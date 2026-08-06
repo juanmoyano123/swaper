@@ -54,9 +54,17 @@ def get_settings() -> Settings:
         return Settings()
     except ValidationError as exc:
         nombres = ", ".join(_missing_variable_names(exc))
+        # En el contenedor no hay .env —los secretos llegan por environment— y mandar a
+        # completar un archivo inexistente es la peor pista posible para un deploy que falla.
+        donde = (
+            f"Completalas en {ENV_FILE} (ver .env.example)"
+            if ENV_FILE.exists()
+            else "Definilas como variables de entorno del servicio "
+            "(fly secrets set / variables de Railway)"
+        )
         print(
             f"FATAL: faltan variables de entorno obligatorias o están vacías: {nombres}. "
-            f"Completalas en {ENV_FILE} (ver .env.example) y volvé a arrancar.",
+            f"{donde} y volvé a arrancar.",
             file=sys.stderr,
         )
         raise SystemExit(1) from exc
