@@ -18,7 +18,7 @@ _DSN_REAL = dotenv_values(ENV_FILE).get("DATABASE_URL")
 async def test_responde_ok_aunque_no_existan_las_tablas_de_mercado(
     crear_app: Callable[..., FastAPI],
 ) -> None:
-    """Hasta F-002 no hay tabla de precios: se informa vacío y se explica por qué."""
+    """Contra una base sin migrar se informa vacío y se dice qué falta hacer."""
     app = crear_app(FakeConnection())
 
     async with cliente(app) as c:
@@ -29,7 +29,7 @@ async def test_responde_ok_aunque_no_existan_las_tablas_de_mercado(
     assert cuerpo["status"] == "ok"
     assert cuerpo["database"] == "ok"
     assert cuerpo["last_market_snapshot_at"] is None
-    assert any("F-002" in aviso for aviso in cuerpo["warnings"])
+    assert any("migraciones" in aviso for aviso in cuerpo["warnings"])
 
 
 async def test_informa_la_hora_del_ultimo_snapshot(crear_app: Callable[..., FastAPI]) -> None:

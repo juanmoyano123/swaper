@@ -28,8 +28,8 @@ ENV_DE_PRUEBA = {
 class FakeConnection:
     """Conexión falsa con el esquema de mercado en el estado que pida cada test.
 
-    Los valores por defecto describen el estado real del proyecto hasta que F-002 cree el
-    esquema: la tabla de precios no existe todavía.
+    Por defecto simula una base sin migrar: es el caso que hay que seguir cubriendo, porque un
+    entorno nuevo arranca así hasta que corren las migraciones.
     """
 
     def __init__(
