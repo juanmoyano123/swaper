@@ -3,3 +3,7 @@ __pycache__
 .env
 .git
 *.pyc
+tests
+.pytest_cache
+.ruff_cache
+.DS_Store
