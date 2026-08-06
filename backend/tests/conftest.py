@@ -26,29 +26,37 @@ ENV_DE_PRUEBA = {
 
 
 class FakeConnection:
-    """Conexión falsa: responde según qué fragmento aparezca en la consulta.
+    """Conexión falsa con el esquema de mercado en el estado que pida cada test.
 
-    Lo que no matchea ninguna clave devuelve None, que es como se ve una tabla que todavía no
-    existe — el estado real del proyecto hasta que F-002 cree el esquema.
+    Los valores por defecto describen el estado real del proyecto hasta que F-002 cree el
+    esquema: la tabla de precios no existe todavía.
     """
 
     def __init__(
         self,
-        respuestas: dict[str, Any] | None = None,
+        tabla_existe: bool = False,
+        columna_existe: bool = False,
+        ultimo_snapshot: Any = None,
         error: Exception | None = None,
     ) -> None:
-        self.respuestas = respuestas or {}
+        self.tabla_existe = tabla_existe
+        self.columna_existe = columna_existe
+        self.ultimo_snapshot = ultimo_snapshot
         self.error = error
         self.consultas: list[str] = []
 
+    async def fetchrow(self, query: str, *args: Any) -> Any:
+        self._registrar(query)
+        return {"tabla_existe": self.tabla_existe, "columna_existe": self.columna_existe}
+
     async def fetchval(self, query: str, *args: Any) -> Any:
+        self._registrar(query)
+        return self.ultimo_snapshot
+
+    def _registrar(self, query: str) -> None:
         if self.error is not None:
             raise self.error
         self.consultas.append(query)
-        for fragmento, valor in self.respuestas.items():
-            if fragmento in query:
-                return valor
-        return None
 
 
 @pytest.fixture(autouse=True)

@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.api.deps import get_db_optional
-from app.db.health import check_database, get_last_snapshot
+from app.db.health import get_last_snapshot
 
 logger = structlog.get_logger()
 
@@ -36,7 +36,7 @@ async def health(conn: Annotated[Any | None, Depends(get_db_optional)]) -> Any:
         return _base_caida()
 
     try:
-        await check_database(conn)
+        # La consulta del snapshot es también la verificación de conectividad.
         ultimo_snapshot, avisos = await get_last_snapshot(conn)
     except Exception as exc:
         logger.warning("health_db_error", error=str(exc), error_type=type(exc).__name__)

@@ -8,13 +8,11 @@ from dotenv import dotenv_values
 from fastapi import FastAPI
 
 from app.core.config import ENV_FILE
-from app.db.health import check_database, get_last_snapshot
+from app.db.health import get_last_snapshot
 from tests.conftest import FakeConnection, cliente
 
 # El único test que toca una base real toma el DSN del .env, no de las variables de prueba.
 _DSN_REAL = dotenv_values(ENV_FILE).get("DATABASE_URL")
-
-TABLA_EXISTE = {"to_regclass": "precios", "information_schema.columns": 1}
 
 
 async def test_responde_ok_aunque_no_existan_las_tablas_de_mercado(
@@ -36,7 +34,7 @@ async def test_responde_ok_aunque_no_existan_las_tablas_de_mercado(
 
 async def test_informa_la_hora_del_ultimo_snapshot(crear_app: Callable[..., FastAPI]) -> None:
     momento = datetime(2026, 8, 6, 17, 30, tzinfo=UTC)
-    conn = FakeConnection({**TABLA_EXISTE, "max(capturado_en)": momento})
+    conn = FakeConnection(tabla_existe=True, columna_existe=True, ultimo_snapshot=momento)
     app = crear_app(conn)
 
     async with cliente(app) as c:
@@ -51,7 +49,7 @@ async def test_informa_la_hora_del_ultimo_snapshot(crear_app: Callable[..., Fast
 async def test_avisa_cuando_la_tabla_existe_pero_no_hubo_ingesta(
     crear_app: Callable[..., FastAPI],
 ) -> None:
-    app = crear_app(FakeConnection(TABLA_EXISTE))
+    app = crear_app(FakeConnection(tabla_existe=True, columna_existe=True))
 
     async with cliente(app) as c:
         cuerpo = (await c.get("/api/v1/health")).json()
@@ -100,7 +98,6 @@ async def test_consulta_una_base_real() -> None:
     pool = await asyncpg.create_pool(dsn=_DSN_REAL, min_size=1, max_size=2, timeout=10)
     try:
         async with pool.acquire() as conn:
-            await check_database(conn)
             ultimo, avisos = await get_last_snapshot(conn)
     finally:
         await pool.close()
