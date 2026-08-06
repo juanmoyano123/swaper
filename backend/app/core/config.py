@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     docta_yield_bonds_url: str | None = None
     docta_serie_precios_url: str | None = None
 
+    # BYMA: la API abierta no lleva token. La base se declara igual para poder apuntar a otro
+    # host sin tocar código, y la demora es un dato de la fuente que el snapshot informa.
+    byma_base_url: str = "https://open.bymadata.com.ar/vanoms-be-core/rest/api/bymadata/free"
+    byma_demora_minutos: int = 20
+
+    # IAMC: el informe diario llega por subida manual, no por descarga. Esta ruta es dónde se
+    # guardan los que se van subiendo.
+    iamc_directorio: str = "fuentes"
+
     log_level: str = "INFO"
     environment: str = "development"
 
