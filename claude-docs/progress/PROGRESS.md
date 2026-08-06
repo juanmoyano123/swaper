@@ -11,9 +11,9 @@ desde `/build-feature` a medida que cada una se implementa.
 | F-001 | Esqueleto de servicio backend | Foundation | 400,0 | completada |
 | F-002 | Esquema de datos y migraciones | Foundation | 300,0 | completada |
 | F-003 | Esqueleto de aplicación frontend | Foundation | 400,0 | completada |
-| F-004 | Cliente de la API abierta de BYMA | Stage 1 | 300,0 | pendiente |
-| F-005 | Parser del informe diario de IAMC | Stage 1 | 50,0 | pendiente |
-| F-006 | Cliente del feed de cashflow de Docta | Stage 1 | 240,0 | pendiente |
+| F-004 | Cliente de la API abierta de BYMA | Stage 1 | 300,0 | completada |
+| F-005 | Parser del informe diario de IAMC | Stage 1 | 50,0 | completada |
+| F-006 | Cliente del feed de cashflow de Docta | Stage 1 | 240,0 | completada |
 | F-007 | Consolidador multi-fuente | Stage 1 | 160,0 | pendiente |
 | F-008 | Job programado de ingesta | Stage 1 | 266,7 | pendiente |
 | F-009 | condiciones_emision: semilla y herencia | Stage 1 | 200,0 | pendiente |
@@ -99,6 +99,7 @@ desde `/build-feature` a medida que cada una se implementa.
 | **Stage 1** | **42** | **185** | **~37 semanas** | |
 | Stage 2 | 8 | 72 | ~14,5 | |
 
-Siguiente paso: la ingesta — `F-004` (BYMA), `F-005` (IAMC) y `F-006` (Docta), que pueden correr en
-paralelo. Del frontend, F-003 destrabó además `F-014` (auth) y `F-028` (ingreso de cartera); el resto
-de la UI espera a que haya datos.
+Siguiente paso: **F-007** (consolidador multi-fuente), que une lo que traen F-004, F-005 y F-006 en
+las tablas de mercado con precedencia declarada por campo. Es lo que finalmente puebla la base y
+destraba el resto del Ciclo 1. En paralelo se pueden tomar `F-014` (auth) y `F-028` (ingreso de
+cartera), que dependen solo del frontend.
