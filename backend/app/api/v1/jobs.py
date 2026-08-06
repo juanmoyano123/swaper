@@ -1,10 +1,62 @@
 """Endpoints del job programado de ingesta (F-008).
 
-Router vacío a propósito: se monta en `router.py` desde ya para que la feature que lo llene no
-tenga que editar ese archivo mientras otra feature del mismo lote lo edita también. Es el mismo
-patrón que se usó con los routers de las tres fuentes en F-004 a F-006.
+El scheduler corre solo cuando `ingesta_habilitada=True`, así que estos endpoints también sirven
+para disparar una corrida a mano en desarrollo o para forzar un refresh puntual en producción —el
+mismo criterio que ya usa `POST /api/v1/consolidar` para la corrida matinal completa.
 """
 
-from fastapi import APIRouter
+from typing import Annotated
 
-router = APIRouter()
+import asyncpg
+from fastapi import APIRouter, Depends
+
+from app.api.deps import get_db
+from app.core.config import Settings, get_settings
+from app.jobs.corridas import corrida_matinal, refresh_intra_rueda
+from app.jobs.registro import listar_corridas
+
+router = APIRouter(prefix="/jobs", tags=["jobs"])
+
+LIMITE_MAXIMO = 100
+LIMITE_POR_DEFECTO = 20
+
+
+@router.get(
+    "/corridas",
+    summary="Historial de corridas del job de ingesta",
+    responses={503: {"description": "La base de datos no está disponible"}},
+)
+async def corridas(
+    conn: Annotated[asyncpg.Connection, Depends(get_db)],
+    limite: int = LIMITE_POR_DEFECTO,
+) -> list[dict[str, object]]:
+    """Las corridas más recientes primero, con hora, duración, filas por fuente y alertas.
+
+    Es lo que F-013 va a consumir para la barra de estado del dato. `limite` tiene tope para que
+    nadie pida el historial entero por accidente.
+    """
+    return await listar_corridas(conn, limite=min(limite, LIMITE_MAXIMO))
+
+
+@router.post(
+    "/corridas/matinal",
+    summary="Dispara a mano la corrida matinal completa (BYMA + IAMC + Docta + consolidación)",
+    responses={503: {"description": "La base de datos no está disponible"}},
+)
+async def disparar_matinal(
+    conn: Annotated[asyncpg.Connection, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> dict[str, object]:
+    return await corrida_matinal(conn, settings)
+
+
+@router.post(
+    "/corridas/refresh",
+    summary="Dispara a mano un refresh intra-rueda (sólo precios y puntas de BYMA)",
+    responses={503: {"description": "La base de datos no está disponible"}},
+)
+async def disparar_refresh(
+    conn: Annotated[asyncpg.Connection, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> dict[str, object]:
+    return await refresh_intra_rueda(conn, settings)

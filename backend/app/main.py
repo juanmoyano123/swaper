@@ -13,6 +13,7 @@ from app.core.config import Settings, get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import RequestLoggingMiddleware, configure_logging
 from app.db.pool import close_pool, create_pool
+from app.jobs.scheduler import Scheduler
 
 API_V1_PREFIX = "/api/v1"
 
@@ -20,9 +21,15 @@ API_V1_PREFIX = "/api/v1"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.pool = await create_pool(app.state.settings)
+    # F-008: el scheduler no aborta el arranque si falta pool o si `ingesta_habilitada` es False
+    # (el default) — el mismo criterio que el pool mismo, que tampoco tumba el arranque sin base.
+    scheduler = Scheduler(app.state.pool, app.state.settings)
+    scheduler.iniciar()
+    app.state.scheduler = scheduler
     try:
         yield
     finally:
+        await scheduler.detener()
         await close_pool(app.state.pool)
         app.state.pool = None
 
