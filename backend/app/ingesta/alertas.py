@@ -31,6 +31,9 @@ CODIGO_CREDENCIAL_VENCIDA = "credencial_vencida"
 CODIGO_RESPUESTA_VACIA = "respuesta_vacia"
 CODIGO_FORMATO_INESPERADO = "formato_inesperado"
 CODIGO_CAMPO_SIN_COBERTURA = "campo_sin_cobertura"
+CODIGO_CONDICIONES_EN_CONFLICTO = "condiciones_en_conflicto"
+CODIGO_ESPECIE_INCOHERENTE = "especie_incoherente"
+CODIGO_RENDIMIENTO_FUERA_DE_RANGO = "rendimiento_fuera_de_rango"
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,4 +120,70 @@ def campo_sin_cobertura(campo: str, total: int, **detalle: object) -> Alerta:
         severidad=Severidad.ADVERTENCIA,
         accion_requerida=None,
         detalle={"campo": campo, "total": total, **detalle},
+    )
+
+
+def condiciones_en_conflicto(
+    campo: str, raiz: str, valores: dict[str, object], **detalle: object
+) -> Alerta:
+    """Dos especies de la misma emisión declaran valores distintos para un atributo que, por
+    definición, comparten. F-009.
+
+    El sistema **no elige**: vacía las dos y lo reporta con los valores en pugna. Elegir requeriría
+    un criterio de precedencia entre fuentes que nadie estableció, y aplicarlo por cuenta propia
+    sería presentar una preferencia inventada como si fuera el dato. Es la regla 1 del proyecto:
+    si falta o si está en disputa, se deja vacío y se alerta con nombre y apellido.
+    """
+    en_pugna = ", ".join(f"{ticker}={valor!r}" for ticker, valor in sorted(valores.items()))
+    return Alerta(
+        codigo=CODIGO_CONDICIONES_EN_CONFLICTO,
+        mensaje=(
+            f"La emisión {raiz} declara {campo} distinto según la especie ({en_pugna}): "
+            f"se vacía en todas y no se elige ninguno."
+        ),
+        severidad=Severidad.ADVERTENCIA,
+        accion_requerida=(
+            f"Resolver a mano cuál es el {campo} de {raiz} y corregirlo en la semilla curada."
+        ),
+        detalle={"campo": campo, "raiz": raiz, "valores": valores, **detalle},
+    )
+
+
+def especie_incoherente(cantidad: int, tickers: list[str], **detalle: object) -> Alerta:
+    """Capa 1 de la sanidad (F-010): una especie se despega de las otras del mismo bono.
+
+    Un bono tiene UNA TIR. Cuando una especie declara más de 100 pp de diferencia contra sus
+    hermanas, lo que está mal es el precio de esa especie, no el rendimiento del bono: VSCQD
+    figuraba con 34.627.917 % mientras VSCQO, el mismo bono, rendía 6,75 %. El resto de las
+    especies de esa emisión sigue disponible.
+    """
+    return Alerta(
+        codigo=CODIGO_ESPECIE_INCOHERENTE,
+        mensaje=(
+            f"{cantidad} especies declaran un rendimiento incoherente contra las otras especies "
+            f"del mismo bono ({', '.join(tickers[:6])}): su precio está mal escalado en la fuente."
+        ),
+        severidad=Severidad.ADVERTENCIA,
+        accion_requerida=None,
+        detalle={"cantidad": cantidad, "tickers": tickers, **detalle},
+    )
+
+
+def rendimiento_fuera_de_rango(cantidad: int, tickers: list[str], **detalle: object) -> Alerta:
+    """Capa 2 de la sanidad (F-010): el rendimiento supera el techo de lo posible de su segmento.
+
+    El tope se compara **en la unidad de cada segmento** —300 % de TIR en dólares, 100 % de tasa
+    real sobre CER, 500 % de TNA nominal en pesos— porque un tope único cruzaría naturalezas de
+    tasa que no son la misma magnitud. Son holgados a propósito: tienen que dejar pasar el distress
+    real, como SNSBO al 245 % en dólares, que es dato correcto.
+    """
+    return Alerta(
+        codigo=CODIGO_RENDIMIENTO_FUERA_DE_RANGO,
+        mensaje=(
+            f"{cantidad} instrumentos declaran un rendimiento por encima del techo de su segmento "
+            f"({', '.join(tickers[:6])}): no puede ser cierto en esa unidad de tasa."
+        ),
+        severidad=Severidad.ADVERTENCIA,
+        accion_requerida=None,
+        detalle={"cantidad": cantidad, "tickers": tickers, **detalle},
     )
