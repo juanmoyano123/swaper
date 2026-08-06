@@ -26,19 +26,19 @@
 </head>
 <body>
   <h1>10-Swaper — Progreso de features</h1>
-  <p class="sub">Actualizado al <strong>06/08/2026</strong>. Este dashboard es estático: el estado
+  <p class="sub">Actualizado al <strong>06/08/2026</strong> (Tanda 1 cerrada). Este dashboard es estático: el estado
   real vive en <code>claude-docs/progress/PROGRESS.md</code> y el orden de ejecución en
   <code>claude-docs/planning/plan-ejecucion-tandas.md</code>.</p>
 
   <div class="cards">
-    <div class="card"><div class="v completada">7 / 42</div><div class="l">Features Stage 1</div></div>
-    <div class="card"><div class="v">32 / 185</div><div class="l">Person-days</div></div>
+    <div class="card"><div class="v completada">10 / 42</div><div class="l">Features Stage 1</div></div>
+    <div class="card"><div class="v">44 / 185</div><div class="l">Person-days</div></div>
     <div class="card"><div class="v">2.894</div><div class="l">Instrumentos en base</div></div>
-    <div class="card"><div class="v">246 + 38</div><div class="l">Tests offline + integración</div></div>
+    <div class="card"><div class="v">409 + 45</div><div class="l">Tests offline + integración</div></div>
   </div>
-  <div class="bar"><div></div></div>
+  <div class="bar"><div style="width:23.8%"></div></div>
 
-  <h2>Ciclo 1 — Cimientos e ingesta · 7 de 12 completadas</h2>
+  <h2>Ciclo 1 — Cimientos e ingesta · 8 de 12 completadas</h2>
   <table>
     <thead><tr><th>ID</th><th>Feature</th><th class="num">RICE</th><th>Estado</th></tr></thead>
     <tbody>
@@ -49,9 +49,9 @@
       <tr><td>F-005</td><td>Parser del informe diario de IAMC</td><td class="num">50,0</td><td class="completada">completada</td></tr>
       <tr><td>F-006</td><td>Cliente del feed de cashflow de Docta</td><td class="num">240,0</td><td class="completada">completada</td></tr>
       <tr><td>F-007</td><td>Consolidador multi-fuente</td><td class="num">160,0</td><td class="completada">completada</td></tr>
-      <tr><td>F-008</td><td>Job programado de ingesta</td><td class="num">266,7</td><td class="pendiente">pendiente — tanda 1</td></tr>
-      <tr><td>F-009</td><td>condiciones_emision: semilla y herencia</td><td class="num">200,0</td><td class="pendiente">pendiente — tanda 2</td></tr>
-      <tr><td>F-010</td><td>Sanidad del dato en dos capas</td><td class="num">400,0</td><td class="pendiente">pendiente — tanda 2</td></tr>
+      <tr><td>F-008</td><td>Job programado de ingesta</td><td class="num">266,7</td><td class="completada">completada</td></tr>
+      <tr><td>F-009</td><td>condiciones_emision: semilla y herencia</td><td class="num">200,0</td><td class="pendiente">pendiente — tanda 2 (siguiente)</td></tr>
+      <tr><td>F-010</td><td>Sanidad del dato en dos capas</td><td class="num">400,0</td><td class="pendiente">pendiente — tanda 2 (siguiente)</td></tr>
       <tr><td>F-011</td><td>Deduplicación de especies</td><td class="num">400,0</td><td class="pendiente">pendiente — tanda 3</td></tr>
       <tr><td>F-012</td><td>Tipo de cambio implícito y normalización</td><td class="num">266,7</td><td class="pendiente">pendiente — tanda 4</td></tr>
     </tbody>
@@ -60,24 +60,38 @@
   instrumentos, 3.344 puntas y 6.150 filas de cronograma, con el motor Python leyendo la vista
   <code>resumen</code> sin modificarse (GWT-4 verificado).</p>
 
-  <h2>Ciclos 2, 3 y 4 + Stage 2 — todas pendientes</h2>
+  <h2>Avance por ciclo</h2>
+  <p class="nota">Las tandas agrupan por ausencia de solape, no por milestone, así que adelantan
+  features de ciclos posteriores: F-014 (ciclo 2) y F-028 (ciclo 3) entraron en la Tanda 1.</p>
   <table>
     <thead><tr><th>Ciclo</th><th class="num">Features</th><th class="num">Person-days</th><th class="num">Semanas (est.)</th><th>Estado</th></tr></thead>
     <tbody>
-      <tr><td>1 — Cimientos e ingesta</td><td class="num">12</td><td class="num">47</td><td class="num">~9,5</td><td><span class="completada">7 completadas</span>, 5 pendientes</td></tr>
-      <tr><td>2 — Armador completo</td><td class="num">12</td><td class="num">55</td><td class="num">~11</td><td class="pendiente">pendiente</td></tr>
-      <tr><td>3 — RV, carga y diagnóstico</td><td class="num">9</td><td class="num">41</td><td class="num">~8</td><td class="pendiente">pendiente</td></tr>
+      <tr><td>1 — Cimientos e ingesta</td><td class="num">12</td><td class="num">47</td><td class="num">~9,5</td><td><span class="completada">8 completadas</span>, 4 pendientes</td></tr>
+      <tr><td>2 — Armador completo</td><td class="num">12</td><td class="num">55</td><td class="num">~11</td><td><span class="completada">1 completada</span> (F-014), 11 pendientes</td></tr>
+      <tr><td>3 — RV, carga y diagnóstico</td><td class="num">9</td><td class="num">41</td><td class="num">~8</td><td><span class="completada">1 completada</span> (F-028), 8 pendientes</td></tr>
       <tr><td>4 — Optimizador y persistencia</td><td class="num">9</td><td class="num">42</td><td class="num">~8,5</td><td class="pendiente">pendiente</td></tr>
-      <tr><td><strong>Stage 1 (total)</strong></td><td class="num"><strong>42</strong></td><td class="num"><strong>185</strong></td><td class="num"><strong>~37</strong></td><td class="num"><strong>17 %</strong></td></tr>
+      <tr><td><strong>Stage 1 (total)</strong></td><td class="num"><strong>42</strong></td><td class="num"><strong>185</strong></td><td class="num"><strong>~37</strong></td><td class="num"><strong>24 %</strong></td></tr>
       <tr><td>Stage 2</td><td class="num">8</td><td class="num">72</td><td class="num">~14,5</td><td class="pendiente">pendiente</td></tr>
     </tbody>
   </table>
 
   <h2>Próximo paso</h2>
-  <p class="nota">El orden de ejecución de las 35 features restantes está fijado en
-  <code>claude-docs/planning/plan-ejecucion-tandas.md</code> (18 tandas, aprobado el 06/08/2026).
-  Sigue la <strong>Tanda 1: F-008 (job de ingesta) ∥ F-014 (auth) ∥ F-028 (ingreso de cartera)</strong>
-  — tres áreas sin archivos en común. Nota: las tandas cruzan los ciclos del plan original
-  (F-014 y F-028 son de los ciclos 2 y 3) porque agrupan por ausencia de solape, no por milestone.</p>
+  <p class="nota"><strong>Tanda 1 cerrada el 06/08/2026</strong> — F-008, F-014 y F-028 construidas
+  en paralelo. Sigue la <strong>Tanda 2: F-009 (condiciones_emision) ∥ F-010 (sanidad del dato)</strong>,
+  que es la que completa la ley y la lámina del universo (hoy cubren 592 de 2.894 instrumentos) y
+  arranca la capa de integridad. El orden completo está en
+  <code>claude-docs/planning/plan-ejecucion-tandas.md</code>.</p>
+
+  <h2>Deuda declarada</h2>
+  <ul class="nota">
+    <li><code>SUPABASE_JWT_SECRET</code> está vacío en el <code>.env</code>: hasta que se cargue,
+    <code>GET /api/v1/auth/me</code> responde 503. El aislamiento no depende de esto — lo aplica RLS
+    adentro de la base.</li>
+    <li>El pool del backend se conecta con un rol que <strong>saltea RLS</strong>. Hoy no se
+    materializa porque ningún endpoint sirve tablas de usuario, pero F-041 no puede exponer carteras
+    por <code>/api/v1/</code> sin resolverlo antes.</li>
+    <li><code>tna</code> sigue vacía en todo el universo y la ley cubre 592 de 2.894 instrumentos
+    (llega con F-009).</li>
+  </ul>
 </body>
 </html>

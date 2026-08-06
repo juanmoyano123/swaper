@@ -15,7 +15,7 @@ desde `/build-feature` a medida que cada una se implementa.
 | F-005 | Parser del informe diario de IAMC | Stage 1 | 50,0 | completada |
 | F-006 | Cliente del feed de cashflow de Docta | Stage 1 | 240,0 | completada |
 | F-007 | Consolidador multi-fuente | Stage 1 | 160,0 | completada |
-| F-008 | Job programado de ingesta | Stage 1 | 266,7 | pendiente |
+| F-008 | Job programado de ingesta | Stage 1 | 266,7 | completada |
 | F-009 | condiciones_emision: semilla y herencia | Stage 1 | 200,0 | pendiente |
 | F-010 | Sanidad del dato en dos capas | Stage 1 | 400,0 | pendiente |
 | F-011 | Deduplicación de especies | Stage 1 | 400,0 | pendiente |
@@ -28,7 +28,7 @@ desde `/build-feature` a medida que cada una se implementa.
 | ID | Feature | Etiqueta | RICE | Estado |
 |---|---|---|---|---|
 | F-013 | Barra de estado del dato | Stage 1 | 200,0 | pendiente |
-| F-014 | Autenticación y aislamiento por asesor | Stage 1 | 200,0 | pendiente |
+| F-014 | Autenticación y aislamiento por asesor | Stage 1 | 200,0 | completada |
 | F-015 | API del calendario de doce meses | Stage 1 | 285,0 | pendiente |
 | F-016 | Grilla-selector de doce meses | Stage 1 | 114,0 | pendiente |
 | F-017 | Filtros de la grilla | Stage 1 | 112,0 | pendiente |
@@ -50,7 +50,7 @@ desde `/build-feature` a medida que cada una se implementa.
 | F-025 | Carga asistida de lámina | Stage 1 | 53,3 | pendiente |
 | F-026 | Bloque de renta variable | Stage 1 | 80,0 | pendiente |
 | F-027 | Calendario de balances | Stage 1 | 16,7 | pendiente |
-| F-028 | Ingreso de cartera por tres vías | Stage 1 | 96,0 | pendiente |
+| F-028 | Ingreso de cartera por tres vías | Stage 1 | 96,0 | completada |
 | F-029 | Resolución de tickers | Stage 1 | 106,7 | pendiente |
 | F-030 | Valuación y diagnóstico de cartera | Stage 1 | 150,0 | pendiente |
 | F-031 | Vector de riesgo de seis ejes | Stage 1 | 100,0 | pendiente |
@@ -103,12 +103,25 @@ desde `/build-feature` a medida que cada una se implementa.
 2.894 precios, 3.344 puntas y 6.150 filas de cronograma, con el motor Python leyendo la vista
 `resumen` sin que haya que tocarle una línea (GWT-4 verificado con un test de integración).
 
-**El orden de ejecución de las 35 features restantes está fijado en
+**El orden de ejecución de las features restantes está fijado en
 `claude-docs/planning/plan-ejecucion-tandas.md`** (aprobado el 06/08/2026): 18 tandas con el
 criterio de paralelizar sólo lo que con certeza no comparte archivos, tablas ni contratos, y
-serializar toda duda. Siguiente paso: **Tanda 1 — F-008 (job de ingesta) ∥ F-014 (auth) ∥ F-028
-(ingreso de cartera)**. `consolidar()` recibe la conexión por parámetro justamente para que F-008
-la invoque desde un job, fuera del ciclo HTTP.
+serializar toda duda.
+
+**Tanda 1 cerrada el 06/08/2026** — F-008, F-014 y F-028 en paralelo, 313 tests offline y 45 de
+integración en el backend, 96 en el frontend. Siguiente paso: **Tanda 2 — F-009
+(condiciones_emision) ∥ F-010 (sanidad del dato)**.
+
+### Deuda declarada de la Tanda 1
+
+- **`SUPABASE_JWT_SECRET` está vacío en el `.env`.** Hasta que se cargue desde el panel de
+  Supabase, `GET /api/v1/auth/me` responde 503. No rompe nada más: el aislamiento lo aplica RLS
+  adentro de la base y no depende de esta variable.
+- **El pool del backend se conecta con un rol que saltea RLS** (`postgres`, `rolbypassrls=true`).
+  Hoy no se materializa porque ningún endpoint sirve tablas de usuario, pero **F-041 no puede
+  exponer carteras por `/api/v1/` sin resolver esto antes**: o el frontend las lee directo de
+  Supabase con el JWT del asesor, o la conexión asume el rol `authenticated` con el `sub` del
+  token antes de la consulta. Verificado empíricamente al cerrar la tanda.
 
 ### Lo que F-007 dejó pendiente, declarado
 
