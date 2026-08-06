@@ -59,6 +59,80 @@ class FakeConnection:
         self.consultas.append(query)
 
 
+class _Transaccion:
+    """Context manager que anota si la transacción cerró bien o se deshizo."""
+
+    def __init__(self, conexion: "FakeConexionEscritura") -> None:
+        self._conexion = conexion
+
+    async def __aenter__(self) -> "_Transaccion":
+        self._conexion.transacciones.append("begin")
+        return self
+
+    async def __aexit__(self, exc_type: Any, *_: Any) -> bool:
+        self._conexion.transacciones.append("rollback" if exc_type else "commit")
+        return False
+
+
+class FakeConexionEscritura(FakeConnection):
+    """Conexión falsa que además acepta escrituras y guarda qué SQL recibió con qué argumentos.
+
+    Existe porque los tests de persistencia no prueban que PostgreSQL funcione: prueban el
+    contrato de las sentencias —que el upsert de instrumentos no pise con nulos, que precios sea
+    un INSERT plano, que el cronograma no se toque cuando no hay uno usable— y eso se ve en el SQL
+    emitido. Que la base lo acepte es lo que verifica el test de integración.
+
+    `fallar_en` hace que un bloque explote sin tocar a los otros, que es la propiedad que F-008
+    hereda: un fallo puntual no puede convertirse en "no se guardó nada".
+    """
+
+    def __init__(
+        self,
+        *,
+        fallar_en: str | None = None,
+        metricas_previas: list[dict[str, Any]] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(**kwargs)
+        self.fallar_en = fallar_en
+        self.metricas_previas = metricas_previas or []
+        self.escrituras: list[tuple[str, list[Any]]] = []
+        self.transacciones: list[str] = []
+
+    async def fetch(self, query: str, *args: Any) -> list[Any]:
+        self._registrar(query)
+        return self.metricas_previas
+
+    def transaction(self) -> _Transaccion:
+        return _Transaccion(self)
+
+    async def executemany(self, query: str, args: Any) -> None:
+        if self.fallar_en and self.fallar_en in query:
+            raise RuntimeError(f"fallo simulado escribiendo {self.fallar_en}")
+        self.escrituras.append((query, list(args)))
+
+    async def execute(self, query: str, *args: Any) -> None:
+        await self.executemany(query, [args])
+
+    def sql_de(self, tabla: str) -> str:
+        """El SQL que se emitió contra una tabla. Falla el test si no se escribió ninguno."""
+        for query, _ in self.escrituras:
+            if f"INTO public.{tabla}" in query:
+                return query
+        raise AssertionError(f"no se escribió nada en {tabla}")
+
+    def filas_de(self, tabla: str) -> list[Any]:
+        return [
+            fila
+            for query, args in self.escrituras
+            if f"INTO public.{tabla}" in query
+            for fila in args
+        ]
+
+    def escribio_en(self, tabla: str) -> bool:
+        return any(f"INTO public.{tabla}" in query for query, _ in self.escrituras)
+
+
 @pytest.fixture(autouse=True)
 def env_de_prueba(monkeypatch: pytest.MonkeyPatch) -> None:
     """Configuración válida en todos los tests, y caché de settings limpia entre ellos.

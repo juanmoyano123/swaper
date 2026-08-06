@@ -14,7 +14,7 @@ desde `/build-feature` a medida que cada una se implementa.
 | F-004 | Cliente de la API abierta de BYMA | Stage 1 | 300,0 | completada |
 | F-005 | Parser del informe diario de IAMC | Stage 1 | 50,0 | completada |
 | F-006 | Cliente del feed de cashflow de Docta | Stage 1 | 240,0 | completada |
-| F-007 | Consolidador multi-fuente | Stage 1 | 160,0 | pendiente |
+| F-007 | Consolidador multi-fuente | Stage 1 | 160,0 | completada |
 | F-008 | Job programado de ingesta | Stage 1 | 266,7 | pendiente |
 | F-009 | condiciones_emision: semilla y herencia | Stage 1 | 200,0 | pendiente |
 | F-010 | Sanidad del dato en dos capas | Stage 1 | 400,0 | pendiente |
@@ -99,7 +99,23 @@ desde `/build-feature` a medida que cada una se implementa.
 | **Stage 1** | **42** | **185** | **~37 semanas** | |
 | Stage 2 | 8 | 72 | ~14,5 | |
 
-Siguiente paso: **F-007** (consolidador multi-fuente), que une lo que traen F-004, F-005 y F-006 en
-las tablas de mercado con precedencia declarada por campo. Es lo que finalmente puebla la base y
-destraba el resto del Ciclo 1. En paralelo se pueden tomar `F-014` (auth) y `F-028` (ingreso de
-cartera), que dependen solo del frontend.
+**La base está poblada.** F-007 corrió contra Supabase el 06/08/2026 y dejó 2.894 instrumentos,
+2.894 precios, 3.344 puntas y 6.150 filas de cronograma, con el motor Python leyendo la vista
+`resumen` sin que haya que tocarle una línea (GWT-4 verificado con un test de integración).
+
+Siguiente paso: **F-008** (job programado de ingesta), que orquesta lo que F-007 dejó listo — una
+corrida completa a la mañana y refrescos de precios durante la rueda. `consolidar()` recibe la
+conexión por parámetro justamente para que F-008 la invoque desde un job, fuera del ciclo HTTP. En
+paralelo se pueden tomar `F-009` (semilla de condiciones de emisión, que llena la ley y la lámina que
+hoy sólo cubren las 242 emisiones del informe de IAMC), `F-014` (auth) y `F-028` (ingreso de
+cartera).
+
+### Lo que F-007 dejó pendiente, declarado
+
+- **`tna` está vacía en todo el universo.** Venía del endpoint de Rendimiento de Bonos de Docta, que
+  ya no se consume. El motor la usa para el rendimiento de tasa fija. La corrida lo alerta.
+- **~450 especies de `public-bonds` quedan fuera del universo** por no tener cronograma que declare
+  su clase. Son casi todas las X/Y/Z que BYMA publica como segundo trío de cada soberano y que el
+  consolidado histórico nunca tuvo; sus puntas sí se guardan.
+- **La ley y la moneda de pago cubren 592 de 2.894 instrumentos**, que son las 242 emisiones del
+  informe de IAMC con sus especies. El resto llega con F-009.

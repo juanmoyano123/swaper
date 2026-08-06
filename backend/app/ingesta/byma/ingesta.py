@@ -11,7 +11,7 @@ vista cuál faltó, sin tener que ir a buscar en los logs.
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import structlog
 
@@ -44,11 +44,18 @@ class ResultadoRueda:
     F-007 importa `ingerir_rueda` directamente (`from app.ingesta.byma import ingerir_rueda`) y es
     quien decide qué persistir y con qué precedencia; el endpoint HTTP es sólo la forma de
     dispararla a mano.
+
+    `especies` es la lista aplanada y `especies_por_endpoint` la misma información sin aplanar. Las
+    dos conviven porque el endpoint es un dato con peso propio: es lo que declara si una especie es
+    una ON, un CEDEAR o una acción. Reconstruirlo después, partiendo `especies` por los conteos de
+    `filas_por_tramo`, funcionaría sólo mientras nadie cambiara el orden de recorrido —un invariante
+    implícito que ningún test protege—, así que se conserva explícito.
     """
 
     especies: list[FilaRueda]
     indices: list[FilaIndice]
     snapshot: Snapshot
+    especies_por_endpoint: dict[str, list[FilaRueda]] = field(default_factory=dict)
 
 
 async def ingerir_rueda(
@@ -62,6 +69,7 @@ async def ingerir_rueda(
 
     especies: list[FilaRueda] = []
     indices: list[FilaIndice] = []
+    por_endpoint: dict[str, list[FilaRueda]] = {}
 
     async with crear_cliente() as cliente:
         for endpoint in (*ENDPOINTS_ESPECIES, ENDPOINT_INDICE):
@@ -89,7 +97,9 @@ async def ingerir_rueda(
             if endpoint == ENDPOINT_INDICE:
                 indices.extend(normalizar_fila_indice(fila) for fila in descarga.filas)
             else:
-                especies.extend(normalizar_fila_rueda(fila) for fila in descarga.filas)
+                normalizadas = [normalizar_fila_rueda(fila) for fila in descarga.filas]
+                por_endpoint[endpoint] = normalizadas
+                especies.extend(normalizadas)
 
     snapshot.cobertura = medir_cobertura(especies, CAMPOS_COBERTURA_ESPECIES) + medir_cobertura(
         indices, CAMPOS_COBERTURA_INDICES
@@ -107,4 +117,9 @@ async def ingerir_rueda(
         completo=snapshot.completo,
     )
 
-    return ResultadoRueda(especies=especies, indices=indices, snapshot=snapshot)
+    return ResultadoRueda(
+        especies=especies,
+        indices=indices,
+        snapshot=snapshot,
+        especies_por_endpoint=por_endpoint,
+    )

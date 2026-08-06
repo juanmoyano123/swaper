@@ -102,3 +102,19 @@ def formato_inesperado(fuente: str, que_falta: str, **detalle: object) -> Alerta
         accion_requerida=f"Revisar si {fuente} cambió su contrato y actualizar el cliente.",
         detalle=detalle,
     )
+
+
+def campo_sin_cobertura(campo: str, total: int, **detalle: object) -> Alerta:
+    """Ninguna fila del universo tiene este campo. Distinto de tenerlo poco: no lo tiene nadie.
+
+    Un campo que está en el esquema, que alguien lee y que ninguna fuente llena es la forma más
+    silenciosa de perder información: las consultas siguen funcionando y devuelven vacío. Que sea
+    una alerta y no una línea de log es lo que hace que se vea en la respuesta de la corrida.
+    """
+    return Alerta(
+        codigo=CODIGO_CAMPO_SIN_COBERTURA,
+        mensaje=f"Ninguna de las {total} filas trae {campo}: ninguna fuente lo publica hoy.",
+        severidad=Severidad.ADVERTENCIA,
+        accion_requerida=None,
+        detalle={"campo": campo, "total": total, **detalle},
+    )

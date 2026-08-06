@@ -60,6 +60,24 @@ La partición es por naturaleza del dato: lo que identifica y clasifica a la esp
 En la base los nombres son snake_case, que es la convención de PostgreSQL; el camelCase existe
 únicamente en la vista, para no obligar al motor a cambiar.
 
+### Columnas agregadas por F-007
+
+Cuatro columnas que las fuentes declaran y que el `Resumen` no tenía. **No están en la vista**: el
+contrato de 21 columnas se conserva intacto y quien las necesite consulta la tabla.
+
+| Columna | Fuente | Por qué |
+|---|---|---|
+| `instrumentos.moneda_cotizacion` | BYMA (`denominationCcy`) | ARS/USD/EXT sin traducir. La regla "nada se compara entre monedas sin normalizar" se apoya acá. Distinta de `coupon_currency`, que es la moneda en que paga la emisión |
+| `instrumentos.plazo_liquidacion` | BYMA (`settlementType`) | 1 o 2, sin mapear; es el plazo de la cotización que se guardó |
+| `instrumentos.estructura_cupon` | IAMC | Tasa Fija, Cupon Cero, Tasa Variable, Step Up. Sin CHECK: es vocabulario de la fuente |
+| `precios.convexidad` | IAMC | por ticker exacto, como la TIR y la duración |
+| `precios.fecha_metricas` | IAMC | de qué informe salieron las métricas de esa fila |
+
+El dominio de `instrumentos.coupon_currency` se amplió a `('MEP','CCL','USD','ARS')`. El CSV curado
+distingue MEP de CCL —por dónde se cobra el dólar— y el informe de IAMC sólo declara USD o ARS.
+Traducir USD a MEP sería elegir por la fuente: el informe no lo dice. Cada valor entra con la
+granularidad que su fuente declaró y F-009 refina el grueso al fino.
+
 ### Bajas explícitas
 
 **Ninguna columna del `Resumen` se dio de baja.** Las 21 tienen correspondencia.
@@ -148,15 +166,63 @@ contra el universo lo hace el motor. No agregar la FK "para arreglarlo".
 
 ---
 
+## Precedencia por campo (F-007)
+
+Cada columna tiene **una sola fuente posible**, fijada en `backend/app/ingesta/consolidacion/`.
+Ninguna se completa desde otra fuente, ni siquiera cuando la declarada falta.
+
+| Columna | Fuente | Grano del dato |
+|---|---|---|
+| `moneda_cotizacion`, `plazo_liquidacion`, `maturity` | BYMA | la especie |
+| `last_price`, `effective_volume`, `px_bid`, `px_ask` | BYMA | la especie |
+| `law`, `coupon_currency`, `underlying`, `estructura_cupon` | IAMC | la emisión (raíz) |
+| `tir`, `duration`, `paridad`, `convexidad`, `residual_value` | IAMC | el ticker exacto |
+| `clase_activo`, `tipo_tasa` | Docta (`type`) | la emisión (raíz) |
+| las 9 columnas de `cashflow` | Docta | el ticker exacto |
+| `tna` | ninguna hoy | — |
+| `lamina`, `calificacion`, `sector` de ONs | ninguna hasta F-009 | — |
+
+**Dos granos para IAMC, y la diferencia es de fondo.** Ley y moneda de pago son atributos de la
+emisión: AL30, AL30D y AL30C se pagan bajo la misma ley y por eso se heredan por raíz. La TIR no:
+depende del precio de cada especie y de la moneda en que ese precio está. Escribir la TIR de AL30 en
+AL30D sería inventar un número que nadie calculó.
+
+**Una fila de `precios` tiene dos fechas.** `capturado_en` fecha el precio y el volumen, que salen de
+la rueda de BYMA; `fecha_metricas` fecha la TIR, la duración, la paridad, la convexidad y el valor
+residual, que salen del informe diario de IAMC. Cuando una corrida no tiene informe a mano se
+conservan las últimas métricas conocidas **con la fecha de su informe**: sin ese rótulo sería
+presentar el dato de un día como el de otro, y con él la fila dice exactamente qué muestra. Sin esto
+el universo se vaciaba solo, porque la vista `resumen` arma cada fila con la fila de precios más
+reciente y un refresco sin IAMC dejaba la TIR nula para todo el universo.
+
+**Qué queda afuera del universo.** Una especie de `public-bonds` sin cronograma en Docta no entra a
+`instrumentos`: `clase_activo` es NOT NULL y BYMA no distingue un bono del Tesoro de uno provincial
+(`securitySubType` vale `'B'` en las 1106 filas). Son ~450 especies, casi todas las X/Y/Z que BYMA
+publica como segundo trío de cada soberano y que el consolidado histórico nunca tuvo. **Sus puntas se
+guardan igual** — para eso `puntas` no tiene FK.
+
+---
+
 ## Contrato de persistencia: quién lee y quién escribe
 
 | Quién | Lee | Escribe |
 |---|---|---|
 | `backend/app/db/health.py` | `precios.capturado_en` (el máximo) | — |
 | Motor Python (`segmentos`, `cupones`, `mercado`) | vista `resumen`, `cashflow`, `puntas` | — |
-| F-007 (ingesta multi-fuente) | — | `instrumentos`, `precios`, `puntas`, `cashflow` |
+| F-007 (ingesta multi-fuente) | `precios.fecha_metricas` y las métricas previas | `instrumentos`, `precios`, `puntas`, `cashflow` |
 | F-009 (semilla y herencia) | `condiciones_emision` | `condiciones_emision`, `instrumentos` |
 | Frontend (F-014 en adelante) | tablas de usuario vía PostgREST, con RLS | tablas de usuario, con RLS |
+
+**`instrumentos` se actualiza sin pisar con nulos.** El upsert usa
+`COALESCE(EXCLUDED.col, instrumentos.col)`, así que una corrida sin IAMC deja la ley y la moneda de
+pago como estaban. Las excepciones son `revisar` y `duplicado`: son NOT NULL y se recalculan enteras
+en cada corrida, porque con COALESCE una emisión que dejó de estar en conflicto quedaría marcada para
+siempre.
+
+**`duplicado` cambió de significado en F-007.** Antes marcaba un ticker repetido en la fuente; ahora
+marca una especie que BYMA publica en los dos plazos de liquidación (1 y 2) y que entra una sola vez.
+Son 2.087 de 2.894. Se conserva la del plazo 2 y, a igualdad, la que más operó; verificado que las
+filas repetidas nunca difieren en moneda ni en vencimiento, sólo en precio y volumen.
 
 **El health depende de nombres exactos.** `backend/app/db/health.py` consulta `public.precios` y su
 columna `capturado_en`; las tiene como constantes, `TABLA_PRECIOS` y `COLUMNA_SNAPSHOT`. Si alguna

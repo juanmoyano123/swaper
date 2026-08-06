@@ -10,10 +10,11 @@ este archivo a la vez.
 
 from fastapi import APIRouter
 
-from app.api.v1 import byma, docta, health, iamc
+from app.api.v1 import byma, consolidar, docta, health, iamc
 
 router = APIRouter()
 router.include_router(health.router)
 router.include_router(byma.router)
 router.include_router(iamc.router)
 router.include_router(docta.router)
+router.include_router(consolidar.router)

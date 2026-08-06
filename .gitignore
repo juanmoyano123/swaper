@@ -29,5 +29,8 @@ backend/__pycache__/
 backend/**/__pycache__/
 backend/*.pyc
 
+# El motor: lo importa el test del GWT-4, que verifica que sigue leyendo el universo consolidado
+tools/__pycache__/
+
 # Worktrees temporales de los agentes
 .claude/worktrees/

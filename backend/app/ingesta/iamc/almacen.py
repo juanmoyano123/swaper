@@ -46,3 +46,27 @@ def guardar_informe(
     ruta = directorio / nombre
     ruta.write_bytes(contenido)
     return ruta
+
+
+PREFIJO_ACEPTADO = "iamc-deuda-corporativa-"
+
+
+def ultimo_informe() -> tuple[Path, bytes] | None:
+    """El informe aceptado más reciente, o `None` si todavía no se subió ninguno.
+
+    Lo necesita la consolidación: IAMC no se puede "correr" como BYMA o Docta, porque el informe
+    llega por subida manual. Lo que sí se puede hacer es volver a parsear el último aceptado, que
+    es determinístico y da lo mismo que la vez que se subió.
+
+    La fecha sale del nombre del archivo y no de su fecha de modificación: el nombre lleva la fecha
+    **del informe**, y un archivo copiado o restaurado cambia de mtime sin cambiar de contenido.
+    Los rechazados quedan afuera por el prefijo: se guardan para diagnosticar un cambio de layout,
+    no para consumirse como dato.
+    """
+    directorio = _directorio()
+    aceptados = sorted(directorio.glob(f"{PREFIJO_ACEPTADO}*.pdf"))
+    if not aceptados:
+        return None
+    # El nombre lleva la fecha en ISO, así que el orden alfabético es el cronológico.
+    ultimo = aceptados[-1]
+    return ultimo, ultimo.read_bytes()

@@ -21,8 +21,13 @@ async def test_la_fuente_real_responde_y_el_snapshot_queda_completo() -> None:
         "public-bonds",
         "cedears",
         "general-equity",
+        "leading-equity",
         "index-price",
     }
     assert resultado.snapshot.filas_por_tramo["index-price"] == 16
     # public-bonds es el caso que la ficha original tenía mal: 1106 filas, no 189.
     assert resultado.snapshot.filas_por_tramo["public-bonds"] > 1000
+    # El panel líder es chico y es el que faltaba: sin él no hay ALUA, BBAR, BMA ni GGAL.
+    assert resultado.snapshot.filas_por_tramo["leading-equity"] > 30
+    lideres = {f["ticker"] for f in resultado.especies_por_endpoint["leading-equity"]}
+    assert {"ALUA", "BBAR", "BMA"} <= lideres

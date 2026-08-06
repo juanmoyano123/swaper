@@ -25,14 +25,19 @@ from app.ingesta.http import con_reintentos, pedir
 
 NOMBRE_FUENTE = "BYMA"
 
-# Los cuatro primeros llevan filas de especies (bonos, ONs, cedears, acciones); el quinto es el
+# Los cinco primeros llevan filas de especies (bonos, ONs, cedears, acciones); el último es el
 # índice dólar y afines, que F-012 usa como contraste. Se listan por separado porque normalizan a
 # tipos de fila distintos (decisión 6 del plan), no porque el cliente HTTP los trate distinto.
+#
+# `leading-equity` se agregó en F-007: BYMA publica el panel líder aparte del general, y sin él el
+# universo de acciones salía sin ALUA, BBAR, BMA, BYMA, CEPU, COME ni CRES —las más operadas del
+# mercado— sin que nada lo delatara. Son 40 filas contra las 349 del panel general.
 ENDPOINTS_ESPECIES: tuple[str, ...] = (
     "negociable-obligations",
     "public-bonds",
     "cedears",
     "general-equity",
+    "leading-equity",
 )
 ENDPOINT_INDICE = "index-price"
 
