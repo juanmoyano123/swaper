@@ -50,6 +50,18 @@ class CredencialVencida(ErrorDeFuente):
         super().__init__(motivo, reintentable=False, status=status)
 
 
+class RespuestaVacia(ErrorDeFuente):
+    """La fuente contestó bien pero sin filas.
+
+    Es una clase y no un mensaje de error porque quien la recibe tiene que poder distinguirla de
+    una caída para elegir la alerta correcta, y hacerlo buscando un texto dentro del mensaje
+    convierte cualquier reescritura de ese mensaje en un bug silencioso.
+    """
+
+    def __init__(self, motivo: str, status: int | None = None):
+        super().__init__(motivo, reintentable=True, status=status)
+
+
 @dataclass(slots=True)
 class Reintentos:
     intentos: int = INTENTOS_POR_DEFECTO
@@ -89,10 +101,14 @@ async def con_reintentos[T](
         if intento < politica.intentos:
             await dormir(politica.espera(intento))
 
-    motivo = ultimo.motivo if ultimo else "sin respuesta"
-    raise ErrorDeFuente(
-        f"{motivo} tras {politica.intentos} intentos",
-        status=ultimo.status if ultimo else None,
+    if ultimo is None:
+        raise ErrorDeFuente(f"sin respuesta tras {politica.intentos} intentos")
+
+    # Se conserva la clase del último error: quien recibe esto necesita seguir sabiendo si la
+    # fuente estuvo caída o si contestó vacía, y agotar los intentos no cambia cuál de las dos fue.
+    raise type(ultimo)(
+        f"{ultimo.motivo} tras {politica.intentos} intentos",
+        status=ultimo.status,
     )
 
 
@@ -148,7 +164,7 @@ async def pedir(
         )
 
     if vacio_es_fallo is not None and vacio_es_fallo(respuesta):
-        raise ErrorDeFuente("la fuente devolvió cero filas")
+        raise RespuestaVacia("la fuente devolvió cero filas")
 
     return respuesta
 

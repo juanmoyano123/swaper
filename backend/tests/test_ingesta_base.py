@@ -14,6 +14,7 @@ from app.ingesta.http import (
     CredencialVencida,
     ErrorDeFuente,
     Reintentos,
+    RespuestaVacia,
     con_reintentos,
     pedir,
 )
@@ -175,6 +176,28 @@ async def test_se_agotan_los_intentos_y_falla_con_el_ultimo_motivo() -> None:
 
     with pytest.raises(ErrorDeFuente, match="5 intentos"):
         await con_reintentos(operacion, descripcion="prueba", dormir=no_dormir)
+
+
+async def test_agotar_los_intentos_conserva_el_tipo_del_ultimo_error() -> None:
+    """Quien recibe el fallo tiene que seguir sabiendo si la fuente estuvo caída o contestó vacía.
+
+    Antes se distinguía buscando "cero filas" dentro del mensaje: cualquier reescritura de ese
+    texto habría cambiado la alerta emitida sin que ningún test se enterara.
+    """
+
+    async def vacia() -> str:
+        raise RespuestaVacia("la fuente devolvió cero filas")
+
+    async def no_dormir(_: float) -> None:
+        return None
+
+    with pytest.raises(RespuestaVacia):
+        await con_reintentos(vacia, descripcion="prueba", dormir=no_dormir)
+
+
+def test_una_respuesta_vacia_es_reintentable_y_una_credencial_vencida_no() -> None:
+    assert RespuestaVacia("x").reintentable
+    assert not CredencialVencida("x").reintentable
 
 
 def test_la_espera_crece_entre_intentos() -> None:

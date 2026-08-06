@@ -66,6 +66,13 @@ def configure_logging(level: str = "INFO", stream: TextIO | None = None) -> None
     # mismo en texto plano y ensuciaría la salida estructurada.
     logging.getLogger("uvicorn.access").disabled = True
 
+    # httpx emite "HTTP Request: GET <url>..." por el logging de la stdlib, sin pasar por
+    # structlog ni por el redactor de abajo. Las URLs de las fuentes llevan el token en la query
+    # string, así que esa línea publicaría una credencial en texto plano cada vez que el backend
+    # consulta una fuente. Se silencia acá, para todo el servicio: dejarlo a criterio de cada
+    # cliente significa que el primero que se olvide filtra el token.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
 
 class RequestLoggingMiddleware:
     """Middleware ASGI que asigna un request_id y emite el log de cada request.

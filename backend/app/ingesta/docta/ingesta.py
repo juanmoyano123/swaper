@@ -32,6 +32,7 @@ from app.ingesta.http import (
     INTENTOS_POR_DEFECTO,
     CredencialVencida,
     ErrorDeFuente,
+    RespuestaVacia,
     con_reintentos,
     crear_cliente,
 )
@@ -89,16 +90,16 @@ async def ingerir_cashflow(
             snapshot.alertar(
                 credencial_vencida("Docta", INSTRUCCION_TOKEN_VENCIDO, status=exc.status)
             )
+        except RespuestaVacia as exc:
+            # Agotó los reintentos sin traer una sola fila: es la inestabilidad errática del
+            # feed, no una fuente caída — la acción es distinta (ver docstring del módulo).
+            snapshot.registrar_tramo(TRAMO, 0)
+            snapshot.alertar(
+                respuesta_vacia(FUENTE, intentos=INTENTOS_POR_DEFECTO, motivo=exc.motivo)
+            )
         except ErrorDeFuente as exc:
             snapshot.registrar_tramo(TRAMO, 0)
-            if "cero filas" in exc.motivo:
-                # Agotó los reintentos sin traer una sola fila: es la inestabilidad errática del
-                # feed, no una fuente caída — la acción es distinta (ver docstring del módulo).
-                snapshot.alertar(
-                    respuesta_vacia(FUENTE, intentos=INTENTOS_POR_DEFECTO, motivo=exc.motivo)
-                )
-            else:
-                snapshot.alertar(fuente_caida(FUENTE, exc.motivo, status=exc.status))
+            snapshot.alertar(fuente_caida(FUENTE, exc.motivo, status=exc.status))
         else:
             faltantes = columnas_faltantes(df)
             if faltantes:

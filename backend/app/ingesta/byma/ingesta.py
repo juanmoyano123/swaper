@@ -31,7 +31,7 @@ from app.ingesta.byma.normalizacion import (
     normalizar_fila_rueda,
 )
 from app.ingesta.cobertura import medir_cobertura
-from app.ingesta.http import INTENTOS_POR_DEFECTO, ErrorDeFuente, crear_cliente
+from app.ingesta.http import INTENTOS_POR_DEFECTO, ErrorDeFuente, RespuestaVacia, crear_cliente
 from app.ingesta.snapshot import Snapshot
 
 logger = structlog.get_logger()
@@ -69,18 +69,17 @@ async def ingerir_rueda(
                 descarga = await descargar_endpoint(
                     cliente, settings.byma_base_url, endpoint, dormir=dormir
                 )
+            except RespuestaVacia:
+                # Agotó los reintentos sin traer una fila: es la inestabilidad medida del
+                # endpoint, no una caída del servicio.
+                snapshot.registrar_tramo(endpoint, 0)
+                snapshot.alertar(respuesta_vacia("BYMA", INTENTOS_POR_DEFECTO, endpoint=endpoint))
+                continue
             except ErrorDeFuente as exc:
                 snapshot.registrar_tramo(endpoint, 0)
-                if "cero filas" in exc.motivo:
-                    # El fallo final fue exactamente "cero filas tras N intentos": es la
-                    # inestabilidad medida del endpoint, no una caída del servicio.
-                    snapshot.alertar(
-                        respuesta_vacia("BYMA", INTENTOS_POR_DEFECTO, endpoint=endpoint)
-                    )
-                else:
-                    snapshot.alertar(
-                        fuente_caida("BYMA", exc.motivo, endpoint=endpoint, status=exc.status)
-                    )
+                snapshot.alertar(
+                    fuente_caida("BYMA", exc.motivo, endpoint=endpoint, status=exc.status)
+                )
                 continue
 
             snapshot.registrar_tramo(endpoint, len(descarga.filas))

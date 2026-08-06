@@ -10,21 +10,16 @@ vacío trae 1.660 segundos después). Las dos se tratan como `ErrorDeFuente` rei
 """
 
 import io
-import logging
 
 import httpx
 import pandas as pd
 
-from app.ingesta.http import ErrorDeFuente, pedir
+from app.ingesta.http import ErrorDeFuente, RespuestaVacia, pedir
 
 FUENTE = "Docta cash-flow"
 
-# httpx tiene su propio log ("HTTP Request: GET <url> ...") a nivel INFO, por fuera de structlog
-# y sin pasar por el redactor de secretos del logger del proyecto. Para cualquier otra fuente eso
-# es ruido; para Docta es una fuga: la URL lleva el token embebido en la query string. Subir el
-# nivel acá es la única forma de garantizar la regla "la URL nunca se loguea" sin tocar la
-# política de logging compartida (`app/core/logging.py`), que no la contempla.
-logging.getLogger("httpx").setLevel(logging.WARNING)
+# El log propio de httpx —que publicaría esta URL con el token adentro— lo silencia
+# `configure_logging()` para todo el servicio.
 
 
 async def bajar_cashflow(cliente: httpx.AsyncClient, url: str) -> pd.DataFrame:
@@ -40,6 +35,6 @@ async def bajar_cashflow(cliente: httpx.AsyncClient, url: str) -> pd.DataFrame:
 
     primera_hoja = next(iter(hojas.values()), None)
     if primera_hoja is None or len(primera_hoja) == 0:
-        raise ErrorDeFuente(f"{FUENTE} devolvió cero filas")
+        raise RespuestaVacia(f"{FUENTE} devolvió cero filas")
 
     return primera_hoja

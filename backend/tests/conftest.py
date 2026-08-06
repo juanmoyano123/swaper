@@ -61,7 +61,17 @@ class FakeConnection:
 
 @pytest.fixture(autouse=True)
 def env_de_prueba(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Configuración válida en todos los tests, y caché de settings limpia entre ellos."""
+    """Configuración válida en todos los tests, y caché de settings limpia entre ellos.
+
+    Además desconecta el `.env` de la raíz. Sin eso, un test que borra una variable del entorno
+    para probar qué pasa cuando falta la sigue encontrando en el archivo, y termina usando la
+    credencial de verdad: pasó con la del feed de cashflow, que hizo una consulta real a la fuente
+    desde la suite offline. Los tests marcados `integration` no dependen de esto —leen el DSN real
+    con `dotenv_values`— así que siguen andando igual.
+    """
+    from app.core.config import Settings
+
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
     for clave, valor in ENV_DE_PRUEBA.items():
         monkeypatch.setenv(clave, valor)
     get_settings.cache_clear()
