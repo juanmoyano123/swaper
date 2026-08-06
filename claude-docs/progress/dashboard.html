@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+<meta charset="utf-8">
+<title>10-Swaper — Progreso</title>
+<style>
+  body { font-family: ui-sans-serif, system-ui, sans-serif; background:#0a0e13; color:#dce6f0; margin:0; padding:32px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  p.sub { color:#7e91a5; font-size:13px; margin:0 0 24px; }
+  table { border-collapse: collapse; width:100%; margin-bottom:28px; }
+  th, td { text-align:left; padding:6px 10px; border-bottom:1px solid #1d2833; font-size:12.5px; }
+  th { color:#7e91a5; text-transform:uppercase; font-size:10px; letter-spacing:0.08em; }
+  .num { font-family: ui-monospace, monospace; text-align:right; }
+  .pendiente { color:#7e91a5; }
+</style>
+</head>
+<body>
+  <h1>10-Swaper — Progreso de features</h1>
+  <p class="sub">Este dashboard es estático. El estado real vive en <code>claude-docs/progress/PROGRESS.md</code>; actualizar ese archivo a mano o desde <code>/build-feature</code>.</p>
+  <table>
+    <thead><tr><th>Ciclo</th><th class="num">Features</th><th class="num">Person-days</th><th class="num">Semanas (est.)</th></tr></thead>
+    <tbody>
+      <tr><td>1 — Cimientos e ingesta</td><td class="num">12</td><td class="num">47</td><td class="num">~9,5</td></tr>
+      <tr><td>2 — Armador completo</td><td class="num">12</td><td class="num">55</td><td class="num">~11</td></tr>
+      <tr><td>3 — RV, carga y diagnóstico</td><td class="num">9</td><td class="num">41</td><td class="num">~8</td></tr>
+      <tr><td>4 — Optimizador y persistencia</td><td class="num">9</td><td class="num">42</td><td class="num">~8,5</td></tr>
+      <tr><td><strong>Stage 1 (total)</strong></td><td class="num"><strong>42</strong></td><td class="num"><strong>185</strong></td><td class="num"><strong>~37</strong></td></tr>
+      <tr><td>Stage 2</td><td class="num">8</td><td class="num">72</td><td class="num">~14,5</td></tr>
+    </tbody>
+  </table>
+  <p class="pendiente">Ver <code>PROGRESS.md</code> para el detalle de las 50 features. Siguiente paso: <code>/build-feature F-001</code>.</p>
+</body>
+</html>

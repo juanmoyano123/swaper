@@ -84,6 +84,35 @@ una está en `docs/ESTADO.md` y en `docs/historial/`.
   sobrescribiría el universo dejando vacías las columnas de condiciones.
 - **Datos de clientes reales nunca entran al repositorio.** Van a `~/Documents/IFA-confidencial/`.
 
+## Estructura del repo (desde Fase 4)
+
+```
+10-Swaper/
+├── frontend/           React 19 + Vite + TypeScript + Tailwind v4
+├── backend/            FastAPI + Python 3.12, venv local en backend/venv
+├── tools/              motor Python de línea de comandos (pre-Fase 4)
+├── data/                condiciones_emision.csv (curado) + output/ (regenerable)
+├── claude-docs/         pipeline de producto: planning, plans, progress, qa, deploys
+├── referencia/           incluye diseno-cordillera/ (prototipos de Fase 3, no producción)
+├── docs/                ESTADO.md + historial de decisiones
+└── workflows/            SOPs operativos (ej. trampas de la API de Docta)
+```
+
+## Comandos útiles
+
+```
+# Frontend
+cd frontend && npm run dev      # http://localhost:5173
+cd frontend && npm run build
+
+# Backend
+cd backend && source venv/bin/activate
+uvicorn app.main:app --reload   # http://localhost:8000/api/v1/health
+
+# Motor (pre-Fase 4, sigue vigente)
+python3 tools/armar_cartera.py --monto 100000
+```
+
 ## Antes de escalar de modelo
 
 Avisar antes de pasar a Fable u Opus.

@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cordillera · esculpir el año</title>
+<style>
+  html, body { margin:0; padding:0; }
+  body { font-family: ui-sans-serif, system-ui, "Helvetica Neue", sans-serif; -webkit-font-smoothing:antialiased; }
+  a { color:#4fb0ff; text-decoration:none; } a:hover { color:#8ccdff; }
+  input, select, button { font:inherit; }
+  ::-webkit-scrollbar { width:9px; height:9px; }
+  ::-webkit-scrollbar-thumb { background:#4a5a6e; border-radius:9px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  @keyframes pulso { 0%,100% { opacity:1 } 50% { opacity:.25 } }
+</style>
+<script type="module">
+  import * as D from './datos.js';
+  window.DATOS = D;
+  window.dispatchEvent(new Event('datos-listo'));
+</script>
+</helmet>
+
+<div style="--bg:{{ t.bg }}; --pan:{{ t.pan }}; --pan2:{{ t.pan2 }}; --lin:{{ t.lin }}; --tx:{{ t.tx }}; --dim:{{ t.dim }}; --ac:{{ t.ac }}; --ac2:{{ t.ac2 }}; --neg:{{ t.neg }}; --pos:{{ t.pos }}; --sd:{{ t.sd }}; background:var(--bg); color:var(--tx); min-height:100vh; font-size:13px; letter-spacing:0.01em;">
+
+  <div style="display:flex; align-items:center; gap:18px; padding:0 16px; height:46px; background:var(--pan); border-bottom:1px solid var(--lin); position:sticky; top:0; z-index:30;">
+    <div style="display:flex; align-items:baseline; gap:9px;">
+      <span style="font-size:15px; font-weight:700; letter-spacing:-0.01em;">Cordillera</span>
+      <span style="font-size:10px; text-transform:uppercase; letter-spacing:0.14em; color:var(--dim); white-space:nowrap;">armado por perfil de ingresos</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:7px; padding:3px 9px; border:1px solid var(--lin); border-radius:3px; font-family:ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size:11px; white-space:nowrap; flex:none;">
+      <span style="width:6px; height:6px; border-radius:50%; background:var(--pos); animation:pulso 1.6s infinite;"></span>
+      <span style="color:var(--pos);">EN VIVO</span>
+      <span style="color:var(--dim);">refresco en {{ tick }}s</span>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px; margin-left:auto; font-size:12px;">
+      <label style="display:flex; align-items:center; gap:6px; color:var(--dim);">Cliente
+        <select value="{{ clienteId }}" onChange="{{ setCliente }}" style="background:var(--pan2); color:var(--tx); border:1px solid var(--lin); border-radius:3px; padding:4px 6px;">
+          <sc-for list="{{ clientes }}" as="c" hint-placeholder-count="3">
+            <option value="{{ c.id }}">{{ c.nom }}</option>
+          </sc-for>
+        </select>
+      </label>
+      <label style="display:flex; align-items:center; gap:6px; color:var(--dim);">Monto
+        <input value="{{ montoStr }}" onChange="{{ setMonto }}" style="width:92px; background:var(--pan2); color:var(--tx); border:1px solid var(--lin); border-radius:3px; padding:4px 6px; font-family:ui-monospace, Menlo, monospace; text-align:right;">
+      </label>
+      <div style="display:flex; border:1px solid var(--lin); border-radius:3px; overflow:hidden;">
+        <sc-for list="{{ monedas }}" as="m" hint-placeholder-count="3">
+          <button onClick="{{ m.onClick }}" style="background:{{ m.bg }}; color:{{ m.fg }}; border:0; border-left:1px solid var(--lin); padding:4px 9px; font-size:11px; cursor:pointer;">{{ m.nom }}</button>
+        </sc-for>
+      </div>
+      <button onClick="{{ toggleTema }}" title="Tema claro / oscuro" style="background:var(--pan2); color:var(--dim); border:1px solid var(--lin); border-radius:3px; padding:4px 9px; cursor:pointer;">{{ temaIcono }}</button>
+    </div>
+  </div>
+
+  <div style="display:flex; align-items:center; gap:2px; padding:0 16px; height:34px; background:var(--pan); border-bottom:1px solid var(--lin);">
+    <sc-for list="{{ secciones }}" as="s" hint-placeholder-count="5">
+      <button onClick="{{ s.onClick }}" style="background:transparent; border:0; border-bottom:2px solid {{ s.borde }}; color:{{ s.fg }}; padding:8px 13px; font-size:12px; cursor:pointer;">{{ s.nom }}</button>
+    </sc-for>
+    <div style="margin-left:auto; display:flex; gap:10px; align-items:center; font-family:ui-monospace, Menlo, monospace; font-size:11px; color:var(--dim);">
+      <sc-for list="{{ numerosDia }}" as="d" hint-placeholder-count="6">
+        <span title="{{ d.fuente }}" style="display:flex; gap:6px; align-items:baseline; border-left:1px solid var(--lin); padding-left:10px;">
+          <span style="text-transform:uppercase; letter-spacing:0.08em; font-size:9px;">{{ d.rot }}</span>
+          <span style="color:var(--tx);">{{ d.val }}</span>
+          <span style="color:{{ d.color }};">{{ d.varStr }}</span>
+        </span>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="display:flex; gap:1px; padding:0 16px; height:30px; background:var(--pan2); border-bottom:1px solid var(--lin); align-items:stretch; overflow-x:auto;">
+    <sc-for list="{{ segmentos }}" as="g" hint-placeholder-count="7">
+      <button onClick="{{ g.onClick }}" title="{{ g.unidad }}" style="background:{{ g.bg }}; color:{{ g.fg }}; border:0; padding:0 12px; font-size:11px; white-space:nowrap; cursor:pointer; border-bottom:2px solid {{ g.borde }};">{{ g.nom }}</button>
+    </sc-for>
+    <div style="margin-left:auto; display:flex; align-items:center; padding-left:14px; font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:0.1em; white-space:nowrap;">un segmento por vez · {{ unidadSeg }}</div>
+  </div>
+
+  <div style="padding:14px 16px 10px;">
+    <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom:9px;">
+      <div>
+        <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.13em; color:var(--dim);">La cordillera del año · cobros por mes</div>
+        <div style="font-size:12px; color:var(--dim); margin-top:3px; max-width:640px; text-wrap:pretty;">Cada columna es plata real que entra ese mes con el nominal asignado. Tocá una columna para elegir entre los papeles que pagan ahí.</div>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <label style="display:flex; align-items:center; gap:6px; font-size:11px; color:var(--dim);">Piso mensual objetivo
+          <input value="{{ objStr }}" onChange="{{ setObj }}" style="width:74px; background:var(--pan2); color:var(--tx); border:1px solid var(--lin); border-radius:3px; padding:3px 6px; font-family:ui-monospace, Menlo, monospace; text-align:right;">
+        </label>
+        <button onClick="{{ cargarHeredada }}" style="background:var(--pan2); color:var(--tx); border:1px solid var(--lin); border-radius:3px; padding:5px 10px; cursor:pointer; font-size:11px;">Leer cartera del cliente</button>
+        <button onClick="{{ toggleGhost }}" style="background:{{ ghostBg }}; color:{{ ghostFg }}; border:1px solid var(--lin); border-radius:3px; padding:5px 10px; cursor:pointer; font-size:11px;">Silueta original</button>
+        <button onClick="{{ copiarPanel }}" title="Copiar este panel como imagen" style="background:var(--pan2); color:var(--dim); border:1px solid var(--lin); border-radius:3px; padding:5px 9px; cursor:pointer; font-size:11px;">⧉ panel</button>
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 268px; gap:12px; align-items:stretch;">
+      <div style="background:var(--pan); border:1px solid var(--lin); border-radius:4px; padding:14px 14px 8px; position:relative;">
+        <div style="position:relative; height:216px; display:flex; align-items:flex-end; gap:6px;">
+          <div style="position:absolute; left:0; right:0; bottom:{{ objLinea }}%; border-top:1px dashed var(--ac2); pointer-events:none;">
+            <span style="position:absolute; right:0; top:-15px; font-size:10px; font-family:ui-monospace, Menlo, monospace; color:var(--ac2); background:var(--pan); padding:0 4px;">piso {{ objEtiqueta }}</span>
+          </div>
+          <sc-for list="{{ barras }}" as="b" hint-placeholder-count="12">
+            <div onClick="{{ b.onClick }}" title="{{ b.tip }}" style="flex:1; display:flex; flex-direction:column; justify-content:flex-end; align-items:stretch; height:100%; cursor:pointer; position:relative; border-radius:3px 3px 0 0; background:{{ b.zonaBg }};">
+              <div style="font-family:ui-monospace, Menlo, monospace; font-size:10px; text-align:center; color:{{ b.montoColor }}; margin-bottom:4px; white-space:nowrap;">{{ b.montoStr }}</div>
+              <div style="position:relative; height:{{ b.h }}%; min-height:2px; display:flex; flex-direction:column-reverse; border-radius:3px 3px 0 0; overflow:hidden; background:{{ b.baseBg }};">
+                <sc-for list="{{ b.tramos }}" as="s" hint-placeholder-count="0">
+                  <div title="{{ s.tip }}" style="height:{{ s.h }}%; background:{{ s.bg }}; border-top:1px solid rgba(0,0,0,0.35);"></div>
+                </sc-for>
+              </div>
+              <div style="position:absolute; left:0; right:0; bottom:0; height:{{ b.hGhost }}%; border:1px dashed var(--sd); border-bottom:0; pointer-events:none; display:{{ b.ghostDisplay }};"></div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex; gap:6px; margin-top:6px;">
+          <sc-for list="{{ barras }}" as="b" hint-placeholder-count="12">
+            <div onClick="{{ b.onClick }}" style="flex:1; text-align:center; cursor:pointer; padding:3px 0 5px; border-top:2px solid {{ b.borde }};">
+              <div style="font-size:11px; color:{{ b.fg }}; font-weight:{{ b.peso }};">{{ b.nom }}</div>
+              <div style="display:flex; gap:2px; justify-content:center; margin-top:4px; min-height:7px;">
+                <sc-for list="{{ b.marcas }}" as="m" hint-placeholder-count="0">
+                  <span title="{{ m.tip }}" style="width:6px; height:6px; background:{{ m.bg }}; transform:rotate(45deg);"></span>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex; gap:16px; padding:8px 0 2px; border-top:1px solid var(--lin); margin-top:4px; font-size:10px; color:var(--dim); flex-wrap:wrap;">
+          <span style="display:flex; align-items:center; gap:5px;"><span style="width:9px; height:9px; background:var(--ac); border-radius:2px;"></span>renta (cupón)</span>
+          <span style="display:flex; align-items:center; gap:5px;"><span style="width:7px; height:7px; background:var(--ac2); transform:rotate(45deg);"></span>amortización de capital</span>
+          <span style="display:flex; align-items:center; gap:5px;"><span style="width:7px; height:7px; background:var(--dim); transform:rotate(45deg);"></span>balance trimestral (renta variable)</span>
+          <span style="display:flex; align-items:center; gap:5px;"><span style="width:9px; height:0; border-top:1px dashed var(--sd);"></span>cartera original del cliente</span>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="background:var(--pan); border:1px solid var(--lin); border-radius:4px; padding:12px;">
+          <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.12em; color:var(--dim);">Renta anual sobre lo invertido</div>
+          <div style="font-family:ui-monospace, Menlo, monospace; font-size:34px; line-height:1.05; color:var(--ac); margin:6px 0 2px;">{{ rentaPctStr }}</div>
+          <div style="font-family:ui-monospace, Menlo, monospace; font-size:11px; color:var(--dim); text-wrap:pretty;">sólo cupones · {{ cuentaRenta }}</div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <div style="background:var(--pan); border:1px solid var(--lin); border-radius:4px; padding:10px;">
+            <div style="font-size:9px; text-transform:uppercase; letter-spacing:0.1em; color:var(--dim);">Meses cubiertos</div>
+            <div style="font-family:ui-monospace, Menlo, monospace; font-size:20px; color:{{ cubColor }};">{{ cubiertosStr }}</div>
+          </div>
+          <div style="background:var(--pan); border:1px solid var(--lin); border-radius:4px; padding:10px;">
+            <div style="font-size:9px; text-transform:uppercase; letter-spacing:0.1em; color:var(--dim);">Parejo</div>
+            <div style="font-family:ui-monospace, Menlo, monospace; font-size:20px; color:var(--tx);">{{ parejoStr }}</div>
+          </div>
+          <div style="background:var(--pan); border:1px solid var(--lin); border-radius:4px; padding:10px;">
+            <div style="font-size:9px; text-transform:uppercase; letter-spacing:0.1em; color:var(--dim);">TIR pond. USD</div>
+            <div style="font-family:ui-monospace, Menlo, monospace; font-size:20px; color:var(--tx);">{{ tirStr }}</div>
+            <div style="font-size:9px; color:var(--dim);">{{ tirNota }}</div>
+          </div>
+          <div style="background:var(--pan); border:1px solid var(--lin); border-radius:4px; padding:10px;">
+            <div style="font-size:9px; text-transform:uppercase; letter-spacing:0.1em; color:var(--dim);">Duración mod.</div>
+            <div style="font-family:ui-monospace, Menlo, monospace; font-size:20px; color:var(--tx);">{{ dmStr }}</div>
+            <div style="font-size:9px; color:var(--dim);">{{ mixStr }}</div>
+          </div>
+        </div>
+        <div style="background:var(--pan); border:1px solid var(--lin); border-radius:4px; padding:11px;">
+          <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.12em; color:var(--ac2); margin-bottom:7px;">Lo que falta</div>
+          <sc-for list="{{ sugerencias }}" as="s" hint-placeholder-count="2">
+            <div style="display:flex; gap:8px; align-items:flex-start; padding:6px 0; border-top:1px solid var(--lin);">
+              <div style="flex:1; font-size:11px; color:var(--tx); text-wrap:pretty;">{{ s.texto }}</div>
+              <button onClick="{{ s.onClick }}" style="background:var(--ac); color:var(--bg); border:0; border-radius:3px; padding:3px 8px; font-size:10px; cursor:pointer; white-space:nowrap;">{{ s.accion }}</button>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:0 16px 16px; align-items:start;">
+
+    <div style="background:var(--pan); border:1px solid var(--lin); border-radius:4px; overflow:hidden;">
+      <div style="display:flex; align-items:center; gap:10px; padding:10px 12px; border-bottom:1px solid var(--lin);">
+        <span style="font-size:11px; text-transform:uppercase; letter-spacing:0.12em; color:var(--dim);">Universo</span>
+        <span style="font-family:ui-monospace, Menlo, monospace; font-size:11px; color:var(--ac);">{{ filtroMesStr }}</span>
+        <span style="margin-left:auto; font-family:ui-monospace, Menlo, monospace; font-size:11px; color:var(--dim);">{{ conteoUniverso }}</span>
+      </div>
+      <div style="display:flex; gap:7px; padding:8px 12px; border-bottom:1px solid var(--lin); flex-wrap:wrap; align-items:center; background:var(--pan2);">
+        <span style="font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:0.1em;">{{ rotFiltro }}</span>
+        <input value="{{ tirMin }}" onChange="{{ setTirMin }}" placeholder="mín" style="width:52px; background:var(--pan); color:var(--tx); border:1px solid var(--lin); border-radius:3px; padding:3px 5px; font-family:ui-monospace, Menlo, monospace; font-size:11px; text-align:right;">
+        <input value="{{ tirMax }}" onChange="{{ setTirMax }}" placeholder="máx" style="width:52px; background:var(--pan); color:var(--tx); border:1px solid var(--lin); border-radius:3px; padding:3px 5px; font-family:ui-monospace, Menlo, monospace; font-size:11px; text-align:right;">
+        <span style="font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:0.1em;">Dur. máx</span>
+        <input value="{{ dmMax }}" onChange="{{ setDmMax }}" placeholder="años" style="width:52px; background:var(--pan); color:var(--tx); border:1px solid var(--lin); border-radius:3px; padding:3px 5px; font-family:ui-monospace, Menlo, monospace; font-size:11px; text-align:right;">
+        <select value="{{ ley }}" onChange="{{ setLey }}" style="background:var(--pan); color:var(--tx); border:1px solid var(--lin); border-radius:3px; padding:3px 5px; font-size:11px;">
+          <option value="">Toda ley</option>
+          <option value="Argentina">Ley Argentina</option>
+          <option value="Nueva York">Ley Nueva York</option>
+        </select>
+        <button onClick="{{ limpiar }}" style="background:transparent; color:var(--dim); border:1px solid var(--lin); border-radius:3px; padding:3px 8px; font-size:10px; cursor:pointer;">limpiar</button>
+      </div>
+      <div style="max-height:340px; overflow:auto;">
+        <sc-for list="{{ universo }}" as="u" hint-placeholder-count="9">
+          <div onClick="{{ u.onClick }}" style="display:grid; grid-template-columns:78px 1fr 62px 52px 52px 104px 26px; gap:8px; align-items:center; padding:7px 12px; border-bottom:1px solid var(--lin); cursor:pointer; background:{{ u.bg }};">
+            <div>
+              <div style="font-family:ui-monospace, Menlo, monospace; font-size:12px; color:{{ u.tkColor }};">{{ u.tk }}</div>
+              <div style="font-size:9px; color:var(--dim);">{{ u.ley }}</div>
+            </div>
+            <div style="min-width:0;">
+              <div style="font-size:11px; color:var(--tx); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ u.emisor }}</div>
+              <div style="font-size:9px; color:var(--dim);">{{ u.sub }}</div>
+            </div>
+            <div style="text-align:right; font-family:ui-monospace, Menlo, monospace; font-size:11px;">
+              <div style="color:var(--tx);">{{ u.rend }}</div>
+              <div style="font-size:9px; color:var(--dim);">{{ u.rendRot }}</div>
+            </div>
+            <div style="text-align:right; font-family:ui-monospace, Menlo, monospace; font-size:11px; color:var(--tx);">{{ u.cupon }}<div style="font-size:9px; color:var(--dim);">cupón</div></div>
+            <div style="text-align:right; font-family:ui-monospace, Menlo, monospace; font-size:11px; color:var(--tx);">{{ u.dm }}<div style="font-size:9px; color:var(--dim);">dur.</div></div>
+            <div style="display:flex; gap:2px;">
+              <sc-for list="{{ u.mini }}" as="m" hint-placeholder-count="12">
+                <span title="{{ m.tip }}" style="flex:1; height:13px; border-radius:1px; background:{{ m.bg }};"></span>
+              </sc-for>
+            </div>
+            <div style="text-align:center; font-size:14px; color:{{ u.masColor }};">{{ u.mas }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="background:var(--pan); border:1px solid var(--lin); border-radius:4px; overflow:hidden;">
+      <div style="display:flex; align-items:center; gap:9px; padding:10px 12px; border-bottom:1px solid var(--lin);">
+        <span style="font-size:11px; text-transform:uppercase; letter-spacing:0.12em; color:var(--dim);">Cartera en construcción</span>
+        <span style="font-family:ui-monospace, Menlo, monospace; font-size:11px; color:{{ sumaColor }};">Σ {{ sumaStr }}</span>
+        <span style="font-family:ui-monospace, Menlo, monospace; font-size:11px; color:var(--dim);">invertido {{ invertidoStr }}</span>
+        <div style="margin-left:auto; display:flex; gap:6px;">
+          <button onClick="{{ equiponderar }}" style="background:var(--pan2); color:var(--tx); border:1px solid var(--lin); border-radius:3px; padding:4px 8px; font-size:10px; cursor:pointer;">Equiponderar</button>
+          <button onClick="{{ vaciar }}" style="background:var(--pan2); color:var(--dim); border:1px solid var(--lin); border-radius:3px; padding:4px 8px; font-size:10px; cursor:pointer;">Vaciar</button>
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns:74px 1fr 58px 62px 66px 58px 104px 22px; gap:8px; padding:6px 12px; border-bottom:1px solid var(--lin); font-size:9px; text-transform:uppercase; letter-spacing:0.08em; color:var(--dim); background:var(--pan2);">
+        <div>Ticker</div><div>Emisor</div><div style="text-align:right;">Pedido</div><div style="text-align:right;">Nominal</div><div style="text-align:right;">Invertido</div><div style="text-align:right;">Real</div><div>Paga</div><div></div>
+      </div>
+      <div style="max-height:296px; overflow:auto;">
+        <sc-for list="{{ posiciones }}" as="p" hint-placeholder-count="0">
+          <div style="display:grid; grid-template-columns:74px 1fr 58px 62px 66px 58px 104px 22px; gap:8px; align-items:center; padding:6px 12px; border-bottom:1px solid var(--lin);">
+            <div>
+              <div style="font-family:ui-monospace, Menlo, monospace; font-size:12px; color:var(--tx);">{{ p.tk }}</div>
+              <div style="font-size:9px; color:var(--dim);">lám. {{ p.lamina }}</div>
+            </div>
+            <div style="min-width:0; font-size:11px; color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ p.emisor }}</div>
+            <div><input value="{{ p.pesoStr }}" onChange="{{ p.setPeso }}" style="width:100%; background:var(--pan2); color:var(--ac); border:1px solid var(--lin); border-radius:3px; padding:2px 4px; font-family:ui-monospace, Menlo, monospace; font-size:11px; text-align:right;"></div>
+            <div style="text-align:right; font-family:ui-monospace, Menlo, monospace; font-size:11px; color:var(--tx);">{{ p.vn }}</div>
+            <div style="text-align:right; font-family:ui-monospace, Menlo, monospace; font-size:11px; color:var(--tx);">{{ p.inv }}</div>
+            <div style="text-align:right; font-family:ui-monospace, Menlo, monospace; font-size:11px; color:{{ p.realColor }};" title="{{ p.realTip }}">{{ p.real }}</div>
+            <div style="display:flex; gap:2px;">
+              <sc-for list="{{ p.mini }}" as="m" hint-placeholder-count="12">
+                <span title="{{ m.tip }}" style="flex:1; height:13px; border-radius:1px; background:{{ m.bg }};"></span>
+              </sc-for>
+            </div>
+            <div onClick="{{ p.quitar }}" style="text-align:center; font-size:13px; color:var(--dim); cursor:pointer;">×</div>
+          </div>
+        </sc-for>
+        <sc-if value="{{ vacia }}" hint-placeholder-val="{{ true }}">
+          <div style="padding:26px 14px; text-align:center; color:var(--dim); font-size:12px; text-wrap:pretty;">Cartera vacía. Tocá un mes flojo en la cordillera y elegí ahí, o leé la cartera que trae el cliente.</div>
+        </sc-if>
+      </div>
+      <div style="padding:9px 12px; border-top:1px solid var(--lin); background:var(--pan2); display:flex; gap:14px; flex-wrap:wrap; font-family:ui-monospace, Menlo, monospace; font-size:11px;">
+        <span style="color:var(--dim);">remanente sin invertir <span style="color:var(--tx);">{{ remanenteStr }}</span></span>
+        <span style="color:var(--dim);">renta fija <span style="color:var(--tx);">{{ pesoRFStr }}</span></span>
+        <span style="color:var(--dim);">renta variable <span style="color:var(--tx);">{{ pesoRVStr }}</span></span>
+        <span style="color:var(--dim);">{{ avisoRV }}</span>
+      </div>
+      <div style="padding:10px 12px; border-top:1px solid var(--lin);">
+        <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.12em; color:var(--dim); margin-bottom:6px;">Flujo mes por mes · en dólares que cobra el cliente</div>
+        <sc-for list="{{ flujoDetalle }}" as="f" hint-placeholder-count="4">
+          <div style="display:grid; grid-template-columns:36px 1fr 74px; gap:9px; align-items:center; padding:4px 0; border-top:1px solid var(--lin); font-family:ui-monospace, Menlo, monospace; font-size:11px;">
+            <div style="color:{{ f.mesColor }};">{{ f.nom }}</div>
+            <div style="color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ f.detalle }}</div>
+            <div style="text-align:right; color:var(--tx);">{{ f.total }}</div>
+          </div>
+        </sc-for>
+        <div style="display:flex; justify-content:space-between; padding-top:8px; margin-top:4px; border-top:1px solid var(--ac); font-family:ui-monospace, Menlo, monospace; font-size:12px;">
+          <span style="color:var(--dim);">total anual sólo cupones</span><span style="color:var(--ac);">{{ rentaAnualStr }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <sc-if value="{{ mostrarFicha }}" hint-placeholder-val="{{ true }}">
+    <div style="margin:0 16px 22px; background:var(--pan); border:1px solid var(--lin); border-left:3px solid var(--ac); border-radius:4px; padding:14px 16px;">
+      <div style="display:flex; align-items:baseline; gap:10px; margin-bottom:10px;">
+        <span style="font-family:ui-monospace, Menlo, monospace; font-size:12px; color:var(--ac);">ALTERNATIVA 1</span>
+        <span style="font-size:15px; font-weight:600;">Cordillera</span>
+        <span style="font-size:12px; color:var(--dim);">— el asesor no elige papeles: esculpe la forma del año, y la cartera es el subproducto.</span>
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(230px, 1fr)); gap:14px; font-size:11px; line-height:1.55;">
+        <div><div style="color:var(--ac2); text-transform:uppercase; letter-spacing:0.1em; font-size:9px; margin-bottom:4px;">Qué pasa con el calendario-selector</div><div style="color:var(--dim); text-wrap:pretty;">Se conserva el hallazgo (el calendario elige) pero deja de ser doce cajas con listas: pasa a tener altura, así el hueco de cobertura se lee como un valle y no como una caja con menos renglones. La lista de papeles del mes se despliega abajo al tocar la columna, en la mitad del espacio.</div></div>
+        <div><div style="color:var(--ac2); text-transform:uppercase; letter-spacing:0.1em; font-size:9px; margin-bottom:4px;">Nueva vs. existente</div><div style="color:var(--dim); text-wrap:pretty;">Un solo lienzo. «Leer cartera del cliente» carga las posiciones y deja la silueta original punteada detrás de las columnas: mejorar es ver la silueta y llenar los valles. Armar de cero es el caso con silueta en cero.</div></div>
+        <div><div style="color:var(--ac2); text-transform:uppercase; letter-spacing:0.1em; font-size:9px; margin-bottom:4px;">Renta variable</div><div style="color:var(--dim); text-wrap:pretty;">No suma altura, porque no hay flujo garantizado. Entra como rombos bajo cada mes con la fecha de balance, y pesa en la tabla y en el mix RF/RV. Nunca se le calcula TIR ni duración.</div></div>
+        <div><div style="color:var(--ac2); text-transform:uppercase; letter-spacing:0.1em; font-size:9px; margin-bottom:4px;">Qué sacrifica</div><div style="color:var(--dim); text-wrap:pretty;">La comparación fina entre papeles del mismo mes: la columna muestra plata, no cupón contra TIR contra vencimiento lado a lado, así que hay que bajar a la lista. Y privilegia el flujo por sobre el precio: quien busca ganancia de capital no tiene acá su herramienta principal.</div></div>
+        <div><div style="color:var(--ac2); text-transform:uppercase; letter-spacing:0.1em; font-size:9px; margin-bottom:4px;">Huecos que ataca</div><div style="color:var(--dim); text-wrap:pretty;">Cliente con mandato y piso mensual declarado (1), universo completo con los seis segmentos y filtros (2 y 6), renta variable con calendario de balances (3), lectura de la cartera existente con silueta (4) y señalamiento activo de los meses flojos (5).</div></div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1520,&quot;height&quot;:1180},&quot;tema&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;oscuro&quot;,&quot;claro&quot;],&quot;default&quot;:&quot;oscuro&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Vista&quot;},&quot;objetivoMensual&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:550,&quot;min&quot;:0,&quot;max&quot;:5000,&quot;step&quot;:50,&quot;unit&quot;:&quot;US$/mes&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Mandato&quot;},&quot;montoInicial&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:100000,&quot;min&quot;:10000,&quot;max&quot;:1000000,&quot;step&quot;:10000,&quot;unit&quot;:&quot;US$&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Mandato&quot;},&quot;mostrarFicha&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Vista&quot;}}">
+const T = {
+  oscuro: { bg:'#0a0e13', pan:'#111820', pan2:'#0d141b', lin:'#1d2833', tx:'#dce6f0', dim:'#7e91a5', ac:'#5ee39a', ac2:'#f2b13c', neg:'#ff6b6b', pos:'#5ee39a', sd:'#516373' },
+  claro:  { bg:'#f2f4f7', pan:'#ffffff', pan2:'#eef1f5', lin:'#d5dce4', tx:'#182430', dim:'#61717f', ac:'#0e8a55', ac2:'#a86a06', neg:'#c0392b', pos:'#0e8a55', sd:'#94a4b4' },
+};
+
+class Component extends DCLogic {
+  state = {
+    cargado: false, tema: 'oscuro', clienteId: 'gv', mon: 'mep', monto: 100000,
+    pos: [], seg: 'hard', selMes: null, tirMin: '', tirMax: '', dmMax: '', ley: '',
+    obj: 550, ghost: null, verGhost: true, tick: 8, drift: 0,
+  };
+
+  componentDidMount() {
+    const usar = () => {
+      const db = window.DATOS;
+      if (!db) return false;
+      const p = this.props || {};
+      const t = p.tema;
+      this.db = db;
+      this.setState({
+        cargado: true,
+        tema: t === 'claro' || t === 'oscuro' ? t : 'oscuro',
+        obj: p.objetivoMensual ?? 550,
+        monto: p.montoInicial ?? 100000,
+        pos: db.CARTERA_PROPUESTA.map(q => ({ ...q })),
+      });
+      return true;
+    };
+    if (!usar()) window.addEventListener('datos-listo', usar, { once: true });
+    this.timer = setInterval(() => this.setState(s => (
+      s.tick <= 1 ? { tick: 8, drift: s.drift + 1 } : { tick: s.tick - 1 }
+    )), 1000);
+  }
+  componentWillUnmount() { clearInterval(this.timer); }
+
+  set = (k) => (e) => this.setState({ [k]: e.target.value });
+  num = (v, def) => { const n = parseFloat(String(v).replace(/[^\d.,-]/g, '').replace(/\./g, '').replace(',', '.')); return isNaN(n) ? def : n; };
+
+  agregar = (id) => this.setState(s => {
+    if (s.pos.some(p => p.id === id)) return { pos: s.pos.filter(p => p.id !== id) };
+    const n = s.pos.length + 1;
+    return { pos: [...s.pos, { id, peso: Math.round((100 / n) * 10) / 10 }] };
+  });
+
+  renderVals() {
+    const s = this.state, db = this.db;
+    const t = T[s.tema] || T.oscuro;
+    const base = {
+      t, tick: s.tick, temaIcono: s.tema === 'oscuro' ? '☾' : '☀',
+      toggleTema: () => this.setState(x => ({ tema: x.tema === 'oscuro' ? 'claro' : 'oscuro' })),
+      mostrarFicha: this.props.mostrarFicha ?? true,
+      clienteId: s.clienteId, montoStr: String(s.monto), objStr: String(s.obj),
+      tirMin: s.tirMin, tirMax: s.tirMax, dmMax: s.dmMax, ley: s.ley,
+      setTirMin: this.set('tirMin'), setTirMax: this.set('tirMax'), setDmMax: this.set('dmMax'), setLey: this.set('ley'),
+      setMonto: (e) => this.setState({ monto: Math.max(1000, this.num(e.target.value, 100000)) }),
+      setObj: (e) => this.setState({ obj: Math.max(0, this.num(e.target.value, 0)) }),
+      limpiar: () => this.setState({ tirMin: '', tirMax: '', dmMax: '', ley: '', selMes: null }),
+      equiponderar: () => this.setState(x => ({ pos: x.pos.map(p => ({ ...p, peso: Math.round((100 / x.pos.length) * 10) / 10 })) })),
+      vaciar: () => this.setState({ pos: [], ghost: null }),
+      toggleGhost: () => this.setState(x => ({ verGhost: !x.verGhost })),
+      copiarPanel: () => {},
+    };
+    if (!db) return { ...base, vacia: true, unidadSeg: '', barras: [], universo: [], posiciones: [] };
+
+    const { UNIVERSO, porId, SEGMENTOS, MESES, NUMEROS_DEL_DIA, CLIENTES, CARTERA_HEREDADA, resolver, precio, ticker, usd, n0, n1, pct } = db;
+    const cli = CLIENTES.find(c => c.id === s.clienteId) || CLIENTES[0];
+    const r = resolver(s.pos, s.monto, s.mon);
+    const rG = s.ghost ? resolver(s.ghost, s.monto, s.mon) : null;
+    const segInfo = SEGMENTOS.find(g => g.id === s.seg);
+
+    const pico = Math.max(r.picoRenta, rG ? rG.picoRenta : 0, s.obj * 1.15, 1);
+    const barras = r.meses.map(m => {
+      const g = rG ? rG.meses[m.mes - 1] : null;
+      const sel = s.selMes === m.mes;
+      const flojo = m.totalRenta < s.obj;
+      const marcas = [
+        ...m.amortiz.map(a => ({ bg: t.ac2, tip: `${a.tk} amortiza ${usd(a.monto, 0)}` })),
+        ...m.balances.map(b => ({ bg: t.dim, tip: `${b.tk} presenta balance` })),
+      ];
+      return {
+        nom: m.nom, h: Math.max(0.5, m.totalRenta / pico * 100), hGhost: g ? Math.max(0.5, g.totalRenta / pico * 100) : 0,
+        ghostDisplay: rG && s.verGhost ? 'block' : 'none',
+        montoStr: m.totalRenta > 0 ? n0(m.totalRenta) : '—',
+        montoColor: m.totalRenta === 0 ? t.neg : flojo ? t.ac2 : t.tx,
+        baseBg: m.totalRenta > 0 ? t.ac : 'transparent',
+        zonaBg: sel ? (s.tema === 'oscuro' ? 'rgba(94,227,154,0.09)' : 'rgba(14,138,85,0.08)') : 'transparent',
+        borde: sel ? t.ac : 'transparent', fg: sel ? t.ac : t.tx, peso: sel ? '700' : '400',
+        tramos: m.renta.slice().sort((a, b) => b.monto - a.monto).map(x => ({
+          h: Math.max(2, x.monto / Math.max(m.totalRenta, 1e-9) * 100), bg: t.ac,
+          tip: `${x.tk} paga ${usd(x.monto)} en ${m.nom}`,
+        })),
+        marcas,
+        tip: `${m.nom}: ${usd(m.totalRenta)} de renta · ${m.renta.length} papeles`,
+        onClick: () => this.setState(x => ({ selMes: x.selMes === m.mes ? null : m.mes })),
+      };
+    });
+
+    const mini = (inst) => MESES.map((nm, i) => {
+      const paga = inst.clase === 'RF' ? inst.meses.includes(i + 1) && inst.cuponAnual > 0 : inst.balances.includes(i + 1);
+      const cubierto = r.meses[i].totalRenta >= s.obj && s.obj > 0;
+      return { bg: paga ? (cubierto ? t.sd : t.ac) : (s.tema === 'oscuro' ? '#1b2530' : '#e2e7ed'), tip: paga ? `paga en ${nm}` : nm };
+    });
+
+    const tmin = this.num(s.tirMin, -Infinity), tmax = this.num(s.tirMax, Infinity), dmx = this.num(s.dmMax, Infinity);
+    const esRV = s.seg === 'rv';
+    const universo = UNIVERSO
+      .filter(i => esRV ? i.clase === 'RV' : i.seg === s.seg)
+      .filter(i => !s.ley || i.clase === 'RV' || i.ley === s.ley)
+      .filter(i => i.clase === 'RV' || ((i.tir ?? 0) >= tmin && (i.tir ?? 0) <= tmax && (i.dm ?? 0) <= dmx))
+      .filter(i => !s.selMes || (i.clase === 'RF' ? i.meses.includes(s.selMes) && i.cuponAnual > 0 : i.balances.includes(s.selMes)))
+      .sort((a, b) => (b.tir ?? -1) - (a.tir ?? -1))
+      .map(i => {
+        const en = s.pos.some(p => p.id === i.id);
+        const px = precio(i, s.mon);
+        return {
+          tk: ticker(i, s.mon) || `${i.id} (no cotiza en ${s.mon === 'mep' ? 'MEP' : s.mon === 'cable' ? 'cable' : 'pesos'})`,
+          tkColor: px == null ? t.dim : en ? t.ac : t.tx,
+          ley: i.clase === 'RF' ? `Ley ${i.ley}` : i.tipo,
+          emisor: i.emisor,
+          sub: i.clase === 'RF' ? `${i.tipo} · ${i.estructura} · vto ${i.vto}` : `${i.industria} · dividendo ${i.dividendo}`,
+          rend: i.clase === 'RF' ? (i.tir == null ? 's/d' : pct(i.tir)) : (i.varDia == null ? 's/d' : pct(i.varDia, 2)),
+          rendRot: i.clase === 'RF' ? (segInfo ? segInfo.unidad.split(' ')[0].toLowerCase() : 'tir') : 'día',
+          cupon: i.clase === 'RF' ? (i.cuponAnual > 0 ? n1(i.cuponAnual) : '0') : 's/c',
+          dm: i.clase === 'RF' ? (i.dm == null ? 's/d' : n1(i.dm)) : 's/d',
+          mini: mini(i), mas: en ? '✓' : '+', masColor: en ? t.ac : t.dim,
+          bg: en ? (s.tema === 'oscuro' ? 'rgba(94,227,154,0.07)' : 'rgba(14,138,85,0.06)') : 'transparent',
+          onClick: () => this.agregar(i.id),
+        };
+      });
+
+    const posiciones = r.filas.map(f => ({
+      tk: ticker(f.inst, s.mon) || f.inst.id, emisor: f.inst.emisor, lamina: n0(f.inst.lamina || 1),
+      pesoStr: String(f.peso), vn: f.sinCotizar ? 's/d' : n0(f.vn),
+      inv: f.sinCotizar ? 'no cotiza' : usd(f.invertido, 0),
+      real: f.sinCotizar ? 's/d' : pct(f.pesoReal),
+      realColor: Math.abs(f.pesoReal - f.peso) > 0.6 ? t.ac2 : t.dim,
+      realTip: `pedido ${f.peso}% · real ${f.pesoReal.toFixed(1)}% — el nominal se redondea hacia abajo al múltiplo de la lámina (${f.inst.lamina})`,
+      mini: mini(f.inst),
+      setPeso: (e) => { const v = this.num(e.target.value, f.peso); this.setState(x => ({ pos: x.pos.map(p => p.id === f.id ? { ...p, peso: Math.max(0, Math.min(100, v)) } : p) })); },
+      quitar: () => this.setState(x => ({ pos: x.pos.filter(p => p.id !== f.id) })),
+    }));
+
+    const vacios = r.meses.filter(m => m.totalRenta < s.obj);
+    const sugerencias = [];
+    vacios.slice(0, 2).forEach(m => {
+      const cand = UNIVERSO.filter(i => i.clase === 'RF' && i.seg === 'hard' && i.cuponAnual > 0 &&
+        i.meses.includes(m.mes) && !s.pos.some(p => p.id === i.id))
+        .sort((a, b) => (b.tir ?? 0) - (a.tir ?? 0))[0];
+      if (cand) sugerencias.push({
+        texto: `${m.nom} entra ${m.totalRenta === 0 ? 'en cero' : `con ${usd(m.totalRenta, 0)}`}, abajo del piso. ${ticker(cand, s.mon) || cand.id} paga en ${cand.meses.map(x => MESES[x - 1]).join(' y ')} con TIR ${pct(cand.tir)}.`,
+        accion: `sumar ${ticker(cand, s.mon) || cand.id}`, onClick: () => this.agregar(cand.id),
+      });
+    });
+    if (r.pesoRV < 25 && s.pos.length) {
+      sugerencias.push({ texto: `La renta variable pesa ${pct(r.pesoRV)}. Una cartera de este perfil suele llevar 30-40% entre acciones y CEDEARs.`, accion: 'ver acciones', onClick: () => this.setState({ seg: 'rv', selMes: null }) });
+    }
+    if (!sugerencias.length) sugerencias.push({ texto: 'Los doce meses están sobre el piso objetivo y el mix RF/RV está en rango. No hay hueco que señalar.', accion: 'ok', onClick: () => {} });
+
+    const flujoDetalle = r.meses.map(m => ({
+      nom: m.nom, mesColor: m.totalRenta === 0 ? t.neg : m.totalRenta < s.obj ? t.ac2 : t.tx,
+      detalle: m.renta.length ? m.renta.map(x => `${x.tk} ${n0(x.monto)}`).join(' · ') : 'sin cobros',
+      total: m.totalRenta ? usd(m.totalRenta, 0) : '—',
+    }));
+
+    return {
+      ...base,
+      vacia: !s.pos.length,
+      clientes: CLIENTES.map(c => ({ id: c.id, nom: `${c.nom} · ${c.perfil}` })),
+      setCliente: (e) => { const c = CLIENTES.find(x => x.id === e.target.value); this.setState({ clienteId: e.target.value, monto: c.monto, obj: c.objetivoMensual }); },
+      monedas: [['ars', 'Pesos'], ['mep', 'MEP'], ['cable', 'Cable']].map(([id, nom]) => ({
+        nom, bg: s.mon === id ? t.ac : 'transparent', fg: s.mon === id ? t.bg : t.dim,
+        onClick: () => this.setState({ mon: id }),
+      })),
+      secciones: [['armar', 'Armado'], ['monitor', 'Monitor'], ['carteras', 'Carteras'], ['coloc', 'Colocaciones'], ['cal', 'Calendario de flujos']].map(([id, nom], i) => ({
+        nom, borde: i === 0 ? t.ac : 'transparent', fg: i === 0 ? t.tx : t.dim, onClick: () => {},
+      })),
+      segmentos: [...SEGMENTOS.map(g => ({ id: g.id, nom: g.nom, unidad: g.unidad })), { id: 'rv', nom: 'Acciones y CEDEARs', unidad: 'sin TIR ni duración' }]
+        .map(g => ({
+          nom: g.nom, unidad: g.unidad,
+          bg: s.seg === g.id ? t.pan : 'transparent', fg: s.seg === g.id ? t.tx : t.dim,
+          borde: s.seg === g.id ? t.ac : 'transparent',
+          onClick: () => this.setState({ seg: g.id }),
+        })),
+      unidadSeg: esRV ? 'renta variable: sin TIR ni duración, el equivalente del cupón es el balance trimestral' : segInfo.eje,
+      rotFiltro: esRV ? 'Variación día' : `${segInfo.unidad} entre`,
+      numerosDia: NUMEROS_DEL_DIA.map(d => ({ ...d, varStr: (d.var > 0 ? '+' : '') + d.var.toFixed(2) + '%', color: d.var >= 0 ? t.pos : t.neg })),
+      barras,
+      objLinea: Math.min(96, s.obj / pico * 100), objEtiqueta: usd(s.obj, 0),
+      ghostBg: rG && s.verGhost ? t.pan2 : 'transparent', ghostFg: rG && s.verGhost ? t.tx : t.dim,
+      cargarHeredada: () => this.setState({ pos: CARTERA_HEREDADA.map(p => ({ ...p })), ghost: CARTERA_HEREDADA.map(p => ({ ...p })), verGhost: true }),
+      rentaPctStr: pct(r.rentaSobreInvertido, 2),
+      cuentaRenta: `${usd(r.rentaAnual)} / ${usd(r.invertido)} = ${pct(r.rentaSobreInvertido, 2)}`,
+      cubiertosStr: `${r.cubiertos}/12`, cubColor: r.cubiertos === 12 ? t.ac : r.cubiertos >= 9 ? t.ac2 : t.neg,
+      parejoStr: r.invertido ? `${r.parejo}%` : 's/d',
+      tirStr: r.tirHard == null ? 's/d' : pct(r.tirHard, 2),
+      tirNota: r.otrosSeg.length ? `${r.otrosSeg.length} segmento(s) más, sin promediar` : 'sólo dólar hard',
+      dmStr: r.dmHard == null ? 's/d' : n1(r.dmHard) + ' a',
+      mixStr: `${Math.round(r.pesoRF)}/${Math.round(r.pesoRV)} RF·RV`,
+      sugerencias, universo, posiciones,
+      conteoUniverso: `${universo.length} papeles`,
+      filtroMesStr: s.selMes ? `pagan en ${MESES[s.selMes - 1]}` : 'todo el año',
+      sumaStr: pct(r.sumaPesos), sumaColor: Math.abs(r.sumaPesos - 100) < 0.15 ? t.dim : t.ac2,
+      invertidoStr: usd(r.invertido, 0), remanenteStr: usd(r.remanente, 0),
+      pesoRFStr: pct(r.pesoRF), pesoRVStr: pct(r.pesoRV),
+      avisoRV: cli.perfil === 'Conservador' ? 'perfil conservador: el mix no se empuja al riesgo' : `perfil ${cli.perfil.toLowerCase()}`,
+      flujoDetalle, rentaAnualStr: usd(r.rentaAnual),
+    };
+  }
+}
+
+</script>
+</body>
+</html>

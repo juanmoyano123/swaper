@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+/*
+  Tokens de claude-docs/planning/design-system.md — Fase 3, diseño "Cordillera v2".
+  Oscuro es el tema default; :root[data-theme] permite forzar uno u otro
+  independientemente de prefers-color-scheme.
+*/
+
+:root {
+  --bg: #0a0e13;
+  --pan: #111820;
+  --pan2: #0d141b;
+  --lin: #1d2833;
+  --tx: #dce6f0;
+  --dim: #7e91a5;
+  --ac: #5ee39a;
+  --ac2: #f2b13c;
+  --neg: #ff6b6b;
+  --pos: #5ee39a;
+  --sd: #516373;
+
+  color-scheme: dark light;
+  font: 13.5px/1.45 ui-sans-serif, system-ui, "Helvetica Neue", sans-serif;
+  color: var(--tx);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f2f4f7;
+    --pan: #ffffff;
+    --pan2: #eef1f5;
+    --lin: #d5dce4;
+    --tx: #182430;
+    --dim: #61717f;
+    --ac: #0e8a55;
+    --ac2: #a86a06;
+    --neg: #c0392b;
+    --pos: #0e8a55;
+    --sd: #94a4b4;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0a0e13;
+  --pan: #111820;
+  --pan2: #0d141b;
+  --lin: #1d2833;
+  --tx: #dce6f0;
+  --dim: #7e91a5;
+  --ac: #5ee39a;
+  --ac2: #f2b13c;
+  --neg: #ff6b6b;
+  --pos: #5ee39a;
+  --sd: #516373;
+}
+
+:root[data-theme="light"] {
+  --bg: #f2f4f7;
+  --pan: #ffffff;
+  --pan2: #eef1f5;
+  --lin: #d5dce4;
+  --tx: #182430;
+  --dim: #61717f;
+  --ac: #0e8a55;
+  --ac2: #a86a06;
+  --neg: #c0392b;
+  --pos: #0e8a55;
+  --sd: #94a4b4;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+#root {
+  min-height: 100svh;
+}
+
+.mono {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}

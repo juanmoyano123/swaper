@@ -1,0 +1,2628 @@
+# Plan de Producto — 10-Swaper
+
+Fase 2 del pipeline. Fecha: 05/08/2026.
+Inputs: `product-definition.md` (Fase 1A), `idea-brief.md` (Fase −1), `CLAUDE.md` (reglas del dominio).
+Output que consume: `/init-project` (Fase 4) y `/build-feature` (Fase 5).
+
+---
+
+## 0. Resumen ejecutivo
+
+| | |
+|---|---|
+| Features totales | 50 (F-001 … F-050) |
+| Stage 1 | 39 |
+| Foundation (obligatorias en Stage 1) | 3 |
+| Stage 2 | 8 |
+| Esfuerzo Stage 1 | 185 person-days *(estimación)* |
+| Esfuerzo Stage 2 | 72 person-days *(estimación)* |
+| Ciclos de Stage 1 | 4 |
+| Feature crítica | **F-002** (esquema de datos) — desbloquea 24 features de forma directa o transitiva |
+
+Las 13 features conceptuales del `product-definition.md` (F1–F13) se descomponen acá en unidades
+construibles por `/build-feature`: cada F-0NN es una unidad con lógica, superficie de API o UI, y
+tests propios. **No se agregó alcance nuevo**: cada F-0NN traza a una F1–F13 del documento de
+producto o a un requisito Foundation explícito.
+
+Las 10 reglas del dominio de `CLAUDE.md` no son criterios de aceptación opcionales: aparecen como
+acceptance criteria verificables dentro de las features donde se materializan, y están mapeadas en
+la sección 9.
+
+---
+
+## 1. User personas
+
+### Persona 1 — Marina, asesora financiera de la ALyC (persona primaria)
+
+**Contexto.** Empleada de la ALyC. Atiende una cartera de clientes minoristas. Trabaja todo el día
+con la misma pantalla abierta y opera en las tres monedas de liquidación: pesos, dólar MEP y dólar
+cable. No es trader ni analista cuantitativo.
+
+**Jobs to be done**
+- *Cuando* un cliente me pregunta "¿cuánto voy a cobrar y cuándo?", *quiero* llegar a la reunión con
+  un calendario mes a mes en plata real, *para* vender certeza de cobro y no una tasa abstracta.
+- *Cuando* armo una cartera nueva, *quiero* elegir los papeles desde el mes que necesito cubrir,
+  *para* no descubrir después de comprar que toda la renta cae en marzo y septiembre.
+- *Cuando* el cliente me pide más rendimiento, *quiero* poder decirle en la misma frase qué está
+  pagando por ese rendimiento, *para* que la decisión sea suya y quede documentada.
+
+**Flujo de uso principal.** Flujo A (armar desde cero) y Flujo C (consulta de mercado a la mañana).
+
+**Métricas de éxito de la persona**
+- Tiempo de armado de una cartera desde cero: hoy es trabajo de planilla; objetivo declarado del
+  producto es que ocurra en una sesión. *(No hay medición de línea de base en los inputs — se mide
+  desde la primera semana de uso.)*
+- Cantidad de meses sin cobertura en las carteras que produce: la métrica que el producto existe
+  para bajar.
+- Cero números en pantalla que no pueda rastrear hasta un dato de fuente.
+
+---
+
+### Persona 2 — Damián, asesor independiente que opera a través de la ALyC
+
+**Contexto.** No es empleado; opera a través de la ALyC. No tiene acceso al monitor interno de la
+mesa ni a los Excel de carteras sugeridas — su alternativa real hoy son screeners públicos y su
+propia planilla. Trabaja con menos infraestructura y más volumen de clientes chicos.
+
+**Jobs to be done**
+- *Cuando* llega un cliente con una cartera armada en otro lado, *quiero* diagnosticarla en minutos,
+  *para* poder ofrecer una mejora sin invertir horas de trabajo manual que no puedo facturar.
+- *Cuando* comparo instrumentos, *quiero* el universo completo y no una lista curada a mano, *para*
+  no depender del criterio de otro sobre qué papeles existen.
+- *Cuando* uso una herramienta que no es mía, *quiero* que mis carteras sean mías y de nadie más,
+  *para* poder trabajar con tranquilidad sobre un sistema compartido.
+
+**Flujo de uso principal.** Flujo B (optimizar una cartera existente).
+
+**Métricas de éxito de la persona**
+- Carteras existentes diagnosticadas por mes: hoy es cero, porque no se hace.
+- Tasa de tickers resueltos contra el universo al pegar un resumen de cuenta.
+- Aislamiento verificable: nunca ve una cartera que no es suya (RLS, no filtro de cliente).
+
+---
+
+### Persona 3 — Sergio, jefe de mesa (persona de revisión)
+
+**Contexto.** No arma carteras todos los días: revisa las propuestas que arman los asesores antes de
+que salgan. Es quien tiene que poder defender una propuesta si el cliente o el compliance la
+cuestiona. Es también quien ya conoce la pantalla "Cuponera" del monitor interno y va a comparar
+contra ella.
+
+**Jobs to be done**
+- *Cuando* reviso una propuesta, *quiero* ver la contrapartida de riesgo declarada al lado de cada
+  mejora de TIR, *para* aprobarla o devolverla en un vistazo y no reconstruir el razonamiento.
+- *Cuando* un número me llama la atención, *quiero* saber de qué fuente salió, de qué hora, y qué
+  cobertura tiene ese campo, *para* poder responder por él.
+- *Cuando* comparo dos propuestas de dos asesores distintos, *quiero* que estén medidas con la misma
+  vara, *para* que la diferencia sea de criterio y no de método.
+
+**Flujo de uso principal.** Reapertura de carteras guardadas (F-041) y lectura del vector de seis
+ejes (F-031) sobre propuestas ajenas. *Nota: la visibilidad de carteras de terceros es Stage 2 — en
+Stage 1 la revisión ocurre sobre el export (F-042) o sesión compartida.*
+
+**Métricas de éxito de la persona**
+- Propuestas devueltas por falta de fundamento: objetivo, que baje a cero.
+- Reproducibilidad: una cartera guardada hace tres semanas se reabre y muestra exactamente los
+  números con los que se presentó.
+
+---
+
+## 2. Escala de RICE declarada
+
+Para que los scores sean comparables y auditables, la escala se declara. **La cantidad de usuarios
+no está en los inputs**: se usa una base estimada y se marca como tal.
+
+- **Reach** = sesiones de asesor por mes que tocan la feature. Base estimada: **400 sesiones/mes**
+  (20 asesores × 20 ruedas). *Es una estimación, no un dato de los inputs.* Una feature que toca
+  todas las sesiones tiene R = 400; una que sólo aparece en el Flujo B tiene R ≈ 200.
+- **Impact** — 3 = masivo (sin esto el producto no existe), 2 = alto, 1 = medio, 0,5 = bajo,
+  0,25 = mínimo.
+- **Confidence** — 100 % = lógica ya construida y verificada contra fuente real, o contrato de
+  fuente verificado empíricamente; 80 % = camino claro con incógnita de implementación; 50 % =
+  depende de una fuente o un parsing no verificado; 25 % = sin fuente conocida.
+- **Effort** — person-days de un desarrollador fullstack, incluyendo tests.
+- **Score** = (R × I × C) / E.
+
+---
+
+## 3. Catálogo de features
+
+Cada ficha: etiqueta, traza a la feature conceptual del `product-definition.md`, descripción, input,
+output, dependencias, RICE y acceptance criteria.
+
+---
+
+### Bloque A — Foundation
+
+---
+
+#### F-001 — Esqueleto de servicio backend
+
+**Etiqueta:** Foundation (obligatoria en Stage 1) · **Traza a:** requisito Foundation
+
+**Descripción.** Servicio FastAPI con todo lo que después es carísimo retrofitear: prefijo `/api/v1/`
+en cada ruta, `GET /health` que verifica conectividad a PostgreSQL y devuelve la hora del último
+snapshot de mercado, logs en JSON estructurado a stdout con `request_id`, contrato de error uniforme,
+paginación por cursor en toda colección, y `Dockerfile` con la imagen que después se despliega en
+Fly.io o Railway. Los secretos (URL y claves de Supabase, token de Docta) se leen exclusivamente de
+`.env` vía Pydantic Settings, y el arranque falla ruidosamente si falta alguno. Es la primera cosa
+que se construye porque toda otra feature de backend se monta encima.
+
+**Input:** nada — es la raíz del árbol de dependencias.
+**Output:** aplicación desplegable, contrato de API versionado, paginación y logging que todas las
+demás features heredan sin volver a decidirlos.
+**Depende de:** —
+**Habilita:** F-002, F-004, F-005, F-006, F-008, y transitivamente todo el backend.
+
+**RICE:** R = 400 · I = 3 · C = 100 % · E = 3 → **Score 400**
+
+```
+GIVEN el servicio levantado con base de datos accesible
+WHEN se hace GET /api/v1/health
+THEN responde 200 con el estado de PostgreSQL y el timestamp del último snapshot de mercado
+
+GIVEN una variable de entorno obligatoria ausente de .env
+WHEN el servicio arranca
+THEN falla en el arranque nombrando la variable faltante, y no levanta en modo degradado
+
+GIVEN un endpoint de colección con más resultados que el tamaño de página
+WHEN se lo consulta sin parámetros
+THEN devuelve la primera página con cursor de continuación, nunca el conjunto completo
+
+GIVEN cualquier request al servicio
+WHEN se procesa
+THEN se emite una línea de log JSON con request_id, ruta, status y duración, y ningún secreto
+```
+
+---
+
+#### F-002 — Esquema de datos y migraciones
+
+**Etiqueta:** Foundation (obligatoria en Stage 1) · **Traza a:** F1 + F3 + requisito Foundation
+
+**Descripción.** Modelo de datos completo en PostgreSQL/Supabase, con migraciones versionadas. Dos
+familias de tablas con reglas distintas. **Mercado, compartido y sin RLS de lectura:**
+`instrumentos`, `precios`, `puntas`, `cashflow`, `condiciones_emision` — el universo es el mismo para
+todos. **Usuario, con `user_id` FK obligatoria y Row Level Security:** `carteras`, `posiciones`,
+`propuestas`. El esquema de mercado **replica el contrato de salida del `Resumen` actual y de
+`cashflow_completo.csv`**, que es lo que permite reusar el 85 % del motor sin tocarlo. Cada valor de
+`condiciones_emision` lleva `origen` y `fecha` en la misma fila que el valor.
+
+**Input:** las columnas del universo consolidado actual y de `cashflow_completo.csv`; el listado de
+campos de BYMA, IAMC y Docta de la sección de fuentes.
+**Output:** base de datos migrable, tipos TypeScript generados, y el contrato de persistencia que
+consume todo el backend.
+**Depende de:** F-001
+**Habilita:** F-007, F-009, F-014, F-015, F-041, y transitivamente todo lo que persiste.
+
+**RICE:** R = 400 · I = 3 · C = 100 % · E = 4 → **Score 300**
+
+```
+GIVEN el esquema migrado desde cero
+WHEN se inspeccionan las tablas carteras, posiciones y propuestas
+THEN todas tienen user_id NOT NULL con FK a auth.users y RLS habilitada
+
+GIVEN una fila de condiciones_emision con lamina cargada
+WHEN se la consulta
+THEN trae origen y fecha en la misma fila, y ninguno de los dos es nulo
+
+GIVEN el esquema de instrumentos y cashflow
+WHEN se compara contra las columnas del Resumen actual y de cashflow_completo.csv
+THEN cada columna del contrato anterior tiene su correspondencia, y las que no existan están
+     documentadas como bajas explícitas
+
+GIVEN una migración aplicada
+WHEN se corre el rollback
+THEN el esquema vuelve al estado anterior sin pérdida de las tablas de mercado
+```
+
+---
+
+#### F-003 — Esqueleto de aplicación frontend
+
+**Etiqueta:** Foundation (obligatoria en Stage 1) · **Traza a:** requisito Foundation
+
+**Descripción.** SPA con React 19 + TypeScript + Vite: ruteo, layout de las seis pantallas
+esenciales, cliente de API tipado contra `/api/v1/`, TanStack Query configurado con la política de
+invalidación que después usa cada refresh de precios, Tailwind con los tokens del design system, y
+tema oscuro por defecto con opción de claro. Incluye el manejo global de errores y estados de carga,
+para que ninguna feature posterior reinvente cómo se ve un fetch que falla. Sin renderizado en
+servidor: es una herramienta interna, no hay SEO ni primera carga fría que optimizar.
+
+**Input:** contrato de API de F-001; `design-system.md` de la Fase 3 cuando exista.
+**Output:** aplicación navegable con las rutas vacías, cliente de datos, y las convenciones de UI que
+heredan todas las pantallas.
+**Depende de:** F-001
+**Habilita:** F-013, F-014, F-016, F-038, y transitivamente toda la UI.
+
+**RICE:** R = 400 · I = 3 · C = 100 % · E = 3 → **Score 400**
+
+```
+GIVEN la aplicación levantada
+WHEN se navega a cada una de las seis rutas principales
+THEN cada una renderiza su layout sin errores de consola
+
+GIVEN un endpoint de la API que devuelve error
+WHEN una vista lo consulta
+THEN se muestra el estado de error global con el mensaje del contrato, y no una pantalla en blanco
+
+GIVEN el tema oscuro por defecto
+WHEN el usuario alterna a claro
+THEN la preferencia persiste entre recargas
+```
+
+---
+
+### Bloque B — Ingesta y consolidación del universo (F1)
+
+---
+
+#### F-004 — Cliente de la API abierta de BYMA
+
+**Etiqueta:** Stage 1 · **Traza a:** F1
+
+**Descripción.** Cliente HTTP de `open.bymadata.com.ar` que consume por POST y sin token los cinco
+endpoints verificados el 05/08/2026: `negociable-obligations` (4.909 filas), `public-bonds` (189),
+`cedears` (2.267), `general-equity` (189) e `index-price` (16). Normaliza los campos de la rueda
+—`bidPrice`/`offerPrice` con cantidades, `denominationCcy`, `settlementType`, `closingPrice`, `vwap`,
+`volume`, `volumeAmount`, `numberOfOrders`, `maturityDate`— a un modelo interno tipado. La moneda de
+cotización **se lee de `denominationCcy`**, nunca se infiere del sufijo del ticker. Registra la
+demora declarada de 20 minutos como atributo del snapshot, no como nota al pie.
+
+**Input:** los cinco endpoints de BYMA.
+**Output:** snapshot de rueda normalizado: precios, puntas, volumen, moneda de cotización, especies y
+plazos de liquidación, más las 16 filas de `index-price` para el contraste de F-012.
+**Depende de:** F-001
+**Habilita:** F-007, F-012, F-026
+
+**RICE:** R = 400 · I = 3 · C = 100 % · E = 4 → **Score 300**
+
+```
+GIVEN los cinco endpoints de BYMA disponibles
+WHEN corre la ingesta de rueda
+THEN se obtienen las cinco respuestas por POST sin token y el conteo de filas de cada una queda
+     registrado en el snapshot
+
+GIVEN un instrumento con denominationCcy = "USD" y ticker sin sufijo D ni C
+WHEN se normaliza
+THEN la moneda de cotización queda en USD por el campo declarado, y en ningún punto del código se
+     deriva del sufijo del ticker
+
+GIVEN un endpoint de BYMA que responde 401
+WHEN corre la ingesta
+THEN ese endpoint queda marcado como no disponible con su código, los otros cuatro se ingieren
+     igual, y la barra de estado del dato lo declara
+
+GIVEN un snapshot ingerido
+WHEN se lo consulta
+THEN expone la hora de captura y la demora declarada de 20 minutos como atributos propios
+```
+
+---
+
+#### F-005 — Parser del informe diario de IAMC
+
+**Etiqueta:** Stage 1 · **Traza a:** F1
+
+**Descripción.** Extracción estructurada del informe diario de deuda corporativa de IAMC (PDF,
+~260 ONs). Aporta lo que BYMA no tiene: emisor con nombre completo, ley y moneda de pago, estructura
+del cupón, tasa, frecuencia, próximo cupón, próximo pago de capital, valor residual, paridad, valor
+técnico, TIR, duración modificada, convexidad, vida promedio y volumen medio de 20 ruedas. **Ley y
+moneda de pago se leen del título de la sección del informe, no de una columna inferida** — esa
+distinción es la que evita repetir el episodio de "Ley Inglesa". Si el layout del PDF cambia y una
+sección no se reconoce, el parser falla ruidosamente en vez de producir filas parciales.
+
+**Input:** informe diario de IAMC del día.
+**Output:** atributos del instrumento por raíz de ticker, con la ley y la moneda de pago trazadas a
+la sección de la que salieron.
+**Depende de:** F-001
+**Habilita:** F-007, F-031
+
+**RICE:** R = 400 · I = 2 · C = 50 % · E = 8 → **Score 50**
+*Confidence 50 %: el parsing del PDF no está verificado en los inputs; el contenido del informe sí. Es
+el score más bajo de todo el Ciclo 1, y aun así la feature es obligatoria: es la única fuente de
+emisor, ley y moneda de pago. El RICE mide eficiencia, no necesidad.*
+
+```
+GIVEN un informe de IAMC con sus secciones por ley y moneda de pago
+WHEN se lo parsea
+THEN cada ON hereda la ley y la moneda de pago del título de su sección, y el parser registra de qué
+     sección salió cada valor
+
+GIVEN un informe cuyo layout cambió y tiene una sección no reconocida
+WHEN se lo parsea
+THEN el parser aborta con el detalle de la sección no reconocida, y no persiste filas parciales
+
+GIVEN un campo numérico ausente para una ON del informe
+WHEN se lo normaliza
+THEN queda vacío y se contabiliza en la cobertura del campo, y no se completa por inferencia ni por
+     el valor del día anterior
+```
+
+---
+
+#### F-006 — Cliente del feed de cashflow de Docta
+
+**Etiqueta:** Stage 1 · **Traza a:** F1 (hueco de datos declarado, DECIDIDO 05/08/2026)
+
+**Descripción.** Único consumo de Docta que queda en el producto: el cronograma completo de pagos
+futuros por ticker desde `/api/cash-flow`, con 97 % de cobertura de las emisiones. Es el corazón del
+producto: sin el calendario completo, F-015 se degrada a "el próximo pago de cada bono" y la grilla
+de doce meses deja de existir. El cliente maneja las trampas conocidas del feed: **HTTP 500 "Error al
+verificar el token" significa token vencido y se regenera desde Docta Terminal**, mientras que un
+timeout o un 5xx distinto significa API caída — son dos alertas separadas porque la acción que
+requieren es distinta. Cero filas erráticas se resuelven con hasta 5 reintentos con espera creciente,
+y la ventana `fromDate` es móvil, no hardcodeada.
+
+**Input:** endpoint tokenizado de Docta; token desde `.env`.
+**Output:** cronograma completo de pagos por ticker, separando interés de capital.
+**Depende de:** F-001
+**Habilita:** F-007, F-015, F-040
+
+**RICE:** R = 400 · I = 3 · C = 80 % · E = 4 → **Score 240**
+
+```
+GIVEN el feed de Docta respondiendo HTTP 500 con "Error al verificar el token"
+WHEN corre la ingesta
+THEN se emite la alerta "token vencido — regenerar desde Docta Terminal", distinta de la alerta de
+     API caída, y la ingesta conserva el último cashflow válido
+
+GIVEN el feed de Docta con timeout o un 5xx que no es el de token
+WHEN corre la ingesta
+THEN se emite la alerta "API de cashflow no disponible", distinta de la de token vencido
+
+GIVEN una respuesta con cero filas de forma errática
+WHEN corre la ingesta
+THEN reintenta hasta 5 veces con espera creciente antes de declarar el fallo
+
+GIVEN una ventana temporal de consulta
+WHEN se arma el request
+THEN fromDate se calcula relativo a la fecha de corrida, y no hay ninguna fecha hardcodeada
+```
+
+---
+
+#### F-007 — Consolidador multi-fuente con precedencia por campo
+
+**Etiqueta:** Stage 1 · **Traza a:** F1
+
+**Descripción.** Une las tres fuentes en la única base de mercado del producto, **por la raíz del
+ticker**, porque ley, moneda de pago y estructura son atributos de la emisión y no de la especie. La
+precedencia está declarada campo por campo y es la decisión del 05/08/2026: **BYMA** aporta precios,
+puntas, volumen, moneda de cotización, especies y plazos de liquidación; **IAMC** aporta emisor, ley,
+moneda de pago, estructura, TIR, duración, convexidad y próximos pagos; **Docta** aporta únicamente
+el cronograma completo. Ningún campo se completa desde una fuente que no es la declarada para ese
+campo. Reemplaza a `consolidar_universo.py`, conservando su contrato de salida.
+
+**Input:** salidas de F-004, F-005 y F-006.
+**Output:** tablas `instrumentos`, `precios`, `puntas`, `cashflow` pobladas, con `fuente` por campo y
+métricas de cobertura por campo.
+**Depende de:** F-002, F-004, F-005, F-006
+**Habilita:** F-008, F-009, F-010, F-013
+
+**RICE:** R = 400 · I = 3 · C = 80 % · E = 6 → **Score 160**
+
+```
+GIVEN un bono presente en BYMA con sus tres especies y en IAMC con su raíz
+WHEN se consolida
+THEN las tres especies heredan ley, moneda de pago y estructura de la raíz, y cada una conserva su
+     propio precio, punta y moneda de cotización
+
+GIVEN un instrumento presente en BYMA pero ausente del informe de IAMC
+WHEN se consolida
+THEN queda en el universo con precio y punta, con ley y moneda de pago vacías, y suma al contador
+     de cobertura faltante del campo
+
+GIVEN la TIR presente tanto en IAMC como calculable desde otra fuente
+WHEN se consolida
+THEN se persiste la de IAMC por precedencia declarada, y el campo fuente lo registra
+
+GIVEN el universo consolidado
+WHEN se compara su esquema contra el contrato del Resumen anterior
+THEN los consumidores del universo (segmentos.py, cupones.py, mercado.py) leen sin modificación
+```
+
+---
+
+#### F-008 — Job programado de ingesta y refresh de rueda
+
+**Etiqueta:** Stage 1 · **Traza a:** F1
+
+**Descripción.** Orquestación temporal del pipeline: una corrida completa a la mañana (BYMA + IAMC +
+Docta + consolidación + integridad) y refrescos de precios y puntas durante la rueda, que sólo tocan
+BYMA porque IAMC es diario y el cashflow no cambia intradiario. Cada corrida deja un registro
+auditable —hora de inicio, duración, filas por fuente, alertas emitidas— que alimenta la barra de
+estado del dato. Si una fuente falla, la corrida no se aborta entera: se persiste lo que sí llegó y
+se declara lo que no.
+
+**Input:** F-004, F-005, F-006, F-007 como pasos orquestados.
+**Output:** snapshots de mercado con periodicidad; historial de corridas.
+**Depende de:** F-007
+**Habilita:** F-013
+
+**RICE:** R = 400 · I = 2 · C = 100 % · E = 3 → **Score 266,7**
+
+```
+GIVEN la corrida matinal programada
+WHEN se ejecuta
+THEN corre las tres fuentes, la consolidación y la capa de integridad en ese orden, y registra la
+     corrida con hora, duración y filas por fuente
+
+GIVEN un refresh intra-rueda
+WHEN se ejecuta
+THEN actualiza precios y puntas desde BYMA sin volver a consultar IAMC ni Docta
+
+GIVEN una corrida en la que IAMC falla y BYMA responde
+WHEN termina
+THEN los precios quedan actualizados, los atributos de instrumento conservan el último valor válido
+     con su fecha, y la corrida se marca como parcial con el detalle de la fuente caída
+```
+
+---
+
+#### F-009 — `condiciones_emision`: semilla, herencia entre especies y conflictos
+
+**Etiqueta:** Stage 1 · **Traza a:** F1 + F7 (resolución de la cuestión abierta N.º 2)
+
+**Descripción.** La tabla que aloja el dato curado del producto: ley, moneda de pago, lámina,
+calificación, sector y emisor, con `origen` y `fecha` en cada valor. Se siembra migrando
+`condiciones_estaticas.csv` (272 tickers) y `condiciones_monitor.csv` (526 tickers), cada valor con
+su origen declarado, y el `data/condiciones_emision.csv` curado de 823 tickers que el proyecto trata
+como irrecuperable. Implementa la **herencia entre especies** —si AL30 tiene la lámina, AL30D y AL30C
+la tienen— y la **detección de conflictos**: si dos especies de la misma emisión declaran valores
+distintos, no se elige fuente por cuenta propia, se vacían las dos y se reporta. Reemplaza a
+`merge_condiciones.py` y `aplicar_sectores.py` conservando su lógica.
+
+**Input:** los CSV de semilla; el universo consolidado de F-007.
+**Output:** `condiciones_emision` poblada y consultable, cobertura por campo, y lista de conflictos.
+**Depende de:** F-002, F-007
+**Habilita:** F-013, F-024, F-025, F-031, F-039
+
+**RICE:** R = 400 · I = 2 · C = 100 % · E = 4 → **Score 200**
+
+```
+GIVEN AL30 con lámina informada y AL30D y AL30C sin ella
+WHEN corre la herencia entre especies
+THEN AL30D y AL30C quedan con la lámina de AL30 y con origen "herencia de AL30"
+
+GIVEN dos especies de la misma emisión que declaran láminas distintas
+WHEN corre la detección de conflictos
+THEN las dos quedan vacías, el conflicto se reporta con los dos valores en pugna, y el sistema no
+     elige ninguno
+
+GIVEN los CSV de semilla migrados
+WHEN se consulta la cobertura de lámina
+THEN el conteo reportado se corresponde con los valores efectivamente cargados y su origen, sin
+     ninguna fila completada por inferencia
+```
+
+---
+
+### Bloque C — Capa de integridad del dato (F2)
+
+---
+
+#### F-010 — Sanidad del dato en dos capas
+
+**Etiqueta:** Stage 1 · **Traza a:** F2
+
+**Descripción.** Envuelve como servicio la lógica ya verificada de `segmentos.py`. **Primera capa,
+coherencia entre especies del mismo bono:** un bono tiene UNA TIR, y cuando una especie se despega de
+las otras por más de 100 pp, esa especie tiene el precio mal escalado — VSCQD figuraba con
+34.627.917 % mientras VSCQO, el mismo bono, rendía 6,75 %. **Segunda capa, techo de lo posible por
+segmento y en la unidad de cada segmento:** hard-dollar y dólar-linked 300 %, CER 100 % de tasa
+*real*, tasa fija/Badlar/Tamar 500 % de TNA *nominal*. Los topes son holgados a propósito: SNSBO
+rinde 245 % en dólares y es dato **correcto** —bono a 80 días cotizando al 78 % de su valor técnico—
+y un umbral ajustado lo mataría junto con la basura. Cada descarte se registra con su motivo.
+
+**Input:** universo consolidado de F-007, con su segmentación.
+**Output:** universo saneado; lista de descartados con ticker, motivo y valor que disparó el descarte.
+**Depende de:** F-007
+**Habilita:** F-011, F-012, F-013, F-015, F-038
+
+**RICE:** R = 400 · I = 3 · C = 100 % · E = 3 → **Score 400**
+
+```
+GIVEN VSCQD con TIR de 34.627.917 % y VSCQO del mismo bono con 6,75 %
+WHEN corre la coherencia entre especies
+THEN VSCQD se descarta por despegue mayor a 100 pp, VSCQO se conserva, y el descarte queda listado
+     con su motivo
+
+GIVEN SNSBO con 245 % de TIR en dólares, bono a 80 días al 78 % de su valor técnico
+WHEN corre el techo por segmento
+THEN SNSBO NO se descarta, porque el tope de hard-dollar es 300 %
+
+GIVEN un instrumento CER con tasa real de 150 %
+WHEN corre el techo por segmento
+THEN se descarta contra el tope de 100 % de tasa real, y no contra el de 300 % de hard-dollar
+
+GIVEN un instrumento de tasa fija con TNA nominal de 480 %
+WHEN corre el techo por segmento
+THEN se conserva, porque el tope de TNA nominal es 500 %
+```
+
+---
+
+#### F-011 — Deduplicación de especies de liquidación
+
+**Etiqueta:** Stage 1 · **Traza a:** F2
+
+**Descripción.** MR46O, MR46D y MR46C son el mismo bono: comprar dos es comprar el mismo bono creyendo
+que se diversifica. La deduplicación **no es un descarte, es una doble vista**: las especies se
+colapsan a una fila por emisión para el armador y para el cómputo de concentración, y se conservan
+vivas e individuales para el optimizador, porque los swaps de perfil rotan justamente entre especies
+de la misma emisión (MEP → Cable). El servicio expone las dos vistas del mismo universo con la clave
+de emisión explícita en ambas.
+
+**Input:** universo saneado de F-010.
+**Output:** vista colapsada por emisión y vista viva por especie, ambas con clave de emisión.
+**Depende de:** F-010
+**Habilita:** F-015, F-020, F-032, F-039
+
+**RICE:** R = 400 · I = 2 · C = 100 % · E = 2 → **Score 400**
+
+```
+GIVEN MR46O, MR46D y MR46C en el universo
+WHEN se pide la vista colapsada del armador
+THEN aparece una sola fila para la emisión MR46, con la clave de emisión explícita
+
+GIVEN las mismas tres especies
+WHEN se pide la vista viva del optimizador
+THEN aparecen las tres filas individuales, cada una con su precio, su punta y su moneda de cotización
+
+GIVEN una cartera que ya tiene MR46D
+WHEN el asesor intenta agregar MR46C desde el armador
+THEN el sistema advierte que es la misma emisión y que no suma diversificación
+```
+
+---
+
+#### F-012 — Tipo de cambio implícito, normalización de volumen y contraste
+
+**Etiqueta:** Stage 1 · **Traza a:** F2 (resolución de la cuestión abierta N.º 3)
+
+**Descripción.** El tipo de cambio **se deriva del propio universo, nunca de una fuente externa**: la
+misma emisión cotiza en pesos y en dólares, y ese cociente es el tipo de cambio al que opera el
+mercado. Se toma la mediana sobre todas las emisiones que cotizan en las dos puntas, con **mínimo de
+20 pares**; con menos, no se normaliza y se declara. Se usa la especie D (MEP) como referencia y sólo
+se cae a la C (Cable) si no hay MEP, porque los separa el canje (~3,5 %) y mezclarlos ensuciaría la
+mediana. Con ese tipo de cambio se normaliza `volume`/`volumeAmount` a dólares antes de comparar
+liquidez: la especie en pesos de un bono muestra ~1.500× más volumen que su especie en dólares por el
+tipo de cambio, no por operarse más. El `index-price` de BYMA entra como **control de contraste, no
+como fuente**: si el implícito difiere del índice publicado más allá del umbral, sale alerta.
+
+**Input:** universo saneado de F-010; `index-price` de F-004.
+**Output:** tipo de cambio implícito con su cantidad de pares y su dispersión; volumen normalizado a
+dólares; alerta de contraste.
+**Depende de:** F-010
+**Habilita:** F-013, F-031, F-038
+
+**RICE:** R = 400 · I = 2 · C = 100 % · E = 3 → **Score 266,7**
+
+```
+GIVEN un universo con al menos 20 emisiones que cotizan en pesos y en MEP
+WHEN se calcula el tipo de cambio implícito
+THEN se toma la mediana de los cocientes usando la especie D, y se reporta la cantidad de pares y la
+     dispersión intercuartil
+
+GIVEN un universo con menos de 20 pares disponibles
+WHEN se calcula el tipo de cambio
+THEN no se normaliza nada, y la barra de estado del dato declara que la comparación entre monedas no
+     está disponible
+
+GIVEN una emisión sin especie D pero con especie C
+WHEN se arma la muestra de pares
+THEN se usa la C sólo para esa emisión, y el hecho queda registrado, porque MEP y Cable son tipos de
+     cambio distintos
+
+GIVEN el implícito derivado y el índice publicado en index-price
+WHEN difieren más allá del umbral configurado
+THEN se emite alerta de contraste, y el implícito se conserva como fuente
+
+GIVEN un bono con especie en pesos y especie en dólares
+WHEN se comparan sus volúmenes
+THEN los dos están expresados en dólares antes de la comparación
+```
+
+---
+
+#### F-013 — Barra de estado del dato
+
+**Etiqueta:** Stage 1 · **Traza a:** F2
+
+**Descripción.** No es infraestructura: es una feature de producto, porque su salida es visible en
+pantalla y es la que hace que la regla "cuando falta un dato, lo dice" deje de ser decorativa. Franja
+global y siempre visible, transversal a las seis pantallas, con: hora del último refresh, **demora
+declarada de la fuente (BYMA abierta tiene 20 minutos)**, cantidad de instrumentos descartados por
+sanidad con el detalle desplegable, cobertura de cada campo crítico, alertas de token vencido versus
+API caída, y la alerta de contraste del tipo de cambio. La lista de alertas que hoy se acumula en una
+hoja "Alertas" del Excel pasa acá como array estructurado; el contenido no cambia.
+
+**Input:** registro de corridas de F-008, descartes de F-010, cobertura de F-007 y F-009, alertas de
+F-006 y F-012.
+**Output:** componente global de UI y endpoint que lo alimenta.
+**Depende de:** F-003, F-008, F-009, F-010, F-012
+**Habilita:** F-016, F-030, F-038
+
+**RICE:** R = 400 · I = 2 · C = 100 % · E = 4 → **Score 200**
+
+```
+GIVEN cualquier pantalla de la aplicación
+WHEN se la abre
+THEN la barra de estado del dato está visible, sin necesidad de navegar a ninguna parte
+
+GIVEN un snapshot de BYMA de las 11:00
+WHEN se lo muestra a las 11:15
+THEN la barra declara la hora del snapshot y la demora de 20 minutos de la fuente, no la hora actual
+     como si fuera el dato
+
+GIVEN 14 instrumentos descartados por sanidad en la última corrida
+WHEN el asesor despliega el detalle
+THEN ve los 14 tickers con el motivo de descarte y el valor que lo disparó
+
+GIVEN el token de Docta vencido
+WHEN se abre cualquier pantalla
+THEN la barra muestra la alerta de token vencido con su acción, distinguida de una caída de API
+```
+
+---
+
+### Bloque D — Autenticación (F3)
+
+---
+
+#### F-014 — Autenticación por invitación y aislamiento por asesor
+
+**Etiqueta:** Stage 1 · **Traza a:** F3
+
+**Descripción.** Login con Supabase Auth, email y contraseña, **por invitación y sin registro
+abierto**. Cada asesor ve exclusivamente sus propias carteras, y ese aislamiento se aplica con Row
+Level Security en PostgreSQL, **no con filtros del lado del cliente**. La base de mercado, en cambio,
+es compartida y única: el universo, los precios y las condiciones de emisión son los mismos para
+todos, y también lo es la lámina que un asesor carga a mano. Incluye guard de rutas en el frontend,
+manejo de sesión y expiración.
+
+**Input:** esquema con `user_id` y RLS de F-002.
+**Output:** sesión autenticada; contexto de usuario en backend y frontend; aislamiento verificable.
+**Depende de:** F-002, F-003
+**Habilita:** F-018, F-041
+
+**RICE:** R = 400 · I = 2 · C = 100 % · E = 4 → **Score 200**
+
+```
+GIVEN un visitante sin invitación
+WHEN intenta registrarse
+THEN no existe formulario de registro abierto y el acceso es denegado
+
+GIVEN el asesor A con una cartera guardada y el asesor B autenticado
+WHEN B consulta la API de carteras directamente, salteando el frontend
+THEN no recibe la cartera de A, porque la restricción es de RLS y no de filtro de cliente
+
+GIVEN un asesor autenticado
+WHEN consulta el universo de mercado
+THEN ve exactamente los mismos instrumentos, precios y condiciones que cualquier otro asesor
+
+GIVEN una sesión expirada
+WHEN se intenta una operación
+THEN se redirige al login sin perder silenciosamente el trabajo en curso
+```
+
+---
+
+### Bloque E — Calendario-selector (F4)
+
+---
+
+#### F-015 — API del calendario de doce meses
+
+**Etiqueta:** Stage 1 · **Traza a:** F4
+
+**Descripción.** Servicio que convierte el cronograma completo de pagos en la grilla de doce meses:
+por cada mes, los instrumentos que pagan, cuánto pagan, su TIR y su vencimiento. **Amortización y
+renta se distinguen y no se suman**: cobrar amortización no es renta, y el motor ya lo separa con
+`pct_interes` y `pct_capital`. Los meses sin pagos devuelven cero explícito, no ausencia — un cero
+vale más que una celda faltante cuando lo que se evalúa es la continuidad del ingreso. Es envoltura
+de `cupones.py`, cuya matemática reproduce exacto los nominales de RUCED, SBC2D, CS47D y LOC5D
+contra el Excel real de la mesa.
+
+**Input:** cashflow de F-006 vía F-007; universo saneado y colapsado de F-010 y F-011.
+**Output:** estructura de doce meses con instrumentos, monto de renta, monto de amortización, TIR y
+vencimiento por instrumento.
+**Depende de:** F-006, F-010, F-011
+**Habilita:** F-016, F-021, F-036
+
+**RICE:** R = 380 · I = 3 · C = 100 % · E = 4 → **Score 285**
+
+```
+GIVEN un bono que paga cupón en marzo y septiembre
+WHEN se pide el calendario de doce meses
+THEN el bono aparece en marzo y en septiembre, con el mismo identificador de emisión en las dos
+
+GIVEN un mes en el que ningún instrumento del universo filtrado paga
+WHEN se pide el calendario
+THEN ese mes viene presente con valor cero, no ausente
+
+GIVEN un bono amortizing que en un mes paga interés y capital
+WHEN se pide el calendario
+THEN el monto de renta y el de amortización vienen en campos separados, y el total de renta del mes
+     no incluye la amortización
+
+GIVEN las posiciones de RUCED, SBC2D, CS47D y LOC5D del Excel real de la mesa
+WHEN se calculan sus nominales con la matemática de cupones
+THEN los cuatro reproducen exacto los del Excel
+```
+
+---
+
+#### F-016 — Grilla-selector de doce meses
+
+**Etiqueta:** Stage 1 · **Traza a:** F4 — **la feature central: sin esta mecánica el producto no existe**
+
+**Descripción.** La pantalla que invierte el producto: el calendario es la entrada, no la salida.
+Grilla de doce tarjetas, una por mes. Cada tarjeta lista los papeles que pagan renta ese mes con
+ticker, moneda de liquidación, cuánto paga de cupón, TIR y año de vencimiento — los tres criterios de
+selección, en orden: TIR, cupón, frecuencia. Al hacer clic, el papel entra a la cartera y **se ilumina
+simultáneamente en todos los meses en que paga**, así la cobertura del año se lee de un vistazo. Los
+meses sin cobertura quedan visualmente marcados. Trabaja sobre la vista colapsada: un papel, una
+emisión.
+
+**Input:** calendario de F-015; selección actual de la cartera de F-018.
+**Output:** selección de posiciones que alimenta la cartera; estado visual de cobertura del año.
+**Depende de:** F-013, F-015
+**Habilita:** F-017, F-018
+
+**RICE:** R = 380 · I = 3 · C = 80 % · E = 8 → **Score 114**
+
+```
+GIVEN la grilla de doce meses cargada
+WHEN el asesor hace clic en un papel que paga en marzo, julio y noviembre
+THEN el papel entra a la cartera y queda iluminado en las tres tarjetas simultáneamente
+
+GIVEN un papel ya seleccionado
+WHEN el asesor vuelve a hacer clic sobre él en cualquiera de sus meses
+THEN sale de la cartera y se apaga en todos los meses a la vez
+
+GIVEN una cartera en la que ningún papel paga en febrero
+WHEN se mira la grilla
+THEN la tarjeta de febrero está marcada como mes sin cobertura de forma visualmente distinguible
+
+GIVEN un papel listado en una tarjeta
+WHEN se lee su renglón
+THEN muestra ticker, moneda de liquidación, monto del cupón, TIR y año de vencimiento en una sola
+     línea
+```
+
+---
+
+#### F-017 — Filtros de la grilla
+
+**Etiqueta:** Stage 1 · **Traza a:** F4
+
+**Descripción.** Barra de filtros sobre la grilla de doce meses: segmento, horizonte de duración,
+percentil de liquidez, sector, emisor, ley y frecuencia de cupón. El filtro de segmento es especial:
+**se trabaja un segmento por vez, o con la unidad declarada por columna** — no hay estado en el que la
+grilla mezcle una TIR en dólares con una TNA nominal sin decir cuál es cuál. Los filtros son siempre
+visibles, tienen botón de limpiar, y el conteo de instrumentos que sobreviven al filtro está a la
+vista.
+
+**Input:** universo filtrable de F-010; percentiles de liquidez normalizada de F-012; sector, emisor y
+ley de F-009.
+**Output:** subconjunto del universo que alimenta la grilla.
+**Depende de:** F-016
+**Habilita:** F-019
+
+**RICE:** R = 350 · I = 2 · C = 80 % · E = 5 → **Score 112**
+
+```
+GIVEN la grilla sin filtro de segmento
+WHEN se la muestra
+THEN cada columna de rendimiento declara su unidad, o bien la grilla exige elegir un segmento antes
+     de mostrar rendimientos
+
+GIVEN el filtro de segmento en CER
+WHEN se leen los rendimientos de la grilla
+THEN todos están expresados como tasa real, con la unidad declarada en el encabezado
+
+GIVEN filtros de duración, liquidez y sector aplicados simultáneamente
+WHEN se los aplica
+THEN el conteo de instrumentos resultantes está visible, y el botón de limpiar los quita todos de
+     una vez
+
+GIVEN un filtro por ley
+WHEN hay instrumentos sin ley informada
+THEN quedan agrupados como "ley no informada" y no se los asigna a ninguna de las dos leyes
+```
+
+---
+
+### Bloque F — Cartera editable (F5)
+
+---
+
+#### F-018 — Cartera editable y ponderación
+
+**Etiqueta:** Stage 1 · **Traza a:** F5
+
+**Descripción.** El panel donde vive la cartera en construcción. Tabla editable con una fila por
+posición: ticker, emisor, sector, precio, monto, ponderación deseada, lámina, valor nominal asignado,
+porcentaje real y meses en que paga. Se edita el peso por porcentaje o por monto, se quita, se
+reordena. Botones de equiponderar y vaciar. Muestra el total acumulado de ponderación y el invertido
+real al lado, **porque no coinciden**. Es el estado central del Flujo A: el calendario selecciona,
+pero sin ponderación editable no hay cartera. Los FCI, que siguen sin fuente verificada, se cargan
+acá como línea con peso y sin precio.
+
+**Input:** selecciones de F-016; precios del universo.
+**Output:** cartera en construcción, que es el input de F-020, F-021, F-022, F-023, F-024, F-041.
+**Depende de:** F-014, F-016
+**Habilita:** F-019, F-020, F-021, F-024, F-026, F-041
+
+**RICE:** R = 350 · I = 3 · C = 80 % · E = 6 → **Score 140**
+
+```
+GIVEN una cartera con tres posiciones
+WHEN el asesor cambia el peso de una por porcentaje
+THEN el monto de esa posición se recalcula y el total acumulado de ponderación se actualiza en vivo
+
+GIVEN una cartera con pesos que suman 97,4 %
+WHEN se la mira
+THEN el total muestra 97,4 % y el invertido real al lado, sin normalizar a 100 % en silencio
+
+GIVEN una cartera con posiciones
+WHEN el asesor presiona equiponderar
+THEN todas las posiciones quedan con el mismo peso deseado, y el porcentaje real sigue difiriendo
+     donde la lámina obliga a redondear
+
+GIVEN una línea de FCI cargada con peso y sin precio
+WHEN se calcula el total de la cartera
+THEN la línea suma al peso, se declara como sin precio, y no participa de ningún cálculo de renta
+     ni de rendimiento
+```
+
+---
+
+#### F-019 — Armado asistido
+
+**Etiqueta:** Stage 1 · **Traza a:** F5
+
+**Descripción.** Botón que precarga una cartera de arranque a partir de monto, moneda de referencia,
+objetivo de cobertura (devaluación / inflación / tasa en pesos / mixta), perfil (conservador /
+moderado / agresivo) y horizonte (corto / medio / largo). El asesor la toma como punto de partida y
+la edita a mano sobre el calendario — no es un resultado final. Es envoltura de las funciones ya
+escritas y verificadas de `armar_cartera.py`: `resolver_mix`, `candidatos_del_segmento`,
+`elegir_siguiente` y `armar`, con 15 casos de regresión. Lo que se descarta es la cáscara: `main()`
+con argparse y `exportar_excel()` con openpyxl; los flags de CLI pasan a ser un modelo Pydantic.
+
+**Input:** parámetros de la cartera; universo filtrado de F-017.
+**Output:** cartera de arranque cargada en el panel editable de F-018.
+**Depende de:** F-017, F-018
+**Habilita:** —
+
+**RICE:** R = 250 · I = 2 · C = 100 % · E = 5 → **Score 100**
+
+```
+GIVEN los parámetros monto, moneda de referencia, objetivo, perfil y horizonte
+WHEN el asesor pide armado asistido
+THEN se precarga una cartera en el panel editable, editable posición por posición como cualquier otra
+
+GIVEN los 15 casos de regresión de armar_cartera.py
+WHEN se corren contra el servicio envuelto
+THEN los 15 producen el mismo resultado que la versión de línea de comandos
+
+GIVEN un objetivo de cobertura para el que no hay candidatos suficientes en el universo
+WHEN se pide el armado asistido
+THEN el sistema devuelve la cartera parcial y declara qué parte del objetivo no pudo cubrir, sin
+     rellenar con instrumentos de otra naturaleza
+```
+
+---
+
+#### F-020 — Límites de concentración en vivo
+
+**Etiqueta:** Stage 1 · **Traza a:** F5
+
+**Descripción.** Los topes se muestran y se advierten con cada cambio de la cartera, con el criterio
+ya calibrado en `verificar_concentracion`: tope por emisor corporativo, **tope separado para el riesgo
+soberano** y tope por sector, con Soberano y Subsoberano exentos del tope sectorial porque ya los
+acota el tope soberano. El Tesoro emite bajo muchos prefijos —GD, AE, DIC, TZX, TY3— y todos son el
+mismo crédito: se agrupan bajo la clave única **`SOBERANO_AR`**. Sin esta separación, una cartera
+100 % soberana pasaba como diversificada. La advertencia no bloquea: informa.
+
+**Input:** cartera de F-018; clave de riesgo y sector del universo; vista colapsada de F-011.
+**Output:** estado de cumplimiento por tope y advertencias en vivo.
+**Depende de:** F-011, F-018
+**Habilita:** F-031
+
+**RICE:** R = 350 · I = 2 · C = 100 % · E = 3 → **Score 233,3**
+
+```
+GIVEN una cartera con GD30, AE38 y TZX26
+WHEN se calcula la concentración
+THEN los tres se agrupan bajo la clave SOBERANO_AR y se miden contra el tope soberano, no contra el
+     tope por emisor corporativo
+
+GIVEN una cartera 100 % soberana
+WHEN se calcula la concentración
+THEN se advierte el exceso del tope soberano, y en ningún caso figura como diversificada
+
+GIVEN una cartera con exceso de un emisor corporativo
+WHEN se supera el tope
+THEN se advierte nombrando el emisor y el exceso, y la posición se puede dejar igual
+
+GIVEN una cartera con posiciones de clase Soberano y Subsoberano
+WHEN se calcula el tope por sector
+THEN esas posiciones quedan exentas del tope sectorial
+```
+
+---
+
+### Bloque G — Panel de renta y métricas (F6)
+
+---
+
+#### F-021 — Panel de renta mensual y renta anual sobre lo invertido
+
+**Etiqueta:** Stage 1 · **Traza a:** F6
+
+**Descripción.** El feedback en vivo que convierte al calendario en selector y no en consulta. Renta
+mes a mes **en plata real** según el nominal asignado —no en porcentaje, no cada 100 de valor
+nominal—, el total anual, y destacado el **total anual de cupones sobre lo invertido**, con la cuenta
+a la vista. Ese número es el que el asesor le dice al cliente: es el ingreso por cupones, separado de
+cualquier ganancia de capital, que es incierta. Los totales se expresan en la moneda de referencia
+declarada de la cartera y **también desagregados por moneda de cobro**, porque un cupón en pesos y uno
+en dólares no son el mismo peso hasta que se declara el tipo de cambio usado. Incluye meses sin
+cobertura, mes más flaco y mes más fuerte.
+
+**Input:** cartera de F-018; calendario de F-015; tipo de cambio de F-012.
+**Output:** renta mensual, total anual, ratio sobre lo invertido, desagregación por moneda de cobro.
+**Depende de:** F-015, F-018
+**Habilita:** F-030, F-036
+
+**RICE:** R = 380 · I = 3 · C = 100 % · E = 4 → **Score 285**
+
+```
+GIVEN una cartera con nominales asignados
+WHEN se muestra el panel de renta
+THEN cada mes muestra el monto en plata real que el cliente va a cobrar, no un porcentaje ni un
+     monto cada 100 de valor nominal
+
+GIVEN una cartera de US$ 99.999,11 invertidos que cobra US$ 7.173,92 de cupones en el año
+WHEN se muestra la renta anual sobre lo invertido
+THEN muestra 7,17 % con la cuenta visible: sólo cupones, monto de cupones sobre monto invertido
+
+GIVEN una cartera con cupones en pesos y en dólares
+WHEN se muestra el total mensual
+THEN aparece en la moneda de referencia declarada y también desagregado por moneda de cobro, con el
+     tipo de cambio usado declarado
+
+GIVEN el asesor agrega una posición
+WHEN termina el clic
+THEN la renta mensual, el total anual y el ratio sobre lo invertido se actualizan sin recargar la
+     pantalla
+
+GIVEN una cartera con un bono amortizing
+WHEN se calcula la renta anual sobre lo invertido
+THEN la amortización no entra en el numerador
+```
+
+---
+
+#### F-022 — Rendimientos por naturaleza de tasa y plazo promedio
+
+**Etiqueta:** Stage 1 · **Traza a:** F6
+
+**Descripción.** **Cuatro números, nunca uno solo:** TIR en dólares, rendimiento dólar-linked, tasa
+real sobre CER y TNA nominal en pesos. La pantalla **no ofrece la opción de colapsarlos en un
+promedio**, porque ese promedio no significa nada: son magnitudes de unidades distintas. Cada número
+viene con la porción de la cartera sobre la que se calcula. La duración ponderada se etiqueta como
+*plazo promedio* y la sensibilidad de precio se reporta **por segmento, no agregada**: la duración
+modificada es elasticidad respecto de la tasa propia de cada segmento, y sumarlas cruzaría
+naturalezas.
+
+**Input:** cartera de F-018; segmentación y métricas del universo.
+**Output:** cuatro rendimientos ponderados abiertos, plazo promedio, sensibilidad por segmento.
+**Depende de:** F-018
+**Habilita:** F-030, F-033, F-034
+
+**RICE:** R = 350 · I = 2 · C = 100 % · E = 4 → **Score 175**
+
+```
+GIVEN una cartera con posiciones hard-dollar, CER y tasa fija en pesos
+WHEN se muestran los rendimientos
+THEN aparecen tres números separados con su unidad declarada y la porción de cartera de cada uno, y
+     no existe control de UI que los promedie
+
+GIVEN una cartera 100 % hard-dollar
+WHEN se muestran los rendimientos
+THEN los otros tres aparecen explícitamente en cero por ciento de la cartera, no ausentes
+
+GIVEN una cartera con posiciones en dos segmentos
+WHEN se muestra la sensibilidad de precio
+THEN aparece una sensibilidad por segmento, y no un único número agregado
+
+GIVEN posiciones sin TIR ni duración informadas
+WHEN se calcula el rendimiento ponderado
+THEN quedan excluidas del cálculo y el panel declara qué porcentaje de la cartera quedó fuera
+```
+
+---
+
+#### F-023 — Composición y curva TIR/duración
+
+**Etiqueta:** Stage 1 · **Traza a:** F6
+
+**Descripción.** Composición de la cartera por emisor, sector, clase de activo (soberano /
+subsoberano / ON) y segmento. Y la **curva TIR/duración del segmento activo**, con las posiciones de
+la cartera marcadas sobre la nube de candidatos del mismo segmento: es la herramienta que muestra de
+un golpe qué papel está barato o caro para su plazo. Un segmento por gráfico, con la unidad del eje
+declarada — nunca dos naturalezas de tasa en el mismo par de ejes.
+
+**Input:** cartera de F-018; universo del segmento activo.
+**Output:** gráficos de composición y dispersión TIR/duración.
+**Depende de:** F-018
+**Habilita:** —
+
+**RICE:** R = 300 · I = 1 · C = 80 % · E = 5 → **Score 48**
+
+```
+GIVEN una cartera con posiciones de dos segmentos
+WHEN se muestra la curva TIR/duración
+THEN se grafica un solo segmento por vez, con la unidad del eje de rendimiento declarada
+
+GIVEN el segmento activo seleccionado
+WHEN se muestra la curva
+THEN las posiciones de la cartera están marcadas de forma distinguible sobre la nube de candidatos
+     del mismo segmento
+
+GIVEN posiciones con sector no informado
+WHEN se muestra la composición por sector
+THEN aparecen agrupadas como "sector no informado", con su porcentaje, y no repartidas entre los
+     sectores conocidos
+```
+
+---
+
+### Bloque H — Lámina mínima (F7)
+
+---
+
+#### F-024 — Redondeo por lámina y diferencia entre pedido y real
+
+**Etiqueta:** Stage 1 · **Traza a:** F7
+
+**Descripción.** Cuando la lámina está informada, el sistema redondea el valor nominal al múltiplo
+correspondiente y **muestra la diferencia entre la ponderación pedida y la real** — que es justamente
+lo que hace que difieran: una posición pedida al 16,5 % puede terminar en 17,6 % real, y eso se ve.
+Cuando **no** está informada, no redondea y **no asume 1, ni 1.000, ni ningún default de mercado**:
+marca la posición como *lámina no informada*, la excluye del total ajustado, y el resumen dice cuántas
+posiciones y qué porcentaje de la cartera quedaron sin ajustar. Un default de lámina produciría
+nominales que parecen correctos y no lo son, en la pantalla que el asesor lleva a la reunión.
+
+**Input:** cartera de F-018; lámina de F-009.
+**Output:** valores nominales redondeados, porcentaje real por posición, marca de lámina faltante y
+resumen de cobertura de ajuste.
+**Depende de:** F-009, F-018
+**Habilita:** F-025
+
+**RICE:** R = 300 · I = 2 · C = 100 % · E = 3 → **Score 200**
+
+```
+GIVEN una posición pedida al 16,5 % con lámina informada
+WHEN se calcula el nominal
+THEN se redondea al múltiplo de la lámina y la pantalla muestra el 16,5 % pedido y el porcentaje real
+     resultante, los dos a la vista
+
+GIVEN una posición cuya emisión no tiene lámina informada
+WHEN se calcula el nominal
+THEN no se redondea, la posición se marca como "lámina no informada", y no se asume ningún valor por
+     defecto
+
+GIVEN una cartera con dos de siete posiciones sin lámina
+WHEN se muestra el resumen
+THEN declara cuántas posiciones y qué porcentaje de la cartera quedaron fuera del total ajustado
+```
+
+---
+
+#### F-025 — Carga asistida de lámina con trazabilidad
+
+**Etiqueta:** Stage 1 · **Traza a:** F7
+
+**Descripción.** Cuando el asesor se topa con una posición sin lámina, tipea el valor en la misma
+pantalla, sin salir del armador. Lo que tipea queda guardado con **origen `carga manual` y fecha**, se
+propaga a las otras especies de la misma emisión —la lámina es atributo de la emisión, no de la
+especie— y queda disponible para todos los asesores. La cobertura crece por uso, que es el único
+mecanismo de crecimiento que no requiere inventar nada. Si el valor cargado entra en conflicto con uno
+existente de otro origen, se aplica la detección de conflictos de F-009: no se elige, se reporta.
+
+**Input:** posición marcada sin lámina en F-024; valor tipeado por el asesor.
+**Output:** `condiciones_emision` actualizada con origen y fecha, propagada entre especies.
+**Depende de:** F-024
+**Habilita:** —
+
+**RICE:** R = 200 · I = 1 · C = 80 % · E = 3 → **Score 53,3**
+
+```
+GIVEN una posición marcada como lámina no informada
+WHEN el asesor tipea la lámina en la misma pantalla
+THEN la posición se recalcula con redondeo y el valor queda guardado con origen "carga manual" y la
+     fecha
+
+GIVEN una lámina cargada a mano para la especie D de una emisión
+WHEN se consultan las otras especies de la misma emisión
+THEN heredan la lámina con el origen trazado a la carga manual original
+
+GIVEN una lámina cargada por el asesor A
+WHEN el asesor B abre una cartera con esa emisión
+THEN ve la lámina cargada, porque condiciones_emision es compartida
+
+GIVEN una lámina cargada a mano que contradice una ya existente de otro origen
+WHEN se guarda
+THEN se reporta el conflicto con los dos valores y sus orígenes, y el sistema no elige uno
+```
+
+---
+
+### Bloque I — Renta variable (F8)
+
+---
+
+#### F-026 — Bloque de renta variable separado
+
+**Etiqueta:** Stage 1 · **Traza a:** F8
+
+**Descripción.** Acciones locales (69 verificadas) y CEDEARs (683 verificados) con su precio y su
+volumen, en una sección propia del armador con su propio total. **Sin TIR, sin duración y sin
+cashflow: no se mezcla con la renta fija en ningún cálculo.** El bloque suma al monto total de la
+cartera pero **no al cálculo de renta ni a los rendimientos ponderados**. La frontera ya vive en un
+solo lugar del motor —`cargar_universo()` devuelve renta fija y nada más; la renta variable se pide
+aparte y a propósito— y la interfaz la replica. Existe porque la cartera estándar del cliente es
+60-70 / 30-40 y una propuesta que sólo cubre renta fija no es la que el asesor lleva a la reunión.
+
+**Input:** `cedears` y `general-equity` de F-004; cartera de F-018.
+**Output:** posiciones de renta variable con su total propio, integradas al monto de la cartera y
+excluidas de todo cálculo de renta fija.
+**Depende de:** F-004, F-018
+**Habilita:** F-027
+
+**RICE:** R = 300 · I = 2 · C = 80 % · E = 5 → **Score 96**
+
+```
+GIVEN una cartera con 65 % de renta fija y 35 % de renta variable
+WHEN se calcula la renta anual sobre lo invertido
+THEN el denominador y el numerador consideran únicamente la porción de renta fija, y el criterio está
+     declarado en pantalla
+
+GIVEN una posición de renta variable
+WHEN se la mira en la tabla
+THEN no tiene columna de TIR, ni de duración, ni de cupón
+
+GIVEN una cartera mixta
+WHEN se muestran los rendimientos ponderados por naturaleza de tasa
+THEN la renta variable no participa de ninguno de los cuatro
+
+GIVEN una cartera mixta
+WHEN se muestra el monto total
+THEN incluye las dos porciones, cada una con su subtotal identificado
+```
+
+---
+
+#### F-027 — Calendario de presentación de balances
+
+**Etiqueta:** Stage 1 · **Traza a:** F8
+
+**Descripción.** El equivalente del cupón del lado de la renta variable: en qué mes cada acción o
+CEDEAR presenta balance. Las fechas salen de **SEC EDGAR** (`data.sec.gov`, gratuita, sin clave) para
+los CEDEARs de empresas estadounidenses, y de la **CNV** para emisores argentinos. EDGAR registra lo
+ya presentado, no un calendario a futuro; el patrón mensual es estable y es lo que se necesita, y **la
+pantalla lo declara como patrón histórico, no como fecha confirmada**. Se muestra en su propia grilla,
+nunca superpuesto a la de cupones, porque un balance no es un cobro.
+
+**Input:** tickers de renta variable de F-026; EDGAR y CNV.
+**Output:** patrón mensual de presentación por emisor, declarado como histórico.
+**Depende de:** F-026
+**Habilita:** —
+
+**RICE:** R = 200 · I = 1 · C = 50 % · E = 6 → **Score 16,7**
+*Confidence 50 %: la disponibilidad programática de las fechas de CNV no está verificada en los inputs.*
+
+```
+GIVEN un CEDEAR de una empresa estadounidense con historial en EDGAR
+WHEN se muestra su calendario de balances
+THEN muestra el patrón mensual derivado de las presentaciones ya hechas, etiquetado como patrón
+     histórico y no como fecha confirmada
+
+GIVEN un emisor argentino sin dato de CNV disponible
+WHEN se muestra su calendario
+THEN queda vacío y declarado como sin dato, y no se le proyecta un patrón por analogía con otros
+     emisores
+
+GIVEN una cartera mixta
+WHEN se muestran el calendario de cupones y el de balances
+THEN están en grillas separadas y sus montos no se suman entre sí
+```
+
+---
+
+### Bloque J — Carga y diagnóstico de cartera existente (F9)
+
+---
+
+#### F-028 — Ingreso de cartera existente por tres vías
+
+**Etiqueta:** Stage 1 · **Traza a:** F9
+
+**Descripción.** La puerta de entrada del Flujo B. Tres vías: **pegar desde el portapapeles** —que es
+el formato en que llega el resumen de cuenta—, **subir un CSV o Excel**, o **cargar posición por
+posición** a mano. El parseo del pegado tolera las variantes de formato del resumen de cuenta
+(separadores, decimales con coma, columnas en distinto orden) y muestra una previsualización de lo que
+entendió antes de confirmar. Todo lo que entra se valida en el borde con Zod: nada llega al motor sin
+esquema.
+
+**Input:** texto pegado, archivo, o carga manual.
+**Output:** lista de posiciones crudas con ticker declarado y nominal o monto, lista para resolver.
+**Depende de:** F-003
+**Habilita:** F-029
+
+**RICE:** R = 200 · I = 3 · C = 80 % · E = 5 → **Score 96**
+
+```
+GIVEN un resumen de cuenta pegado desde el portapapeles con decimales con coma
+WHEN se lo parsea
+THEN se muestra la previsualización de las posiciones interpretadas antes de confirmar, con la
+     cantidad de filas leídas
+
+GIVEN un archivo CSV con columnas en distinto orden al esperado
+WHEN se lo sube
+THEN el sistema pide el mapeo de columnas en vez de asumir el orden
+
+GIVEN una fila con un valor no numérico en el campo de nominal
+WHEN se valida
+THEN la fila se marca como inválida con el motivo, y no se la descarta en silencio ni se la
+     interpreta como cero
+```
+
+---
+
+#### F-029 — Resolución de tickers contra el universo
+
+**Etiqueta:** Stage 1 · **Traza a:** F9
+
+**Descripción.** Cada ticker declarado se resuelve contra el universo: se identifica la emisión, la
+especie y el plazo de liquidación. Los que no se reconocen **se marcan sin descartarlos en silencio**:
+quedan en la cartera como posición no resuelta, con su monto, y el diagnóstico declara qué porcentaje
+de la cartera quedó sin resolver. Es la aplicación directa de la regla de no inventar: un ticker que
+no está en el universo no se aproxima al más parecido, y en particular **no se deriva por manipulación
+de strings** — ese camino ya produjo 121 tickers inexistentes que hubo que revertir.
+
+**Input:** posiciones crudas de F-028; universo con especies vivas de F-011.
+**Output:** posiciones resueltas con su instrumento; posiciones no resueltas marcadas.
+**Depende de:** F-011, F-028
+**Habilita:** F-030
+
+**RICE:** R = 200 · I = 2 · C = 80 % · E = 3 → **Score 106,7**
+
+```
+GIVEN una posición con ticker presente en el universo
+WHEN se la resuelve
+THEN queda vinculada a la emisión, la especie y el plazo de liquidación correctos
+
+GIVEN una posición con ticker que no existe en el universo
+WHEN se la resuelve
+THEN queda marcada como no reconocida, permanece en la cartera con su monto, y no se la reemplaza
+     por el ticker más parecido
+
+GIVEN una cartera con 2 de 11 posiciones no resueltas
+WHEN se muestra el diagnóstico
+THEN declara la cantidad y el porcentaje del monto de la cartera que quedó sin resolver
+
+GIVEN un ticker de especie que no existe pero cuya raíz sí
+WHEN se lo resuelve
+THEN no se genera la especie por derivación de sufijo; queda no reconocido
+```
+
+---
+
+#### F-030 — Valuación y diagnóstico de la cartera cargada
+
+**Etiqueta:** Stage 1 · **Traza a:** F9
+
+**Descripción.** Valora la cartera a precios de hoy y devuelve su descripción tal como está: renta mes
+a mes, meses vacíos, rendimientos abiertos por naturaleza de tasa, plazo promedio, concentración por
+emisor y por sector. Reusa exactamente los mismos servicios que el armador —F-015, F-020, F-021,
+F-022— así que la cartera cargada y la que se está armando se leen con la misma vara. El diagnóstico
+solo ya tiene valor comercial: hoy nadie lo hace porque son horas de trabajo manual.
+
+**Input:** posiciones resueltas de F-029; precios de hoy.
+**Output:** diagnóstico completo de la cartera existente, comparable con el de una cartera armada.
+**Depende de:** F-013, F-021, F-022, F-029
+**Habilita:** F-031, F-032
+
+**RICE:** R = 200 · I = 3 · C = 100 % · E = 4 → **Score 150**
+
+```
+GIVEN una cartera cargada con posiciones resueltas
+WHEN se la valora
+THEN cada posición usa el precio del snapshot vigente, y la barra de estado declara la hora de ese
+     snapshot y su demora
+
+GIVEN la misma composición cargada por F-028 y armada a mano en el armador
+WHEN se comparan los dos diagnósticos
+THEN producen los mismos números, porque usan los mismos servicios de cálculo
+
+GIVEN una cartera cargada con posiciones no resueltas
+WHEN se la valora
+THEN el monto no resuelto queda fuera de los cálculos de renta y rendimiento, y el diagnóstico lo
+     declara
+
+GIVEN una cartera cargada
+WHEN se muestra su calendario
+THEN los meses sin cobertura aparecen con cero explícito
+```
+
+---
+
+### Bloque K — Riesgo en seis ejes (F10)
+
+---
+
+#### F-031 — Vector de riesgo de seis ejes
+
+**Etiqueta:** Stage 1 · **Traza a:** F10 (resolución de la cuestión abierta N.º 1)
+
+**Descripción.** El perfil de riesgo de una cartera es un **vector de seis ejes, no un score**:
+duración, crédito, legislación, liquidez, concentración y moneda. Cada eje con su métrica, su unidad y
+**su cobertura de dato declarada al lado**: duración modificada ponderada en años (618 de 927 con TIR
+y duración); clase soberano/subsoberano/corporativo más calificación cuando existe (clase 100 %,
+**calificación 359 de 927, 39 %**); porcentaje bajo ley extranjera vs argentina (691 de 927, 75 %);
+percentil de volumen en dólares dentro del segmento más spread bid/ask (674 de 927 con spread);
+máximo por clave de riesgo con `SOBERANO_AR` como clave única y por sector (100 % por emisor, sector
+efectivo 903 de 927); y composición por naturaleza de tasa (100 %). **Nunca se colapsan en un número
+único** — un score exigiría ponderar años contra una calificación que sólo existe para el 39 % del
+universo, y eso sería un juicio inventado presentado como dato. Se rinden igual para la cartera
+cargada, la que se está construyendo y cualquier propuesta. Donde falta la calificación se usan —y se
+declaran— los proxies ya calibrados: tope de rendimiento sobre los pares del segmento, percentil de
+liquidez y concentración máxima. **La calificación nunca se usa como filtro automático.**
+
+**Input:** cartera (cargada o en construcción); ley y calificación de F-009; liquidez normalizada de
+F-012; concentración de F-020; segmentación.
+**Output:** seis ejes con su métrica, su unidad y su cobertura; visualización comparable.
+**Depende de:** F-005, F-009, F-012, F-020, F-030
+**Habilita:** F-033, F-034, F-036, F-037
+
+**RICE:** R = 250 · I = 3 · C = 80 % · E = 6 → **Score 100**
+
+```
+GIVEN una cartera cualquiera
+WHEN se muestra su perfil de riesgo
+THEN aparecen seis ejes separados, y no existe en la interfaz ningún número único de riesgo ni
+     control que los combine
+
+GIVEN el eje de crédito
+WHEN se lo muestra
+THEN lleva al lado la cobertura de calificación de la cartera, y las posiciones sin calificación
+     figuran como tales
+
+GIVEN una cartera con posiciones sin calificación
+WHEN el asesor arma o rota
+THEN la calificación no filtra automáticamente ningún candidato; los proxies usados están declarados
+
+GIVEN GD30, AE38 y TZX26 en la cartera
+WHEN se calcula el eje de concentración
+THEN los tres cuentan bajo la clave única SOBERANO_AR
+
+GIVEN una cartera cargada, una en construcción y una propuesta
+WHEN se muestran los tres perfiles
+THEN los seis ejes se calculan y se presentan igual en los tres casos
+```
+
+---
+
+### Bloque L — Optimizador de rotaciones (F11)
+
+---
+
+#### F-032 — Motor de rotaciones intra-segmento
+
+**Etiqueta:** Stage 1 · **Traza a:** F11
+
+**Descripción.** Envoltura como servicio de `detectar_swaps.py`: `evaluar_par`, `detectar`,
+`tabla_spread_legislacion` y `hoja_sensibilidad` se conservan; se descarta la cáscara de argparse y
+openpyxl. Genera el conjunto de rotaciones candidatas **dentro del mismo segmento**: un cruce CER →
+hard-dollar es una visión macro humana, no un swap, y el motor no lo propone. Trabaja sobre la vista
+viva de especies, porque los swaps de perfil rotan entre especies de la misma emisión (MEP → Cable).
+Incluye el ranking de destinos con filtro de liquidez y de rendimiento mínimo. Está validado contra
+swaps que la mesa efectivamente ejecutó — TLCWO → TLCMO.
+
+**Input:** cartera diagnosticada de F-030; universo con especies vivas de F-011.
+**Output:** rotaciones candidatas origen → destino con su delta de rendimiento y sus deltas por eje.
+**Depende de:** F-011, F-030
+**Habilita:** F-033, F-034, F-035
+
+**RICE:** R = 200 · I = 3 · C = 100 % · E = 6 → **Score 100**
+
+```
+GIVEN una posición en un bono CER
+WHEN se generan rotaciones candidatas
+THEN todos los destinos propuestos son del segmento CER, y ninguno es hard-dollar, dólar-linked ni
+     tasa nominal en pesos
+
+GIVEN el swap TLCWO → TLCMO que la mesa ejecutó
+WHEN se corre el motor sobre la cartera de origen
+THEN esa rotación aparece entre las candidatas
+
+GIVEN una posición en la especie MEP de una emisión
+WHEN se generan rotaciones
+THEN la especie Cable de la misma emisión es un destino válido, porque el optimizador trabaja sobre
+     la vista viva
+
+GIVEN un destino candidato por debajo del filtro de liquidez o de rendimiento mínimo
+WHEN se rankean los destinos
+THEN queda excluido del ranking
+```
+
+---
+
+#### F-033 — Modo "mantener la TIR y bajar el riesgo"
+
+**Etiqueta:** Stage 1 · **Traza a:** F11
+
+**Descripción.** El asesor elige **cuál de los seis ejes minimizar** — el default es **duración**,
+porque es el único eje con cobertura casi total sobre los instrumentos que efectivamente cotizan y el
+más medible sin depender de un dato que falta. El sistema propone destinos que cumplen las tres
+condiciones a la vez: **(a)** mejoran estrictamente el eje elegido, **(b)** **no empeoran ninguno de
+los otros cinco** —criterio de no-empeoramiento, no de compensación— y **(c)** mantienen el
+rendimiento dentro de una banda de **±0,5 pp**, la misma que el motor ya usa para considerar dos
+candidatos parejos. Si no hay ningún destino que cumpla las tres, el sistema **dice que no hay
+propuesta** en vez de relajar la restricción en silencio.
+
+**Input:** rotaciones candidatas de F-032; vector de seis ejes de F-031; eje primario elegido.
+**Output:** propuestas que satisfacen las tres condiciones, o la declaración explícita de que no hay.
+**Depende de:** F-022, F-031, F-032
+**Habilita:** F-036
+
+**RICE:** R = 180 · I = 2 · C = 80 % · E = 5 → **Score 57,6**
+
+```
+GIVEN el modo bajar riesgo sin eje elegido
+WHEN se abre
+THEN el eje primario viene preseleccionado en duración, y se puede cambiar a cualquiera de los otros
+     cinco
+
+GIVEN una rotación que baja duración pero sube concentración
+WHEN se evalúa contra el criterio de no-empeoramiento
+THEN se descarta, porque empeora uno de los otros cinco ejes
+
+GIVEN una rotación que baja duración, no empeora los otros cinco, y cambia el rendimiento en 0,8 pp
+WHEN se evalúa
+THEN se descarta por salir de la banda de ±0,5 pp
+
+GIVEN una cartera para la que ningún destino cumple las tres condiciones
+WHEN se pide el modo bajar riesgo
+THEN el sistema declara que no hay propuesta, y no muestra alternativas con la restricción relajada
+```
+
+---
+
+#### F-034 — Modo "subir la TIR declarando la contrapartida"
+
+**Etiqueta:** Stage 1 · **Traza a:** F11
+
+**Descripción.** Propone rotaciones que suben el rendimiento, y **cada propuesta lleva, en la misma
+fila, el eje o los ejes que empeoran y en cuánto**: "+180 bps de TIR / duración +2,3 años / ley ARG en
+vez de NY". **Nunca se propone una mejora de TIR sin nombrar su contrapartida** — la fila no se puede
+renderizar sin ella. Si una rotación sube el rendimiento y no empeora ningún eje, se lo declara
+igual, porque es información y no un vacío. La contrapartida se expresa en la unidad de cada eje, no
+en un puntaje.
+
+**Input:** rotaciones candidatas de F-032; vector de seis ejes de F-031.
+**Output:** propuestas de mejora de rendimiento con su contrapartida nombrada y cuantificada.
+**Depende de:** F-022, F-031, F-032
+**Habilita:** F-036
+
+**RICE:** R = 180 · I = 3 · C = 80 % · E = 5 → **Score 86,4**
+
+```
+GIVEN una rotación que sube 180 bps de TIR, alarga la duración 2,3 años y cambia ley NY por ley ARG
+WHEN se la muestra
+THEN la misma fila declara los tres datos: la mejora, el delta de duración en años y el cambio de ley
+
+GIVEN una propuesta de mejora de TIR cuyos deltas por eje no se pudieron calcular
+WHEN se intenta mostrarla
+THEN no se muestra, porque no hay mejora de TIR sin contrapartida nombrada
+
+GIVEN una rotación que sube la TIR sin empeorar ningún eje
+WHEN se la muestra
+THEN declara explícitamente que ningún eje empeora, en vez de dejar la columna en blanco
+
+GIVEN un eje cuya cobertura de dato es parcial para la posición
+WHEN se declara la contrapartida sobre ese eje
+THEN la cobertura faltante se declara junto al delta
+```
+
+---
+
+#### F-035 — Costo real de rotar y aviso de cupón próximo
+
+**Etiqueta:** Stage 1 · **Traza a:** F11
+
+**Descripción.** Cada propuesta trae el costo real de rotar, que **no es sólo el arancel**: la rotación
+paga el **spread bid/ask en las dos patas**. Con las puntas reales el costo mediano medido pasó de
+1,50 % a **3,10 %**, y **12 de 51 rotaciones superaban el 5 %** — el motor venía proponiendo swaps que
+en la práctica no convenían, y sin este cálculo el optimizador es una fuente de malas
+recomendaciones. Reusa `mercado.py`; lo único que cambia es de dónde vienen las puntas: BYMA publica
+`bidPrice`/`offerPrice` en el mismo endpoint que el precio, lo que **elimina la dependencia de
+data912** y mejora la cobertura de spread. Trae además el **aviso de cupón próximo**: rotar tres días
+antes de cobrar tiene un costo que no está en el precio.
+
+**Input:** propuestas de F-032; puntas de F-004; calendario de F-015.
+**Output:** costo de rotación por propuesta, desagregado en arancel y spread por pata; aviso de cupón.
+**Depende de:** F-032
+**Habilita:** F-036
+
+**RICE:** R = 180 · I = 3 · C = 100 % · E = 3 → **Score 180**
+
+```
+GIVEN una rotación entre dos instrumentos con puntas vivas
+WHEN se calcula su costo
+THEN el costo declara arancel y spread bid/ask de la pata de venta y de la pata de compra por
+     separado
+
+GIVEN una rotación cuyo costo total supera el 5 %
+WHEN se la muestra
+THEN queda marcada como costo elevado, con el porcentaje a la vista
+
+GIVEN un instrumento sin dos puntas vivas
+WHEN se calcula el costo de rotarlo
+THEN el spread se declara como no disponible y la propuesta se marca como de costo no verificable, y
+     no se asume un spread por defecto
+
+GIVEN una posición que cobra cupón dentro de la ventana de aviso
+WHEN se propone rotarla
+THEN la propuesta muestra el aviso de cupón próximo con la fecha del cobro
+```
+
+---
+
+#### F-036 — Aceptación rotación por rotación y efecto sobre el calendario
+
+**Etiqueta:** Stage 1 · **Traza a:** F11
+
+**Descripción.** El asesor acepta o descarta **una rotación por vez**, y con cada decisión ve moverse
+el calendario de doce meses y los seis ejes de riesgo. Cada propuesta declara además su **efecto sobre
+el calendario**: qué mes se llena y qué mes se vacía — que es la razón de ser del producto del lado
+del optimizador, porque desconcentrar el calendario de cobros es el objetivo, no un efecto lateral.
+El estado es reversible: una rotación aceptada se puede deshacer y todo vuelve.
+
+**Input:** propuestas de F-033, F-034 y F-035; calendario de F-015; ejes de F-031.
+**Output:** cartera propuesta acumulada; calendario y ejes actualizados en vivo.
+**Depende de:** F-015, F-021, F-031, F-033, F-034, F-035
+**Habilita:** F-037
+
+**RICE:** R = 180 · I = 2 · C = 80 % · E = 5 → **Score 57,6**
+
+```
+GIVEN una propuesta de rotación
+WHEN se la muestra
+THEN declara qué mes del calendario se llena y qué mes se vacía si se acepta
+
+GIVEN el asesor acepta una rotación
+WHEN termina la acción
+THEN el calendario de doce meses y los seis ejes se actualizan, y las propuestas restantes se
+     recalculan sobre la cartera resultante
+
+GIVEN una rotación aceptada
+WHEN el asesor la deshace
+THEN la cartera, el calendario y los seis ejes vuelven al estado anterior
+
+GIVEN el asesor descarta una rotación
+WHEN sigue trabajando
+THEN esa rotación no vuelve a proponerse en la misma sesión
+```
+
+---
+
+#### F-037 — Comparación de la cartera original contra la propuesta
+
+**Etiqueta:** Stage 1 · **Traza a:** F11
+
+**Descripción.** Al final del Flujo B, las dos carteras lado a lado: la original y la propuesta, con
+la renta mes a mes de cada una, los rendimientos abiertos por naturaleza de tasa, los seis ejes y el
+costo total de rotación acumulado. Las diferencias de cobertura mensual y de renta anual están
+marcadas. Es la pantalla que el jefe de mesa lee para aprobar o devolver, y por eso las dos columnas
+se miden exactamente con la misma vara.
+
+**Input:** cartera original de F-030; cartera propuesta de F-036.
+**Output:** comparación lado a lado con deltas por métrica y por mes.
+**Depende de:** F-031, F-036
+**Habilita:** F-041
+
+**RICE:** R = 180 · I = 2 · C = 80 % · E = 4 → **Score 72**
+
+```
+GIVEN una cartera original y una propuesta
+WHEN se las compara
+THEN cada métrica aparece en las dos columnas calculada con el mismo servicio, y el delta está
+     explícito
+
+GIVEN una comparación
+WHEN se mira la renta mensual
+THEN los meses que pasaron de cero a cubierto y los que pasaron de cubierto a cero están marcados
+
+GIVEN una comparación
+WHEN se mira el resultado neto
+THEN el costo total de rotación acumulado está a la vista junto a la mejora de renta o de rendimiento
+```
+
+---
+
+### Bloque M — Monitor de mercado y ficha de instrumento (F12)
+
+---
+
+#### F-038 — Monitor de mercado
+
+**Etiqueta:** Stage 1 · **Traza a:** F12
+
+**Descripción.** La pantalla de entrada diaria: el universo por segmento, con filtros y orden, para
+consultar sin armar nada — el uso de "abro la herramienta a la mañana y miro cómo está el mercado".
+Grilla densa de ~1.700 filas con ordenamiento y filtrado del lado del cliente sobre datos paginados.
+Navegación de dos niveles: sección arriba, segmento debajo, y **nunca dos segmentos a la vez**, que es
+como se respeta la regla de las unidades. Barra de filtros numéricos siempre visible (TIR mínima y
+máxima, duración mínima y máxima, familia, limpiar) y la curva TIR/duración del segmento activo con
+las alertas del día.
+
+**Input:** universo saneado de F-010; liquidez normalizada de F-012; barra de estado de F-013.
+**Output:** vista de consulta del universo; punto de entrada a la ficha de instrumento.
+**Depende de:** F-003, F-010, F-012, F-013
+**Habilita:** F-039
+
+**RICE:** R = 400 · I = 2 · C = 80 % · E = 6 → **Score 106,7**
+
+```
+GIVEN el monitor abierto
+WHEN se lo mira
+THEN hay un solo segmento activo por vez, y la unidad de la columna de rendimiento corresponde a ese
+     segmento
+
+GIVEN una grilla con ~1.700 filas
+WHEN el asesor ordena por una columna y aplica dos filtros numéricos
+THEN la respuesta es inmediata y el conteo de filas resultantes está visible
+
+GIVEN el monitor abierto a la mañana
+WHEN se lo mira
+THEN la barra de estado del dato muestra la hora del snapshot, la demora de la fuente, los descartes
+     por sanidad del día y la cobertura de los campos críticos
+
+GIVEN una fila del monitor
+WHEN se hace clic
+THEN se abre la ficha del instrumento
+```
+
+---
+
+#### F-039 — Ficha de instrumento
+
+**Etiqueta:** Stage 1 · **Traza a:** F12
+
+**Descripción.** El destino natural de cada ticker que aparece en el armador y en el optimizador.
+Muestra las condiciones de emisión —emisor, ley, moneda de pago, estructura del cupón, tasa,
+frecuencia, lámina, calificación cuando existe—, **las tres especies de liquidación con sus precios y
+puntas**, y el flujo de fondos completo hasta el vencimiento. Cada campo con su origen y, cuando
+falta, con la marca de faltante en vez del vacío silencioso. Desde acá se agrega el instrumento a una
+cartera nueva.
+
+**Input:** `condiciones_emision` de F-009; especies vivas de F-011; cashflow de F-006.
+**Output:** ficha completa; acción de agregar a cartera.
+**Depende de:** F-009, F-011, F-038
+**Habilita:** F-040
+
+**RICE:** R = 350 · I = 2 · C = 80 % · E = 5 → **Score 112**
+
+```
+GIVEN un bono con tres especies de liquidación
+WHEN se abre su ficha
+THEN las tres aparecen con su precio, sus dos puntas y su moneda de cotización, sin sumarse ni
+     promediarse entre sí
+
+GIVEN un bono sin calificación crediticia
+WHEN se abre su ficha
+THEN el campo aparece marcado como no informado, y no vacío ni inferido de la clase del emisor
+
+GIVEN un bono con cashflow disponible
+WHEN se abre su ficha
+THEN muestra el flujo de fondos completo hasta el vencimiento, distinguiendo interés de amortización
+
+GIVEN cada condición de emisión mostrada
+WHEN se la consulta
+THEN trae su origen y su fecha
+```
+
+---
+
+#### F-040 — Sensibilidad del precio por repricing completo
+
+**Etiqueta:** Stage 1 · **Traza a:** F12
+
+**Descripción.** La sensibilidad del precio a movimientos de la TIR del instrumento se calcula por
+**repricing completo del cashflow contractual**, no por aproximación lineal de duración: en bonos
+largos la aproximación subestima fuerte la suba ante compresiones grandes, y esos son justamente los
+escenarios que interesan. El método está verificado contra una tabla externa con desvío máximo de
+**0,12 pp sobre movimientos de hasta +91 %**. Reusa `cupones.py`, que ya implementa el repricing por
+descuento completo. Se muestra como tabla de escenarios sobre la TIR propia del instrumento, nunca
+sobre una tasa de otro segmento.
+
+**Input:** cashflow del instrumento; TIR vigente.
+**Output:** tabla de precio ante escenarios de movimiento de la TIR.
+**Depende de:** F-006, F-039
+**Habilita:** —
+
+**RICE:** R = 200 · I = 1 · C = 100 % · E = 3 → **Score 66,7**
+
+```
+GIVEN un bono con cashflow completo
+WHEN se calcula la sensibilidad
+THEN el precio de cada escenario sale de descontar el cashflow contractual a la TIR del escenario, y
+     no de multiplicar por la duración modificada
+
+GIVEN la tabla externa de verificación con movimientos de hasta +91 %
+WHEN se corre el repricing
+THEN el desvío máximo contra esa tabla es de 0,12 pp
+
+GIVEN un instrumento sin cashflow disponible
+WHEN se pide la sensibilidad
+THEN se declara que no se puede calcular, y no se cae a la aproximación por duración
+```
+
+---
+
+### Bloque N — Mis carteras (F13)
+
+---
+
+#### F-041 — Guardar, listar, reabrir y revaluar carteras
+
+**Etiqueta:** Stage 1 · **Traza a:** F13
+
+**Descripción.** Sin persistencia el producto es una calculadora de una sesión y el login no tendría
+objeto. Listado de las carteras guardadas del asesor con nombre, fecha, monto, moneda de referencia y
+un resumen de una línea. Cada cartera se guarda **con los precios del momento en que se guardó** —una
+propuesta tiene que poder reproducirse tal como se presentó— y se puede reabrir para valuarla a
+precios de hoy, **con la diferencia explícita**. Se guardan carteras, no clientes: los objetivos del
+cliente son parámetros de la cartera, no un registro que persiste.
+
+**Input:** cartera de F-018 o propuesta de F-037; snapshot de precios vigente.
+**Output:** carteras persistidas con precios congelados; listado; revaluación con delta.
+**Depende de:** F-014, F-018, F-037
+**Habilita:** F-042
+
+**RICE:** R = 300 · I = 3 · C = 100 % · E = 5 → **Score 180**
+
+```
+GIVEN una cartera guardada hace tres semanas
+WHEN se la reabre
+THEN muestra por defecto los precios y los números con los que se guardó, no los de hoy
+
+GIVEN una cartera guardada
+WHEN el asesor pide revaluarla a precios de hoy
+THEN muestra las dos valuaciones y la diferencia explícita, con la fecha de cada snapshot
+
+GIVEN el listado de carteras del asesor A
+WHEN el asesor B se autentica
+THEN no ve ninguna cartera de A
+
+GIVEN una cartera guardada
+WHEN se la inspecciona
+THEN no contiene ningún campo de identificación de cliente: nombre, contacto ni historial
+```
+
+---
+
+#### F-042 — Exportación a Excel y PDF
+
+**Etiqueta:** Stage 1 · **Traza a:** F13
+
+**Descripción.** Exportación de la cartera y del diagnóstico como **documento interno de trabajo** — el
+asesor arma la presentación final al cliente por su cuenta. El export lleva todo lo que la pantalla
+lleva y con el mismo criterio: los rendimientos abiertos por naturaleza de tasa y nunca promediados,
+los seis ejes con su cobertura, las posiciones sin lámina declaradas, y el pie con la hora del
+snapshot y la demora de la fuente. Un export que perdiera esas declaraciones sería peor que no
+exportar, porque circula fuera de la pantalla que las contextualiza.
+
+**Input:** cartera guardada o en curso de F-041.
+**Output:** archivo Excel y archivo PDF.
+**Depende de:** F-041
+**Habilita:** —
+
+**RICE:** R = 250 · I = 2 · C = 80 % · E = 4 → **Score 100**
+
+```
+GIVEN una cartera con posiciones de tres naturalezas de tasa
+WHEN se la exporta
+THEN el archivo trae los rendimientos abiertos por naturaleza, y ninguna celda los promedia
+
+GIVEN una cartera con posiciones sin lámina informada
+WHEN se la exporta
+THEN el archivo las declara como tales y reporta el porcentaje sin ajustar
+
+GIVEN cualquier export
+WHEN se lo abre
+THEN el pie declara la hora del snapshot de precios y la demora de la fuente
+```
+
+---
+
+### Bloque O — Stage 2
+
+---
+
+#### F-043 — Gestión de clientes y CRM
+
+**Etiqueta:** Stage 2 · **Traza a:** "Fuera del MVP"
+
+**Descripción.** Ficha de cliente, asociación de carteras a clientes, y los datos que Stage 1 excluye
+deliberadamente. Es la feature que convierte "se guardan carteras" en "se guardan clientes", y por eso
+está explícitamente fuera del MVP: el producto se define por lo que no es tanto como por lo que es.
+Requiere resolver dónde viven los datos de clientes reales, que por regla del proyecto **no entran al
+repositorio**.
+
+**Input:** F-041 en producción con uso real.
+**Output:** entidad cliente con sus carteras asociadas.
+**Depende de:** F-041
+**Habilita:** F-044
+
+**RICE:** R = 300 · I = 2 · C = 50 % · E = 15 → **Score 20**
+
+```
+GIVEN un cliente creado
+WHEN se le asocian carteras
+THEN el listado del asesor puede filtrarse por cliente sin cambiar el cálculo de ninguna cartera
+
+GIVEN datos de clientes reales
+WHEN se los persiste
+THEN nunca quedan en el repositorio de código
+```
+
+---
+
+#### F-044 — Historial de propuestas y seguimiento de performance
+
+**Etiqueta:** Stage 2 · **Traza a:** "Fuera del MVP"
+
+**Descripción.** Registro de las propuestas presentadas a lo largo del tiempo y comparación de lo
+propuesto contra lo que efectivamente pasó. Depende de tener clientes (F-043) y de acumular meses de
+carteras guardadas.
+
+**Input:** F-043; histórico de carteras y snapshots.
+**Output:** línea de tiempo de propuestas con su evolución.
+**Depende de:** F-043
+**Habilita:** —
+
+**RICE:** R = 250 · I = 2 · C = 50 % · E = 10 → **Score 25**
+
+```
+GIVEN una propuesta presentada hace seis meses
+WHEN se la revisa hoy
+THEN se ve la valuación de entonces y la de hoy, con los snapshots de cada fecha declarados
+```
+
+---
+
+#### F-045 — Colocaciones primarias
+
+**Etiqueta:** Stage 2 · **Traza a:** "Fuera del MVP"
+
+**Descripción.** Instrumentos que todavía no cotizan: licitaciones primarias que el asesor quiere
+evaluar antes de que exista precio de mercado. Incluye el recuadro de simulación de un instrumento
+inexistente sobre la curva TIR/duración.
+
+**Input:** condiciones de la colocación cargadas a mano.
+**Output:** instrumento simulado evaluable junto a los reales, marcado como no cotizante.
+**Depende de:** F-038
+**Habilita:** —
+
+**RICE:** R = 150 · I = 2 · C = 50 % · E = 10 → **Score 15**
+
+```
+GIVEN un instrumento simulado con ticker, TIR y duración tipeados
+WHEN se lo agrega a la curva
+THEN aparece junto a los reales, visualmente marcado como simulado y no cotizante
+```
+
+---
+
+#### F-046 — Fondos comunes de inversión con fuente
+
+**Etiqueta:** Stage 2 · **Traza a:** "Fuera del MVP"
+
+**Descripción.** FCI con precio y composición. **Siguen sin fuente** — verificado el 30/07/2026: no
+hay submercado FCI ni cuotapartes en las fuentes disponibles. Las carteras de la mesa los usan, así
+que en Stage 1 van como línea con peso y sin precio (F-018). Esta feature sólo se construye si aparece
+una fuente verificada; no se construye sobre un dato inventado.
+
+**Input:** una fuente de precios de FCI que hoy no existe.
+**Output:** FCI valuables e integrables al cálculo.
+**Depende de:** F-018
+**Habilita:** —
+
+**RICE:** R = 200 · I = 2 · C = 25 % · E = 12 → **Score 8,3**
+*Confidence 25 %: sin fuente conocida al 30/07/2026.*
+
+```
+GIVEN que no se identificó una fuente verificada de precios de FCI
+WHEN se planifica el ciclo
+THEN la feature no se construye, y los FCI siguen como línea con peso y sin precio
+```
+
+---
+
+#### F-047 — Opciones
+
+**Etiqueta:** Stage 2 · **Traza a:** "Fuera del MVP"
+
+**Descripción.** Instrumentos con opcionalidad. Fuera del MVP y del alcance del motor actual, que no
+modela payoffs no lineales.
+
+**Input:** por definir.
+**Output:** por definir.
+**Depende de:** —
+**Habilita:** —
+
+**RICE:** R = 80 · I = 1 · C = 50 % · E = 10 → **Score 4**
+
+```
+GIVEN una posición en opciones
+WHEN se la carga en Stage 1
+THEN queda como posición no resuelta y declarada, sin cálculo asociado
+```
+
+---
+
+#### F-048 — Alertas y notificaciones
+
+**Etiqueta:** Stage 2 · **Traza a:** "Fuera del MVP"
+
+**Descripción.** Avisos proactivos: un mes de la cartera que quedó sin cobertura, una rotación que
+apareció, un cupón que se cobra la semana que viene. En Stage 1 toda la señalización es en pantalla
+(F-013); acá pasa a ser push.
+
+**Input:** eventos de las corridas de ingesta y de las carteras guardadas.
+**Output:** notificaciones configurables por asesor.
+**Depende de:** F-041
+**Habilita:** —
+
+**RICE:** R = 300 · I = 1 · C = 80 % · E = 6 → **Score 40**
+
+```
+GIVEN una cartera guardada con un cupón a cobrar en 7 días
+WHEN corre la evaluación de alertas
+THEN el asesor dueño de esa cartera recibe el aviso, y ningún otro asesor lo recibe
+```
+
+---
+
+#### F-049 — Comparación de carteras entre sí
+
+**Etiqueta:** Stage 2 · **Traza a:** "Fuera del MVP"
+
+**Descripción.** Comparar dos o más carteras guardadas lado a lado, más allá del par original/propuesta
+que F-037 ya resuelve. Útil para el jefe de mesa que revisa propuestas de asesores distintos.
+
+**Input:** carteras guardadas de F-041.
+**Output:** comparación n a n con la misma vara.
+**Depende de:** F-037, F-041
+**Habilita:** —
+
+**RICE:** R = 200 · I = 1 · C = 80 % · E = 4 → **Score 40**
+
+```
+GIVEN dos carteras guardadas en fechas distintas
+WHEN se las compara
+THEN los precios usados se declaran por cartera y la comparación advierte si los snapshots difieren
+```
+
+---
+
+#### F-050 — Migración a la API Market Data oficial de BYMA
+
+**Etiqueta:** Stage 2 · **Traza a:** "Fuera del MVP"
+
+**Descripción.** Reemplazo del feed abierto demorado 20 minutos por la API Market Data oficial, que
+según BYMA no requiere homologación y se solicita a `marketdata@byma.com.ar`. Elimina la demora
+declarada. El cliente de F-004 se diseña con la interfaz de fuente desacoplada justamente para que
+esta migración sea un cambio de implementación y no de arquitectura.
+
+**Input:** acceso concedido a la API Market Data.
+**Output:** snapshots sin demora; la barra de estado del dato deja de declarar 20 minutos.
+**Depende de:** F-004
+**Habilita:** —
+
+**RICE:** R = 400 · I = 2 · C = 50 % · E = 5 → **Score 80**
+*Confidence 50 %: la concesión del acceso no está confirmada en los inputs.*
+
+```
+GIVEN el acceso a la API oficial concedido
+WHEN se cambia la implementación de la fuente de rueda
+THEN el consolidador y todo lo que consume el universo no requieren modificación
+
+GIVEN la fuente sin demora activa
+WHEN se muestra la barra de estado del dato
+THEN declara la demora real de la nueva fuente, no la de 20 minutos de la anterior
+```
+
+---
+
+## 4. Tabla de RICE ordenada
+
+| # | ID | Feature | Etiqueta | R | I | C | E | Score |
+|---|---|---|---|---|---|---|---|---|
+| 1 | F-001 | Esqueleto de servicio backend | Foundation | 400 | 3 | 100 % | 3 | **400,0** |
+| 2 | F-003 | Esqueleto de aplicación frontend | Foundation | 400 | 3 | 100 % | 3 | **400,0** |
+| 3 | F-010 | Sanidad del dato en dos capas | Stage 1 | 400 | 3 | 100 % | 3 | **400,0** |
+| 4 | F-011 | Deduplicación de especies | Stage 1 | 400 | 2 | 100 % | 2 | **400,0** |
+| 5 | F-002 | Esquema de datos y migraciones | Foundation | 400 | 3 | 100 % | 4 | **300,0** |
+| 6 | F-004 | Cliente de la API abierta de BYMA | Stage 1 | 400 | 3 | 100 % | 4 | **300,0** |
+| 7 | F-015 | API del calendario de doce meses | Stage 1 | 380 | 3 | 100 % | 4 | 285,0 |
+| 8 | F-021 | Panel de renta y renta anual | Stage 1 | 380 | 3 | 100 % | 4 | 285,0 |
+| 9 | F-008 | Job programado de ingesta | Stage 1 | 400 | 2 | 100 % | 3 | 266,7 |
+| 10 | F-012 | Tipo de cambio implícito y normalización | Stage 1 | 400 | 2 | 100 % | 3 | 266,7 |
+| 11 | F-006 | Cliente del feed de cashflow de Docta | Stage 1 | 400 | 3 | 80 % | 4 | 240,0 |
+| 12 | F-020 | Límites de concentración en vivo | Stage 1 | 350 | 2 | 100 % | 3 | 233,3 |
+| 13 | F-009 | condiciones_emision: semilla y herencia | Stage 1 | 400 | 2 | 100 % | 4 | 200,0 |
+| 14 | F-013 | Barra de estado del dato | Stage 1 | 400 | 2 | 100 % | 4 | 200,0 |
+| 15 | F-014 | Autenticación y aislamiento por asesor | Stage 1 | 400 | 2 | 100 % | 4 | 200,0 |
+| 16 | F-024 | Redondeo por lámina y diferencia | Stage 1 | 300 | 2 | 100 % | 3 | 200,0 |
+| 17 | F-035 | Costo real de rotar y cupón próximo | Stage 1 | 180 | 3 | 100 % | 3 | 180,0 |
+| 18 | F-041 | Guardar, listar, reabrir y revaluar | Stage 1 | 300 | 3 | 100 % | 5 | 180,0 |
+| 19 | F-022 | Rendimientos por naturaleza y plazo | Stage 1 | 350 | 2 | 100 % | 4 | 175,0 |
+| 20 | F-007 | Consolidador multi-fuente | Stage 1 | 400 | 3 | 80 % | 6 | 160,0 |
+| 21 | F-030 | Valuación y diagnóstico de cartera | Stage 1 | 200 | 3 | 100 % | 4 | 150,0 |
+| 22 | F-018 | Cartera editable y ponderación | Stage 1 | 350 | 3 | 80 % | 6 | 140,0 |
+| 23 | F-016 | Grilla-selector de doce meses | Stage 1 | 380 | 3 | 80 % | 8 | 114,0 |
+| 24 | F-017 | Filtros de la grilla | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
+| 25 | F-039 | Ficha de instrumento | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
+| 26 | F-029 | Resolución de tickers | Stage 1 | 200 | 2 | 80 % | 3 | 106,7 |
+| 27 | F-038 | Monitor de mercado | Stage 1 | 400 | 2 | 80 % | 6 | 106,7 |
+| 28 | F-019 | Armado asistido | Stage 1 | 250 | 2 | 100 % | 5 | 100,0 |
+| 29 | F-031 | Vector de riesgo de seis ejes | Stage 1 | 250 | 3 | 80 % | 6 | 100,0 |
+| 30 | F-032 | Motor de rotaciones intra-segmento | Stage 1 | 200 | 3 | 100 % | 6 | 100,0 |
+| 31 | F-042 | Exportación a Excel y PDF | Stage 1 | 250 | 2 | 80 % | 4 | 100,0 |
+| 32 | F-026 | Bloque de renta variable | Stage 1 | 300 | 2 | 80 % | 5 | 96,0 |
+| 33 | F-028 | Ingreso de cartera por tres vías | Stage 1 | 200 | 3 | 80 % | 5 | 96,0 |
+| 34 | F-034 | Modo subir TIR con contrapartida | Stage 1 | 180 | 3 | 80 % | 5 | 86,4 |
+| 35 | F-050 | API Market Data oficial de BYMA | Stage 2 | 400 | 2 | 50 % | 5 | 80,0 |
+| 36 | F-037 | Comparación original contra propuesta | Stage 1 | 180 | 2 | 80 % | 4 | 72,0 |
+| 37 | F-040 | Sensibilidad por repricing completo | Stage 1 | 200 | 1 | 100 % | 3 | 66,7 |
+| 38 | F-033 | Modo bajar riesgo | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
+| 39 | F-036 | Aceptación rotación por rotación | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
+| 40 | F-025 | Carga asistida de lámina | Stage 1 | 200 | 1 | 80 % | 3 | 53,3 |
+| 41 | F-005 | Parser del informe diario de IAMC | Stage 1 | 400 | 2 | 50 % | 8 | 50,0 |
+| 42 | F-023 | Composición y curva TIR/duración | Stage 1 | 300 | 1 | 80 % | 5 | 48,0 |
+| 43 | F-048 | Alertas y notificaciones | Stage 2 | 300 | 1 | 80 % | 6 | 40,0 |
+| 44 | F-049 | Comparación de carteras entre sí | Stage 2 | 200 | 1 | 80 % | 4 | 40,0 |
+| 45 | F-044 | Historial de propuestas | Stage 2 | 250 | 2 | 50 % | 10 | 25,0 |
+| 46 | F-043 | Gestión de clientes y CRM | Stage 2 | 300 | 2 | 50 % | 15 | 20,0 |
+| 47 | F-027 | Calendario de balances | Stage 1 | 200 | 1 | 50 % | 6 | 16,7 |
+| 48 | F-045 | Colocaciones primarias | Stage 2 | 150 | 2 | 50 % | 10 | 15,0 |
+| 49 | F-046 | FCI con fuente | Stage 2 | 200 | 2 | 25 % | 12 | 8,3 |
+| 50 | F-047 | Opciones | Stage 2 | 80 | 1 | 50 % | 10 | 4,0 |
+
+**Cómo se lee esta tabla.** El RICE ordena por eficiencia, no por secuencia. Las features de más
+score son las Foundation y las de ingesta: mucho alcance sobre poco esfuerzo, porque reusan lógica ya
+verificada. Las del optimizador puntúan bajo por su Reach acotado al Flujo B, y **eso no las hace
+opcionales**: el usuario declaró el optimizador como mitad no negociable del producto. El RICE informa
+el orden dentro de un ciclo; la etiqueta Stage 1 / Stage 2 decide qué se construye.
+
+---
+
+## 5. Tech stack, con la justificación de cada pieza
+
+El stack ya está decidido en `product-definition.md`. Acá va por qué cada pieza es la correcta, no una
+reapertura de la decisión.
+
+### Frontend — React 19 + TypeScript + Vite (SPA)
+
+- **SPA sin renderizado en servidor.** Es una herramienta interna con login por invitación: no hay SEO
+  que ganar ni primera carga fría que optimizar. SSR agregaría una capa de servidor a mantener para
+  cero beneficio.
+- **TypeScript.** El dominio tiene unidades que no se pueden mezclar —TIR en dólares, tasa real, TNA
+  nominal— y el tipado es la primera línea de defensa contra sumar dos cosas que no se suman. Los tipos
+  del esquema se generan desde Supabase, así que la base de datos y el frontend no pueden divergir en
+  silencio.
+- **TanStack Query.** Los precios se refrescan durante la rueda y toda la pantalla depende de un
+  snapshot con hora. La invalidación coordinada es exactamente el problema que resuelve; hacerla a mano
+  produciría paneles con datos de momentos distintos, que es el error que la barra de estado del dato
+  existe para hacer imposible.
+- **TanStack Table.** El monitor tiene ~1.700 filas con ordenamiento y filtrado. Es una grilla densa,
+  no una lista.
+- **Tailwind CSS.** Densidad alta de información sin decoración: la interfaz de trabajo del asesor
+  necesita control fino de espaciado, no una librería de componentes con opinión propia.
+- **Recharts.** Curva TIR/duración y renta mensual. Suficiente para los dos gráficos que el producto
+  necesita, sin el peso de d3 a mano.
+- **Zod.** Todo lo que entra por carga de cartera (F-028) se valida en el borde. Un resumen de cuenta
+  pegado es entrada no confiable por definición.
+
+### Backend — Python 3.12 + FastAPI
+
+- **Python, porque el motor ya está escrito y verificado en Python.** No es una preferencia de
+  lenguaje: reescribir `segmentos.py`, `cupones.py` y `mercado.py` en otro lenguaje significaría
+  reverificarlos contra el Excel de la mesa, contra los swaps ejecutados y contra la tabla de
+  repricing. Ese trabajo ya está hecho y no se paga dos veces.
+- **FastAPI.** Los parámetros que hoy son flags de argparse pasan a ser modelos Pydantic con
+  validación y documentación automática. El desacople de `armar_cartera.py` y `detectar_swaps.py` es
+  casi mecánico con este modelo.
+- **pandas ya es dependencia.** Los DataFrames que hoy van a hojas de Excel se serializan a JSON.
+- **El pipeline de ingesta corre como job del mismo servicio**, así comparte el modelo de datos, la
+  configuración y el logging.
+
+### Base de datos — Supabase (PostgreSQL + Auth + RLS)
+
+- **RLS y no filtros de aplicación.** El aislamiento entre asesores es una garantía, no una
+  convención. Con RLS, un bug en el frontend no filtra la cartera de otro asesor.
+- **Auth incluida, por invitación.** No hay que construir gestión de sesiones para un puñado de
+  usuarios internos.
+- **PostgreSQL.** El esquema replica el contrato del universo consolidado actual, lo que permite que
+  los módulos reusados no se enteren del cambio de fuente.
+- **Es más barato construirlo con RLS desde la primera tabla que retrofitearlo** sobre datos
+  existentes: por eso F-002 es Foundation y no una feature de seguridad posterior.
+
+### Hosting
+
+- **Stage 1:** frontend en Vercel o Cloudflare Pages, backend FastAPI containerizado en Fly.io o
+  Railway, Supabase managed. Cero operaciones y costo mínimo, que es lo que corresponde a un producto
+  con un puñado de usuarios internos.
+- **Stage 2:** AWS (ECS Fargate + RDS), cuando el volumen y los requisitos de retención lo justifiquen.
+  Es una migración de infraestructura, no de arquitectura: el `Dockerfile` de F-001 es el mismo.
+
+---
+
+## 6. Arquitectura por etapa
+
+### Stage 1
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  SPA React 19 + TS (Vercel / Cloudflare Pages)              │
+│  Armador · Optimizador · Monitor · Mis carteras · Ficha     │
+│  ── barra de estado del dato, transversal (F-013) ──        │
+└───────────────────────────┬─────────────────────────────────┘
+                            │  /api/v1/  (JSON, paginado)
+┌───────────────────────────┴─────────────────────────────────┐
+│  FastAPI (Fly.io / Railway) — Dockerfile, JSON logs, /health│
+│                                                              │
+│  Servicios de cálculo (envoltura del motor)                 │
+│    segmentos.py · cupones.py · mercado.py     REUSO 55 %    │
+│    armar_cartera.py · detectar_swaps.py       ENVUELTO 30 % │
+│                                                              │
+│  Pipeline de ingesta (job programado)                        │
+│    BYMA ──┐                                                  │
+│    IAMC ──┼─► consolidador multi-fuente ─► integridad ─► DB │
+│    Docta ─┘   (reescrito, 15 %)                              │
+└───────────────────────────┬─────────────────────────────────┘
+                            │
+┌───────────────────────────┴─────────────────────────────────┐
+│  Supabase — PostgreSQL + Auth + RLS                          │
+│  Mercado (compartido): instrumentos, precios, puntas,        │
+│                        cashflow, condiciones_emision         │
+│  Usuario (RLS, user_id FK): carteras, posiciones, propuestas │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### Rol del motor existente
+
+Esta es una decisión de producto con impacto real en el plazo, no un detalle de implementación. De ella
+depende que el esfuerzo de Stage 1 sea el estimado y no el doble.
+
+**Se reusa tal cual, sin tocar la lógica (~55 %).** Estos módulos entran envueltos en un servicio, con
+sus funciones intactas y sus tests como tests de regresión del servicio:
+
+| Módulo | Qué aporta | Features que lo consumen |
+|---|---|---|
+| `segmentos.py` | Segmentación en seis segmentos y cuatro naturalezas de tasa; sanidad en dos capas; deduplicación de especies; tipo de cambio implícito; normalización de volumen a dólares; agrupación por clave de riesgo con el soberano aparte. **El módulo más crítico y el más verificado.** | F-010, F-011, F-012, F-020, F-031 |
+| `cupones.py` | Flujos por peso; calendario de doce meses; valor técnico; frecuencia de cobro; repricing por descuento completo. | F-015, F-021, F-035, F-040 |
+| `mercado.py` | Puntas bid/ask y costo real de rotar. **Sólo cambia de dónde vienen las puntas**: BYMA las publica en el mismo endpoint que el precio, lo que elimina la dependencia de data912 y mejora la cobertura de spread. | F-035 |
+
+**Se envuelve como servicio: el núcleo se conserva, el entorno se reemplaza (~30 %).**
+
+| Módulo | Qué se conserva | Qué se descarta | Features |
+|---|---|---|---|
+| `armar_cartera.py` | `resolver_mix`, `candidatos_del_segmento`, `elegir_siguiente`, `armar`, `verificar_concentracion`, `resumir` | `main()` con argparse; `exportar()`/`exportar_excel()` con openpyxl; lectura desde archivos en disco | F-019, F-020 |
+| `detectar_swaps.py` | `evaluar_par`, `detectar`, `tabla_spread_legislacion`, `hoja_sensibilidad` | Misma cáscara | F-032, F-033, F-034 |
+
+Los flags de CLI pasan a ser un modelo Pydantic; los DataFrames que hoy van a hojas de Excel se
+serializan. **El trabajo es de desacople, no de reescritura.** La lista de alertas que hoy se acumula
+en una hoja "Alertas" pasa a ser un array estructurado en la respuesta, y la interfaz la renderiza en
+F-013. El contenido no cambia.
+
+**Se reescribe (~15 %).**
+
+| Módulo | Por qué | Reemplazo |
+|---|---|---|
+| `consolidar_universo.py` | Está atado a la API de Docta: tres links tokenizados que devuelven Excel por HTTP, con `fromDate` hardcodeado. **Y no se corre hoy**: sobrescribiría el universo dejando vacías las columnas de condiciones. | F-004 + F-005 + F-006 + F-007, escribiendo a PostgreSQL. **Conserva el contrato de salida**, y eso es lo que permite reusar el 85 % restante. |
+| `merge_condiciones.py` | Opera sobre CSV en disco | F-009, como operación sobre la tabla `condiciones_emision`, conservando la herencia entre especies y la detección de conflictos que vacía lo contradictorio y lo reporta |
+| `aplicar_sectores.py` | Ídem | F-009 |
+
+### Stage 2
+
+Los cambios de Stage 2 son de alcance de producto (F-043 … F-049) y de infraestructura (AWS: ECS
+Fargate + RDS), **no de arquitectura**. Dos puntos de diseño de Stage 1 existen para que esto sea
+cierto: el `Dockerfile` de F-001, que hace que el hosting sea intercambiable, y la interfaz de fuente
+desacoplada de F-004, que hace que la migración a la API Market Data oficial (F-050) sea un cambio de
+implementación.
+
+---
+
+## 7. Execution Map
+
+### Paralelas desde el día 1 (sin dependencias)
+
+Sólo **F-001** no depende de nada. Es la raíz literal del árbol: el esqueleto de servicio con el
+contrato de API, el logging y la configuración que todo lo demás asume. Es la única feature que no se
+puede paralelizar contra nada, y por eso conviene que sea la más corta posible.
+
+**Inmediatamente después de F-001 se abren cuatro frentes en paralelo:** F-002 (datos), F-003
+(frontend), F-004 (BYMA), F-005 (IAMC) y F-006 (Docta) — cinco features que no se tocan entre sí.
+
+### Tracks de desarrollo
+
+**Track A — Datos y persistencia** (crítico, bloquea todo)
+```
+F-001 → F-002 → F-007 → F-008 → F-013
+                  └───→ F-009 → F-024 → F-025
+```
+
+**Track B — Fuentes** (tres sub-tracks paralelos entre sí, convergen en F-007)
+```
+F-001 → F-004 ─┐
+F-001 → F-005 ─┼─→ F-007
+F-001 → F-006 ─┘
+```
+
+**Track C — Integridad** (arranca cuando F-007 cierra)
+```
+F-007 → F-010 → F-011 → F-015 → F-016 → F-017 → F-019
+          └───→ F-012
+```
+
+**Track D — Frontend y auth** (paralelo total a A/B/C hasta F-013)
+```
+F-001 → F-003 → F-014 → F-018 → F-020
+          └───→ F-013 → F-038 → F-039 → F-040
+          └───→ F-028 → F-029
+```
+
+**Track E — Armador** (converge C + D)
+```
+F-016 + F-018 → F-021 → F-022 → F-023
+                  └───→ F-024 → F-025
+                  └───→ F-026 → F-027
+```
+
+**Track F — Optimizador** (el track más profundo; arranca cuando el diagnóstico existe)
+```
+F-029 + F-021 + F-022 → F-030 → F-031 → F-033 ─┐
+                          └───→ F-032 → F-034 ─┼→ F-036 → F-037
+                                  └───→ F-035 ─┘
+```
+
+**Track G — Persistencia de usuario** (cola de todo)
+```
+F-018 + F-037 → F-041 → F-042
+```
+
+### No pueden correr en paralelo entre sí
+
+Pares y grupos que tocan el mismo modelo, la misma tabla o el mismo componente compartido, y que hay
+que serializar aunque el grafo de dependencias no lo exija:
+
+| Grupo | Recurso compartido | Por qué |
+|---|---|---|
+| F-007 · F-009 | Tablas `instrumentos` y `condiciones_emision` | Las dos escriben condiciones de emisión; si corren a la vez, la herencia entre especies opera sobre datos a medio consolidar |
+| F-010 · F-011 · F-012 | Envoltura de `segmentos.py` | Las tres exponen el mismo módulo como servicio; construirlas en paralelo produce tres envolturas incompatibles |
+| F-016 · F-017 · F-018 | Estado de la cartera en el armador | Comparten el mismo store de UI; en paralelo se pisan el modelo de estado |
+| F-021 · F-022 · F-023 | Servicio de métricas de cartera | Mismo endpoint de resumen; conviene una sola vez y bien |
+| F-024 · F-025 | Tabla `condiciones_emision`, campo `lamina` | F-025 escribe lo que F-024 lee |
+| F-033 · F-034 | Servicio de propuestas y el contrato de la fila de propuesta | Comparten el modelo de salida; si divergen, F-036 tiene que reconciliar dos formatos |
+| F-030 · F-031 | Servicio de diagnóstico | F-031 extiende la salida de F-030 |
+| F-038 · F-039 | Grilla del monitor y navegación a la ficha | Misma pantalla, mismo ruteo |
+
+### Resumen ejecutivo del Execution Map
+
+- **Features de Stage 1 (incluyendo Foundation):** 42
+- **Features que pueden arrancarse el día 1:** 1 (F-001). A partir del día 4, **5 en paralelo**
+  (F-002, F-003, F-004, F-005, F-006).
+- **Tracks independientes:** 7 (A a G), con 3 sub-tracks paralelos dentro del Track B.
+- **Feature crítica — la que más desbloquea:** **F-002 (esquema de datos y migraciones)**. Es
+  prerrequisito directo de F-007, F-009 y F-014, y transitivamente de 24 de las 42 features de
+  Stage 1. Un error de modelado acá se paga en cada ciclo posterior.
+- **Camino crítico (la cadena más larga):**
+  `F-001 → F-002 → F-007 → F-010 → F-011 → F-015 → F-016 → F-018 → F-021 → F-030 → F-031 → F-033 → F-036 → F-037 → F-041 → F-042`
+  — 16 features encadenadas, **73 person-days**. Ninguna paralelización lo acorta; sólo achicar sus
+  eslabones lo hace.
+- **Cuello de botella conocido:** F-016 (grilla-selector, 8 pd) es la feature de UI más pesada y está
+  sobre el camino crítico. Depende además de `design-system.md`, que es output de la Fase 3. **Si la
+  Fase 3 no está lista cuando el Ciclo 2 arranca, F-016 se bloquea y el camino crítico se estira.**
+
+---
+
+## 8. Ciclos y timeline
+
+Cuatro ciclos para Stage 1. Ningún ciclo supera las 12 features. La estimación de calendario asume un
+desarrollador a tiempo completo, 5 person-days por semana — **la dedicación real no está en los inputs,
+así que el calendario es una derivación de los person-days y no un compromiso**.
+
+### Ciclo 1 — Cimientos e ingesta (12 features · 47 pd · ~9,5 semanas)
+
+F-001, F-002, F-003, F-004, F-005, F-006, F-007, F-008, F-009, F-010, F-011, F-012
+
+Al final de este ciclo hay una base de mercado poblada, saneada, deduplicada y normalizada, que se
+refresca sola. No hay pantalla que un asesor pueda usar todavía.
+
+> **Milestone 1 — "El universo existe y es confiable."**
+> Criterio de salida: la corrida matinal completa termina sin intervención; VSCQD se descarta y VSCQO
+> se conserva; SNSBO sobrevive; MR46O/D/C se colapsan en el armador y viven en el optimizador; el tipo
+> de cambio implícito se calcula con ≥ 20 pares y se contrasta contra `index-price`; el token vencido
+> de Docta produce una alerta distinta de la de API caída.
+
+### Ciclo 2 — Armador completo (12 features · 55 pd · ~11 semanas)
+
+F-013, F-014, F-015, F-016, F-017, F-018, F-019, F-020, F-021, F-022, F-023, F-024
+
+Al final de este ciclo el **Flujo A está completo y es usable en producción**. Es el ciclo de mayor
+riesgo de cronograma porque concentra la UI pesada.
+
+> **Milestone 2 — "Un asesor arma una cartera desde el calendario y se lleva el número a la reunión."**
+> Criterio de salida: un asesor autenticado entra, filtra por segmento, elige papeles desde la grilla
+> de doce meses, ve la iluminación multi-mes, ajusta pesos, ve la diferencia entre ponderación pedida
+> y real, y lee la renta anual sobre lo invertido con la cuenta a la vista. Los cuatro rendimientos
+> aparecen abiertos y no hay control que los promedie.
+> **Dependencia externa: `design-system.md` (Fase 3) tiene que estar listo antes de que empiece este
+> ciclo.**
+
+### Ciclo 3 — Renta variable, carga y diagnóstico (9 features · 41 pd · ~8 semanas)
+
+F-025, F-026, F-027, F-028, F-029, F-030, F-031, F-032, F-035
+
+Al final de este ciclo la cartera del cliente se carga, se valora y se diagnostica con los seis ejes,
+y el motor de rotaciones produce candidatas con su costo real. Falta la capa de decisión.
+
+> **Milestone 3 — "El diagnóstico de una cartera ajena tarda minutos y no horas."**
+> Criterio de salida: un resumen de cuenta pegado se resuelve contra el universo con los no
+> reconocidos marcados; el diagnóstico produce los mismos números que si la cartera se hubiera armado
+> a mano; los seis ejes aparecen con su cobertura declarada y no hay score compuesto en ninguna
+> pantalla; el costo mediano de rotación se calcula con el spread en las dos patas.
+
+### Ciclo 4 — Optimizador, monitor y persistencia (9 features · 42 pd · ~8,5 semanas)
+
+F-033, F-034, F-036, F-037, F-038, F-039, F-040, F-041, F-042
+
+Al final de este ciclo **Stage 1 está completo**: los tres flujos funcionan de punta a punta.
+
+> **Milestone 4 — "Stage 1 completo: los tres flujos cierran."**
+> Criterio de salida: el modo bajar riesgo respeta el no-empeoramiento de los cinco ejes restantes y
+> dice "no hay propuesta" cuando corresponde; ninguna propuesta de mejora de TIR se renderiza sin su
+> contrapartida nombrada; el monitor sirve la consulta de la mañana con un segmento por vez; una
+> cartera guardada se reabre con los precios con los que se guardó y se revalúa con la diferencia
+> explícita; el export declara snapshot y demora en el pie.
+
+### Totales
+
+| Ciclo | Features | Person-days | Semanas (est.) | Acumulado |
+|---|---|---|---|---|
+| 1 — Cimientos e ingesta | 12 | 47 | ~9,5 | ~9,5 |
+| 2 — Armador completo | 12 | 55 | ~11 | ~20,5 |
+| 3 — RV, carga y diagnóstico | 9 | 41 | ~8 | ~28,5 |
+| 4 — Optimizador y persistencia | 9 | 42 | ~8,5 | ~37 |
+| **Stage 1** | **42** | **185** | **~37 semanas** | |
+| Stage 2 (8 features) | 8 | 72 | ~14,5 | |
+
+**~37 semanas de un desarrollador a tiempo completo para Stage 1.** El camino crítico son 73 pd de esos
+185: con un segundo desarrollador, el piso teórico de compresión es **~15 semanas**, y el cuello real
+sería F-016 más la disponibilidad del design system.
+
+---
+
+## 9. Riesgos y mitigaciones
+
+### Riesgos de datos y fuentes
+
+**R1 — El token de Docta vence y se lleva puesto el corazón del producto.**
+El cronograma completo de pagos —97 % de cobertura— sale sólo de Docta, y sin él la grilla de doce
+meses deja de existir. El token vence y los tres links lo comparten.
+*Mitigación:* F-006 distingue **HTTP 500 "Error al verificar el token" (vencido, se regenera desde
+Docta Terminal)** de un timeout o un 5xx distinto (API caída), porque la acción que requieren es
+distinta. La alerta llega a la barra de estado del dato (F-013) con la acción concreta. Además, el
+último cashflow válido se conserva con su fecha: el producto sigue funcionando declarando que el
+calendario es de ayer, en vez de quedarse en blanco.
+*Lo que no se hace:* proyectar el calendario desde la estructura del cupón de IAMC. Funcionaría para
+bullets de cupón fijo y fallaría en los amortizing con escalera, que son mayoría entre las ONs
+locales. Proyectarlos sería inventar.
+
+**R2 — La demora de 20 minutos de BYMA convierte cualquier número en histórico.**
+El feed abierto tiene 20 minutos de demora declarada. Un asesor que decide sobre un precio de hace 20
+minutos y no lo sabe está decidiendo mal.
+*Mitigación:* la demora es un atributo del snapshot (F-004), no una nota al pie, y la barra de estado
+del dato la declara en todas las pantallas (F-013). La salida es F-050: la API Market Data oficial, que
+según BYMA no requiere homologación y se solicita a `marketdata@byma.com.ar`. F-004 se diseña con la
+fuente desacoplada para que esa migración sea un cambio de implementación.
+
+**R3 — Endpoints de BYMA que hoy responden 401.**
+No todos los endpoints de la API abierta responden igual; algunos dan 401.
+*Mitigación:* F-004 aísla cada endpoint: uno que falla no aborta la corrida de los otros cuatro, queda
+registrado con su código, y la barra de estado declara qué parte del universo no se pudo refrescar. Se
+verifica el conteo de filas contra el verificado el 05/08/2026 (4.909 / 189 / 2.267 / 189 / 16) y una
+desviación grande dispara alerta.
+
+**R4 — IAMC es un PDF, y los PDF cambian de layout.**
+Es la única fuente de emisor, ley, moneda de pago y estructura. Un cambio de formato rompe el parser, y
+un parser que "tolera" el cambio produce filas parciales que parecen datos.
+*Mitigación:* F-005 falla ruidosamente ante una sección no reconocida en vez de persistir filas
+parciales, y ley y moneda de pago se leen del **título de la sección**, no de una columna inferida —
+que es exactamente lo que evita repetir el episodio de "Ley Inglesa". Es el riesgo con la Confidence
+más baja de todo el Stage 1 (50 %) y por eso su Effort está estimado en 8 pd.
+
+**R5 — La calificación crediticia existe para el 39 % del universo (359 de 927).**
+Es la cobertura más baja de los seis ejes de riesgo, y es tentador rellenarla.
+*Mitigación:* la cobertura se declara al lado del eje (F-031), la calificación **nunca se usa como
+filtro automático**, y donde falta se usan y se declaran los proxies ya calibrados: tope de rendimiento
+sobre los pares del segmento, percentil de liquidez y concentración máxima. El análisis crediticio
+sigue siendo del asesor. **No se construye un score compuesto** — ponderar años contra una calificación
+que existe para el 39 % sería un juicio inventado presentado como dato.
+
+**R6 — La lámina mínima no tiene fuente pública sistemática (568 de 927, 61 %).**
+Sin lámina no se redondea, y sin redondeo la ponderación pedida y la real no difieren — que es
+justamente el dato que la pantalla existe para mostrar.
+*Mitigación:* F-024 no asume ningún default; marca la posición y la excluye del total ajustado. F-025
+hace que la cobertura crezca por uso, con origen y fecha en cada valor y propagación entre especies.
+Camino de ampliación conocido, no supuesto: los avisos de suscripción y prospectos de la CNV traen la
+lámina por emisión, pero es carga manual por instrumento y **no se asume que la CNV lo exponga
+programáticamente**.
+
+**R7 — Discrepancia entre los conteos del universo: 937 vs 927.**
+`product-definition.md` habla de 937 instrumentos de renta fija en la propuesta de valor y de 927 como
+denominador de todas las coberturas.
+*Mitigación:* se resuelve empíricamente en F-007, contando el universo consolidado real y publicando
+el conteo en la barra de estado del dato. **No se reconcilia por elección: se mide.** Hasta que se
+mida, cada cobertura se reporta con el denominador con el que fue medida.
+
+**R8 — `consolidar_universo.py` sobrescribiría el universo dejando vacías las condiciones.**
+Es una regla del proyecto: no se corre hasta que el ingestor se reescriba.
+*Mitigación:* F-007 es el reemplazo, y la semilla de F-009 preserva `condiciones_estaticas.csv`,
+`condiciones_monitor.csv` y el `condiciones_emision.csv` curado de 823 tickers, que el proyecto trata
+como **irrecuperable**. El Ciclo 1 no toca el script viejo.
+
+### Riesgos técnicos
+
+**R9 — El desacople del motor resulta ser reescritura encubierta.**
+El plan asume que envolver `armar_cartera.py` y `detectar_swaps.py` es trabajo de desacople (~30 % del
+código) y no de reescritura. Si las funciones tienen estado global o dependencias de disco más
+enredadas de lo previsto, el esfuerzo de F-019, F-032, F-033 y F-034 se dispara.
+*Mitigación:* los 15 casos de regresión de `armar_cartera.py` y el swap TLCWO → TLCMO son los tests de
+aceptación del servicio envuelto (F-019, F-032). Si el servicio no los reproduce, el desacople está
+mal hecho y se detecta en el ciclo, no al final.
+
+**R10 — El contrato de salida del universo se rompe y arrastra el 85 % reusado.**
+El reuso del motor depende de que el esquema de PostgreSQL replique las columnas del `Resumen` actual y
+de `cashflow_completo.csv`.
+*Mitigación:* está como acceptance criteria explícito de F-002 y F-007. Cualquier baja de columna se
+documenta como baja explícita, no como omisión.
+
+**R11 — Performance de la grilla del monitor con ~1.700 filas.**
+Ordenamiento y filtrado sobre esa cantidad de filas con render por fila degrada la experiencia de la
+pantalla que se usa todos los días.
+*Mitigación:* TanStack Table con virtualización, paginación por cursor desde F-001, y el conteo de
+filas resultantes como criterio de aceptación de F-038.
+
+**R12 — Los seis ejes se calculan distinto en el armador, en el diagnóstico y en la propuesta.**
+Si divergen, las tres carteras dejan de leerse con la misma vara y la comparación pierde sentido.
+*Mitigación:* F-031 es un servicio único consumido por los tres, y el criterio de aceptación de F-030
+es explícito: la misma composición cargada y armada produce los mismos números.
+
+### Riesgos de producto
+
+**R13 — La grilla-selector no resulta mejor que la "Cuponera" que la mesa ya tiene.**
+La Cuponera funciona bien y es la referencia. Si F-016 es sólo distinta y no mejor, el producto pierde
+su diferenciador principal.
+*Mitigación:* los diferenciadores están definidos y son verificables, no estéticos: universo completo
+en vez de lista curada, las tres especies en vez de sólo las que liquidan en dólares, renta variable,
+partir de una cartera existente, y sugerencias además de cálculo. Cada uno es una feature con
+acceptance criteria. La Fase 3 (`design-system.md`) explora cinco direcciones antes de comprometerse.
+
+**R14 — Sin el design system, el Ciclo 2 se bloquea.**
+F-016 es 8 pd de UI sobre el camino crítico y depende de `design-system.md`, output de la Fase 3, que
+ocurre fuera de la terminal.
+*Mitigación:* la Fase 3 tiene que estar cerrada antes de que arranque el Ciclo 2. El Ciclo 1 no tiene
+ninguna feature de UI más allá del esqueleto de F-003, así que hay ~9,5 semanas de margen. Está
+declarado como criterio de entrada del Milestone 2.
+
+**R15 — El optimizador propone rotaciones que en la práctica no convienen.**
+Ya pasó: con las puntas reales el costo mediano pasó de 1,50 % a 3,10 %, y **12 de 51 rotaciones
+superaban el 5 %**. Un optimizador sin costo real es una fuente de malas recomendaciones con apariencia
+de análisis.
+*Mitigación:* F-035 es prerrequisito de F-036: ninguna propuesta llega a la pantalla de aceptación sin
+su costo desagregado en arancel y spread por pata. Las que superan el 5 % se marcan. Donde no hay dos
+puntas vivas, el costo se declara no verificable y **no se asume un spread por defecto**.
+
+**R16 — El producto se vuelve un CRM por acumulación.**
+"Se guardan carteras, no clientes" es una frontera de producto, y las fronteras se erosionan de a un
+campo por vez.
+*Mitigación:* está como acceptance criteria de F-041 —una cartera guardada no contiene ningún campo de
+identificación de cliente— y el CRM es F-043, explícitamente Stage 2.
+
+**R17 — Adopción: los asesores tienen su planilla y su monitor.**
+La alternativa no es "nada", es un flujo de trabajo que ya funciona.
+*Mitigación:* el Flujo C (monitor de mercado, F-038) existe justamente para ser el punto de entrada
+diario de bajo compromiso, y el Flujo B (diagnóstico de cartera ajena) entrega valor sin pedir que el
+asesor cambie cómo arma. **No hay dato de adopción en los inputs**: se mide desde el primer uso real.
+
+### Riesgos de seguridad y operación
+
+**R18 — Fuga de carteras entre asesores.**
+*Mitigación:* RLS en PostgreSQL desde F-002, verificada en F-014 con un criterio de aceptación que
+saltea el frontend y consulta la API directamente.
+
+**R19 — Secretos en el repositorio.**
+El token de Docta y las claves de Supabase son los dos secretos vivos del proyecto.
+*Mitigación:* Pydantic Settings desde `.env` únicamente (F-001), con arranque fallido si falta alguno,
+y logs JSON que no emiten secretos.
+
+**R20 — Datos de clientes reales en el repositorio.**
+*Mitigación:* regla del proyecto — van a `~/Documents/IFA-confidencial/`. En Stage 1 el producto no
+persiste identificación de clientes (F-041), lo que reduce la superficie a cero por diseño.
+
+### Trazabilidad de las reglas del dominio
+
+Cada regla de `CLAUDE.md` está materializada en features con criterios verificables:
+
+| Regla | Features donde vive |
+|---|---|
+| 1. Nunca inventar un dato | F-005, F-007, F-009, F-017, F-023, F-024, F-027, F-029, F-035, F-039, F-040 |
+| 2. No promediar rendimientos de distinta naturaleza | F-017, F-022, F-023, F-042 |
+| 3. Nada se compara entre monedas sin normalizar | F-004, F-012, F-021 |
+| 4. Riesgo soberano bajo `SOBERANO_AR` | F-020, F-031 |
+| 5. Calendario de cupones como criterio de armado | F-015, F-016, F-021, F-036 |
+| 6. Lógica determinística, sin IA | Todo el motor: F-010 … F-035 |
+| 7. Riesgo como vector de seis ejes, sin score | F-031, F-033, F-034 |
+| 8. Nunca mejora de TIR sin nombrar el riesgo | F-034 |
+| 9. No filtrar por disponibilidad en Balanz | Ausencia deliberada: ninguna feature introduce whitelist |
+| 10. No conectarse a `mesaifa.netlify.app` | Ausencia deliberada: ninguna fuente del pipeline lo referencia |
+
+---
+
+## 10. Success metrics
+
+Ninguna de estas métricas tiene línea de base en los inputs. **Todas son objetivos a medir desde el
+primer uso real, no proyecciones.**
+
+### Métricas de producto — ¿resuelve el problema que lo originó?
+
+| Métrica | Definición | Objetivo | Cómo se mide |
+|---|---|---|---|
+| **Meses sin cobertura por cartera** | Cantidad de meses del año con renta cero en las carteras producidas con la herramienta | Bajar respecto de las carteras que el asesor traía | Se calcula en F-021 sobre cada cartera guardada |
+| **Carteras existentes diagnosticadas** | Flujo B completado por mes | > 0 desde el primer mes — hoy es cero, porque son horas de trabajo manual | Conteo de F-030 ejecutadas |
+| **Rotaciones aceptadas sobre propuestas** | Tasa de aceptación en F-036 | Una tasa muy baja indica propuestas irrelevantes; una muy alta, criterios demasiado laxos | F-036 |
+| **Carteras guardadas por asesor activo** | Persistencia real de uso | Creciente | F-041 |
+
+### Métricas de confiabilidad del dato — ¿se puede confiar en lo que muestra?
+
+| Métrica | Definición | Objetivo | Cómo se mide |
+|---|---|---|---|
+| **Cobertura de lámina** | Instrumentos con lámina informada sobre el universo | Creciente desde el 61 % sembrado (568 de 927), por carga asistida | F-009 / F-025 |
+| **Cobertura de spread** | Instrumentos con dos puntas vivas | Mayor que los 674 de 927 actuales, por el cambio de data912 a BYMA | F-035 |
+| **Instrumentos descartados por sanidad** | Cantidad y motivo por corrida | Estable; un salto indica cambio de formato en una fuente | F-010 / F-013 |
+| **Desvío del tipo de cambio implícito contra `index-price`** | Diferencia porcentual por corrida | Del orden del 0,14 % ya verificado contra fuente externa (1.530,90 vs 1.533) | F-012 |
+| **Corridas de ingesta completas sin intervención** | Corridas exitosas sobre corridas programadas | Alto; las fallas se atribuyen a token vencido o API caída, distinguidas | F-008 / F-006 |
+| **Números sin trazabilidad en pantalla** | Valores mostrados sin origen ni cobertura declarada | **Cero.** Es una condición de aceptación, no una métrica a optimizar | Revisión por pantalla |
+
+### Métricas de ingeniería
+
+| Métrica | Objetivo |
+|---|---|
+| Casos de regresión del motor que pasan tras el desacople | 15 de 15 en `armar_cartera.py`; TLCWO → TLCMO en `detectar_swaps.py`; RUCED, SBC2D, CS47D y LOC5D exactos en `cupones.py`; ≤ 0,12 pp de desvío en el repricing |
+| Latencia de la grilla del monitor con ~1.700 filas | Ordenar y filtrar sin degradación perceptible |
+| Fugas de datos entre asesores | Cero, verificado consultando la API directamente |
+| Features de Stage 1 entregadas por ciclo | Según el plan de la sección 8 |
+
+---
+
+*Fin del plan. Próxima fase: 3 — Claude Design → `claude-docs/planning/design-system.md`.*

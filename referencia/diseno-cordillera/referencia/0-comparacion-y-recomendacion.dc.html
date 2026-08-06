@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cinco alternativas · comparación y recomendación</title>
+<style>
+  html, body { margin:0; padding:0; }
+  body { font-family: ui-sans-serif, system-ui, "Helvetica Neue", sans-serif; -webkit-font-smoothing:antialiased; }
+  input, select, button { font:inherit; }
+  ::-webkit-scrollbar { width:9px; height:9px; }
+  ::-webkit-scrollbar-thumb { background:#4a5a6e; border-radius:9px; }
+</style>
+</helmet>
+
+<div style="--bg:{{ t.bg }}; --pan:{{ t.pan }}; --pan2:{{ t.pan2 }}; --lin:{{ t.lin }}; --tx:{{ t.tx }}; --dim:{{ t.dim }}; --ac:{{ t.ac }}; background:var(--bg); color:var(--tx); min-height:100vh; font-size:14px;">
+
+  <div style="max-width:1180px; margin:0 auto; padding:34px 28px 60px;">
+
+    <div style="display:flex; align-items:flex-start; gap:20px; border-bottom:1px solid var(--lin); padding-bottom:22px;">
+      <div style="flex:1;">
+        <div style="font-family:ui-monospace, Menlo, monospace; font-size:11px; letter-spacing:0.16em; text-transform:uppercase; color:var(--dim);">Armado y seguimiento de carteras · ALyC</div>
+        <h1 style="font-size:34px; line-height:1.12; margin:9px 0 10px; font-weight:650; letter-spacing:-0.02em;">Cinco maneras distintas de armar la cuponera</h1>
+        <p style="margin:0; max-width:720px; color:var(--dim); font-size:14.5px; line-height:1.6; text-wrap:pretty;">Cinco pantallas navegables, con el mismo universo de instrumentos y el mismo motor de cálculo, que se diferencian en una sola cosa: qué asume cada una sobre cómo trabaja el asesor. Las tesis son incompatibles a propósito — no se pueden combinar sin que una gane.</p>
+      </div>
+      <button onClick="{{ toggleTema }}" style="background:var(--pan); color:var(--dim); border:1px solid var(--lin); border-radius:3px; padding:7px 12px; cursor:pointer;">{{ temaIcono }}</button>
+    </div>
+
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(330px, 1fr)); gap:14px; margin-top:22px;">
+      <sc-for list="{{ alternativas }}" as="a" hint-placeholder-count="5">
+        <a href="{{ a.href }}" style="display:block; text-decoration:none; color:inherit; background:var(--pan); border:1px solid var(--lin); border-left:3px solid {{ a.color }}; border-radius:4px; padding:16px 17px;" style-hover="border-color:{{ a.color }}">
+          <div style="display:flex; align-items:baseline; gap:9px;">
+            <span style="font-family:ui-monospace, Menlo, monospace; font-size:11px; color:{{ a.color }};">{{ a.n }}</span>
+            <span style="font-size:19px; font-weight:600;">{{ a.nom }}</span>
+          </div>
+          <div style="font-size:14px; line-height:1.5; margin:8px 0 12px; text-wrap:pretty;">{{ a.tesis }}</div>
+          <div style="display:grid; grid-template-columns:82px 1fr; gap:4px 10px; font-size:11.5px; line-height:1.45;">
+            <span style="color:var(--dim);">Cuponera</span><span style="color:var(--dim);">{{ a.cuponera }}</span>
+            <span style="color:var(--dim);">Gesto</span><span style="color:var(--dim);">{{ a.gesto }}</span>
+            <span style="color:var(--dim);">Sacrifica</span><span style="color:var(--dim);">{{ a.sacrificio }}</span>
+          </div>
+          <div style="margin-top:12px; font-family:ui-monospace, Menlo, monospace; font-size:11px; color:{{ a.color }};">abrir la pantalla →</div>
+        </a>
+      </sc-for>
+    </div>
+
+    <h2 style="font-size:19px; font-weight:600; margin:34px 0 12px;">Comparación</h2>
+    <div style="overflow-x:auto; border:1px solid var(--lin); border-radius:4px; background:var(--pan);">
+      <div style="min-width:940px;">
+        <div style="display:grid; grid-template-columns:172px repeat(5, 1fr); gap:0; background:var(--pan2); border-bottom:1px solid var(--lin);">
+          <div style="padding:10px 12px; font-size:10px; text-transform:uppercase; letter-spacing:0.11em; color:var(--dim);">Dimensión</div>
+          <sc-for list="{{ alternativas }}" as="a" hint-placeholder-count="5">
+            <div style="padding:10px 12px; font-size:12px; font-weight:600; color:{{ a.color }}; border-left:1px solid var(--lin);">{{ a.nom }}</div>
+          </sc-for>
+        </div>
+        <sc-for list="{{ tabla }}" as="f" hint-placeholder-count="8">
+          <div style="display:grid; grid-template-columns:172px repeat(5, 1fr); border-bottom:1px solid var(--lin);">
+            <div style="padding:9px 12px; font-size:11.5px; color:var(--dim); background:var(--pan2);">{{ f.dim }}</div>
+            <sc-for list="{{ f.celdas }}" as="c" hint-placeholder-count="5">
+              <div style="padding:9px 12px; font-size:11.5px; line-height:1.45; border-left:1px solid var(--lin); text-wrap:pretty; color:{{ c.color }};">{{ c.txt }}</div>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <h2 style="font-size:19px; font-weight:600; margin:34px 0 12px;">Recomendación</h2>
+    <div style="display:grid; grid-template-columns:1.35fr 1fr; gap:16px; align-items:start;">
+      <div style="background:var(--pan); border:1px solid var(--lin); border-left:3px solid var(--ac); border-radius:4px; padding:18px 20px;">
+        <div style="font-family:ui-monospace, Menlo, monospace; font-size:11px; color:var(--ac); text-transform:uppercase; letter-spacing:0.13em;">Base: Cordillera, con dos préstamos</div>
+        <p style="font-size:14px; line-height:1.62; color:var(--tx); margin:10px 0 0; text-wrap:pretty;">La pantalla que ya existe funciona porque el calendario elige. Cordillera es la única de las cinco que <strong>conserva ese hallazgo y lo mejora</strong> en lugar de reemplazarlo: al darle altura al mes, la pregunta deja de ser «¿qué papeles pagan en marzo?» y pasa a ser «¿cuánta plata entra en marzo?», que es exactamente lo que el asesor le promete al cliente. La renta anual sobre lo invertido queda arriba y en vivo, que es el número con el que se cierra la venta.</p>
+        <p style="font-size:14px; line-height:1.62; color:var(--dim); margin:12px 0 0; text-wrap:pretty;">De <strong style="color:var(--tx);">Espejo</strong> hay que tomar la silueta punteada de la cartera original: es la manera más barata de convertir «armar» en «mejorar» sin una segunda pantalla, y ya está incorporada. De <strong style="color:var(--tx);">Mandato</strong>, el encabezado del cliente —objetivo, riesgos a cubrir, piso mensual— que además resuelve el hueco de que hoy no queda registro de nada; pero conviene tomar el mandato como <em>restricción declarada</em>, no como generador automático de carteras.</p>
+        <p style="font-size:14px; line-height:1.62; color:var(--dim); margin:12px 0 0; text-wrap:pretty;">La <strong style="color:var(--tx);">Curva</strong> no compite: es el panel que ya existe en el monitor y donde vive el análisis de precio relativo, con el simulador de licitaciones. Debería quedar como sección propia, alcanzable desde el armado, no como el centro del flujo. Y la <strong style="color:var(--tx);">Mesa</strong> conviene descartarla como estructura general —arrastrar es más lento que un click y esconde tres de los cuatro cajones— salvo por su cajón de Entrada, que es la mejor forma vista acá de leer la cartera que trae el cliente papel por papel.</p>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <div style="background:var(--pan); border:1px solid var(--lin); border-radius:4px; padding:15px 16px;">
+          <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.12em; color:var(--dim); margin-bottom:9px;">Si el equipo es otro</div>
+          <sc-for list="{{ escenarios }}" as="e" hint-placeholder-count="4">
+            <div style="padding:7px 0; border-top:1px solid var(--lin);">
+              <div style="font-size:12px; color:{{ e.color }};">{{ e.si }}</div>
+              <div style="font-size:11.5px; color:var(--dim); line-height:1.45; text-wrap:pretty;">{{ e.entonces }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="background:var(--pan); border:1px solid var(--lin); border-radius:4px; padding:15px 16px;">
+          <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.12em; color:var(--dim); margin-bottom:9px;">Reglas del dominio, respetadas en las cinco</div>
+          <sc-for list="{{ reglas }}" as="r" hint-placeholder-count="4">
+            <div style="display:flex; gap:8px; padding:6px 0; border-top:1px solid var(--lin); font-size:11.5px; line-height:1.45;">
+              <span style="color:var(--ac);">✓</span><span style="color:var(--dim); text-wrap:pretty;">{{ r }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:26px; font-size:11.5px; color:var(--dim); line-height:1.55; text-wrap:pretty; border-top:1px solid var(--lin); padding-top:14px;">Los datos de mercado son de ejemplo —tickers y órdenes de magnitud argentinos plausibles para una rueda de agosto de 2026—, no cotizaciones reales. El motor de cálculo es el mismo en las cinco pantallas: reparte el monto según la ponderación pedida, redondea el valor nominal hacia abajo al múltiplo de la lámina mínima, y de ahí salen la ponderación real, el flujo mes a mes en dólares y la renta anual sobre lo invertido.</div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1240,&quot;height&quot;:1100},&quot;tema&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;oscuro&quot;,&quot;claro&quot;],&quot;default&quot;:&quot;oscuro&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Vista&quot;}}">
+const T = {
+  oscuro: { bg:'#0a0e13', pan:'#111820', pan2:'#0d141b', lin:'#1d2833', tx:'#dce6f0', dim:'#8496a8', ac:'#5ee39a' },
+  claro:  { bg:'#f2f4f7', pan:'#ffffff', pan2:'#eef1f5', lin:'#d5dce4', tx:'#182430', dim:'#5b6b79', ac:'#0e8a55' },
+};
+const C = ['#5ee39a', '#e2a33a', '#38c9d4', '#9a8cff', '#ff8a4c'];
+
+class Component extends DCLogic {
+  state = { tema: 'oscuro' };
+  componentDidMount() { const p = this.props || {}; if (p.tema === 'claro') this.setState({ tema: 'claro' }); }
+
+  renderVals() {
+    const t = T[this.state.tema] || T.oscuro;
+    const alternativas = [
+      { n: 'ALTERNATIVA 1', nom: 'Cordillera', href: '1%20Cordillera.dc.html', color: C[0],
+        tesis: 'El asesor no elige papeles: esculpe la forma del año. La cartera es el subproducto de un perfil de ingresos mensual.',
+        cuponera: 'Es la pantalla: doce columnas con altura en dólares y línea de piso mensual.',
+        gesto: 'Tocar el mes flojo y elegir ahí adentro.',
+        sacrificio: 'Comparar papeles entre sí; privilegia flujo sobre precio.' },
+      { n: 'ALTERNATIVA 2', nom: 'Mesa de trabajo', href: '2%20Mesa%20de%20trabajo.dc.html', color: C[1],
+        tesis: 'Armar es un oficio manual: la cartera vive fija a un costado y todo lo demás es material que se arrastra hacia ella.',
+        cuponera: 'Uno de cuatro cajones, más una tira de control dentro de la bandeja.',
+        gesto: 'Arrastrar de cualquier cajón a la bandeja.',
+        sacrificio: 'Ver todo a la vez; depende de arrastrar.' },
+      { n: 'ALTERNATIVA 3', nom: 'Mandato', href: '3%20Mandato.dc.html', color: C[2],
+        tesis: 'El asesor declara el resultado que el cliente necesita y su trabajo es auditar, vetar y ajustar el borrador que devuelve el sistema.',
+        cuponera: 'Instrumento de control: doce barras contra el piso pedido.',
+        gesto: 'Declarar restricciones y vetar papeles.',
+        sacrificio: 'El oficio; riesgo de caja negra si falla el motivo por papel.' },
+      { n: 'ALTERNATIVA 4', nom: 'Espejo', href: '4%20Espejo.dc.html', color: C[3],
+        tesis: 'Armar es un caso particular de comparar: siempre hay dos carteras en pantalla, y la nueva se compara contra la vacía.',
+        cuponera: 'Doce filas espejadas con la diferencia mensual en el medio.',
+        gesto: 'Sumar a la derecha y leer la columna del medio.',
+        sacrificio: 'Ancho de pantalla; ceremonia en el armado desde cero.' },
+      { n: 'ALTERNATIVA 5', nom: 'Curva', href: '5%20Curva.dc.html', color: C[4],
+        tesis: 'Primero el precio relativo: se elige lo que está barato para su plazo y el calendario aparece como consecuencia.',
+        cuponera: 'Consecuencia: doce celdas que se llenan y avisan el mes en cero.',
+        gesto: 'Clic sobre el punto de la nube TIR/duración.',
+        sacrificio: 'La cuponera como criterio de armado; más clicks para cubrir el año.' },
+    ];
+
+    const fila = (dim, ...celdas) => ({ dim, celdas: celdas.map((txt, i) => ({ txt, color: i === 0 ? t.tx : t.dim })) });
+    const tabla = [
+      fila('Dónde vive la cuponera', 'Es el lienzo principal', 'Cajón + tira de control', 'Panel de auditoría', 'Columna central de diferencias', 'Panel de consecuencia'),
+      fila('Nueva vs. existente', 'Mismo lienzo, silueta punteada del original', 'La cartera del cliente es un cajón de entrada', 'Dos modos y una orden de trabajo', 'Son la misma operación', 'Anillos huecos sobre la nube'),
+      fila('Cómo entra la renta variable', 'Rombos de balance bajo cada mes, sin altura', 'Cajón y sección propios en la bandeja', 'Tope declarado en el mandato', 'Rombos en la columna del medio', 'Solapa aparte: no tiene ejes'),
+      fila('Quién decide', 'El asesor, mirando la forma del año', 'El asesor, con las manos', 'El sistema propone, el asesor veta', 'El asesor, contra un término de comparación', 'El asesor, por precio relativo'),
+      fila('Velocidad para armar de cero', 'Media: guía por meses flojos', 'Media-baja: arrastrar cuesta', 'Alta: sale un borrador entero', 'Media', 'Baja: exige criterio papel por papel'),
+      fila('Fuerza para defenderla ante el cliente', 'Alta: el año dibujado es la venta', 'Media', 'Alta si se leen los motivos', 'Muy alta: antes y después', 'Media: es argumento técnico'),
+      fila('Riesgo principal', 'Elegir un papel caro porque tapa un mes', 'Que el asesor no encuentre el cajón', 'Que se firme el borrador sin leerlo', 'Que no entre en el monitor del asesor', 'Que el año quede desparejo'),
+      fila('Para qué mesa sirve', 'Asesores que venden previsibilidad de flujo', 'Mesas chicas con mucho armado a medida', 'Equipos grandes con mandatos estandarizados', 'Equipos que reciben carteras de afuera', 'Mesas con perfil analítico o trading'),
+    ];
+
+    return {
+      t, temaIcono: this.state.tema === 'oscuro' ? '☾ tema oscuro' : '☀ tema claro',
+      toggleTema: () => this.setState(x => ({ tema: x.tema === 'oscuro' ? 'claro' : 'oscuro' })),
+      alternativas, tabla,
+      escenarios: [
+        { si: 'Si el negocio es traer carteras de otra ALyC', entonces: 'Espejo primero: la comparación antes-después es el argumento comercial y la orden de trabajo sale sola.', color: C[3] },
+        { si: 'Si hay muchos asesores nuevos', entonces: 'Mandato: estandariza el criterio y deja rastro de por qué entró cada papel.', color: C[2] },
+        { si: 'Si la mesa opera además de asesorar', entonces: 'Curva como pantalla diaria y Cordillera para el armado del cliente.', color: C[4] },
+        { si: 'Si el volumen es bajo y el armado muy a medida', entonces: 'Mesa: el ritmo manual no molesta y el cajón de entrada rinde.', color: C[1] },
+      ],
+      reglas: [
+        'Nunca se ven dos segmentos de rendimiento a la vez, y el eje declara siempre su unidad: la TIR en dólares no comparte gráfico con la TNA en pesos.',
+        'El mismo bono se muestra con sus tres tickers (pesos, MEP y cable) y se opera en la moneda elegida, sin sumarlos ni mezclarlos.',
+        'Cuando falta un dato dice «s/d»: no se estima, no se rellena, no se deja la celda muda.',
+        'La ponderación pedida y la real conviven en pantalla, porque el nominal se redondea hacia abajo al múltiplo de la lámina mínima.',
+        'La renta anual sobre lo invertido está siempre a la vista, con la cuenta expuesta y separada de cualquier ganancia de capital.',
+      ],
+    };
+  }
+}
+
+</script>
+</body>
+</html>

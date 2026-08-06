@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cordillera v2 · armado y seguimiento</title>
+<style>
+  html, body { margin:0; padding:0; }
+  body { font-family: ui-sans-serif, system-ui, "Helvetica Neue", sans-serif; -webkit-font-smoothing:antialiased; }
+  a { color:#5ee39a; text-decoration:none; } a:hover { color:#8ff0b8; }
+  input, select, button, textarea { font:inherit; }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-thumb { background:#43566a; border-radius:10px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  @keyframes pulso { 0%,100% { opacity:1 } 50% { opacity:.25 } }
+</style>
+<script type="module">
+  import * as D from './datos.js';
+  window.DATOS = D;
+  window.dispatchEvent(new Event('datos-listo'));
+</script>
+</helmet>
+
+<div style="--bg:{{ t.bg }}; --pan:{{ t.pan }}; --pan2:{{ t.pan2 }}; --lin:{{ t.lin }}; --tx:{{ t.tx }}; --dim:{{ t.dim }}; --ac:{{ t.ac }}; --ac2:{{ t.ac2 }}; --neg:{{ t.neg }}; --pos:{{ t.pos }}; --sd:{{ t.sd }}; background:var(--bg); color:var(--tx); min-height:100vh; font-size:13.5px;">
+
+  <div style="display:flex; align-items:center; gap:16px; padding:0 18px; height:52px; background:var(--pan); border-bottom:1px solid var(--lin); position:sticky; top:0; z-index:40;">
+    <div style="display:flex; align-items:baseline; gap:10px;">
+      <span style="font-size:17px; font-weight:700; letter-spacing:-0.01em;">Cordillera</span>
+      <span style="font-size:10px; text-transform:uppercase; letter-spacing:0.14em; color:var(--dim); white-space:nowrap;">v2</span>
+    </div>
+    <div style="display:flex; gap:2px; margin-left:6px;">
+      <sc-for list="{{ secciones }}" as="s" hint-placeholder-count="2">
+        <button onClick="{{ s.onClick }}" style="background:{{ s.bg }}; color:{{ s.fg }}; border:1px solid {{ s.borde }}; border-radius:3px; padding:6px 14px; font-size:12px; cursor:pointer;">{{ s.nom }}</button>
+      </sc-for>
+    </div>
+    <div style="display:flex; align-items:center; gap:7px; padding:4px 10px; border:1px solid var(--lin); border-radius:3px; font-family:ui-monospace, Menlo, monospace; font-size:11px; white-space:nowrap; flex:none;">
+      <span style="width:6px; height:6px; border-radius:50%; background:var(--pos); animation:pulso 1.6s infinite;"></span>
+      <span style="color:var(--pos);">EN VIVO</span><span style="color:var(--dim);">refresco en {{ tick }}s</span>
+    </div>
+    <div style="margin-left:auto; display:flex; align-items:center; gap:10px; white-space:nowrap;">
+      <select value="{{ clienteId }}" onChange="{{ setCliente }}" style="background:var(--pan2); color:var(--tx); border:1px solid var(--lin); border-radius:3px; padding:5px 8px; font-size:12.5px;">
+        <sc-for list="{{ clientes }}" as="c" hint-placeholder-count="3">
+          <option value="{{ c.id }}">{{ c.nom }}</option>
+        </sc-for>
+      </select>
+      <label style="display:flex; align-items:center; gap:6px; color:var(--dim); font-size:12px;">Monto
+        <input value="{{ montoStr }}" onChange="{{ setMonto }}" style="width:94px; background:var(--pan2); color:var(--tx); border:1px solid var(--lin); border-radius:3px; padding:5px 7px; font-family:ui-monospace, Menlo, monospace; text-align:right;">
+      </label>
+      <div style="display:flex; border:1px solid var(--lin); border-radius:3px; overflow:hidden;">
+        <sc-for list="{{ monedas }}" as="m" hint-placeholder-count="3">
+          <button onClick="{{ m.onClick }}" title="{{ m.tip }}" style="background:{{ m.bg }}; color:{{ m.fg }}; border:0; border-left:1px solid var(--lin); padding:5px 10px; font-size:11px; cursor:pointer;">{{ m.nom }}</button>
+        </sc-for>
+      </div>
+      <button onClick="{{ toggleTema }}" style="background:var(--pan2); color:var(--dim); border:1px solid var(--lin); border-radius:3px; padding:5px 10px; cursor:pointer;">{{ temaIcono }}</button>
+    </div>
+  </div>
+
+  <sc-if value="{{ esArmado }}" hint-placeholder-val="{{ true }}">
+    <div style="padding:14px 18px 0;">
+      <div style="background:var(--pan); border:1px solid var(--lin); border-radius:4px;">
+        <div style="display:flex; align-items:center; gap:12px; padding:11px 15px; cursor:pointer;" onClick="{{ toggleMandato }}">
+          <span style="font-size:10px; text-transform:uppercase; letter-spacing:0.13em; color:var(--ac);">Mandato del cliente</span>
+          <span style="font-size:12.5px; color:var(--tx);">{{ mandatoResumen }}</span>
+          <span style="margin-left:auto; font-family:ui-monospace, Menlo, monospace; font-size:11px; color:var(--dim);">{{ guardadoStr }}</span>
+          <span style="color:var(--dim); font-size:12px;">{{ mandatoIcono }}</span>
+        </div>
+        <sc-if value="{{ mandatoAbierto }}" hint-placeholder-val="{{ false }}">
+          <div style="display:grid; grid-template-columns:1.3fr 1fr 1fr; gap:20px; padding:4px 15px 15px; border-top:1px solid var(--lin);">
+            <div>
+              <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.11em; color:var(--dim); margin:11px 0 6px;">Qué busca</div>
+              <textarea value="{{ objetivoTxt }}" onChange="{{ setObjetivo }}" rows="2" style="width:100%; box-sizing:border-box; background:var(--pan2); color:var(--tx); border:1px solid var(--lin); border-radius:3px; padding:7px 9px; font-size:12.5px; line-height:1.5; resize:vertical;"></textarea>
+              <div style="display:flex; gap:14px; margin-top:10px; flex-wrap:wrap;">
+                <label style="font-size:10px; color:var(--dim);">Piso mensual (US$)
+                  <input value="{{ objStr }}" onChange="{{ setObj }}" style="display:block; width:96px; margin-top:4px; background:var(--pan2); color:var(--ac); border:1px solid var(--lin); border-radius:3px; padding:6px 8px; font-family:ui-monospace, Menlo, monospace; font-size:14px; text-align:right;">
+                </label>
+                <label style="font-size:10px; color:var(--dim);">Horizonte
+                  <select value="{{ horizonte }}" onChange="{{ setHorizonte }}" style="display:block; margin-top:4px; background:var(--pan2); color:var(--tx); border:1px solid var(--lin); border-radius:3px; padding:6px 8px;">
+                    <option value="2 años">2 años</option><option value="5 años">5 años</option><option value="8 años">8 años</option>
+                  </select>
+                </label>
+                <label style="font-size:10px; color:var(--dim);">Perfil
+                  <select value="{{ perfil }}" onChange="{{ setPerfil }}" style="display:block; margin-top:4px; background:var(--pan2); color:var(--tx); border:1px solid var(--lin); border-radius:3px; padding:6px 8px;">
+                    <option value="Conservador">Conservador</option><option value="Moderado">Moderado</option><option value="Agresivo declarado">Agresivo declarado</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.11em; color:var(--dim); margin:11px 0 6px;">Contra qué se quiere cubrir</div>
+              <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                <sc-for list="{{ riesgos }}" as="r" hint-placeholder-count="5">
+                  <button onClick="{{ r.onClick }}" style="background:{{ r.bg }}; color:{{ r.fg }}; border:1px solid {{ r.borde }}; border-radius:12px; padding:5px 11px; font-size:11.5px; cursor:pointer;">{{ r.nom }}</button>
+                </sc-for>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.11em; color:var(--dim); margin:11px 0 6px;">Restricciones</div>
+              <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                <sc-for list="{{ restricciones }}" as="r" hint-placeholder-count="4">
+                  <button onClick="{{ r.onClick }}" style="background:{{ r.bg }}; color:{{ r.fg }}; border:1px solid {{ r.borde }}; border-radius:12px; padding:5px 11px; font-size:11.5px; cursor:pointer;">{{ r.nom }}</button>
+                </sc-for>
+              </div>
+              <div style="display:flex; gap:8px; margin-top:11px;">
+                <button onClick="{{ guardar }}" style="background:var(--ac); color:var(--bg); border:0; border-radius:3px; padding:7px 14px; font-size:11.5px; cursor:pointer;">Guardar mandato</button>
+                <button onClick="{{ aplicarMandato }}" style="background:transparent; color:var(--tx); border:1px solid var(--lin); border-radius:3px; padding:7px 14px; font-size:11.5px; cursor:pointer;">Filtrar universo por mandato</button>
+              </div>
+              <div style="font-size:10.5px; color:{{ avisoMandatoColor }}; margin-top:9px; text-wrap:pretty;">{{ avisoMandato }}</div>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:1fr 252px; gap:14px; padding:14px 18px 0; align-items:start;">
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <div style="background:var(--pan); border:1px solid var(--lin); border-radius:4px; padding:16px 16px 10px;">
+          <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom:12px; flex-wrap:wrap;">
+            <div>
+              <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.13em; color:var(--dim);">Cobros en dólares · {{ tituloUSD }}</div>
+              <div style="font-size:12.5px; color:var(--dim); margin-top:4px;">Tocá un mes para abrirlo y comparar los papeles que pagan ahí.</div>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <div style="display:flex; border:1px solid var(--lin); border-radius:3px; overflow:hidden;">
+                <sc-for list="{{ rvModos }}" as="m" hint-placeholder-count="3">
+                  <button onClick="{{ m.onClick }}" title="{{ m.tip }}" style="background:{{ m.bg }}; color:{{ m.fg }}; border:0; border-left:1px solid var(--lin); padding:5px 10px; font-size:10.5px; cursor:pointer;">{{ m.nom }}</button>
+                </sc-for>
+              </div>
+              <button onClick="{{ cargarHeredada }}" style="background:var(--pan2); color:var(--tx); border:1px solid var(--lin); border-radius:3px; padding:6px 11px; cursor:pointer; font-size:11.5px;">Leer cartera del cliente</button>
+              <button onClick="{{ toggleGhost }}" style="background:{{ ghostBg }}; color:{{ ghostFg }}; border:1px solid var(--lin); border-radius:3px; padding:6px 11px; cursor:pointer; font-size:11.5px;">Silueta original</button>
+              <button onClick="{{ copiar }}" style="background:var(--pan2); color:var(--dim); border:1px solid var(--lin); border-radius:3px; padding:6px 10px; cursor:pointer; font-size:11.5px;">⧉</button>
+            </div>
+          </div>
+
+          <div style="position:relative; height:290px; display:flex; align-items:flex-end; gap:8px;">
+            <div style="position:absolute; left:0; right:0; bottom:{{ objLinea }}%; border-top:1px dashed var(--ac2); pointer-events:none; z-index:2;">
+              <span style="position:absolute; right:0; top:-16px; font-size:10.5px; font-family:ui-monospace, Menlo, monospace; color:var(--ac2); background:var(--pan); padding:0 5px;">piso {{ objEtiqueta }}</span>
+            </div>
+            <sc-for list="{{ barrasUSD }}" as="b" hint-placeholder-count="12">
+              <div onClick="{{ b.onClick }}" title="{{ b.tip }}" style="flex:1; display:flex; flex-direction:column; justify-content:flex-end; height:100%; cursor:pointer; position:relative; background:{{ b.zonaBg }}; border-radius:4px 4px 0 0;">
+                <div style="font-family:ui-monospace, Menlo, monospace; font-size:11.5px; text-align:center; color:{{ b.montoColor }}; margin-bottom:5px; white-space:nowrap;">{{ b.montoStr }}</div>
+                <div style="position:relative; height:{{ b.h }}%; min-height:3px; display:flex; flex-direction:column-reverse; border-radius:4px 4px 0 0; overflow:hidden;">
+                  <sc-for list="{{ b.tramos }}" as="s" hint-placeholder-count="0">
+                    <div title="{{ s.tip }}" style="height:{{ s.h }}%; background:{{ s.bg }}; border-top:1px solid rgba(0,0,0,0.35);"></div>
+                  </sc-for>
+                </div>
+                <div style="position:absolute; left:0; right:0; bottom:0; height:{{ b.hGhost }}%; border:1px dashed var(--sd); border-bottom:0; pointer-events:none; display:{{ b.ghostDisplay }};"></div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex; gap:8px; margin-top:7px;">
+            <sc-for list="{{ barrasUSD }}" as="b" hint-placeholder-count="12">
+              <div onClick="{{ b.onClick }}" style="flex:1; text-align:center; cursor:pointer; padding:5px 0 6px; border-top:2px solid {{ b.borde }};">
+                <div style="font-size:12.5px; color:{{ b.fg }}; font-weight:{{ b.peso }};">{{ b.nom }}</div>
+                <div style="display:flex; gap:3px; justify-content:center; margin-top:5px; min-height:8px;">
+                  <sc-for list="{{ b.marcas }}" as="m" hint-placeholder-count="0">
+                    <span title="{{ m.tip }}" style="width:7px; height:7px; background:{{ m.bg }}; transform:rotate(45deg);"></span>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex; gap:18px; padding:9px 0 3px; border-top:1px solid var(--lin); margin-top:5px; font-size:10.5px; color:var(--dim); flex-wrap:wrap;">
+            <span style="display:flex; align-items:center; gap:5px;"><span style="width:10px; height:10px; background:var(--ac); border-radius:2px;"></span>renta (cupón) en dólares</span>
+            <span style="display:flex; align-items:center; gap:5px;"><span style="width:8px; height:8px; background:var(--ac2); transform:rotate(45deg);"></span>amortización</span>
+            <span style="display:flex; align-items:center; gap:5px;"><span style="width:8px; height:8px; background:var(--sd); transform:rotate(45deg);"></span>{{ leyendaRV }}</span>
+            <span style="display:flex; align-items:center; gap:5px;"><span style="width:10px; height:0; border-top:1px dashed var(--sd);"></span>cartera original</span>
+            <span style="margin-left:auto;">{{ notaUSD }}</span>
+          </div>
+        </div>
+
+        <div style="background:var(--pan); border:1px solid var(--lin); border-radius:4px; padding:14px 16px 10px;">
+          <div style="display:flex; align-items:baseline; gap:12px; margin-bottom:10px; flex-wrap:wrap;">
+            <span style="font-size:11px; text-transform:uppercase; letter-spacing:0.13em; color:var(--dim);">Cobros en pesos</span>
+            <span style="font-size:11.5px; color:var(--dim); text-wrap:pretty;">{{ notaARS }}</span>
+            <span style="margin-left:auto; font-family:ui-monospace, Menlo, monospace; font-size:12px; color:{{ arsColor }};">{{ rentaARSStr }}</span>
+          </div>
+          <div style="position:relative; height:118px; display:flex; align-items:flex-end; gap:8px;">
+            <sc-for list="{{ barrasARS }}" as="b" hint-placeholder-count="12">
+              <div onClick="{{ b.onClick }}" title="{{ b.tip }}" style="flex:1; display:flex; flex-direction:column; justify-content:flex-end; height:100%; cursor:pointer;">
+                <div style="font-family:ui-monospace, Menlo, monospace; font-size:10px; text-align:center; color:{{ b.montoColor }}; margin-bottom:4px; white-space:nowrap;">{{ b.montoStr }}</div>
+                <div style="height:{{ b.h }}%; min-height:2px; background:{{ b.bg }}; border-radius:3px 3px 0 0;"></div>
+                <div style="text-align:center; font-size:11px; color:var(--dim); margin-top:5px;">{{ b.nom }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-size:10.5px; color:var(--dim); padding:8px 0 3px; border-top:1px solid var(--lin); margin-top:6px; text-wrap:pretty;">Escala propia y unidad propia: los cobros en pesos nunca se suman a los dólares ni se convierten para el total. La TIR de esta parte tampoco se promedia con la del segmento dólar hard.</div>
+        </div>
+
+        <sc-if value="{{ panelRV }}" hint-placeholder-val="{{ false }}">
+          <div style="background:var(--pan); border:1px solid var(--lin); border-radius:4px; padding:15px 16px;">
+            <div style="display:flex; align-items:baseline; gap:12px; margin-bottom:12px; flex-wrap:wrap;">
+              <span style="font-size:11px; text-transform:uppercase; letter-spacing:0.13em; color:var(--dim);">Renta variable · panel aparte</span>
+              <span style="font-size:11.5px; color:var(--dim); text-wrap:pretty;">Fuera de la cordillera: no hay cupón, no hay TIR y no hay duración. Lo que sí hay es un calendario de balances y, cuando el emisor tiene historia, un dividendo estimado que no es un compromiso.</span>
+              <span style="margin-left:auto; font-family:ui-monospace, Menlo, monospace; font-size:12px; color:var(--sd);">{{ rvResumen }}</span>
+            </div>
+            <sc-if value="{{ rvVacio }}" hint-placeholder-val="{{ false }}">
+              <div style="padding:22px 4px; font-size:12.5px; color:var(--dim); text-wrap:pretty;">La cartera no tiene acciones ni CEDEARs. El perfil declarado tolera hasta 30-40%: abrí el segmento «Acciones y CEDEARs» en el universo para sumarlas.</div>
+            </sc-if>
+            <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(268px, 1fr)); gap:10px;">
+              <sc-for list="{{ rvPosiciones }}" as="v" hint-placeholder-count="0">
+                <div style="background:var(--pan2); border:1px solid var(--lin); border-radius:4px; padding:12px 13px;">
+                  <div style="display:flex; align-items:baseline; gap:8px;">
+                    <span onClick="{{ v.verFicha }}" style="font-family:ui-monospace, Menlo, monospace; font-size:14px; cursor:pointer; text-decoration:underline; text-decoration-color:var(--lin);">{{ v.tk }}</span>
+                    <span style="font-size:10.5px; color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ v.emisor }}</span>
+                    <span style="margin-left:auto; font-family:ui-monospace, Menlo, monospace; font-size:11.5px; color:{{ v.varColor }};">{{ v.varStr }}</span>
+                  </div>
+                  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin:11px 0 9px;">
+                    <div><div style="font-size:9px; color:var(--dim); text-transform:uppercase; letter-spacing:0.08em;">Peso</div><div style="font-family:ui-monospace, Menlo, monospace; font-size:14px;">{{ v.peso }}</div></div>
+                    <div><div style="font-size:9px; color:var(--dim); text-transform:uppercase; letter-spacing:0.08em;">Invertido</div><div style="font-family:ui-monospace, Menlo, monospace; font-size:14px;">{{ v.inv }}</div></div>
+                    <div><div style="font-size:9px; color:var(--dim); text-transform:uppercase; letter-spacing:0.08em;">Div. est.</div><div style="font-family:ui-monospace, Menlo, monospace; font-size:14px; color:{{ v.divColor }};">{{ v.div }}</div></div>
+                  </div>
+                  <div style="display:flex; gap:3px;">
+                    <sc-for list="{{ v.calendario }}" as="m" hint-placeholder-count="12">
+                      <div title="{{ m.tip }}" style="flex:1; text-align:center;">
+                        <div style="height:16px; border-radius:2px; background:{{ m.bg }}; border:1px solid {{ m.borde }};"></div>
+                        <div style="font-size:8px; color:var(--dim); margin-top:3px;">{{ m.ini }}</div>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <div style="font-size:10px; color:var(--dim); margin-top:8px; text-wrap:pretty;">{{ v.nota }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="display:flex; gap:16px; margin-top:11px; padding-top:9px; border-top:1px solid var(--lin); font-size:10.5px; color:var(--dim); flex-wrap:wrap;">
+              <span style="display:flex; align-items:center; gap:5px;"><span style="width:10px; height:10px; border-radius:2px; background:var(--sd);"></span>balance trimestral</span>
+              <span style="display:flex; align-items:center; gap:5px;"><span style="width:10px; height:10px; border-radius:2px; background:var(--ac2);"></span>dividendo estimado, no garantizado</span>
+              <span style="margin-left:auto;">{{ rvNotaTotal }}</span>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ hayMes }}" hint-placeholder-val="{{ false }}">
+          <div style="background:var(--pan); border:1px solid var(--ac); border-radius:4px; padding:14px 16px;">
+            <div style="display:flex; align-items:baseline; gap:12px; margin-bottom:11px; flex-wrap:wrap;">
+              <span style="font-size:15px; font-weight:600; color:var(--ac);">{{ mesTitulo }}</span>
+              <span style="font-size:12px; color:var(--dim); text-wrap:pretty;">{{ mesBajada }}</span>
+              <button onClick="{{ cerrarMes }}" style="margin-left:auto; background:transparent; color:var(--dim); border:1px solid var(--lin); border-radius:3px; padding:4px 10px; font-size:11px; cursor:pointer;">cerrar</button>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(232px, 1fr)); gap:10px;">
+              <sc-for list="{{ comparables }}" as="c" hint-placeholder-count="4">
+                <div style="background:var(--pan2); border:1px solid {{ c.borde }}; border-radius:4px; padding:11px 12px;">
+                  <div style="display:flex; align-items:baseline; gap:8px;">
+                    <span onClick="{{ c.verFicha }}" style="font-family:ui-monospace, Menlo, monospace; font-size:14px; color:{{ c.tkColor }}; cursor:pointer; text-decoration:underline; text-decoration-color:var(--lin);">{{ c.tk }}</span>
+                    <span style="font-size:10px; color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ c.emisor }}</span>
+                  </div>
+                  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin:10px 0 8px;">
+                    <div><div style="font-size:9px; color:var(--dim); text-transform:uppercase; letter-spacing:0.08em;">TIR</div><div style="font-family:ui-monospace, Menlo, monospace; font-size:15px; color:{{ c.tirColor }};">{{ c.tir }}</div></div>
+                    <div><div style="font-size:9px; color:var(--dim); text-transform:uppercase; letter-spacing:0.08em;">Cupón</div><div style="font-family:ui-monospace, Menlo, monospace; font-size:15px;">{{ c.cupon }}</div></div>
+                    <div><div style="font-size:9px; color:var(--dim); text-transform:uppercase; letter-spacing:0.08em;">Frec.</div><div style="font-family:ui-monospace, Menlo, monospace; font-size:15px;">{{ c.freq }}</div></div>
+                  </div>
+                  <div style="font-size:10.5px; color:var(--dim); line-height:1.5; text-wrap:pretty;">{{ c.detalle }}</div>
+                  <div style="display:flex; gap:2px; margin:9px 0 10px;">
+                    <sc-for list="{{ c.mini }}" as="m" hint-placeholder-count="12">
+                      <span title="{{ m.tip }}" style="flex:1; height:12px; border-radius:1px; background:{{ m.bg }};"></span>
+                    </sc-for>
+                  </div>
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <button onClick="{{ c.onClick }}" style="flex:1; background:{{ c.btnBg }}; color:{{ c.btnFg }}; border:1px solid {{ c.borde }}; border-radius:3px; padding:6px; font-size:11px; cursor:pointer;">{{ c.btn }}</button>
+                    <span style="font-family:ui-monospace, Menlo, monospace; font-size:11px; color:var(--pos); white-space:nowrap;">{{ c.aporte }}</span>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <div style="background:var(--pan); border:1px solid var(--lin); border-radius:4px; padding:14px 16px;">
+          <div style="font-size:11px; text-transform:uppercase; letter-spacing:0.13em; color:var(--ac2); margin-bottom:10px;">Rotaciones propuestas · con el efecto medido</div>
+          <sc-for list="{{ rotaciones }}" as="r" hint-placeholder-count="3">
+            <div style="display:grid; grid-template-columns:150px 1fr 200px 92px; gap:14px; align-items:center; padding:11px 0; border-top:1px solid var(--lin);">
+              <div style="font-family:ui-monospace, Menlo, monospace; font-size:12.5px;">
+                <div style="color:var(--neg);">– {{ r.sale }}</div>
+                <div style="color:var(--pos);">+ {{ r.entra }}</div>
+              </div>
+              <div style="font-size:11.5px; color:var(--dim); line-height:1.5; text-wrap:pretty;">{{ r.motivo }}</div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px 10px; font-family:ui-monospace, Menlo, monospace; font-size:11px;">
+                <sc-for list="{{ r.efecto }}" as="e" hint-placeholder-count="4">
+                  <div style="display:flex; justify-content:space-between; gap:6px;">
+                    <span style="color:var(--dim);">{{ e.rot }}</span><span style="color:{{ e.color }};">{{ e.val }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <button onClick="{{ r.aplicar }}" style="background:var(--ac); color:var(--bg); border:0; border-radius:3px; padding:7px 10px; font-size:11px; cursor:pointer;">{{ r.rotBoton }}</button>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; align-items:start; padding-bottom:20px;">
+          <div style="background:var(--pan); border:1px solid var(--lin); border-radius:4px; overflow:hidden;">
+            <div style="display:flex; align-items:center; gap:10px; padding:11px 13px; border-bottom:1px solid var(--lin);">
+              <span style="font-size:11px; text-transform:uppercase; letter-spacing:0.12em; color:var(--dim);">Universo</span>
+              <span style="font-family:ui-monospace, Menlo, monospace; font-size:11px; color:var(--ac);">{{ filtroMesStr }}</span>
+              <span style="margin-left:auto; font-family:ui-monospace, Menlo, monospace; font-size:11px; color:var(--dim);">{{ conteoUniverso }}</span>
+            </div>
+            <div style="display:flex; gap:1px; background:var(--pan2); border-bottom:1px solid var(--lin); overflow-x:auto;">
+              <sc-for list="{{ segmentos }}" as="g" hint-placeholder-count="7">
+                <button onClick="{{ g.onClick }}" title="{{ g.unidad }}" style="background:{{ g.bg }}; color:{{ g.fg }}; border:0; border-bottom:2px solid {{ g.borde }}; padding:7px 10px; font-size:10.5px; white-space:nowrap; cursor:pointer;">{{ g.nom }}</button>
+              </sc-for>
+            </div>
+            <div style="display:flex; gap:7px; padding:8px 13px; border-bottom:1px solid var(--lin); flex-wrap:wrap; align-items:center; background:var(--pan2);">
+              <span style="font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:0.09em;">{{ rotFiltro }}</span>
+              <input value="{{ tirMin }}" onChange="{{ setTirMin }}" placeholder="mín" style="width:50px; background:var(--pan); color:var(--tx); border:1px solid var(--lin); border-radius:3px; padding:3px 6px; font-family:ui-monospace, Menlo, monospace; font-size:11px; text-align:right;">
+              <input value="{{ tirMax }}" onChange="{{ setTirMax }}" placeholder="máx" style="width:50px; background:var(--pan); color:var(--tx); border:1px solid var(--lin); border-radius:3px; padding:3px 6px; font-family:ui-monospace, Menlo, monospace; font-size:11px; text-align:right;">
+              <input value="{{ dmMax }}" onChange="{{ setDmMax }}" placeholder="dur." style="width:52px; background:var(--pan); color:var(--tx); border:1px solid var(--lin); border-radius:3px; padding:3px 6px; font-family:ui-monospace, Menlo, monospace; font-size:11px; text-align:right;">
+              <button onClick="{{ limpiar }}" style="background:transparent; color:var(--dim); border:1px solid var(--lin); border-radius:3px; padding:3px 9px; font-size:10px; cursor:pointer;">limpiar</button>
+            </div>
+            <div style="max-height:352px; overflow:auto;">
+              <sc-for list="{{ universo }}" as="u" hint-placeholder-count="9">
+                <div style="display:grid; grid-template-columns:minmax(70px,88px) 1fr 56px 46px 92px 24px; gap:8px; align-items:center; padding:8px 13px; border-bottom:1px solid var(--lin); background:{{ u.bg }};">
+                  <div onClick="{{ u.verFicha }}" style="cursor:pointer;">
+                    <div style="font-family:ui-monospace, Menlo, monospace; font-size:12.5px; color:{{ u.tkColor }}; overflow:hidden; text-overflow:ellipsis;">{{ u.tk }}</div>
+                    <div style="font-size:9px; color:var(--dim);">{{ u.ley }}</div>
+                  </div>
+                  <div style="min-width:0;">
+                    <div style="font-size:11.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ u.emisor }}</div>
+                    <div style="font-size:9.5px; color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ u.sub }}</div>
+                  </div>
+                  <div style="text-align:right; font-family:ui-monospace, Menlo, monospace; font-size:11.5px;">{{ u.rend }}<div style="font-size:9px; color:var(--dim);">{{ u.rendRot }}</div></div>
+                  <div style="text-align:right; font-family:ui-monospace, Menlo, monospace; font-size:11.5px; color:var(--ac2);">{{ u.cupon }}<div style="font-size:9px; color:var(--dim);">cupón</div></div>
+                  <div style="display:flex; gap:2px;">
+                    <sc-for list="{{ u.mini }}" as="m" hint-placeholder-count="12">
+                      <span title="{{ m.tip }}" style="flex:1; height:13px; border-radius:1px; background:{{ m.bg }};"></span>
+                    </sc-for>
+                  </div>
+                  <div onClick="{{ u.onClick }}" style="text-align:center; font-size:15px; color:{{ u.masColor }}; cursor:pointer;">{{ u.mas }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="background:var(--pan); border:1px solid var(--lin); border-radius:4px; overflow:hidden;">
+            <div style="display:flex; align-items:center; gap:10px; padding:11px 13px; border-bottom:1px solid var(--lin); flex-wrap:wrap;">
+              <span style="font-size:11px; text-transform:uppercase; letter-spacing:0.12em; color:var(--dim);">Cartera</span>
+              <span style="font-family:ui-monospace, Menlo, monospace; font-size:11px; color:{{ sumaColor }};">Σ {{ sumaStr }}</span>
+              <span style="font-family:ui-monospace, Menlo, monospace; font-size:11px; color:var(--dim);">invertido {{ invertidoStr }}</span>
+              <div style="margin-left:auto; display:flex; gap:6px;">
+                <button onClick="{{ equiponderar }}" style="background:var(--pan2); color:var(--tx); border:1px solid var(--lin); border-radius:3px; padding:4px 9px; font-size:10.5px; cursor:pointer;">Equiponderar</button>
+                <button onClick="{{ vaciar }}" style="background:var(--pan2); color:var(--dim); border:1px solid var(--lin); border-radius:3px; padding:4px 9px; font-size:10.5px; cursor:pointer;">Vaciar</button>
+              </div>
+            </div>
+            <div style="max-height:394px; overflow:auto;">
+              <sc-for list="{{ posiciones }}" as="p" hint-placeholder-count="0">
+                <div style="display:grid; grid-template-columns:minmax(70px,86px) 1fr 52px 62px 52px 22px; gap:8px; align-items:center; padding:8px 13px; border-bottom:1px solid var(--lin);">
+                  <div onClick="{{ p.verFicha }}" style="cursor:pointer;">
+                    <div style="font-family:ui-monospace, Menlo, monospace; font-size:12.5px;">{{ p.tk }}</div>
+                    <div style="font-size:9px; color:var(--dim);">{{ p.moneda }}</div>
+                  </div>
+                  <div style="min-width:0;">
+                    <div style="font-size:11.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ p.emisor }}</div>
+                    <div style="font-size:9.5px; color:var(--dim);">VN {{ p.vn }} · {{ p.inv }}</div>
+                  </div>
+                  <div><input value="{{ p.pesoStr }}" onChange="{{ p.setPeso }}" style="width:100%; box-sizing:border-box; background:var(--pan2); color:var(--ac); border:1px solid var(--lin); border-radius:3px; padding:3px 5px; font-family:ui-monospace, Menlo, monospace; font-size:11.5px; text-align:right;"></div>
+                  <div title="{{ p.realTip }}" style="text-align:right; font-family:ui-monospace, Menlo, monospace; font-size:11.5px; color:{{ p.realColor }};">{{ p.real }}<div style="font-size:9px; color:var(--dim);">real</div></div>
+                  <div style="display:flex; gap:2px;">
+                    <sc-for list="{{ p.mini }}" as="m" hint-placeholder-count="12">
+                      <span title="{{ m.tip }}" style="flex:1; height:13px; border-radius:1px; background:{{ m.bg }};"></span>
+                    </sc-for>
+                  </div>
+                  <div onClick="{{ p.quitar }}" style="text-align:center; font-size:14px; color:var(--dim); cursor:pointer;">×</div>
+                </div>
+              </sc-for>
+              <sc-if value="{{ vacia }}" hint-placeholder-val="{{ true }}">
+                <div style="padding:30px 16px; text-align:center; color:var(--dim); font-size:12.5px; text-wrap:pretty;">Cartera vacía. Tocá el mes más flojo de la cordillera y elegí ahí, o leé la cartera que trae el cliente.</div>
+              </sc-if>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="position:sticky; top:66px; display:flex; flex-direction:column; gap:10px;">
+        <div style="background:var(--pan); border:1px solid var(--lin); border-radius:4px; padding:13px;">
+          <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.12em; color:var(--dim);">Renta anual en dólares</div>
+          <div style="font-family:ui-monospace, Menlo, monospace; font-size:36px; line-height:1.05; color:var(--ac); margin:7px 0 3px;">{{ rentaPctStr }}</div>
+          <div style="font-family:ui-monospace, Menlo, monospace; font-size:10.5px; color:var(--dim); text-wrap:pretty;">sólo cupones · {{ cuentaRenta }}</div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:9px;">
+          <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="4">
+            <div style="background:var(--pan); border:1px solid var(--lin); border-radius:4px; padding:11px;">
+              <div style="font-size:9px; text-transform:uppercase; letter-spacing:0.1em; color:var(--dim);">{{ k.rot }}</div>
+              <div style="font-family:ui-monospace, Menlo, monospace; font-size:21px; color:{{ k.color }};">{{ k.val }}</div>
+              <div style="font-size:9px; color:var(--dim);">{{ k.nota }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="background:var(--pan); border:1px solid var(--lin); border-radius:4px; padding:12px;">
+          <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.12em; color:var(--ac2); margin-bottom:8px;">Lo que falta</div>
+          <sc-for list="{{ sugerencias }}" as="s" hint-placeholder-count="2">
+            <div style="display:flex; gap:8px; align-items:flex-start; padding:7px 0; border-top:1px solid var(--lin);">
+              <div style="flex:1; font-size:11.5px; line-height:1.5; text-wrap:pretty;">{{ s.texto }}</div>
+              <button onClick="{{ s.onClick }}" style="background:var(--ac); color:var(--bg); border:0; border-radius:3px; padding:4px 9px; font-size:10px; cursor:pointer; white-space:nowrap;">{{ s.accion }}</button>
+            </div>
+          </sc-for>
+        </div>
+        <div style="background:var(--pan); border:1px solid var(--lin); border-radius:4px; padding:12px;">
+          <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.12em; color:var(--dim); margin-bottom:7px;">Flujo mes por mes · dólares</div>
+          <sc-for list="{{ flujoDetalle }}" as="f" hint-placeholder-count="12">
+            <div style="display:grid; grid-template-columns:30px 1fr 62px; gap:7px; padding:4px 0; border-top:1px solid var(--lin); font-family:ui-monospace, Menlo, monospace; font-size:10.5px;">
+              <span style="color:{{ f.mesColor }};">{{ f.nom }}</span>
+              <span style="color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ f.detalle }}</span>
+              <span style="text-align:right;">{{ f.total }}</span>
+            </div>
+          </sc-for>
+          <div style="display:flex; justify-content:space-between; padding-top:8px; margin-top:5px; border-top:1px solid var(--ac); font-family:ui-monospace, Menlo, monospace; font-size:11.5px;">
+            <span style="color:var(--dim);">total anual</span><span style="color:var(--ac);">{{ rentaAnualStr }}</span>
+          </div>
+          <button onClick="{{ descargar }}" style="width:100%; margin-top:10px; background:var(--ac); color:var(--bg); border:0; border-radius:3px; padding:8px; font-size:11.5px; cursor:pointer;">Descargar propuesta</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ esSeguimiento }}" hint-placeholder-val="{{ false }}">
+    <div style="padding:14px 18px 24px; display:flex; flex-direction:column; gap:12px;">
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(178px,1fr)); gap:10px;">
+        <sc-for list="{{ segKpis }}" as="k" hint-placeholder-count="5">
+          <div style="background:var(--pan); border:1px solid var(--lin); border-radius:4px; padding:13px 14px;">
+            <div style="font-size:9.5px; text-transform:uppercase; letter-spacing:0.11em; color:var(--dim);">{{ k.rot }}</div>
+            <div style="font-family:ui-monospace, Menlo, monospace; font-size:25px; color:{{ k.color }}; line-height:1.2; margin-top:3px;">{{ k.val }}</div>
+            <div style="font-size:10px; color:var(--dim); text-wrap:pretty;">{{ k.nota }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="background:var(--pan); border:1px solid var(--lin); border-radius:4px; padding:15px 16px 10px;">
+        <div style="display:flex; align-items:baseline; gap:12px; margin-bottom:12px; flex-wrap:wrap;">
+          <span style="font-size:11px; text-transform:uppercase; letter-spacing:0.13em; color:var(--dim);">Año en curso · lo cobrado y lo que viene</span>
+          <span style="font-size:12px; color:var(--dim);">{{ segBajada }}</span>
+        </div>
+        <div style="position:relative; height:210px; display:flex; align-items:flex-end; gap:8px;">
+          <sc-for list="{{ barrasSeg }}" as="b" hint-placeholder-count="12">
+            <div title="{{ b.tip }}" style="flex:1; display:flex; flex-direction:column; justify-content:flex-end; height:100%;">
+              <div style="font-family:ui-monospace, Menlo, monospace; font-size:11px; text-align:center; color:{{ b.color }}; margin-bottom:5px;">{{ b.monto }}</div>
+              <div style="height:{{ b.h }}%; min-height:3px; background:{{ b.bg }}; border:1px {{ b.borde }} {{ b.bordeColor }}; border-radius:3px 3px 0 0;"></div>
+              <div style="text-align:center; font-size:12px; color:{{ b.color }}; margin-top:6px;">{{ b.nom }}</div>
+              <div style="text-align:center; font-size:9px; color:var(--dim);">{{ b.estado }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1.5fr 1fr; gap:12px; align-items:start;">
+        <div style="background:var(--pan); border:1px solid var(--lin); border-radius:4px; overflow:hidden;">
+          <div style="display:flex; align-items:center; gap:10px; padding:11px 13px; border-bottom:1px solid var(--lin);">
+            <span style="font-size:11px; text-transform:uppercase; letter-spacing:0.12em; color:var(--dim);">Posiciones vendidas al cliente</span>
+            <span style="margin-left:auto; font-family:ui-monospace, Menlo, monospace; font-size:11px; color:var(--dim);">{{ segFecha }}</span>
+          </div>
+          <div style="display:grid; grid-template-columns:minmax(72px,88px) 1fr 64px 64px 58px 74px 74px; gap:8px; padding:6px 13px; background:var(--pan2); border-bottom:1px solid var(--lin); font-size:9px; text-transform:uppercase; letter-spacing:0.07em; color:var(--dim);">
+            <div>Ticker</div><div>Emisor</div><div style="text-align:right;">Compra</div><div style="text-align:right;">Hoy</div><div style="text-align:right;">Var.</div><div style="text-align:right;">Cobrado</div><div style="text-align:right;">Próximo</div>
+          </div>
+          <sc-for list="{{ tenencia }}" as="p" hint-placeholder-count="7">
+            <div style="display:grid; grid-template-columns:minmax(72px,88px) 1fr 64px 64px 58px 74px 74px; gap:8px; align-items:center; padding:8px 13px; border-bottom:1px solid var(--lin);">
+              <div onClick="{{ p.verFicha }}" style="font-family:ui-monospace, Menlo, monospace; font-size:12.5px; cursor:pointer;">{{ p.tk }}</div>
+              <div style="min-width:0;"><div style="font-size:11.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ p.emisor }}</div><div style="font-size:9.5px; color:var(--dim);">{{ p.sub }}</div></div>
+              <div style="text-align:right; font-family:ui-monospace, Menlo, monospace; font-size:11.5px; color:var(--dim);">{{ p.compra }}</div>
+              <div style="text-align:right; font-family:ui-monospace, Menlo, monospace; font-size:11.5px;">{{ p.hoy }}</div>
+              <div style="text-align:right; font-family:ui-monospace, Menlo, monospace; font-size:11.5px; color:{{ p.varColor }};">{{ p.varStr }}</div>
+              <div style="text-align:right; font-family:ui-monospace, Menlo, monospace; font-size:11.5px; color:var(--ac);">{{ p.cobrado }}</div>
+              <div style="text-align:right; font-family:ui-monospace, Menlo, monospace; font-size:11.5px; color:var(--dim);">{{ p.proximo }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:12px;">
+          <div style="background:var(--pan); border:1px solid var(--lin); border-radius:4px; padding:13px;">
+            <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.12em; color:var(--neg); margin-bottom:8px;">Alertas de la cartera viva</div>
+            <sc-for list="{{ alertas }}" as="a" hint-placeholder-count="3">
+              <div style="display:flex; gap:9px; align-items:flex-start; padding:8px 0; border-top:1px solid var(--lin);">
+                <span style="color:{{ a.color }}; font-size:12px;">{{ a.icono }}</span>
+                <div style="flex:1;">
+                  <div style="font-size:11.5px; line-height:1.5; text-wrap:pretty;">{{ a.texto }}</div>
+                  <button onClick="{{ a.onClick }}" style="margin-top:6px; background:transparent; color:var(--ac); border:1px solid var(--lin); border-radius:3px; padding:3px 9px; font-size:10px; cursor:pointer;">{{ a.accion }}</button>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="background:var(--pan); border:1px solid var(--lin); border-radius:4px; padding:13px;">
+            <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.12em; color:var(--dim); margin-bottom:8px;">Contra el mandato firmado</div>
+            <sc-for list="{{ segChequeos }}" as="c" hint-placeholder-count="3">
+              <div style="display:flex; gap:9px; padding:7px 0; border-top:1px solid var(--lin);">
+                <span style="color:{{ c.color }};">{{ c.icono }}</span>
+                <div><div style="font-size:11.5px;">{{ c.nom }}</div><div style="font-size:10.5px; color:var(--dim); line-height:1.45; text-wrap:pretty;">{{ c.detalle }}</div></div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ hayFicha }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; top:52px; right:0; bottom:0; width:430px; background:var(--pan); border-left:1px solid var(--ac); box-shadow:-16px 0 40px rgba(0,0,0,0.35); overflow:auto; z-index:50;">
+      <div style="display:flex; align-items:baseline; gap:10px; padding:15px 17px 12px; border-bottom:1px solid var(--lin); position:sticky; top:0; background:var(--pan);">
+        <span style="font-family:ui-monospace, Menlo, monospace; font-size:20px;">{{ ficha.tk }}</span>
+        <span style="font-size:12px; color:var(--dim); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ ficha.emisor }}</span>
+        <button onClick="{{ cerrarFicha }}" style="background:transparent; color:var(--dim); border:1px solid var(--lin); border-radius:3px; padding:3px 9px; cursor:pointer; font-size:12px;">✕</button>
+      </div>
+      <div style="padding:13px 17px;">
+        <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.12em; color:var(--dim); margin-bottom:7px;">El mismo papel en las tres monedas</div>
+        <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:8px;">
+          <sc-for list="{{ ficha.monedas }}" as="m" hint-placeholder-count="3">
+            <div style="background:var(--pan2); border:1px solid {{ m.borde }}; border-radius:3px; padding:9px 10px;">
+              <div style="font-size:9px; text-transform:uppercase; letter-spacing:0.09em; color:var(--dim);">{{ m.rot }}</div>
+              <div style="font-family:ui-monospace, Menlo, monospace; font-size:12.5px; color:{{ m.color }};">{{ m.tk }}</div>
+              <div style="font-family:ui-monospace, Menlo, monospace; font-size:13px; margin-top:3px;">{{ m.px }}</div>
+              <div style="font-family:ui-monospace, Menlo, monospace; font-size:9.5px; color:var(--dim);">{{ m.puntas }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-size:10px; color:var(--dim); margin-top:7px; text-wrap:pretty;">{{ ficha.notaMonedas }}</div>
+
+        <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.12em; color:var(--dim); margin:16px 0 7px;">Ficha</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0 14px;">
+          <sc-for list="{{ ficha.campos }}" as="c" hint-placeholder-count="14">
+            <div style="display:flex; justify-content:space-between; gap:8px; padding:5px 0; border-bottom:1px solid var(--lin);">
+              <span style="font-size:10px; color:var(--dim); white-space:nowrap;">{{ c.rot }}</span>
+              <span style="font-family:ui-monospace, Menlo, monospace; font-size:11px; color:{{ c.color }}; text-align:right;">{{ c.val }}</span>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.12em; color:var(--dim); margin:16px 0 7px;">{{ ficha.rotFlujo }}</div>
+        <sc-for list="{{ ficha.flujo }}" as="f" hint-placeholder-count="6">
+          <div style="display:grid; grid-template-columns:64px 1fr 84px; gap:8px; padding:5px 0; border-bottom:1px solid var(--lin); font-family:ui-monospace, Menlo, monospace; font-size:11px;">
+            <span style="color:var(--dim);">{{ f.fecha }}</span>
+            <span style="color:{{ f.color }};">{{ f.tipo }}</span>
+            <span style="text-align:right;">{{ f.monto }}</span>
+          </div>
+        </sc-for>
+        <div style="font-size:10px; color:var(--dim); margin-top:7px; text-wrap:pretty;">{{ ficha.notaFlujo }}</div>
+
+        <div style="display:flex; gap:8px; margin-top:16px;">
+          <button onClick="{{ ficha.agregar }}" style="flex:1; background:var(--ac); color:var(--bg); border:0; border-radius:3px; padding:9px; font-size:12px; cursor:pointer;">{{ ficha.rotBoton }}</button>
+          <button onClick="{{ ficha.copiar }}" style="background:transparent; color:var(--dim); border:1px solid var(--lin); border-radius:3px; padding:9px 12px; font-size:12px; cursor:pointer;">⧉</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1560,&quot;height&quot;:1240},&quot;tema&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;oscuro&quot;,&quot;claro&quot;],&quot;default&quot;:&quot;oscuro&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Vista&quot;},&quot;objetivoMensual&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:550,&quot;min&quot;:0,&quot;max&quot;:5000,&quot;step&quot;:50,&quot;unit&quot;:&quot;US$/mes&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Mandato&quot;},&quot;montoInicial&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:100000,&quot;min&quot;:10000,&quot;max&quot;:1000000,&quot;step&quot;:10000,&quot;unit&quot;:&quot;US$&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Mandato&quot;},&quot;rentaVariable&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;rombos&quot;,&quot;dividendos&quot;,&quot;panel&quot;],&quot;default&quot;:&quot;rombos&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Renta variable&quot;}}">
+const T = {
+  oscuro: { bg:'#0a0e13', pan:'#111820', pan2:'#0d141b', lin:'#1d2833', tx:'#dce6f0', dim:'#7e91a5', ac:'#5ee39a', ac2:'#f2b13c', neg:'#ff6b6b', pos:'#5ee39a', sd:'#516373' },
+  claro:  { bg:'#f2f4f7', pan:'#ffffff', pan2:'#eef1f5', lin:'#d5dce4', tx:'#182430', dim:'#61717f', ac:'#0e8a55', ac2:'#a86a06', neg:'#c0392b', pos:'#0e8a55', sd:'#94a4b4' },
+};
+const TC = { mep: 1192.40, cable: 1207.90 };
+const MES_HOY = 8; // agosto de 2026
+// Rendimiento por dividendos: última anualización publicada. Nunca es un compromiso.
+const DIV = { GGAL:{ y:4.2, meses:[4] }, YPFD:{ y:null, meses:[] }, PAMP:{ y:2.1, meses:[5] }, BMA:{ y:5.0, meses:[4] },
+  TXAR:{ y:3.4, meses:[5] }, LOMA:{ y:null, meses:[] }, CRES:{ y:2.8, meses:[10] }, ALUA:{ y:null, meses:[] },
+  AAPL:{ y:0.5, meses:[2,5,8,11] }, GOOGL:{ y:0.4, meses:[3,6,9,12] }, KO:{ y:3.1, meses:[4,7,10,12] }, BRKB:{ y:0, meses:[] } };
+// Cartera ya vendida: precio y fecha de compra por posición.
+const VENDIDA = [
+  { id:'YMCJO', peso:14, compra:100.20, fecha:'12/02/26' }, { id:'PNDCO', peso:13, compra:102.60, fecha:'12/02/26' },
+  { id:'MRCAO', peso:11, compra:106.10, fecha:'12/02/26' }, { id:'YFCJO', peso:11, compra:99.40, fecha:'03/03/26' },
+  { id:'VSCRO', peso:10, compra:99.80, fecha:'03/03/26' },  { id:'AEC1O', peso:9,  compra:101.30, fecha:'03/03/26' },
+  { id:'GD38',  peso:8,  compra:70.10, fecha:'12/02/26' },  { id:'CO27D', peso:6,  compra:91.80, fecha:'20/04/26' },
+  { id:'GGAL',  peso:8,  compra:8.02,  fecha:'20/04/26' },  { id:'AAPL',  peso:6,  compra:13.40, fecha:'20/04/26' },
+  { id:'PAMP',  peso:4,  compra:5.71,  fecha:'20/04/26' },
+];
+
+class Component extends DCLogic {
+  state = {
+    cargado: false, tema: 'oscuro', sec: 'armar', clienteId: 'gv', mon: 'mep', monto: 100000,
+    pos: [], seg: 'hard', selMes: null, sel: null, mandatoAbierto: true, rvModo: 'rombos',
+    tirMin: '', tirMax: '', dmMax: '', obj: 550, ghost: null, verGhost: true, tick: 8,
+    objetivoTxt: '', horizonte: '5 años', perfil: 'Conservador', riesgos: [], restr: [], guardado: null,
+  };
+
+  componentDidMount() {
+    const usar = () => {
+      if (!window.DATOS) return false;
+      this.db = window.DATOS;
+      const p = this.props || {};
+      const cli = window.DATOS.CLIENTES[0];
+      this.setState({
+        cargado: true, tema: p.tema === 'claro' ? 'claro' : 'oscuro',
+        obj: p.objetivoMensual ?? cli.objetivoMensual, monto: p.montoInicial ?? cli.monto,
+        rvModo: p.rentaVariable || 'rombos',
+        pos: window.DATOS.CARTERA_PROPUESTA.map(q => ({ ...q })),
+        objetivoTxt: cli.objetivo, perfil: cli.perfil, horizonte: cli.horizonte,
+        riesgos: [...cli.cubrir], restr: ['maxRV'],
+      });
+      return true;
+    };
+    if (!usar()) window.addEventListener('datos-listo', usar, { once: true });
+    this.timer = setInterval(() => this.setState(s => (s.tick <= 1 ? { tick: 8 } : { tick: s.tick - 1 })), 1000);
+  }
+  componentWillUnmount() { clearInterval(this.timer); }
+
+  num = (v, def) => { const n = parseFloat(String(v).replace(/[^\d.,-]/g, '').replace(/\./g, '').replace(',', '.')); return isNaN(n) ? def : n; };
+  set = (k) => (e) => this.setState({ [k]: e.target.value });
+  agregar = (id) => this.setState(s => {
+    if (s.pos.some(p => p.id === id)) return { pos: s.pos.filter(p => p.id !== id) };
+    const n = s.pos.length + 1;
+    return { pos: [...s.pos, { id, peso: Math.round((100 / n) * 10) / 10 }] };
+  });
+
+  // Resuelve la cartera separando por moneda de cobro: los dólares y los pesos
+  // nunca se suman ni se convierten para el total.
+  resolverMix(pos, monto, monUSD) {
+    const { porId, MESES } = this.db;
+    const tc = TC[monUSD === 'ars' ? 'mep' : monUSD] || TC.mep;
+    const filas = pos.map(p => {
+      const inst = porId[p.id];
+      const esUSD = inst.seg === 'hard' || inst.clase === 'RV';
+      const monCompra = esUSD ? (inst.precios[monUSD] != null ? monUSD : 'mep') : 'ars';
+      const px = inst.precios[monCompra];
+      const objetivo = monto * (p.peso / 100) * (monCompra === 'ars' ? tc : 1);
+      const lam = inst.lamina || 1;
+      const vn = px ? Math.floor((objetivo / (px / 100)) / lam) * lam : 0;
+      const invLocal = vn * (px || 0) / 100;
+      const invUSD = monCompra === 'ars' ? invLocal / tc : invLocal;
+      return { ...p, inst, monCompra, px, vn, invLocal, invUSD, cobraEn: inst.clase === 'RV' ? null : (inst.seg === 'hard' ? 'USD' : 'ARS') };
+    });
+    const invUSD = filas.reduce((a, f) => a + f.invUSD, 0);
+    filas.forEach(f => { f.pesoReal = invUSD ? f.invUSD / invUSD * 100 : 0; });
+    const vacio = () => ({ renta: [], amortiz: [], balances: [], divs: [], totalRenta: 0, totalAmort: 0, totalDiv: 0 });
+    const mUSD = MESES.map(() => vacio()), mARS = MESES.map(() => vacio());
+    filas.forEach(f => {
+      const inst = f.inst;
+      if (inst.clase === 'RV') {
+        inst.balances.forEach(m => mUSD[m - 1].balances.push({ tk: inst.tickers[f.monCompra] || inst.id }));
+        const d = DIV[inst.id];
+        if (d && d.y) d.meses.forEach(m => mUSD[m - 1].divs.push({ tk: inst.tickers[f.monCompra] || inst.id, monto: f.invUSD * (d.y / 100) / d.meses.length }));
+        return;
+      }
+      const destino = inst.seg === 'hard' ? mUSD : mARS;
+      const tk = inst.tickers[f.monCompra] || inst.id;
+      if (inst.cuponAnual > 0) inst.meses.forEach(m => {
+        const monto = f.vn * (inst.cuponAnual / 100) / inst.meses.length * (inst.residual / 100);
+        destino[m - 1].renta.push({ id: inst.id, tk, monto });
+      });
+      (inst.amort || []).forEach(a => destino[a.mes - 1].amortiz.push({ id: inst.id, tk, monto: f.vn * a.pct / 100 }));
+    });
+    const cerrar = (arr) => arr.map((m, i) => ({
+      ...m, mes: i + 1, nom: MESES[i],
+      totalRenta: m.renta.reduce((a, x) => a + x.monto, 0),
+      totalAmort: m.amortiz.reduce((a, x) => a + x.monto, 0),
+      totalDiv: m.divs.reduce((a, x) => a + x.monto, 0),
+    }));
+    const usd = cerrar(mUSD), ars = cerrar(mARS);
+    const rentaUSD = usd.reduce((a, m) => a + m.totalRenta, 0);
+    const rentaARS = ars.reduce((a, m) => a + m.totalRenta, 0);
+    const invUSDsolo = filas.filter(f => f.cobraEn === 'USD').reduce((a, f) => a + f.invUSD, 0);
+    const invARSsolo = filas.filter(f => f.cobraEn === 'ARS').reduce((a, f) => a + f.invLocal, 0);
+    const prom = rentaUSD / 12;
+    const gini = rentaUSD > 0 ? usd.reduce((a, m) => a + Math.abs(m.totalRenta - prom), 0) / (2 * rentaUSD) * (12 / 11) : 0;
+    const hard = filas.filter(f => f.inst.seg === 'hard' && f.inst.tir != null && f.invUSD > 0);
+    const invHard = hard.reduce((a, f) => a + f.invUSD, 0);
+    const pesoRV = invUSD ? filas.filter(f => f.inst.clase === 'RV').reduce((a, f) => a + f.invUSD, 0) / invUSD * 100 : 0;
+    return {
+      filas, usd, ars, rentaUSD, rentaARS, invUSD, invUSDsolo, invARSsolo, tc,
+      cubiertos: usd.filter(m => m.totalRenta > 0).length,
+      parejo: Math.round((1 - gini) * 100),
+      picoUSD: Math.max(1e-9, ...usd.map(m => m.totalRenta)),
+      picoARS: Math.max(1e-9, ...ars.map(m => m.totalRenta)),
+      rentaPct: invUSDsolo ? rentaUSD / invUSDsolo * 100 : 0,
+      rentaPctARS: invARSsolo ? rentaARS / invARSsolo * 100 : 0,
+      tirHard: invHard ? hard.reduce((a, f) => a + f.inst.tir * f.invUSD, 0) / invHard : null,
+      dmHard: invHard ? hard.reduce((a, f) => a + f.inst.dm * f.invUSD, 0) / invHard : null,
+      pesoRV, pesoRF: 100 - pesoRV,
+      sumaPesos: pos.reduce((a, p) => a + p.peso, 0),
+      remanente: monto - invUSD,
+    };
+  }
+
+  renderVals() {
+    const s = this.state, db = this.db, t = T[s.tema] || T.oscuro;
+    const base = {
+      t, tick: s.tick, temaIcono: s.tema === 'oscuro' ? '☾' : '☀',
+      toggleTema: () => this.setState(x => ({ tema: x.tema === 'oscuro' ? 'claro' : 'oscuro' })),
+      esArmado: s.sec === 'armar', esSeguimiento: s.sec === 'seguimiento',
+      clienteId: s.clienteId, montoStr: String(s.monto), objStr: String(s.obj),
+      objetivoTxt: s.objetivoTxt, horizonte: s.horizonte, perfil: s.perfil,
+      mandatoAbierto: s.mandatoAbierto, mandatoIcono: s.mandatoAbierto ? '▲' : '▼',
+      toggleMandato: () => this.setState(x => ({ mandatoAbierto: !x.mandatoAbierto })),
+      tirMin: s.tirMin, tirMax: s.tirMax, dmMax: s.dmMax,
+      setTirMin: this.set('tirMin'), setTirMax: this.set('tirMax'), setDmMax: this.set('dmMax'),
+      setObjetivo: this.set('objetivoTxt'), setHorizonte: this.set('horizonte'), setPerfil: this.set('perfil'),
+      setMonto: (e) => this.setState({ monto: Math.max(1000, this.num(e.target.value, 100000)) }),
+      setObj: (e) => this.setState({ obj: Math.max(0, this.num(e.target.value, 0)) }),
+      limpiar: () => this.setState({ tirMin: '', tirMax: '', dmMax: '', selMes: null }),
+      equiponderar: () => this.setState(x => ({ pos: x.pos.map(p => ({ ...p, peso: Math.round((100 / x.pos.length) * 10) / 10 })) })),
+      vaciar: () => this.setState({ pos: [], ghost: null }),
+      toggleGhost: () => this.setState(x => ({ verGhost: !x.verGhost })),
+      cerrarMes: () => this.setState({ selMes: null }),
+      cerrarFicha: () => this.setState({ sel: null }),
+      copiar: () => {}, descargar: () => {},
+      hayFicha: !!s.sel, hayMes: !!s.selMes,
+    };
+    if (!db) return { ...base, vacia: true, barrasUSD: [], barrasARS: [], universo: [], posiciones: [], kpis: [], sugerencias: [], rotaciones: [], flujoDetalle: [], comparables: [], ficha: { campos: [], monedas: [], flujo: [] }, segKpis: [], barrasSeg: [], tenencia: [], alertas: [], segChequeos: [] };
+
+    const { UNIVERSO, SEGMENTOS, MESES, CLIENTES, CARTERA_HEREDADA, ticker, usd, ars, n0, n1, n2, pct, compacto, porId } = db;
+    const cli = CLIENTES.find(c => c.id === s.clienteId) || CLIENTES[0];
+    const r = this.resolverMix(s.pos, s.monto, s.mon);
+    const rG = s.ghost ? this.resolverMix(s.ghost, s.monto, s.mon) : null;
+    const segInfo = SEGMENTOS.find(g => g.id === s.seg);
+    const esRV = s.seg === 'rv';
+
+    const mini = (inst) => MESES.map((nm, i) => {
+      const paga = inst.clase === 'RF' ? inst.meses.includes(i + 1) && inst.cuponAnual > 0 : inst.balances.includes(i + 1);
+      const flojo = r.usd[i].totalRenta < s.obj;
+      return { bg: paga ? (flojo ? t.ac : t.sd) : (s.tema === 'oscuro' ? '#1b2530' : '#e2e7ed'), tip: paga ? `${inst.clase === 'RF' ? 'paga' : 'balance'} en ${nm}${flojo ? ' · mes flojo' : ''}` : nm };
+    });
+
+    const picoUSD = Math.max(r.picoUSD, rG ? rG.picoUSD : 0, s.obj * 1.15, 1);
+    const barrasUSD = r.usd.map(m => {
+      const g = rG ? rG.usd[m.mes - 1] : null;
+      const sel = s.selMes === m.mes;
+      const flojo = m.totalRenta < s.obj;
+      const conDiv = s.rvModo === 'dividendos';
+      const marcas = [
+        ...m.amortiz.map(a => ({ bg: t.ac2, tip: `${a.tk} amortiza ${usd(a.monto, 0)}` })),
+        ...(s.rvModo === 'rombos' ? m.balances.map(b => ({ bg: t.sd, tip: `${b.tk} presenta balance` })) : []),
+      ];
+      const tramos = m.renta.slice().sort((a, b) => b.monto - a.monto).map(x => ({
+        h: Math.max(2, x.monto / Math.max(m.totalRenta + (conDiv ? m.totalDiv : 0), 1e-9) * 100), bg: t.ac,
+        tip: `${x.tk} paga ${usd(x.monto)} en ${m.nom}`,
+      }));
+      if (conDiv && m.totalDiv > 0) tramos.push({
+        h: Math.max(2, m.totalDiv / Math.max(m.totalRenta + m.totalDiv, 1e-9) * 100), bg: t.sd,
+        tip: `dividendos estimados ${usd(m.totalDiv)} · ${m.divs.map(d => d.tk).join(', ')} — no garantizados`,
+      });
+      const alto = (m.totalRenta + (conDiv ? m.totalDiv : 0)) / picoUSD * 100;
+      return {
+        nom: m.nom, h: Math.max(0.5, alto), hGhost: g ? Math.max(0.5, g.totalRenta / picoUSD * 100) : 0,
+        ghostDisplay: rG && s.verGhost ? 'block' : 'none',
+        montoStr: m.totalRenta > 0 ? n0(m.totalRenta) : '—',
+        montoColor: m.totalRenta === 0 ? t.neg : flojo ? t.ac2 : t.tx,
+        zonaBg: sel ? (s.tema === 'oscuro' ? 'rgba(94,227,154,0.10)' : 'rgba(14,138,85,0.08)') : 'transparent',
+        borde: sel ? t.ac : 'transparent', fg: sel ? t.ac : t.tx, peso: sel ? '700' : '400',
+        tramos, marcas,
+        tip: `${m.nom}: ${usd(m.totalRenta)} de renta en dólares · ${m.renta.length} pagos${m.totalDiv ? ` · dividendos estimados ${usd(m.totalDiv)}` : ''}`,
+        onClick: () => this.setState(x => ({ selMes: x.selMes === m.mes ? null : m.mes })),
+      };
+    });
+
+    const picoARS = Math.max(r.picoARS, 1);
+    const barrasARS = r.ars.map(m => ({
+      nom: m.nom.slice(0, 3), h: Math.max(0.5, m.totalRenta / picoARS * 100),
+      bg: m.totalRenta === 0 ? (s.tema === 'oscuro' ? '#1b2530' : '#e2e7ed') : t.ac2,
+      montoStr: m.totalRenta > 0 ? compacto(m.totalRenta) : '—',
+      montoColor: m.totalRenta === 0 ? t.dim : t.tx,
+      tip: `${m.nom}: ${m.totalRenta ? ars(m.totalRenta) : 'sin cobros en pesos'}`,
+      onClick: () => this.setState(x => ({ selMes: x.selMes === m.mes ? null : m.mes })),
+    }));
+
+    const tmin = this.num(s.tirMin, -Infinity), tmax = this.num(s.tirMax, Infinity), dmx = this.num(s.dmMax, Infinity);
+    const universoBase = UNIVERSO
+      .filter(i => esRV ? i.clase === 'RV' : i.seg === s.seg)
+      .filter(i => !s.restr.includes('sinArgy') || i.clase === 'RV' || i.ley !== 'Argentina')
+      .filter(i => !s.restr.includes('sinProv') || i.clase === 'RV' || i.tipo !== 'Subsoberano')
+      .filter(i => i.clase === 'RV' || ((i.tir ?? 0) >= tmin && (i.tir ?? 0) <= tmax && (i.dm ?? 0) <= dmx));
+    const universo = universoBase
+      .filter(i => !s.selMes || (i.clase === 'RF' ? i.meses.includes(s.selMes) && i.cuponAnual > 0 : i.balances.includes(s.selMes)))
+      .sort((a, b) => (b.tir ?? -1) - (a.tir ?? -1))
+      .map(i => {
+        const en = s.pos.some(p => p.id === i.id);
+        return {
+          tk: ticker(i, s.mon) || ticker(i, 'ars'), tkColor: en ? t.ac : t.tx,
+          ley: i.clase === 'RF' ? `Ley ${i.ley}` : i.tipo, emisor: i.emisor,
+          sub: i.clase === 'RF' ? `${i.tipo} · ${i.estructura} · vto ${i.vto} · lám. ${n0(i.lamina)}` : `${i.industria} · dividendo ${i.dividendo}`,
+          rend: i.clase === 'RF' ? (i.tir == null ? 's/d' : pct(i.tir)) : (i.varDia == null ? 's/d' : pct(i.varDia, 2)),
+          rendRot: i.clase === 'RF' ? (i.seg === 'hard' ? 'TIR USD' : 'rend.') : 'día',
+          cupon: i.clase === 'RF' ? (i.cuponAnual > 0 ? n1(i.cuponAnual) : '0') : 's/c',
+          mini: mini(i), mas: en ? '✓' : '+', masColor: en ? t.ac : t.dim,
+          bg: en ? (s.tema === 'oscuro' ? 'rgba(94,227,154,0.07)' : 'rgba(14,138,85,0.06)') : 'transparent',
+          onClick: () => this.agregar(i.id), verFicha: () => this.setState({ sel: i.id }),
+        };
+      });
+
+    const comparables = s.selMes ? universoBase
+      .filter(i => i.clase === 'RF' && i.cuponAnual > 0 && i.meses.includes(s.selMes))
+      .sort((a, b) => (b.tir ?? 0) - (a.tir ?? 0)).slice(0, 6)
+      .map(i => {
+        const en = s.pos.some(p => p.id === i.id);
+        const pesoTipo = 10;
+        const px = i.precios[i.seg === 'hard' ? (i.precios[s.mon] != null ? s.mon : 'mep') : 'ars'];
+        const vn = px ? Math.floor((s.monto * pesoTipo / 100 * (i.seg === 'hard' ? 1 : r.tc)) / (px / 100) / i.lamina) * i.lamina : 0;
+        const aporte = vn * (i.cuponAnual / 100) / i.meses.length * (i.residual / 100);
+        return {
+          tk: ticker(i, s.mon) || ticker(i, 'ars'), tkColor: en ? t.ac : t.tx, emisor: i.emisor,
+          tir: i.tir == null ? 's/d' : pct(i.tir), tirColor: (i.tir ?? 0) >= 9 ? t.ac : t.tx,
+          cupon: n1(i.cuponAnual) + '%', freq: i.freq.slice(0, 4).toLowerCase(),
+          detalle: `${i.tipo} ley ${i.ley} · ${i.estructura} · vence ${i.vto} · duración ${i.dm == null ? 's/d' : n1(i.dm)} · lámina ${n0(i.lamina)} · paga en ${i.meses.map(m => MESES[m - 1]).join(', ')}`,
+          mini: mini(i), borde: en ? t.ac : t.lin,
+          btn: en ? 'ya está en la cartera' : 'sumar al 10%', btnBg: en ? 'transparent' : t.ac, btnFg: en ? t.dim : t.bg,
+          aporte: i.seg === 'hard' ? `+${usd(aporte, 0)} en ${MESES[s.selMes - 1]}` : `+${compacto(aporte)} $ en ${MESES[s.selMes - 1]}`,
+          onClick: () => this.agregar(i.id), verFicha: () => this.setState({ sel: i.id }),
+        };
+      }) : [];
+
+    // Rotaciones con efecto medido: se simula el canje y se comparan los números.
+    const rotaciones = [];
+    const flojos = r.usd.slice().sort((a, b) => a.totalRenta - b.totalRenta).slice(0, 2);
+    flojos.forEach(valle => {
+      const saturado = r.usd.slice().sort((a, b) => b.totalRenta - a.totalRenta)[0];
+      const candidatos = UNIVERSO.filter(i => i.clase === 'RF' && i.seg === 'hard' && i.cuponAnual > 0 && i.meses.includes(valle.mes) && !s.pos.some(p => p.id === i.id))
+        .sort((a, b) => (b.cuponAnual - a.cuponAnual) || ((b.tir ?? 0) - (a.tir ?? 0))).slice(0, 5);
+      const salidas = r.filas.filter(f => f.inst.clase === 'RF' && f.inst.seg === 'hard' && f.inst.meses.includes(saturado.mes) && !f.inst.meses.includes(valle.mes))
+        .sort((a, b) => (a.inst.cuponAnual - b.inst.cuponAnual)).slice(0, 4);
+      let mejor = null;
+      candidatos.forEach(c => salidas.forEach(x => {
+        const prueba = [...s.pos.filter(p => p.id !== x.id), { id: c.id, peso: x.peso }];
+        const rp = this.resolverMix(prueba, s.monto, s.mon);
+        const score = (rp.parejo - r.parejo) + (rp.rentaPct - r.rentaPct) * 8 + (rp.cubiertos - r.cubiertos) * 6;
+        if (rp.usd[valle.mes - 1].totalRenta <= valle.totalRenta) return;
+        if (rp.rentaPct < r.rentaPct - 0.05) return;
+        if (!mejor || score > mejor.score) mejor = { cand: c, sale: x, r2: rp, score, pos: prueba };
+      }));
+      if (!mejor || rotaciones.some(z => z.entra === (ticker(mejor.cand, s.mon) || mejor.cand.id))) return;
+      const cand = mejor.cand, sale = mejor.sale, r2 = mejor.r2, nuevo = mejor.pos;
+      const d = (a, b) => (b - a);
+      const efecto = [
+        { rot: valle.nom, val: `+${usd(d(valle.totalRenta, r2.usd[valle.mes - 1].totalRenta), 0)}`, color: t.pos },
+        { rot: 'renta anual', val: `${pct(r.rentaPct, 2)} → ${pct(r2.rentaPct, 2)}`, color: r2.rentaPct >= r.rentaPct ? t.pos : t.neg },
+        { rot: 'parejo', val: `${r.parejo}% → ${r2.parejo}%`, color: r2.parejo >= r.parejo ? t.pos : t.neg },
+        { rot: 'TIR pond.', val: `${pct(r.tirHard, 2)} → ${pct(r2.tirHard, 2)}`, color: (r2.tirHard ?? 0) >= (r.tirHard ?? 0) ? t.pos : t.ac2 },
+      ];
+      rotaciones.push({
+        sale: ticker(sale.inst, s.mon) || sale.id, entra: ticker(cand, s.mon) || cand.id,
+        motivo: `${valle.nom} cobra ${valle.totalRenta ? usd(valle.totalRenta, 0) : 'US$ 0'} mientras ${saturado.nom} concentra ${usd(saturado.totalRenta, 0)}. ${ticker(cand, s.mon) || cand.id} (${cand.emisor}) paga en ${cand.meses.map(m => MESES[m - 1]).join(' y ')} con TIR ${pct(cand.tir)} contra ${pct(sale.inst.tir)} del que sale, duración ${n1(cand.dm)} contra ${n1(sale.inst.dm)}.`,
+        efecto, rotBoton: 'Aplicar',
+        aplicar: () => this.setState({ pos: nuevo }),
+      });
+    });
+    if (!rotaciones.length) rotaciones.push({ sale: '—', entra: '—', motivo: 'Ninguna rotación de un papel por otro mejora el mes flojo sin bajar la renta anual. Para levantar el piso hace falta más capital o aflojar alguna restricción del mandato.', efecto: [], rotBoton: 'ok', aplicar: () => {} });
+
+    const vacios = r.usd.filter(m => m.totalRenta < s.obj);
+    const sugerencias = [];
+    vacios.slice(0, 2).forEach(m => sugerencias.push({
+      texto: `${m.nom} entra ${m.totalRenta === 0 ? 'en cero' : `con ${usd(m.totalRenta, 0)}`}, abajo del piso de ${usd(s.obj, 0)}.`,
+      accion: `abrir ${m.nom}`, onClick: () => this.setState({ selMes: m.mes }),
+    }));
+    if (r.pesoRV < 25) sugerencias.push({ texto: `La renta variable pesa ${pct(r.pesoRV)} y el mandato la tolera hasta 30-40%.`, accion: 'ver acciones', onClick: () => this.setState({ seg: 'rv', selMes: null }) });
+    if (!sugerencias.length) sugerencias.push({ texto: 'Los doce meses superan el piso y el mix está en rango. No hay hueco que señalar.', accion: 'ok', onClick: () => {} });
+
+    // Ficha del papel
+    const inst = s.sel ? porId[s.sel] : null;
+    const campo = (rot, val) => ({ rot, val: val == null ? 's/d' : val, color: val == null ? t.ac2 : t.tx });
+    const ficha = inst ? {
+      tk: ticker(inst, s.mon) || ticker(inst, 'ars'), emisor: inst.emisor,
+      monedas: [['Pesos', 'ars'], ['Dólar MEP', 'mep'], ['Dólar cable', 'cable']].map(([rot, k]) => {
+        const tk = inst.tickers[k], px = inst.precios[k];
+        const pt = db.puntasDe(inst, k);
+        return {
+          rot, tk: tk || '—', px: px == null ? 'no cotiza' : (k === 'ars' ? ars(px, 2) : usd(px)),
+          puntas: pt == null ? 's/d' : `${n2(pt.c)} / ${n2(pt.v)}`,
+          color: tk ? (k === s.mon ? t.ac : t.tx) : t.dim, borde: k === s.mon ? t.ac : t.lin,
+        };
+      }),
+      notaMonedas: 'Son tres tickers del mismo instrumento. Se muestran juntos para comparar, nunca se suman entre sí; las puntas corresponden a la especie operada en la moneda elegida arriba.',
+      campos: inst.clase === 'RF' ? [
+        campo('Tipo', inst.tipo), campo('Ley de emisión', inst.ley),
+        campo('Estructura', inst.estructura), campo('Cupón', `${n1(inst.cuponAnual)}% ${inst.freq.toLowerCase()}`),
+        campo('TIR', inst.tir == null ? null : pct(inst.tir, 2)), campo('Duración mod.', inst.dm == null ? null : n1(inst.dm)),
+        campo('Convexidad', inst.convexidad == null ? null : n1(inst.convexidad)), campo('Vida promedio', inst.vidaProm == null ? null : n1(inst.vidaProm)),
+        campo('Paridad', inst.paridad == null ? null : pct(inst.paridad)), campo('Valor técnico', inst.vt == null ? null : n1(inst.vt)),
+        campo('Valor residual', pct(inst.residual)), campo('Lámina mínima', n0(inst.lamina)),
+        campo('Moneda de pago', inst.seg === 'hard' ? 'Dólares' : inst.seg === 'dlk' ? 'Pesos ajustados por dólar' : 'Pesos'),
+        campo('Volumen del día', inst.volumen == null ? null : compacto(inst.volumen)),
+        campo('Variación', inst.varDia == null ? null : pct(inst.varDia, 2)), campo('Vencimiento', String(inst.vto)),
+      ] : [
+        campo('Tipo', inst.tipo), campo('Industria', inst.industria),
+        campo('TIR', 'no aplica'), campo('Duración', 'no aplica'),
+        campo('Último', n2(inst.ultimo)), campo('Apertura', n2(inst.apertura)),
+        campo('Máximo', n2(inst.max)), campo('Mínimo', n2(inst.min)),
+        campo('Cierre anterior', n2(inst.cierreAnt)), campo('Variación', inst.varDia == null ? null : pct(inst.varDia, 2)),
+        campo('Volumen', inst.volumen == null ? null : compacto(inst.volumen)), campo('Órdenes', inst.ordenes == null ? null : n0(inst.ordenes)),
+        campo('Dividendo', inst.dividendo), campo('Rend. div. últ.', DIV[inst.id] && DIV[inst.id].y != null ? pct(DIV[inst.id].y) : null),
+      ],
+      rotFlujo: inst.clase === 'RF' ? 'Cronograma de los próximos doce meses' : 'Calendario de balances y dividendos',
+      flujo: inst.clase === 'RF' ? MESES.map((nom, i) => {
+        const m = i + 1;
+        const cup = inst.meses.includes(m) && inst.cuponAnual > 0;
+        const am = (inst.amort || []).find(a => a.mes === m);
+        if (!cup && !am) return null;
+        const vnRef = 100;
+        return {
+          fecha: `${nom} ${m >= MES_HOY ? '26' : '27'}`,
+          tipo: cup && am ? 'renta + amortización' : cup ? 'renta' : 'amortización',
+          color: cup ? t.ac : t.ac2,
+          monto: `${n2(cup ? inst.cuponAnual / inst.meses.length * inst.residual / 100 : 0 + (am ? am.pct : 0))} c/100 VN`,
+        };
+      }).filter(Boolean) : MESES.map((nom, i) => {
+        const bal = inst.balances.includes(i + 1);
+        const d = DIV[inst.id];
+        const div = d && d.meses.includes(i + 1);
+        if (!bal && !div) return null;
+        return { fecha: `${nom} 26`, tipo: bal && div ? 'balance + dividendo' : bal ? 'balance trimestral' : 'dividendo estimado', color: bal ? t.sd : t.ac2, monto: div ? (d.y == null ? 's/d' : `≈ ${pct(d.y / Math.max(d.meses.length, 1), 2)}`) : '—' };
+      }).filter(Boolean),
+      notaFlujo: inst.clase === 'RF'
+        ? 'Montos cada 100 de valor nominal; el flujo en dólares del cliente sale del nominal asignado en la cartera. Las fechas exactas de pago son las del prospecto.'
+        : 'Los dividendos son estimados sobre el último pago anualizado. No son un compromiso del emisor y no entran en la renta garantizada.',
+      rotBoton: s.pos.some(p => p.id === inst.id) ? 'Sacar de la cartera' : 'Sumar a la cartera',
+      agregar: () => this.agregar(inst.id), copiar: () => {},
+    } : { campos: [], monedas: [], flujo: [] };
+
+    // ── Seguimiento ────────────────────────────────────────────────────────
+    const rV = this.resolverMix(VENDIDA, 100000, s.mon);
+    const valorHoy = rV.filas.reduce((a, f) => a + f.invUSD, 0);
+    const costo = VENDIDA.reduce((acc, v) => {
+      const f = rV.filas.find(x => x.id === v.id);
+      if (!f) return acc;
+      const c = f.vn * v.compra / 100;
+      return acc + (f.monCompra === 'ars' ? c / rV.tc : c);
+    }, 0);
+    const cobrado = rV.usd.filter(m => m.mes < MES_HOY).reduce((a, m) => a + m.totalRenta, 0);
+    const porCobrar = rV.usd.filter(m => m.mes >= MES_HOY).reduce((a, m) => a + m.totalRenta, 0);
+    const picoSeg = Math.max(rV.picoUSD, 1);
+    const barrasSeg = rV.usd.map(m => {
+      const pasado = m.mes < MES_HOY;
+      return {
+        nom: m.nom.slice(0, 3), h: Math.max(1, m.totalRenta / picoSeg * 100),
+        monto: m.totalRenta ? n0(m.totalRenta) : '—',
+        bg: m.totalRenta === 0 ? 'transparent' : pasado ? t.ac : 'transparent',
+        borde: pasado ? 'solid' : 'dashed', bordeColor: m.totalRenta === 0 ? t.lin : t.ac,
+        color: pasado ? t.tx : t.dim, estado: m.totalRenta === 0 ? 'sin cobro' : pasado ? 'cobrado' : 'proyectado',
+        tip: `${m.nom}: ${usd(m.totalRenta)} ${pasado ? 'ya acreditados' : 'a cobrar'} · ${m.renta.map(x => x.tk).join(', ')}`,
+      };
+    });
+    const tenencia = VENDIDA.map(v => {
+      const inst = porId[v.id], f = rV.filas.find(x => x.id === v.id);
+      const hoy = f.px, varPct = (hoy - v.compra) / v.compra * 100;
+      const cob = rV.usd.filter(m => m.mes < MES_HOY).reduce((a, m) => a + m.renta.filter(x => x.id === v.id).reduce((b, x) => b + x.monto, 0), 0)
+        + rV.ars.filter(m => m.mes < MES_HOY).reduce((a, m) => a + m.renta.filter(x => x.id === v.id).reduce((b, x) => b + x.monto, 0), 0);
+      const prox = inst.clase === 'RF' ? inst.meses.filter(m => m >= MES_HOY)[0] || inst.meses[0] : inst.balances.filter(m => m >= MES_HOY)[0];
+      return {
+        tk: ticker(inst, s.mon) || ticker(inst, 'ars'), emisor: inst.emisor,
+        sub: `${v.fecha} · ${inst.clase === 'RF' ? `${inst.tipo} ley ${inst.ley}` : inst.tipo}`,
+        compra: n2(v.compra), hoy: n2(hoy), varStr: pct(varPct, 2), varColor: varPct >= 0 ? t.pos : t.neg,
+        cobrado: inst.clase === 'RV' ? 's/c' : usd(cob, 0),
+        proximo: prox ? `${MESES[prox - 1]}${inst.clase === 'RV' ? ' bal.' : ''}` : 's/d',
+        verFicha: () => this.setState({ sel: v.id }),
+      };
+    });
+    const sinCobro = rV.usd.filter(m => m.mes >= MES_HOY && m.totalRenta === 0).map(m => m.nom);
+    const alertas = [
+      ...(sinCobro.length ? [{ icono: '▲', color: t.neg, texto: `${sinCobro.join(' y ')} ${sinCobro.length === 1 ? 'queda' : 'quedan'} sin cobro en lo que resta del año. Conviene rotar ahora, no cuando el cliente lo note.`, accion: 'abrir en armado', onClick: () => this.setState({ sec: 'armar', selMes: rV.usd.find(m => m.nom === sinCobro[0]).mes, pos: VENDIDA.map(v => ({ ...v })) }) }] : []),
+      { icono: '●', color: t.ac2, texto: `MRCAD amortiza 25% en octubre: entran US$ ${n0(rV.usd[9].totalAmort)} de capital que hay que reinvertir para no perder el cupón de 2027.`, accion: 'ver ficha', onClick: () => this.setState({ sel: 'MRCAO' }) },
+      { icono: '●', color: t.dim, texto: 'CRCEO y ALUA siguen sin volumen publicado en la rueda de hoy: la valuación de esas posiciones se muestra, pero con el dato de mercado incompleto.', accion: 'ver ficha', onClick: () => this.setState({ sel: 'ALUA' }) },
+    ];
+    const segChequeos = [
+      { nom: `Piso de ${usd(s.obj, 0)} por mes`, ok: !rV.usd.some(m => m.totalRenta < s.obj), detalle: `${rV.usd.filter(m => m.totalRenta < s.obj).length} meses por debajo · renta anual ${pct(rV.rentaPct, 2)} sobre lo invertido` },
+      { nom: 'Mix declarado en el mandato', ok: rV.pesoRV <= 40, detalle: `${pct(rV.pesoRF)} renta fija · ${pct(rV.pesoRV)} renta variable` },
+      { nom: 'Riesgos que el cliente pidió cubrir', ok: true, detalle: `${s.riesgos.join(', ') || 'ninguno declarado'} — cartera 100% en instrumentos que pagan en dólares.` },
+    ].map(c => ({ ...c, icono: c.ok ? '✓' : '✗', color: c.ok ? t.pos : t.neg }));
+
+    return {
+      ...base,
+      vacia: !s.pos.length,
+      clientes: CLIENTES.map(c => ({ id: c.id, nom: `${c.nom} · ${c.perfil}` })),
+      setCliente: (e) => { const c = CLIENTES.find(x => x.id === e.target.value); this.setState({ clienteId: e.target.value, monto: c.monto, obj: c.objetivoMensual, objetivoTxt: c.objetivo, perfil: c.perfil, horizonte: c.horizonte, riesgos: [...c.cubrir], guardado: null }); },
+      secciones: [['armar', 'Armado'], ['seguimiento', 'Seguimiento']].map(([id, nom]) => ({
+        nom, bg: s.sec === id ? t.ac : 'transparent', fg: s.sec === id ? t.bg : t.dim, borde: s.sec === id ? t.ac : t.lin,
+        onClick: () => this.setState({ sec: id }),
+      })),
+      monedas: [['ars', 'Pesos', 'especie en pesos'], ['mep', 'MEP', 'dólar MEP'], ['cable', 'Cable', 'dólar cable']].map(([id, nom, tip]) => ({
+        nom, tip, bg: s.mon === id ? t.ac : 'transparent', fg: s.mon === id ? t.bg : t.dim, onClick: () => this.setState({ mon: id }),
+      })),
+      segmentos: [...SEGMENTOS.map(g => ({ id: g.id, nom: g.nom, unidad: g.unidad })), { id: 'rv', nom: 'Acciones y CEDEARs', unidad: 'sin TIR ni duración' }].map(g => ({
+        nom: g.nom, unidad: g.unidad, bg: s.seg === g.id ? t.pan : 'transparent', fg: s.seg === g.id ? t.tx : t.dim,
+        borde: s.seg === g.id ? t.ac : 'transparent', onClick: () => this.setState({ seg: g.id }),
+      })),
+      rotFiltro: esRV ? 'Var. día' : `${segInfo ? segInfo.unidad : ''} entre`,
+      rvModos: [['rombos', 'Rombos', 'balances como marca, sin altura'], ['dividendos', 'Dividendos', 'franja de dividendos estimados, no garantizados'], ['panel', 'Panel aparte', 'la renta variable sale de la cordillera']].map(([id, nom, tip]) => ({
+        nom, tip, bg: s.rvModo === id ? t.ac : 'transparent', fg: s.rvModo === id ? t.bg : t.dim, onClick: () => this.setState({ rvModo: id }),
+      })),
+      leyendaRV: s.rvModo === 'rombos' ? 'balance trimestral' : s.rvModo === 'dividendos' ? 'dividendo estimado (no garantizado)' : 'renta variable: en su propio panel',
+      tituloUSD: `${r.filas.filter(f => f.cobraEn === 'USD').length} papeles que pagan en dólares`,
+      notaUSD: s.rvModo === 'dividendos' ? 'La franja gris son dividendos estimados sobre el último pago: no son renta garantizada.' : 'Sólo cupones: la altura es plata que el cliente cobra sí o sí.',
+      notaARS: r.rentaARS ? `${r.filas.filter(f => f.cobraEn === 'ARS').length} papeles en pesos · CER, tasa fija, Badlar y Tamar` : 'No hay posiciones que cobren en pesos. Si sumás CER o tasa fija aparecen acá, con su propia escala.',
+      rentaARSStr: r.rentaARS ? `${ars(r.rentaARS, 0)} al año · ${pct(r.rentaPctARS, 1)} sobre lo invertido en pesos` : 'sin cobros en pesos',
+      arsColor: r.rentaARS ? t.ac2 : t.dim,
+      barrasUSD, barrasARS,
+      objLinea: Math.min(96, s.obj / picoUSD * 100), objEtiqueta: usd(s.obj, 0),
+      ghostBg: rG && s.verGhost ? t.pan2 : 'transparent', ghostFg: rG && s.verGhost ? t.tx : t.dim,
+      cargarHeredada: () => this.setState({ pos: CARTERA_HEREDADA.map(p => ({ ...p })), ghost: CARTERA_HEREDADA.map(p => ({ ...p })), verGhost: true }),
+      mesTitulo: s.selMes ? `${MESES[s.selMes - 1]} · ${usd(r.usd[s.selMes - 1].totalRenta, 0)} de renta` : '',
+      mesBajada: s.selMes ? `${comparables.length} papeles del universo pagan en ${MESES[s.selMes - 1]}. El aporte es lo que sumaría ese mes si entra al 10% de la cartera.` : '',
+      comparables, rotaciones, sugerencias, universo,
+      conteoUniverso: `${universo.length} papeles`,
+      filtroMesStr: s.selMes ? `pagan en ${MESES[s.selMes - 1]}` : 'todo el año',
+      posiciones: r.filas.map(f => ({
+        tk: ticker(f.inst, f.monCompra) || f.inst.id, emisor: f.inst.emisor,
+        moneda: f.cobraEn === 'ARS' ? 'cobra en $' : f.cobraEn === 'USD' ? 'cobra en US$' : 'sin cupones',
+        vn: n0(f.vn), inv: f.monCompra === 'ars' ? ars(f.invLocal, 0) : usd(f.invUSD, 0),
+        pesoStr: String(f.peso), real: pct(f.pesoReal),
+        realColor: Math.abs(f.pesoReal - f.peso) > 0.6 ? t.ac2 : t.dim,
+        realTip: `pedido ${f.peso}% · real ${f.pesoReal.toFixed(1)}% — el nominal se redondea hacia abajo al múltiplo de la lámina (${f.inst.lamina})`,
+        mini: mini(f.inst),
+        setPeso: (e) => { const v = this.num(e.target.value, f.peso); this.setState(x => ({ pos: x.pos.map(p => p.id === f.id ? { ...p, peso: Math.max(0, Math.min(100, v)) } : p) })); },
+        quitar: () => this.setState(x => ({ pos: x.pos.filter(p => p.id !== f.id) })),
+        verFicha: () => this.setState({ sel: f.id }),
+      })),
+      sumaStr: pct(r.sumaPesos), sumaColor: Math.abs(r.sumaPesos - 100) < 0.15 ? t.dim : t.ac2,
+      invertidoStr: usd(r.invUSD, 0),
+      rentaPctStr: pct(r.rentaPct, 2),
+      cuentaRenta: `${usd(r.rentaUSD)} / ${usd(r.invUSDsolo)} = ${pct(r.rentaPct, 2)}`,
+      kpis: [
+        { rot: 'Meses cubiertos', val: `${r.cubiertos}/12`, color: r.cubiertos === 12 ? t.ac : r.cubiertos >= 9 ? t.ac2 : t.neg, nota: `piso ${usd(s.obj, 0)}` },
+        { rot: 'Parejo', val: r.invUSD ? `${r.parejo}%` : 's/d', color: t.tx, nota: 'reparto del año' },
+        { rot: 'TIR pond. USD', val: r.tirHard == null ? 's/d' : pct(r.tirHard, 2), color: t.tx, nota: 'sólo dólar hard' },
+        { rot: 'Duración', val: r.dmHard == null ? 's/d' : n1(r.dmHard) + ' a', color: t.tx, nota: `${Math.round(r.pesoRF)}/${Math.round(r.pesoRV)} RF·RV` },
+      ],
+      flujoDetalle: r.usd.map(m => ({
+        nom: m.nom, mesColor: m.totalRenta === 0 ? t.neg : m.totalRenta < s.obj ? t.ac2 : t.tx,
+        detalle: m.renta.length ? m.renta.map(x => `${x.tk} ${n0(x.monto)}`).join(' · ') : 'sin cobros',
+        total: m.totalRenta ? usd(m.totalRenta, 0) : '—',
+      })),
+      rentaAnualStr: usd(r.rentaUSD),
+      // Mandato
+      mandatoResumen: `${cli.nom} · ${s.perfil} · ${s.horizonte} · piso ${usd(s.obj, 0)}/mes · cubrir ${s.riesgos.join(', ').toLowerCase() || 'sin declarar'}`,
+      guardadoStr: s.guardado ? `guardado ${s.guardado}` : 'sin guardar',
+      riesgos: ['Devaluación', 'Inflación local', 'Riesgo soberano', 'Suba de tasas', 'Iliquidez'].map(nom => {
+        const on = s.riesgos.includes(nom);
+        return { nom, bg: on ? t.ac : 'transparent', fg: on ? t.bg : t.dim, borde: on ? t.ac : t.lin,
+          onClick: () => this.setState(x => ({ riesgos: on ? x.riesgos.filter(v => v !== nom) : [...x.riesgos, nom], guardado: null })) };
+      }),
+      restricciones: [['sinArgy', 'Sin ley Argentina'], ['sinProv', 'Sin provinciales'], ['maxRV', 'Máx. 30% renta variable'], ['sinCorto', 'Duración mínima 2 años']].map(([id, nom]) => {
+        const on = s.restr.includes(id);
+        return { nom, bg: on ? t.neg : 'transparent', fg: on ? t.bg : t.dim, borde: on ? t.neg : t.lin,
+          onClick: () => this.setState(x => ({ restr: on ? x.restr.filter(v => v !== id) : [...x.restr, id], guardado: null })) };
+      }),
+      guardar: () => this.setState({ guardado: new Date().toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) }),
+      aplicarMandato: () => this.setState({ selMes: null, seg: 'hard' }),
+      avisoMandato: s.restr.includes('sinArgy') && s.pos.some(p => porId[p.id].clase === 'RF' && porId[p.id].ley === 'Argentina')
+        ? 'Hay posiciones bajo ley Argentina en la cartera y el mandato las prohíbe. Se marcan, no se sacan solas.'
+        : r.pesoRV > 30 && s.restr.includes('maxRV')
+        ? `La renta variable pesa ${pct(r.pesoRV)} y el mandato la topea en 30%.`
+        : 'La cartera actual respeta el mandato declarado.',
+      avisoMandatoColor: (s.restr.includes('sinArgy') && s.pos.some(p => porId[p.id].clase === 'RF' && porId[p.id].ley === 'Argentina')) || (r.pesoRV > 30 && s.restr.includes('maxRV')) ? t.neg : t.dim,
+      ficha,
+      // Panel aparte de renta variable
+      panelRV: s.rvModo === 'panel',
+      rvVacio: !r.filas.some(f => f.inst.clase === 'RV'),
+      rvResumen: `${pct(r.pesoRV)} de la cartera · ${r.filas.filter(f => f.inst.clase === 'RV').length} papeles`,
+      rvNotaTotal: (() => {
+        const tot = r.usd.reduce((a, m) => a + m.totalDiv, 0);
+        const invRV = r.filas.filter(f => f.inst.clase === 'RV').reduce((a, f) => a + f.invUSD, 0);
+        return tot ? `dividendos estimados del año ${usd(tot, 0)} sobre ${usd(invRV, 0)} invertidos — aparte de la renta garantizada` : 'sin dividendos estimables con los datos de hoy';
+      })(),
+      rvPosiciones: r.filas.filter(f => f.inst.clase === 'RV').map(f => {
+        const d = DIV[f.inst.id] || { y: null, meses: [] };
+        const anual = d.y == null ? null : f.invUSD * d.y / 100;
+        return {
+          tk: ticker(f.inst, f.monCompra) || f.inst.id, emisor: f.inst.emisor,
+          varStr: f.inst.varDia == null ? 's/d' : pct(f.inst.varDia, 2),
+          varColor: f.inst.varDia == null ? t.ac2 : f.inst.varDia >= 0 ? t.pos : t.neg,
+          peso: pct(f.pesoReal), inv: usd(f.invUSD, 0),
+          div: anual == null ? 's/d' : usd(anual, 0), divColor: anual == null ? t.ac2 : t.ac2,
+          calendario: MESES.map((nom, i) => {
+            const bal = f.inst.balances.includes(i + 1), div = d.meses.includes(i + 1);
+            return {
+              ini: nom.slice(0, 1),
+              bg: div ? t.ac2 : bal ? t.sd : 'transparent',
+              borde: bal || div ? 'transparent' : t.lin,
+              tip: `${nom}${bal ? ' · balance trimestral' : ''}${div ? ` · dividendo estimado ${anual == null ? 's/d' : usd(anual / d.meses.length, 0)}` : ''}`,
+            };
+          }),
+          nota: `${f.inst.industria} · ${f.inst.tipo} · dividendo ${f.inst.dividendo}${d.y == null ? ' · rendimiento por dividendos sin dato' : ` · rend. div. ${pct(d.y)} anualizado del último pago`}`,
+          verFicha: () => this.setState({ sel: f.id }),
+        };
+      }),
+      // Seguimiento
+      segFecha: 'armada el 12/02/26 · última operación 20/04/26',
+      segBajada: `Agosto de 2026 · lo cobrado hasta hoy ${usd(cobrado, 0)} y lo que falta ${usd(porCobrar, 0)}.`,
+      segKpis: [
+        { rot: 'Valuación hoy', val: usd(valorHoy, 0), color: t.tx, nota: `costo ${usd(costo, 0)}` },
+        { rot: 'Resultado por precio', val: pct((valorHoy - costo) / Math.max(costo, 1) * 100, 2), color: valorHoy >= costo ? t.pos : t.neg, nota: 'sin contar cupones' },
+        { rot: 'Renta cobrada', val: usd(cobrado, 0), color: t.ac, nota: 'ene a jul, acreditada' },
+        { rot: 'Renta por cobrar', val: usd(porCobrar, 0), color: t.dim, nota: 'ago a dic, proyectada' },
+        { rot: 'Renta anual', val: pct(rV.rentaPct, 2), color: t.ac, nota: 'sobre lo invertido' },
+      ],
+      barrasSeg, tenencia, alertas, segChequeos,
+    };
+  }
+}
+
+</script>
+</body>
+</html>
