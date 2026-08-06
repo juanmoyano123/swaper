@@ -1,6 +1,7 @@
-import { EstadoVacio } from '@/components/EstadoVacio'
 import { Pantalla } from '@/components/Pantalla'
 import { Panel } from '@/components/Panel'
+
+import { IngresoCarteraPanel } from '@/features/cartera-ingreso/components/IngresoCarteraPanel'
 
 /** Diagnóstico de una cartera existente y propuestas de rotación. */
 export function OptimizadorPage() {
@@ -10,10 +11,9 @@ export function OptimizadorPage() {
       bajada="Cargar una cartera existente, diagnosticarla por los seis ejes de riesgo y proponer rotaciones."
     >
       <Panel rotulo="Cartera del cliente">
-        <EstadoVacio
-          titulo="No hay ninguna cartera cargada."
-          detalle="El ingreso de carteras lo construye F-028 y el diagnóstico por ejes de riesgo, F-030 en adelante."
-        />
+        {/* F-028: las tres vías de ingreso. El diagnóstico por ejes de riesgo lo agrega F-030 en
+            adelante, una vez que F-029 resuelva estos tickers contra el universo. */}
+        <IngresoCarteraPanel />
       </Panel>
     </Pantalla>
   )
