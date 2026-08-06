@@ -4,30 +4,80 @@
 <meta charset="utf-8">
 <title>10-Swaper — Progreso</title>
 <style>
-  body { font-family: ui-sans-serif, system-ui, sans-serif; background:#0a0e13; color:#dce6f0; margin:0; padding:32px; }
+  body { font-family: ui-sans-serif, system-ui, sans-serif; background:#0a0e13; color:#dce6f0; margin:0; padding:32px; max-width:1100px; }
   h1 { font-size:20px; margin:0 0 4px; }
+  h2 { font-size:14px; margin:28px 0 8px; color:#a8bccf; }
   p.sub { color:#7e91a5; font-size:13px; margin:0 0 24px; }
-  table { border-collapse: collapse; width:100%; margin-bottom:28px; }
+  table { border-collapse: collapse; width:100%; margin-bottom:20px; }
   th, td { text-align:left; padding:6px 10px; border-bottom:1px solid #1d2833; font-size:12.5px; }
   th { color:#7e91a5; text-transform:uppercase; font-size:10px; letter-spacing:0.08em; }
   .num { font-family: ui-monospace, monospace; text-align:right; }
   .pendiente { color:#7e91a5; }
+  .completada { color:#4ade80; font-weight:600; }
+  .cards { display:flex; gap:16px; margin-bottom:8px; flex-wrap:wrap; }
+  .card { background:#111823; border:1px solid #1d2833; border-radius:8px; padding:14px 18px; min-width:150px; }
+  .card .v { font-size:22px; font-family: ui-monospace, monospace; }
+  .card .l { font-size:11px; color:#7e91a5; text-transform:uppercase; letter-spacing:0.06em; margin-top:2px; }
+  .bar { background:#1d2833; border-radius:4px; height:8px; margin:16px 0 24px; overflow:hidden; }
+  .bar > div { background:#4ade80; height:100%; width:16.7%; }
+  code { color:#a8bccf; }
+  .nota { font-size:12px; color:#7e91a5; }
 </style>
 </head>
 <body>
   <h1>10-Swaper — Progreso de features</h1>
-  <p class="sub">Este dashboard es estático. El estado real vive en <code>claude-docs/progress/PROGRESS.md</code>; actualizar ese archivo a mano o desde <code>/build-feature</code>.</p>
+  <p class="sub">Actualizado al <strong>06/08/2026</strong>. Este dashboard es estático: el estado
+  real vive en <code>claude-docs/progress/PROGRESS.md</code> y el orden de ejecución en
+  <code>claude-docs/planning/plan-ejecucion-tandas.md</code>.</p>
+
+  <div class="cards">
+    <div class="card"><div class="v completada">7 / 42</div><div class="l">Features Stage 1</div></div>
+    <div class="card"><div class="v">32 / 185</div><div class="l">Person-days</div></div>
+    <div class="card"><div class="v">2.894</div><div class="l">Instrumentos en base</div></div>
+    <div class="card"><div class="v">246 + 38</div><div class="l">Tests offline + integración</div></div>
+  </div>
+  <div class="bar"><div></div></div>
+
+  <h2>Ciclo 1 — Cimientos e ingesta · 7 de 12 completadas</h2>
   <table>
-    <thead><tr><th>Ciclo</th><th class="num">Features</th><th class="num">Person-days</th><th class="num">Semanas (est.)</th></tr></thead>
+    <thead><tr><th>ID</th><th>Feature</th><th class="num">RICE</th><th>Estado</th></tr></thead>
     <tbody>
-      <tr><td>1 — Cimientos e ingesta</td><td class="num">12</td><td class="num">47</td><td class="num">~9,5</td></tr>
-      <tr><td>2 — Armador completo</td><td class="num">12</td><td class="num">55</td><td class="num">~11</td></tr>
-      <tr><td>3 — RV, carga y diagnóstico</td><td class="num">9</td><td class="num">41</td><td class="num">~8</td></tr>
-      <tr><td>4 — Optimizador y persistencia</td><td class="num">9</td><td class="num">42</td><td class="num">~8,5</td></tr>
-      <tr><td><strong>Stage 1 (total)</strong></td><td class="num"><strong>42</strong></td><td class="num"><strong>185</strong></td><td class="num"><strong>~37</strong></td></tr>
-      <tr><td>Stage 2</td><td class="num">8</td><td class="num">72</td><td class="num">~14,5</td></tr>
+      <tr><td>F-001</td><td>Esqueleto de servicio backend</td><td class="num">400,0</td><td class="completada">completada</td></tr>
+      <tr><td>F-002</td><td>Esquema de datos y migraciones</td><td class="num">300,0</td><td class="completada">completada</td></tr>
+      <tr><td>F-003</td><td>Esqueleto de aplicación frontend</td><td class="num">400,0</td><td class="completada">completada</td></tr>
+      <tr><td>F-004</td><td>Cliente de la API abierta de BYMA</td><td class="num">300,0</td><td class="completada">completada</td></tr>
+      <tr><td>F-005</td><td>Parser del informe diario de IAMC</td><td class="num">50,0</td><td class="completada">completada</td></tr>
+      <tr><td>F-006</td><td>Cliente del feed de cashflow de Docta</td><td class="num">240,0</td><td class="completada">completada</td></tr>
+      <tr><td>F-007</td><td>Consolidador multi-fuente</td><td class="num">160,0</td><td class="completada">completada</td></tr>
+      <tr><td>F-008</td><td>Job programado de ingesta</td><td class="num">266,7</td><td class="pendiente">pendiente — tanda 1</td></tr>
+      <tr><td>F-009</td><td>condiciones_emision: semilla y herencia</td><td class="num">200,0</td><td class="pendiente">pendiente — tanda 2</td></tr>
+      <tr><td>F-010</td><td>Sanidad del dato en dos capas</td><td class="num">400,0</td><td class="pendiente">pendiente — tanda 2</td></tr>
+      <tr><td>F-011</td><td>Deduplicación de especies</td><td class="num">400,0</td><td class="pendiente">pendiente — tanda 3</td></tr>
+      <tr><td>F-012</td><td>Tipo de cambio implícito y normalización</td><td class="num">266,7</td><td class="pendiente">pendiente — tanda 4</td></tr>
     </tbody>
   </table>
-  <p class="pendiente">Ver <code>PROGRESS.md</code> para el detalle de las 50 features. Siguiente paso: <code>/build-feature F-001</code>.</p>
+  <p class="nota">La base está poblada: F-007 corrió contra Supabase el 06/08/2026 y dejó 2.894
+  instrumentos, 3.344 puntas y 6.150 filas de cronograma, con el motor Python leyendo la vista
+  <code>resumen</code> sin modificarse (GWT-4 verificado).</p>
+
+  <h2>Ciclos 2, 3 y 4 + Stage 2 — todas pendientes</h2>
+  <table>
+    <thead><tr><th>Ciclo</th><th class="num">Features</th><th class="num">Person-days</th><th class="num">Semanas (est.)</th><th>Estado</th></tr></thead>
+    <tbody>
+      <tr><td>1 — Cimientos e ingesta</td><td class="num">12</td><td class="num">47</td><td class="num">~9,5</td><td><span class="completada">7 completadas</span>, 5 pendientes</td></tr>
+      <tr><td>2 — Armador completo</td><td class="num">12</td><td class="num">55</td><td class="num">~11</td><td class="pendiente">pendiente</td></tr>
+      <tr><td>3 — RV, carga y diagnóstico</td><td class="num">9</td><td class="num">41</td><td class="num">~8</td><td class="pendiente">pendiente</td></tr>
+      <tr><td>4 — Optimizador y persistencia</td><td class="num">9</td><td class="num">42</td><td class="num">~8,5</td><td class="pendiente">pendiente</td></tr>
+      <tr><td><strong>Stage 1 (total)</strong></td><td class="num"><strong>42</strong></td><td class="num"><strong>185</strong></td><td class="num"><strong>~37</strong></td><td class="num"><strong>17 %</strong></td></tr>
+      <tr><td>Stage 2</td><td class="num">8</td><td class="num">72</td><td class="num">~14,5</td><td class="pendiente">pendiente</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Próximo paso</h2>
+  <p class="nota">El orden de ejecución de las 35 features restantes está fijado en
+  <code>claude-docs/planning/plan-ejecucion-tandas.md</code> (18 tandas, aprobado el 06/08/2026).
+  Sigue la <strong>Tanda 1: F-008 (job de ingesta) ∥ F-014 (auth) ∥ F-028 (ingreso de cartera)</strong>
+  — tres áreas sin archivos en común. Nota: las tandas cruzan los ciclos del plan original
+  (F-014 y F-028 son de los ciclos 2 y 3) porque agrupan por ausencia de solape, no por milestone.</p>
 </body>
 </html>

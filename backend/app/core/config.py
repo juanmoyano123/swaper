@@ -48,6 +48,22 @@ class Settings(BaseSettings):
     # guardan los que se van subiendo.
     iamc_directorio: str = "fuentes"
 
+    # F-008 — job programado. Los horarios son configurables para poder ejercitar el job en un
+    # entorno de prueba sin esperar a la hora real, y para que un cambio de horario de la rueda
+    # no sea un cambio de código. `ingesta_habilitada` en False deja el servicio sin scheduler:
+    # los tests y el desarrollo local no necesitan que corra solo.
+    ingesta_habilitada: bool = False
+    ingesta_zona_horaria: str = "America/Argentina/Buenos_Aires"
+    ingesta_hora_matinal: str = "09:00"
+    ingesta_refresh_minutos: int = 15
+    ingesta_rueda_desde: str = "11:00"
+    ingesta_rueda_hasta: str = "17:00"
+
+    # F-014 — Supabase Auth. El frontend maneja la sesión con la anon key; el backend valida el
+    # JWT que llega en el header contra este secreto, que sale del panel de Supabase. Opcional
+    # como las de Docta: obligatoria recién en la feature que la consume.
+    supabase_jwt_secret: str | None = None
+
     log_level: str = "INFO"
     environment: str = "development"
 

@@ -103,12 +103,12 @@ desde `/build-feature` a medida que cada una se implementa.
 2.894 precios, 3.344 puntas y 6.150 filas de cronograma, con el motor Python leyendo la vista
 `resumen` sin que haya que tocarle una línea (GWT-4 verificado con un test de integración).
 
-Siguiente paso: **F-008** (job programado de ingesta), que orquesta lo que F-007 dejó listo — una
-corrida completa a la mañana y refrescos de precios durante la rueda. `consolidar()` recibe la
-conexión por parámetro justamente para que F-008 la invoque desde un job, fuera del ciclo HTTP. En
-paralelo se pueden tomar `F-009` (semilla de condiciones de emisión, que llena la ley y la lámina que
-hoy sólo cubren las 242 emisiones del informe de IAMC), `F-014` (auth) y `F-028` (ingreso de
-cartera).
+**El orden de ejecución de las 35 features restantes está fijado en
+`claude-docs/planning/plan-ejecucion-tandas.md`** (aprobado el 06/08/2026): 18 tandas con el
+criterio de paralelizar sólo lo que con certeza no comparte archivos, tablas ni contratos, y
+serializar toda duda. Siguiente paso: **Tanda 1 — F-008 (job de ingesta) ∥ F-014 (auth) ∥ F-028
+(ingreso de cartera)**. `consolidar()` recibe la conexión por parámetro justamente para que F-008
+la invoque desde un job, fuera del ciclo HTTP.
 
 ### Lo que F-007 dejó pendiente, declarado
 
