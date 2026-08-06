@@ -10,7 +10,7 @@ definido a mano.
 Logica 100% deterministica: reglas y umbrales configurables, sin IA. La
 herramienta PROPONE; la decision final y el analisis crediticio son del usuario.
 
-Spec: procesos-en-diseño/2026-07-busqueda-instrumentos-swap-carteras/06-spec-armador-cartera.md
+Spec: docs/historial/2026-07-diseno-wat/06-spec-armador-cartera.md
 Uso:
     python3 tools/armar_cartera.py --monto 100000
     python3 tools/armar_cartera.py --monto 50000 --perfil conservador --horizonte corto

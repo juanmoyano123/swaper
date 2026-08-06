@@ -1,6 +1,24 @@
-# Estado del proyecto 10-Swaper
+# Estado del motor de cálculo
 
-> Handoff para retomar en una sesión nueva. Última actualización: 27/07/2026 (segunda sesión).
+> **Qué es este documento.** El registro de qué se construyó, qué se verificó y contra qué
+> fuente, del **motor de cálculo en Python** (`tools/`). Es la procedencia de todo lo que el
+> producto da por cierto.
+>
+> **No describe el producto.** Desde el 05/08/2026 el proyecto es una aplicación web para
+> asesores; para eso leé `README.md` y `claude-docs/planning/product-definition.md`. Acá el
+> motor todavía se describe como la herramienta de línea de comandos que era, porque eso es
+> lo que efectivamente se verificó.
+>
+> Última actualización del motor: 30/07/2026.
+>
+> **Tres cosas cambiaron desde entonces y no están reflejadas abajo:**
+> 1. `data/condiciones_estaticas.csv` y `condiciones_monitor.csv` **ya no existen**. Sus datos
+>    se rescataron a `data/condiciones_emision.csv` (823 tickers). Todo lo que este documento
+>    diga sobre esos dos archivos es histórico.
+> 2. **Las fuentes cambian**: BYMA (API abierta, sin token) para precios y puntas, IAMC para
+>    las condiciones del instrumento, y Docta **sólo** para el cronograma de pagos.
+> 3. **No correr `tools/consolidar_universo.py`**: fusiona desde un CSV borrado y dejaría el
+>    universo sin ley, moneda, lámina, calificación ni sector.
 
 ## Resumen ejecutivo (27/07/2026)
 
@@ -124,7 +142,12 @@ Flags completos en `workflows/armar_cartera.md` y `workflows/detectar_swaps.md`.
 
 ## Datos: de dónde sale cada cosa
 
-**Exports de ONs del monitor de mesa** → `data/condiciones_monitor.csv` (**526 tickers**, es el archivo vivo): ley, moneda de pago, calificación y lámina mínima. Se incorporan con `tools/merge_condiciones.py --origen data/condiciones_monitor.csv`. Es una **extracción manual puntual**, no una conexión: la herramienta nunca consulta el monitor en tiempo de ejecución.
+> ⚠ **Esta sección es histórica.** Los dos CSV que menciona se borraron el 05/08/2026 y sus
+> datos viven ahora en `data/condiciones_emision.csv`. Las fuentes del producto son BYMA,
+> IAMC y Docta (sólo cashflow) — ver `README.md`. Se conserva el relato porque explica de
+> dónde salió cada dato y por qué la cobertura es la que es.
+
+**Exports de ONs del monitor de mesa** → `data/condiciones_monitor.csv` (**526 tickers**, era el archivo vivo): ley, moneda de pago, calificación y lámina mínima. Se incorporan con `tools/merge_condiciones.py --origen data/condiciones_monitor.csv`. Es una **extracción manual puntual**, no una conexión: la herramienta nunca consulta el monitor en tiempo de ejecución.
 
 Para volver a ampliarlo hay que bajar del monitor los **tres** Excels, uno por especie (pesos, MEP y Cable): 216 D + 215 O + 95 C. Con uno solo hay que adivinar los tickers de las otras especies, y adivinar sale mal (ver más arriba). Los tres `.xlsx` originales se borraron el 30/07/2026 una vez verificado que sus 526 tickers estaban íntegros en el CSV: son fuente descartable, el CSV es el que importa.
 
@@ -189,24 +212,32 @@ Total descartado hoy: 6 instrumentos, todos con alerta explícita.
 
 ```
 tools/
-  consolidar_universo.py   ingesta API → universo + cashflow
+  consolidar_universo.py   ingesta API → universo + cashflow  (SE REESCRIBE — no correr)
   segmentos.py             segmentacion, carga del universo, sanidad del dato,
                            normalizacion de volumen (COMPARTIDO por los 2 pilares)
   armar_cartera.py         pilar 1
   detectar_swaps.py        pilar 2
   cupones.py               calendario de cobros, frecuencia, repricing (compartido)
-  mercado.py               puntas bid/ask de data912 -> costo real de rotar
+  mercado.py               puntas bid/ask -> costo real de rotar
+  merge_condiciones.py     herencia entre especies y deteccion de conflictos
+  aplicar_sectores.py      reclasificacion de sectores por emisor
 
 workflows/                 SOPs operativos de cada herramienta
-procesos-en-diseño/2026-07-busqueda-instrumentos-swap-carteras/
+docs/historial/2026-07-diseno-wat/
   01-process-map.md  02-scorecard.md  03-disenio-tobe.md
   04-spec.md  05-spec-motor-swaps.md  06-spec-armador-cartera.md
 
 data/
-  condiciones_estaticas.csv   ley/moneda/emisor/sector — mantenido a mano
-  output/                     universo, cashflow, carteras y swaps generados
-.env                          token + 3 links de Docta (gitignored)
+  condiciones_emision.csv   ley/moneda/lamina/calificacion/sector/emisor — 823 tickers,
+                            rescatado del universo; sin fuente de origen viva
+  output/                   universo y cashflow (versionados) + lo generado (regenerable)
+.env                        token + links de Docta (gitignored)
 ```
+
+**`merge_condiciones.py` y `aplicar_sectores.py` están rotos hoy**: apuntan a
+`condiciones_estaticas.csv`, que ya no existe. Se conservan porque su lógica —herencia entre
+especies, y vaciar lo contradictorio en vez de elegir fuente— se traslada a las operaciones
+sobre la tabla `condiciones_emision` de Supabase.
 
 ## Verificación hecha
 

@@ -1,73 +1,89 @@
 # Instrucciones para el Agente
 
-Estás trabajando dentro del **framework WAT** (Workflows, Agents, Tools — Flujos de trabajo, Agentes y Herramientas). Esta arquitectura separa responsabilidades para que la IA probabilística se encargue del razonamiento mientras que el código determinístico se encargue de la ejecución. Esa separación es lo que hace que este sistema sea confiable.
+Este proyecto construye **10-Swaper**: una aplicación web para que asesores financieros de
+una ALyC argentina armen carteras de renta fija y variable, y optimicen las que sus clientes
+ya tienen. Leé `README.md` para el estado y `claude-docs/planning/product-definition.md` para
+qué se está construyendo.
 
-## La Arquitectura WAT
+## Cómo se trabaja acá
 
-**Capa 1: Workflows (Las Instrucciones)**
-- SOPs en markdown almacenados en `workflows/`
-- Cada workflow define el objetivo, los inputs requeridos, qué herramientas usar, los outputs esperados y cómo manejar casos límite
-- Escritos en lenguaje natural, de la misma forma en que le pasarías instrucciones a alguien de tu equipo
+El proyecto sigue un **pipeline de producto por fases**, y cada fase deja un archivo que la
+siguiente consume. Los archivos viven en `claude-docs/` — **ese nombre no se cambia**, porque
+los comandos `/create-prd`, `/build-feature`, `/init-project` y `/status` lo tienen fijo.
 
-**Capa 2: Agents (El que toma decisiones)**
-- Este es tu rol. Sos responsable de la coordinación inteligente.
-- Leé el workflow correspondiente, ejecutá las herramientas en la secuencia correcta, manejá las fallas con criterio y hacé preguntas aclaratorias cuando sea necesario
-- Conectás la intención con la ejecución sin intentar hacer todo vos mismo
-- Ejemplo: Si necesitás extraer datos de un sitio web, no intentes hacerlo directamente. Leé `workflows/scrape_website.md`, identificá los inputs requeridos y luego ejecutá `tools/scrape_single_site.py`
-
-**Capa 3: Tools (La Ejecución)**
-- Scripts de Python en `tools/` que hacen el trabajo real
-- Llamadas a APIs, transformaciones de datos, operaciones con archivos, consultas a bases de datos
-- Las credenciales y API keys se guardan en `.env`
-- Estos scripts son consistentes, testeables y rápidos
-
-**Por qué esto importa:** Cuando la IA intenta manejar cada paso directamente, la precisión cae rápido. Si cada paso tiene un 90% de precisión, después de apenas cinco pasos quedás en un 59% de éxito. Al delegar la ejecución a scripts determinísticos, te mantenés enfocado en la orquestación y la toma de decisiones, que es donde te destacás.
-
-## Cómo Operar
-
-**1. Buscá herramientas existentes primero**
-Antes de construir algo nuevo, revisá `tools/` según lo que requiera tu workflow. Solo creá scripts nuevos cuando no exista nada para esa tarea.
-
-**2. Aprendé y adaptate cuando las cosas fallen**
-Cuando te encuentres con un error:
-- Leé el mensaje de error completo y el trace
-- Arreglá el script y volvé a testearlo (si usa llamadas a APIs pagas o créditos, consultame antes de volver a ejecutarlo)
-- Documentá lo que aprendiste en el workflow (rate limits, particularidades de timing, comportamientos inesperados)
-- Ejemplo: Te encontrás con un rate limit en una API, entonces investigás la documentación, descubrís un endpoint batch, refactorizás la herramienta para usarlo, verificás que funcione y actualizás el workflow para que esto no vuelva a pasar
-
-**3. Mantené los workflows actualizados**
-Los workflows deben evolucionar a medida que aprendés. Cuando encuentres mejores métodos, descubras restricciones o te topes con problemas recurrentes, actualizá el workflow. Dicho esto, no crees ni sobrescribas workflows sin preguntar a menos que yo te lo indique explícitamente. Estas son tus instrucciones y necesitan ser preservadas y refinadas, no descartadas después de un solo uso.
-
-## El Loop de Auto-Mejora
-
-Cada falla es una oportunidad para hacer el sistema más fuerte:
-1. Identificá qué se rompió
-2. Arreglá la herramienta
-3. Verificá que el arreglo funcione
-4. Actualizá el workflow con el nuevo enfoque
-5. Seguí adelante con un sistema más robusto
-
-Este loop es la forma en que el framework mejora con el tiempo.
-
-## Estructura de Archivos
-
-**Qué va dónde:**
-- **Entregables**: Los outputs finales van a servicios en la nube (Google Sheets, Slides, etc.) donde yo pueda acceder directamente
-- **Intermedios**: Archivos de procesamiento temporales que pueden regenerarse
-
-**Disposición de directorios:**
 ```
-.tmp/           # Archivos temporales (datos scrapeados, exports intermedios). Se regeneran cuando hagan falta.
-tools/          # Scripts de Python para ejecución determinística
-workflows/      # SOPs en markdown que definen qué hacer y cómo
-.env            # API keys y variables de entorno (NUNCA guardes secretos en otro lado)
-credentials.json, token.json  # OAuth de Google (en gitignore)
+-1  /shape-idea       → planning/idea-brief.md
+ 0  /research-market  → planning/market-research.md        (opcional)
+1A  /define-product   → planning/product-definition.md
+1B  /validate-idea    → planning/validacion.md             (alternativa a 1A)
+ 2  /create-prd       → planning/plan.md                   features con RICE
+ 3  Claude Design     → planning/design-system.md          fuera de la terminal
+ 4  /init-project     → estructura del repo + progress/PROGRESS.md
+ 5  /build-feature    → plans/F-XXX-plan.md → código
 ```
 
-**Principio central:** Los archivos locales son solo para procesamiento. Cualquier cosa que yo necesite ver o usar vive en servicios en la nube. Todo lo que está en `.tmp/` es descartable.
+No saltear fases ni adelantarse: cada comando valida que exista el output de la anterior.
 
-## En Resumen
+Hasta la Fase 4 el motor sigue siendo Python de línea de comandos en `tools/`. Después pasa a
+ser el backend de la aplicación. Qué se reusa, qué se envuelve y qué se reescribe está
+definido en `product-definition.md`, sección "Rol del motor existente".
 
-Te ubicás entre lo que yo quiero (workflows) y lo que realmente se ejecuta (tools). Tu trabajo es leer instrucciones, tomar decisiones inteligentes, llamar a las herramientas correctas, recuperarte de errores y seguir mejorando el sistema sobre la marcha.
+## Reglas del dominio — no se revierten
 
-Mantenete pragmático. Mantenete confiable. Seguí aprendiendo.
+Son restricciones del negocio, no preferencias. Salieron de errores reales; el porqué de cada
+una está en `docs/ESTADO.md` y en `docs/historial/`.
+
+1. **Nunca inventar un dato.** Si falta, se deja vacío y se alerta con nombre y apellido. No
+   se estima, no se infiere del ticker, no se completa por analogía. *Antecedente: una vez
+   traduje un código de la fuente como "Ley Inglesa" —categoría que no existe— y otra vez
+   derivé 121 tickers inexistentes cortando strings. Las dos veces hubo que revertir.*
+
+2. **Los rendimientos de distinta naturaleza no se promedian ni comparten eje.** Una TIR en
+   dólares, una tasa real sobre CER y una TNA nominal en pesos son unidades distintas. Se
+   reportan abiertos por naturaleza de tasa, siempre.
+
+3. **Nada se compara entre monedas sin normalizar.** Precio y volumen vienen en la moneda de
+   cotización de cada especie. El tipo de cambio se deriva del propio universo —la misma
+   emisión cotiza en pesos y en dólares, y ese cociente es el MEP—, nunca de una fuente
+   externa. BYMA publica su Índice Dólar: sirve de contraste, no de fuente.
+
+4. **El riesgo soberano se agrupa aparte.** El Tesoro emite bajo muchos prefijos (GD, AE, DIC,
+   TZX, TY3) y todos son el mismo crédito: clave única `SOBERANO_AR` con tope propio. Sin
+   esto una cartera 100% soberana pasaba como diversificada.
+
+5. **El calendario de cupones es criterio de armado, no reporte.** *"La predecibilidad del
+   cashflow es la piedra fundamental sobre la que fomentamos la inversión en bonos."*
+
+6. **La lógica de análisis es determinística, sin IA.** *"No busco algo que razone, sino que
+   analice datos y me devuelva un análisis de datos duros."*
+
+7. **El riesgo no es un número, es un vector de seis ejes** —duración, crédito, legislación,
+   liquidez, concentración y moneda—. No se construye un score compuesto: exigiría ponderar
+   años contra una calificación que sólo existe para el 39% del universo, y eso sería un
+   juicio inventado presentado como dato.
+
+8. **Nunca se propone una mejora de TIR sin nombrar qué riesgo se asume a cambio.**
+
+9. **No se filtra por disponibilidad en Balanz.** Se da por sentado que todo lo negociable
+   está. No reintroducir esa whitelist.
+
+10. **El proyecto no se conecta al monitor de mesa** (`mesaifa.netlify.app`) ni a su base de
+    datos, en ninguna forma. Se usa como referencia visual y para contrastar números
+    publicados contra los nuestros, nada más.
+
+## Sobre datos y archivos
+
+- **Los secretos van en `.env`**, nunca en otro lado.
+- **`data/condiciones_emision.csv` es dato curado**: 823 tickers con ley, moneda de pago,
+  lámina, calificación, sector y emisor. No tiene fuente de origen viva — se rescató del
+  universo consolidado después de que se borraran los CSV originales. Tratarlo como
+  irrecuperable.
+- **`data/output/` es regenerable**, salvo `universo_consolidado.xlsx` y
+  `cashflow_completo.csv`, que están versionados a propósito.
+- **No correr `tools/consolidar_universo.py`** hasta que el ingestor se reescriba: hoy
+  sobrescribiría el universo dejando vacías las columnas de condiciones.
+- **Datos de clientes reales nunca entran al repositorio.** Van a `~/Documents/IFA-confidencial/`.
+
+## Antes de escalar de modelo
+
+Avisar antes de pasar a Fable u Opus.

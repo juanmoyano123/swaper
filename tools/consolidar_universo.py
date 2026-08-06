@@ -22,7 +22,7 @@ data/output/universo_consolidado.xlsx junto con un log de corrida.
 
 No hay descarga manual de CSV: todo sale de la API con el token de .env.
 
-Spec original (v1, manual): procesos-en-diseño/2026-07-busqueda-instrumentos-swap-carteras/04-spec.md
+Spec original (v1, manual): docs/historial/2026-07-diseno-wat/04-spec.md
 Uso: python3 tools/consolidar_universo.py
 """
 

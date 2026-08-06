@@ -10,7 +10,7 @@ dentro del mismo segmento comparable.
 Logica 100% deterministica: el motor PROPONE, la decision y el analisis
 crediticio profundo son del usuario.
 
-Spec: procesos-en-diseño/2026-07-busqueda-instrumentos-swap-carteras/05-spec-motor-swaps.md
+Spec: docs/historial/2026-07-diseno-wat/05-spec-motor-swaps.md
 Uso:
     python3 tools/detectar_swaps.py                     # origenes = TIR negativa
     python3 tools/detectar_swaps.py --origen todos      # analiza todo el universo

@@ -1,44 +1,85 @@
-# 10-Swaper — Herramienta de Renta Fija
+# 10-Swaper — Armador y Optimizador de Carteras
 
-Herramienta de análisis y automatización enfocada **exclusivamente en renta fija** (bonos soberanos, subsoberanos y Obligaciones Negociables del mercado argentino). Acciones, CEDEARs, FCI y opciones están fuera de alcance.
+Herramienta web para asesores financieros de una ALyC argentina: arman carteras de renta
+fija y variable a medida del objetivo del cliente, y optimizan las que el cliente ya trae.
 
-Construida con el framework WAT (Workflows/Agents/Tools) — ver `CLAUDE.md`.
+**El calendario de cupones es el selector, no el reporte.** El asesor ve los doce meses del
+año con los papeles que pagan en cada uno y elige desde el mes que necesita cubrir. Mientras
+arma, ve en vivo la renta mes a mes en plata real y el total anual de cupones sobre lo
+invertido — el número que lleva a la reunión. Esa mecánica es la razón de ser del producto.
 
-**Para retomar el trabajo en una sesión nueva: leer `ESTADO.md`** — tiene el estado completo, las decisiones tomadas y los pendientes.
+## Estado
 
-## Dos pilares
+El producto está en diseño. El **motor de cálculo financiero ya está construido y
+verificado**; lo que falta es la aplicación alrededor.
 
-### 1. Armador de Carteras
-Construye una propuesta de cartera de renta fija según el perfil/objetivo del cliente (monto, moneda, horizonte, apetito de riesgo o necesidad de cobertura específica), **priorizando la continuidad del cobro mensual de cupones**.
+| Fase | Qué produce | Estado |
+|---|---|---|
+| −1 `/shape-idea` | `claude-docs/planning/idea-brief.md` | Hecha |
+| 1A `/define-product` | `claude-docs/planning/product-definition.md` | Hecha |
+| 2 `/create-prd` | `claude-docs/planning/plan.md` — features con RICE | Siguiente |
+| 3 Claude Design | `claude-docs/planning/design-system.md` | Prompt listo |
+| 4 `/init-project` | Estructura del repo | Pendiente |
+| 5 `/build-feature` | Código | Pendiente |
 
-`tools/armar_cartera.py` — construido y verificado sobre el universo real.
+**Empezá por `claude-docs/planning/product-definition.md`**: tiene las 13 features del MVP,
+el stack, los flujos y qué se reusa del motor existente.
 
-### 2. Buscador de Swaps
-Detecta bonos con TIR baja o negativa y propone rotaciones hacia alternativas de mejor rendimiento a igual o menor riesgo (mismo emisor, mejor moneda de pago, mejor ley), **avisando si el bono a vender cobra cupón pronto**.
+## Alcance
 
-`tools/detectar_swaps.py` — construido y validado.
+Renta fija argentina —soberanos, subsoberanos y obligaciones negociables, en los seis
+segmentos de tasa— **y renta variable**: acciones locales y CEDEARs, con el calendario de
+presentación de balances como equivalente del cupón.
 
-## Base de datos común
+Las dos familias conviven pero **no se mezclan**: una acción no tiene TIR, ni duración, ni
+cashflow, así que no es comparable con un bono. Los FCI y las opciones quedan fuera.
 
-Ambos pilares se alimentan del mismo universo consolidado:
+La gestión de clientes (CRM) es una segunda etapa. Se guardan carteras, no clientes.
+
+## Estructura
 
 ```
-tools/consolidar_universo.py  →  data/output/universo_consolidado.xlsx
+claude-docs/planning/   El pipeline de producto. No renombrar: los comandos lo tienen fijo
+docs/                   ESTADO.md — qué se verificó y contra qué
+docs/historial/         El diseño WAT de julio, congelado. Explica el porqué de cada regla
+tools/                  El motor de cálculo, 8 módulos Python
+workflows/              SOPs operativos de cada herramienta
+data/                   condiciones_emision.csv (curado) + output/ (regenerable)
+referencia/             Los entregables de la mesa que sirven de molde, y el monitor actual
+fuentes/                Muestras de los informes que alimentan el universo
 ```
 
-Ingesta 100% vía API de Docta (`.env`), sin descarga manual. Ver `workflows/consolidar_universo.md`.
+## El motor hoy
 
-## Análisis de cupones (integrado)
+Corre por línea de comandos y sigue siendo la única forma de producir carteras:
 
-`tools/cupones.py` — módulo compartido por ambos pilares. La previsibilidad del cashflow es la base de la inversión en renta fija, así que el calendario de cobros no es un reporte posterior sino criterio de armado.
+```bash
+python3 tools/armar_cartera.py --monto 100000
+python3 tools/detectar_swaps.py
+```
 
-- **Armador de Carteras**: prioriza cubrir los 12 meses (desempata candidatos de rendimiento parejo por mes de cobro descubierto, dentro de una banda de 0,5pp). Hoja `Calendario` con renta y amortización mes a mes. Se desactiva con `--sin-pago-mensual`.
-- **Buscador de Swaps**: avisa si el bono a vender cobra cupón dentro de los próximos N días (`--dias-cupon`, default 45) y cuánto del capital se resigna. No bloquea el swap, lo señala.
+**No corras `tools/consolidar_universo.py`.** Fusiona condiciones desde un CSV que ya no
+existe, así que sobrescribiría `data/output/universo_consolidado.xlsx` dejando vacías las
+columnas de ley, moneda de pago, lámina, calificación y sector. El ingestor se reescribe
+contra BYMA e IAMC; hasta entonces, ese archivo se deja quieto.
 
-**Cómo se calcula**: `lastPrice` del universo viene en monedas mezcladas (la misma emisión cotiza en pesos sin sufijo y en dólares con sufijo D/C), así que el cobro se normaliza contra paridad y valor técnico — `cobro/monto = cash_flow / (paridad × valor_técnico)` — que es adimensional. Validado contra `cartera de inversion/Propuesta Base 7-26.xlsx`: reproduce exacto los nominales de RUCED, SBC2D, CS47D y LOC5D.
+## De dónde salen los datos
 
-**Limitación**: en bonos ajustables (CER, dólar linked, Badlar, Tamar) el calendario proyecta con el coeficiente de ajuste de hoy; el monto nominal futuro va a diferir.
+Tres fuentes que se complementan sin superponerse, y se unen por la raíz del ticker —porque
+ley, moneda de pago y estructura son atributos de la emisión, no de la especie:
 
-## Historial de diseño
+- **BYMA**, API abierta sin token (`open.bymadata.com.ar`): precios, puntas bid/ask con
+  cantidad, volumen, moneda de cotización declarada, las tres especies y los dos plazos de
+  liquidación. 20 minutos de demora; el tiempo real se pide a `marketdata@byma.com.ar`.
+- **IAMC**, informe diario de deuda corporativa: emisor, ley, moneda de pago, estructura del
+  cupón, TIR, duración modificada, convexidad, próximos pagos.
+- **Docta** (doctacapital), sólo el cronograma completo de pagos: es el único que lo publica,
+  con 97% de cobertura, y sin él la grilla de doce meses no existe.
 
-`procesos-en-diseño/2026-07-busqueda-instrumentos-swap-carteras/` — mapeo del proceso, priorización y specs de cada pieza, siguiendo el skill `automation-design-skill`.
+## Reglas del dominio
+
+Están en `CLAUDE.md` y no se revierten. Las dos que más se rompen sin querer:
+
+1. **Los rendimientos de distinta naturaleza no se promedian ni comparten eje.** Una TIR en
+   dólares, una tasa real sobre CER y una TNA en pesos son unidades distintas.
+2. **Cuando falta un dato, se muestra que falta.** Nunca se estima ni se infiere.

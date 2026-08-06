@@ -463,8 +463,23 @@ en el MVP**, con BYMA e IAMC cubriendo precios, puntas y métricas del instrumen
 multi-fuente con precedencia declarada por campo, no un reemplazo. La alternativa —proyectar el
 calendario desde la estructura del cupón publicada por IAMC— funciona para bullets de cupón fijo y
 falla en los amortizing con escalera, que son mayoría entre las ONs locales; proyectarlos sería
-inventar. **Esta es la única decisión de fuente que queda por confirmar con el usuario**, y conviene
-cerrarla antes de la Fase 2 porque define si F4 entra completa al Stage 1.
+inventar.
+
+> **DECIDIDO — 05/08/2026.** Se conserva el feed de cashflow de **Docta (doctacapital)**, que es
+> de donde ya sale hoy. La ingesta queda multifuente con precedencia declarada por campo:
+> **BYMA** precios, puntas, volumen, moneda de cotización, especies y plazos de liquidación;
+> **IAMC** emisor, ley, moneda de pago, estructura, TIR, duración, convexidad y próximos pagos;
+> **Docta** únicamente el cronograma completo de pagos.
+>
+> Se descarta proyectar el calendario desde la estructura de IAMC: fallaría justamente en los
+> amortizing con escalera, y proyectarlos sería inventar el dato.
+>
+> **Consecuencia operativa**: el token de Docta sigue siendo una dependencia del MVP. Vence, y
+> los tres links lo comparten — un HTTP 500 "Error al verificar el token" significa vencido y se
+> regenera desde Docta Terminal. El ingestor tiene que distinguir ese caso de una caída de la
+> API y alertarlo por separado, porque la acción que requiere es distinta.
+>
+> **F4 entra completa al Stage 1.**
 
 ---
 
