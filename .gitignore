@@ -1,0 +1,20 @@
+# Secretos — nunca versionar
+.env
+credentials.json
+token.json
+
+# Configuración local del agente
+.claude/settings.local.json
+
+# Outputs regenerables: una cartera, un swap o un log por corrida
+data/output/*
+
+# ...salvo estos dos, que no siempre se pueden regenerar. El universo carga
+# condiciones que ya no tienen CSV de origen, y el cashflow depende de un token
+# de Docta que vence. Ya perdimos datos una vez por dar por sentado que un
+# archivo se regeneraba solo.
+!data/output/universo_consolidado.xlsx
+!data/output/cashflow_completo.csv
+
+# Basura de macOS
+.DS_Store

@@ -1,0 +1,824 @@
+ticker,ley,moneda_pago,lamina,calificacion,sector,underlying
+AE38,Ley Argentina,MEP,,,Soberano,Gobierno Argentino
+AE38C,Ley Argentina,MEP,,,Soberano,Gobierno Argentino
+AE38D,Ley Argentina,MEP,,,Soberano,Gobierno Argentino
+AEC2C,Ley N.Y.,CCL,,,,
+AEC2D,Ley N.Y.,CCL,,,,
+AEC2O,Ley N.Y.,CCL,,,Servicios,Aes Argentina Generación S.A.
+AERBD,Ley Argentina,MEP,1.0,,,
+AERBO,Ley Argentina,MEP,1.0,,Infraestructura,Aeropuertos Argentina 2000 S.A.
+AFCHD,Ley Argentina,MEP,1.0,A1+ (FIX),,
+AFCHO,Ley Argentina,MEP,1.0,A1+ (FIX),Financiera,Banco Comafi S.A.
+AFCIC,Ley Argentina,MEP,1.0,A1+ (FIX),,
+AFCID,Ley Argentina,MEP,1.0,A1+ (FIX),,
+AFCIO,Ley Argentina,MEP,1.0,A1+ (FIX),Financiera,Banco Comafi S.A.
+AFCJC,Ley Argentina,MEP,1100.0,,,
+AFCJD,Ley Argentina,MEP,1100.0,,,
+AFCJO,Ley Argentina,MEP,1100.0,,Financiera,Banco Comafi S.A.
+AFCKC,Ley Argentina,MEP,1100.0,,,
+AFCKD,Ley Argentina,MEP,1100.0,,,
+AFCKO,Ley Argentina,MEP,1100.0,,Financiera,Banco Comafi S.A.
+AFCLC,Ley Argentina,MEP,,,,
+AFCLD,Ley Argentina,MEP,,,,
+AFCLO,Ley Argentina,MEP,,,Financiera,Banco Comafi S.A.
+AFCQD,Ley Argentina,CCL,,,,
+AFCQO,Ley Argentina,CCL,,,Financiera,Banco Comafi S.A.
+AL29,Ley Argentina,MEP,,,Soberano,Gobierno Argentino
+AL29C,Ley Argentina,MEP,,,Soberano,Gobierno Argentino
+AL29D,Ley Argentina,MEP,,,Soberano,Gobierno Argentino
+AL30,Ley Argentina,MEP,,,Soberano,Gobierno Argentino
+AL30C,Ley Argentina,MEP,,,Soberano,Gobierno Argentino
+AL30D,Ley Argentina,MEP,,,Soberano,Gobierno Argentino
+AL35,Ley Argentina,MEP,,,Soberano,Gobierno Argentino
+AL35C,Ley Argentina,MEP,,,Soberano,Gobierno Argentino
+AL35D,Ley Argentina,MEP,,,Soberano,Gobierno Argentino
+AL41,Ley Argentina,MEP,,,Soberano,Gobierno Argentino
+AL41C,Ley Argentina,MEP,,,Soberano,Gobierno Argentino
+AL41D,Ley Argentina,MEP,,,Soberano,Gobierno Argentino
+AN29,Ley Argentina,MEP,,,Soberano,Gobierno Argentino
+AN29C,Ley Argentina,MEP,,,Soberano,Gobierno Argentino
+AN29D,Ley Argentina,MEP,,,Soberano,Gobierno Argentino
+AO27,Ley Argentina,MEP,,,Soberano,Gobierno Argentino
+AO27C,Ley Argentina,MEP,,,Soberano,Gobierno Argentino
+AO27D,Ley Argentina,MEP,,,Soberano,Gobierno Argentino
+AO28,Ley Argentina,,,,Soberano,Gobierno Argentino
+AO28C,Ley Argentina,,,,Soberano,Gobierno Argentino
+AO28D,Ley Argentina,,,,Soberano,Gobierno Argentino
+AO29,Ley Argentina,MEP,,,Soberano,Gobierno Argentino
+AO29C,Ley Argentina,MEP,,,Soberano,Gobierno Argentino
+AO29D,Ley Argentina,MEP,,,Soberano,Gobierno Argentino
+ARC1C,Ley N.Y.,CCL,1000.0,AA(arg),,
+ARC1D,Ley N.Y.,CCL,1000.0,AA(arg),,
+ARC1O,Ley N.Y.,CCL,1000.0,AA(arg),Infraestructura,Aeropuertos Argentina 2000 S.A.
+AUS1L,Ley Argentina,MEP,,,Agro,Alz Nutrientes S.A.
+AXS1M,Ley Argentina,MEP,,,Agro,AKRON S.A.
+BA37D,,,,,Subsoberano,
+BA7DC,,,,,Subsoberano,
+BA7DD,,,,,Subsoberano,
+BACAC,Ley N.Y.,CCL,,,,
+BACAD,Ley N.Y.,CCL,,,,
+BACAO,Ley N.Y.,CCL,,,Financiera,Banco Macro S.A.
+BACGC,Ley N.Y.,CCL,1000.0,CCC+ (Fitch),,
+BACGD,Ley N.Y.,CCL,1000.0,CCC+ (Fitch),,
+BACGO,Ley N.Y.,CCL,1000.0,CCC+ (Fitch),Financiera,Banco Macro S.A.
+BACHC,Ley N.Y.,CCL,1000.0,,,
+BACHD,Ley N.Y.,CCL,1000.0,,,
+BACHO,Ley N.Y.,CCL,1000.0,,Financiera,Banco Macro S.A.
+BAF27,,,,,Subsoberano,
+BAS26,,,,,Subsoberano,
+BB37D,,,,,Subsoberano,
+BB7DC,,,,,Subsoberano,
+BB7DD,,,,,Subsoberano,
+BC33C,,,,,Subsoberano,
+BC33D,,,,,Subsoberano,
+BC37D,,,,,Subsoberano,
+BDC28,,,,,Subsoberano,
+BDC33,,,,,Subsoberano,
+BDC36,,,,,Subsoberano,
+BF37C,Ley Argentina,MEP,1200.0,,,
+BF37D,Ley Argentina,MEP,1200.0,,,
+BF37O,Ley Argentina,MEP,1200.0,,Financiera,Banco Bbva Argentina S.A
+BF39D,Ley Argentina,MEP,1.0,A1+(arg) (FIX),,
+BF39O,Ley Argentina,MEP,1.0,A1+(arg) (FIX),Financiera,Banco Bbva Argentina S.A
+BF40D,Ley Argentina,MEP,,,,
+BF40O,Ley Argentina,MEP,,,Financiera,Banco Bbva Argentina S.A
+BF44D,Ley Argentina,MEP,1200.0,,,
+BF44O,Ley Argentina,MEP,1200.0,,Financiera,Banco Bbva Argentina S.A
+BF45D,Ley Argentina,MEP,,,,
+BF45O,Ley Argentina,MEP,,,Financiera,Banco Bbva Argentina S.A
+BGC4D,Ley Argentina,MEP,1200.0,A1 (FIX),,
+BGC4O,Ley Argentina,MEP,1200.0,A1 (FIX),Financiera,Banco Patagonia
+BGD26,,,,,Subsoberano,
+BPA7C,,,,,Soberano,Gobierno Argentino
+BPA7D,,,,,Soberano,Gobierno Argentino
+BPA8C,,,,,Soberano,Gobierno Argentino
+BPA8D,,,,,Soberano,Gobierno Argentino
+BPB7C,,,,,Soberano,Gobierno Argentino
+BPB7D,,,,,Soberano,Gobierno Argentino
+BPB8C,,,,,Soberano,Gobierno Argentino
+BPB8D,,,,,Soberano,Gobierno Argentino
+BPC7C,,,,,Soberano,Gobierno Argentino
+BPC7D,,,,,Soberano,Gobierno Argentino
+BPCSD,Ley Argentina,MEP,,,,
+BPCSO,Ley Argentina,MEP,,,Financiera,Banco Supervielle S.A.
+BPCTC,Ley Argentina,MEP,1.0,AA+ (FIX),,
+BPCTD,Ley Argentina,MEP,1.0,AA+ (FIX),,
+BPCTO,Ley Argentina,MEP,1.0,AA+ (FIX),Financiera,Banco Supervielle S.A.
+BPCUD,Ley Argentina,MEP,,,,
+BPCUO,Ley Argentina,MEP,,,Financiera,Banco Supervielle S.A.
+BPCVD,Ley Argentina,MEP,1100.0,,,
+BPCVO,Ley Argentina,MEP,1100.0,,Financiera,Banco Supervielle S.A.
+BPD7C,,,,,Soberano,Gobierno Argentino
+BPD7D,,,,,Soberano,Gobierno Argentino
+BPOA7,,,,,Soberano,Gobierno Argentino
+BPOA8,,,,,Soberano,Gobierno Argentino
+BPOB7,,,,,Soberano,Gobierno Argentino
+BPOB8,,,,,Soberano,Gobierno Argentino
+BPOC7,,,,,Soberano,Gobierno Argentino
+BPOD7,,,,,Soberano,Gobierno Argentino
+BRA27,,,,,Subsoberano,
+BU3S6,,,,,Subsoberano,
+BUN26,,,,,Subsoberano,
+BVCPD,Ley Argentina,MEP,1.0,A1 (FIX),,
+BVCPO,Ley Argentina,MEP,1.0,A1 (FIX),Financiera,Banco De Servicios Y Transacciones S.A.
+BYCHC,Ley N.Y.,CCL,2000.0,A1+(arg),,
+BYCHD,Ley N.Y.,CCL,2000.0,A1+(arg),,
+BYCHO,Ley N.Y.,CCL,2000.0,A1+(arg),Financiera,Banco De Galicia Y Buenos Aires S.A.U.
+BYCVC,Ley Argentina,MEP,1.0,ML A-1.ar (Moodys),,
+BYCVD,Ley Argentina,MEP,1.0,ML A-1.ar (Moodys),,
+BYCVO,Ley Argentina,MEP,1.0,ML A-1.ar (Moodys),Financiera,Banco De Galicia Y Buenos Aires S.A.U.
+BYCWC,Ley Argentina,MEP,1.0,ML A-1.ar (Moodys),,
+BYCWD,Ley Argentina,MEP,1.0,ML A-1.ar (Moodys),,
+BYCWO,Ley Argentina,MEP,1.0,ML A-1.ar (Moodys),Financiera,Banco De Galicia Y Buenos Aires S.A.U.
+BYCXC,Ley Argentina,MEP,1000.0,,,
+BYCXD,Ley Argentina,MEP,1000.0,,,
+BYCXO,Ley Argentina,MEP,1000.0,,Financiera,Banco De Galicia Y Buenos Aires S.A.U.
+BYY2D,Ley Argentina,MEP,,,,
+BYY2O,Ley Argentina,MEP,,,Financiera,Banco De Galicia Y Buenos Aires S.A.U.
+CAC5C,Ley N.Y.,CCL,1.0,AA (arg),,
+CAC5D,Ley N.Y.,CCL,1.0,AA (arg),,
+CAC5O,Ley N.Y.,CCL,1.0,AA (arg),O&G,Capex S.A.
+CACBD,Ley Argentina,MEP,1.0,AA (FIX),,
+CACBO,Ley Argentina,MEP,1.0,AA (FIX),O&G,Capex S.A.
+CACDC,Ley Argentina,MEP,1.0,AA(arg) (FIX),,
+CACDD,Ley Argentina,MEP,1.0,AA(arg) (FIX),,
+CACDO,Ley Argentina,MEP,1.0,AA(arg) (FIX),O&G,Capex S.A.
+CH24D,,,,,Subsoberano,
+CIC7O,Ley Argentina,MEP,100.0,,Financiera,Cnh Industrial Capital Argentina S.A.
+CIC8D,Ley Argentina,MEP,100.0,,,
+CIC8O,Ley Argentina,MEP,100.0,,Financiera,Cnh Industrial Capital Argentina S.A.
+CIC9O,Ley Argentina,MEP,100.0,,Financiera,Cnh Industrial Capital Argentina S.A.
+CICAC,Ley Argentina,MEP,100.0,AA(arg) (FIX),,
+CICAD,Ley Argentina,MEP,100.0,AA(arg) (FIX),,
+CICAO,Ley Argentina,MEP,100.0,AA(arg) (FIX),Financiera,Cnh Industrial Capital Argentina S.A.
+CICBC,Ley Argentina,MEP,1.0,AA(arg) (FIX),,
+CICBD,Ley Argentina,MEP,1.0,AA(arg) (FIX),,
+CICBO,Ley Argentina,MEP,1.0,AA(arg) (FIX),Financiera,Cnh Industrial Capital Argentina S.A.
+CLSIC,Ley N.Y.,CCL,100.0,BBB (arg),,
+CLSID,Ley N.Y.,CCL,100.0,BBB (arg),,
+CLSIO,Ley N.Y.,CCL,100.0,BBB (arg),Construccion,CLISA
+CO26,,,,,Subsoberano,
+CO27D,,,,,Subsoberano,
+CO2D7,,,,,Subsoberano,
+CO32,,,,,Subsoberano,
+CO32C,,,,,Subsoberano,
+CO32D,,,,,Subsoberano,
+CO35,,,,,Subsoberano,
+CO35C,,,,,Subsoberano,
+CO35D,,,,,Subsoberano,
+COC2C,Ley Argentina,MEP,,,,
+COC2D,Ley Argentina,MEP,,,,
+COC2O,Ley Argentina,MEP,,,Financiera,Banco de Córdoba
+COY27,,,,,Subsoberano,
+CP36D,Ley Argentina,MEP,1.0,AA- (FIX),,
+CP36O,Ley Argentina,MEP,1.0,AA- (FIX),O&G,Compañía General De Combustibles S.A.
+CP37C,Ley Argentina,MEP,1.0,AA- (Moodys),,
+CP37D,Ley Argentina,MEP,1.0,AA- (Moodys),,
+CP37O,Ley Argentina,MEP,1.0,AA- (Moodys),O&G,Compañía General De Combustibles S.A.
+CP38C,Ley N.Y.,CCL,100.0,AA-(arg) (FIX),,
+CP38D,Ley N.Y.,CCL,100.0,AA-(arg) (FIX),,
+CP38O,Ley N.Y.,CCL,100.0,AA-(arg) (FIX),O&G,Compañía General De Combustibles S.A.
+CP40C,Ley Argentina,MEP,100.0,,,
+CP40D,Ley Argentina,MEP,100.0,,,
+CP40O,Ley Argentina,MEP,100.0,,O&G,Compañía General De Combustibles S.A.
+CRCJO,Ley Argentina,MEP,100.0,,Industria,Celulosa Argentina S.A
+CS45O,Ley Argentina,MEP,1.0,AA+ (FIX),Agro,Cresud Sacif Y A
+CS47C,Ley Argentina,MEP,100.0,AA+(arg) (FIX),,
+CS47D,Ley Argentina,MEP,100.0,AA+(arg) (FIX),,
+CS47O,Ley Argentina,MEP,100.0,AA+(arg) (FIX),Agro,Cresud Sacif Y A
+CS48C,Ley Argentina,MEP,100.0,AAA (FIX),,
+CS48D,Ley Argentina,MEP,100.0,AAA (FIX),,
+CS48O,Ley Argentina,MEP,100.0,AAA (FIX),Agro,Cresud Sacif Y A
+CS49C,Ley Argentina,MEP,100.0,AAA(arg) (FIX),,
+CS49D,Ley Argentina,MEP,100.0,AAA(arg) (FIX),,
+CS49O,Ley Argentina,MEP,100.0,AAA(arg) (FIX),Agro,Cresud Sacif Y A
+CS50C,Ley Argentina,MEP,1.0,AAA(arg) (FIX),,
+CS50D,Ley Argentina,MEP,1.0,AAA(arg) (FIX),,
+CS50O,Ley Argentina,MEP,1.0,AAA(arg) (FIX),Agro,Cresud Sacif Y A
+CS51C,Ley Argentina,MEP,100.0,,,
+CS51D,Ley Argentina,MEP,100.0,,,
+CS51O,Ley Argentina,MEP,100.0,,Agro,Cresud Sacif Y A
+CS52D,Ley Argentina,MEP,100.0,,,
+CS52O,Ley Argentina,MEP,100.0,,Agro,Cresud Sacif Y A
+CS53C,Ley Argentina,MEP,100.0,,,
+CS53D,Ley Argentina,MEP,100.0,,,
+CS53O,Ley Argentina,MEP,100.0,,Agro,Cresud Sacif Y A
+CUAP,,,,,Soberano,Gobierno Argentino
+CWC6D,Ley Argentina,MEP,1.0,A+ (FIX),,
+CWC6O,Ley Argentina,MEP,1.0,A+ (FIX),O&G,Crown Point Energia Sa
+D10Y7,,,,,Soberano,Gobierno Argentino
+D30S6,,,,,Soberano,Gobierno Argentino
+D31G6,,,,,Soberano,Gobierno Argentino
+D31L6,,,,,Soberano,Gobierno Argentino
+D31M7,,,,,Soberano,Gobierno Argentino
+DEC2D,Ley Argentina,MEP,100.0,,,
+DEC2O,Ley Argentina,MEP,100.0,,Servicios,Edesa S.A.
+DEC4D,Ley Argentina,MEP,,,,
+DEC4O,Ley Argentina,MEP,,,Servicios,Edesa S.A.
+DHSJD,Ley Argentina,MEP,,,,
+DHSJO,Ley Argentina,MEP,,,Financiera,Credicuotas Consumo S.A.
+DHSKD,Ley Argentina,MEP,,,,
+DHSKO,Ley Argentina,MEP,,,Financiera,Credicuotas Consumo S.A.
+DICP,,,,,Soberano,Gobierno Argentino
+DIP0,,,,,Soberano,Gobierno Argentino
+DNC3C,Ley Argentina,MEP,1.0,,,
+DNC3D,Ley Argentina,MEP,1.0,,,
+DNC3O,Ley Argentina,MEP,1.0,,Servicios,Empresa Distribuidora Y Comercializadora Norte S.A.
+DNC5C,Ley Argentina,MEP,100.0,,,
+DNC5D,Ley Argentina,MEP,100.0,,,
+DNC5O,Ley Argentina,MEP,100.0,,Servicios,Empresa Distribuidora Y Comercializadora Norte S.A.
+DNC7C,Ley N.Y.,CCL,100.0,CCC+ (Fitch),,
+DNC7D,Ley N.Y.,CCL,100.0,CCC+ (Fitch),,
+DNC7O,Ley N.Y.,CCL,100.0,CCC+ (Fitch),Servicios,Empresa Distribuidora Y Comercializadora Norte S.A.
+DNCAC,Ley N.Y.,CCL,100.0,A1(arg) (FIX),,
+DNCAD,Ley N.Y.,CCL,100.0,A1(arg) (FIX),,
+DNCAO,Ley N.Y.,CCL,100.0,A1(arg) (FIX),Servicios,Empresa Distribuidora Y Comercializadora Norte S.A.
+DNCBC,Ley Argentina,CCL,100.0,,,
+DNCBD,Ley Argentina,CCL,100.0,,,
+DNCBO,Ley Argentina,CCL,100.0,,Servicios,Empresa Distribuidora Y Comercializadora Norte S.A.
+EAC3D,Ley Argentina,MEP,100.0,,,
+EAC3O,Ley Argentina,MEP,100.0,,Energias Renovables,Msu Green Energy Sa
+EAC4C,Ley N.Y.,CCL,1.0,,,
+EAC4D,Ley N.Y.,CCL,1.0,,,
+EAC4O,Ley N.Y.,CCL,1.0,,Energias Renovables,Msu Green Energy Sa
+EMC1C,Ley Argentina,MEP,100.0,,,
+EMC1D,Ley Argentina,MEP,100.0,,,
+EMC1O,Ley Argentina,MEP,100.0,,O&G,Compañía Mega
+ERF25,,,,,Subsoberano,
+FO4AD,Ley Argentina,MEP,100.0,,,
+FO4AO,Ley Argentina,MEP,100.0,,Financiera,Futuros Y Opciones.Com S.A.
+FPC1D,Ley Argentina,MEP,,,,
+FPC1O,Ley Argentina,MEP,,,Industria,Fiplasto
+FYC1D,Ley Argentina,MEP,100.0,,,
+FYC1O,Ley Argentina,MEP,100.0,,Alimentos y Consumo,Farmacity
+GD29,Ley N.Y.,CCL,,,Soberano,Gobierno Argentino
+GD29C,Ley N.Y.,CCL,,,Soberano,Gobierno Argentino
+GD29D,Ley N.Y.,CCL,,,Soberano,Gobierno Argentino
+GD30,Ley N.Y.,CCL,,,Soberano,Gobierno Argentino
+GD30C,Ley N.Y.,CCL,,,Soberano,Gobierno Argentino
+GD30D,Ley N.Y.,CCL,,,Soberano,Gobierno Argentino
+GD35,Ley N.Y.,CCL,,,Soberano,Gobierno Argentino
+GD35C,Ley N.Y.,CCL,,,Soberano,Gobierno Argentino
+GD35D,Ley N.Y.,CCL,,,Soberano,Gobierno Argentino
+GD38,Ley N.Y.,CCL,,,Soberano,Gobierno Argentino
+GD38C,Ley N.Y.,CCL,,,Soberano,Gobierno Argentino
+GD38D,Ley N.Y.,CCL,,,Soberano,Gobierno Argentino
+GD41,Ley N.Y.,CCL,,,Soberano,Gobierno Argentino
+GD41C,Ley N.Y.,CCL,,,Soberano,Gobierno Argentino
+GD41D,Ley N.Y.,CCL,,,Soberano,Gobierno Argentino
+GD46,Ley N.Y.,CCL,,,Soberano,Gobierno Argentino
+GD46C,Ley N.Y.,CCL,,,Soberano,Gobierno Argentino
+GD46D,Ley N.Y.,CCL,,,Soberano,Gobierno Argentino
+GN43D,Ley Argentina,MEP,50.0,AA (FIX),,
+GN43O,Ley Argentina,MEP,50.0,AA (FIX),Energias Renovables,Genneia S.A.
+GN47D,Ley Argentina,MEP,1.0,AA (FIX),,
+GN47O,Ley Argentina,MEP,1.0,AA (FIX),Energias Renovables,Genneia S.A.
+GN48O,Ley Argentina,MEP,1.0,AA+ (FIX),Energias Renovables,Genneia S.A.
+GN49C,Ley N.Y.,CCL,1000.0,B2 (Moodys),,
+GN49D,Ley N.Y.,CCL,1000.0,B2 (Moodys),,
+GN49O,Ley N.Y.,CCL,1000.0,B2 (Moodys),Energias Renovables,Genneia S.A.
+GOC4O,Ley Argentina,MEP,1.0,,Servicios,Generacion Litoral S.A.
+GYC4C,Ley Argentina,MEP,1.0,BV1(arg) (FIX),,
+GYC4D,Ley Argentina,MEP,1.0,BV1(arg) (FIX),,
+GYC4O,Ley Argentina,MEP,1.0,BV1(arg) (FIX),Energias Renovables,360 Energy S.A.
+GYC5O,Ley Argentina,MEP,50.0,,Energias Renovables,360 Energy S.A.
+HBCAC,Ley Argentina,MEP,1000.0,,,
+HBCAD,Ley Argentina,MEP,1000.0,,,
+HBCAO,Ley Argentina,MEP,1000.0,,Financiera,Banco Hipotecario S.A.
+HBCDC,Ley Argentina,MEP,1000.0,A1+(arg) (FIX),,
+HBCDD,Ley Argentina,MEP,1000.0,A1+(arg) (FIX),,
+HBCDO,Ley Argentina,MEP,1000.0,A1+(arg) (FIX),Financiera,Banco Hipotecario S.A.
+HBCFC,Ley Argentina,MEP,,,,
+HBCFD,Ley Argentina,MEP,,,,
+HBCFO,Ley Argentina,MEP,,,Financiera,Banco Hipotecario S.A.
+HJCFC,Ley Argentina,MEP,1.0,AA (FIX),,
+HJCFD,Ley Argentina,MEP,1.0,AA (FIX),,
+HJCFO,Ley Argentina,MEP,1.0,AA (FIX),Financiera,John Deere Credit Compania Financiera S.A
+HJCGO,Ley Argentina,MEP,1.0,AA (FIX),Financiera,John Deere Credit Compania Financiera S.A
+HJCHC,Ley Argentina,MEP,1200.0,AA(arg) (FIX),,
+HJCHD,Ley Argentina,MEP,1200.0,AA(arg) (FIX),,
+HJCHO,Ley Argentina,MEP,1200.0,AA(arg) (FIX),Financiera,John Deere Credit Compania Financiera S.A
+HJCIC,Ley Argentina,MEP,1200.0,,,
+HJCID,Ley Argentina,MEP,1200.0,,,
+HJCIO,Ley Argentina,MEP,1200.0,,Financiera,John Deere Credit Compania Financiera S.A
+HJCJC,Ley Argentina,MEP,1000.0,,,
+HJCJD,Ley Argentina,MEP,1000.0,,,
+HJCJO,Ley Argentina,MEP,1000.0,,Financiera,John Deere Credit Compania Financiera S.A
+HJCKC,Ley Argentina,MEP,1000.0,AA(arg) (FIX),,
+HJCKD,Ley Argentina,MEP,1000.0,AA(arg) (FIX),,
+HJCKO,Ley Argentina,MEP,1000.0,AA(arg) (FIX),Financiera,John Deere Credit Compania Financiera S.A
+HJCLD,Ley Argentina,MEP,1000.0,AA(arg) (FIX),,
+HJCLO,Ley Argentina,MEP,1000.0,AA(arg) (FIX),Financiera,John Deere Credit Compania Financiera S.A
+HVS1D,Ley Argentina,MEP,,,,
+HVS1O,Ley Argentina,MEP,,,Alimentos y Consumo,Havanna Holding SA
+ICC6D,Ley Argentina,MEP,,,,
+ICC6O,Ley Argentina,MEP,,,Financiera,Icbc
+IRCFC,Ley N.Y.,CCL,1.0,AAA(arg),,
+IRCFD,Ley N.Y.,CCL,1.0,AAA(arg),,
+IRCFO,Ley N.Y.,CCL,1.0,AAA(arg),Real Estate,Irsa Inversiones Y Representaciones S.A.
+IRCJC,Ley Argentina,MEP,100.0,AA+ (FIX),,
+IRCJD,Ley Argentina,MEP,100.0,AA+ (FIX),,
+IRCJO,Ley Argentina,MEP,100.0,AA+ (FIX),Real Estate,Irsa Inversiones Y Representaciones S.A.
+IRCNC,Ley Argentina,MEP,1.0,AA+ (FIX),,
+IRCND,Ley Argentina,MEP,1.0,AA+ (FIX),,
+IRCNO,Ley Argentina,MEP,1.0,AA+ (FIX),Real Estate,Irsa Inversiones Y Representaciones S.A.
+IRCOC,Ley Argentina,MEP,1.0,AA+ (FIX),,
+IRCOD,Ley Argentina,MEP,1.0,AA+ (FIX),,
+IRCOO,Ley Argentina,MEP,1.0,AA+ (FIX),Real Estate,Irsa Inversiones Y Representaciones S.A.
+IRCPC,Ley N.Y.,CCL,1.0,AAA(arg),,
+IRCPD,Ley N.Y.,CCL,1.0,AAA(arg),,
+IRCPO,Ley N.Y.,CCL,1.0,AAA(arg),Real Estate,Irsa Inversiones Y Representaciones S.A.
+IRCQC,Ley Argentina,MEP,100.0,,,
+IRCQD,Ley Argentina,MEP,100.0,,,
+IRCQO,Ley Argentina,MEP,100.0,,Real Estate,Irsa Inversiones Y Representaciones S.A.
+JNC5D,Ley Argentina,,,,,
+JNC5O,Ley Argentina,,,,Agro,Inversora Juramento S.A.
+JNC6D,Ley Argentina,MEP,100.0,,,
+JNC6O,Ley Argentina,MEP,100.0,,Agro,Inversora Juramento S.A.
+JNC7C,Ley Argentina,,,,,
+JNC7D,Ley Argentina,,,,,
+JNC7O,Ley Argentina,,,,Agro,Inversora Juramento S.A.
+JUS22,,,,,Subsoberano,
+LDCGD,Ley Argentina,MEP,100.0,AA- (FIX),,
+LDCGO,Ley Argentina,MEP,100.0,AA- (FIX),Agro,Ledesma
+LMS7C,Ley Argentina,CCL,1.0,AAA (arg) (FIX),,
+LMS7D,Ley Argentina,CCL,1.0,AAA (arg) (FIX),,
+LMS7O,Ley Argentina,CCL,1.0,AAA (arg) (FIX),Industria,Aluar Aluminio Argentino Saic
+LMS8C,Ley Argentina,CCL,50.0,AAA (arg) (FIX),,
+LMS8D,Ley Argentina,CCL,50.0,AAA (arg) (FIX),,
+LMS8O,Ley Argentina,CCL,50.0,AAA (arg) (FIX),Industria,Aluar
+LOC5C,Ley Argentina,MEP,50.0,AAA (FIX),,
+LOC5D,Ley Argentina,MEP,50.0,AAA (FIX),,
+LOC5O,Ley Argentina,MEP,50.0,AAA (FIX),Construccion,Loma Negra
+LOC6C,Ley Argentina,MEP,50.0,AAA(arg) (FIX),,
+LOC6D,Ley Argentina,MEP,50.0,AAA(arg) (FIX),,
+LOC6O,Ley Argentina,MEP,50.0,AAA(arg) (FIX),Construccion,Loma Negra
+LR7BO,Ley Argentina,MEP,,,Industria,Laboratorios Richmond Sacif
+LUC5D,Ley Argentina,MEP,100.0,AA(arg) (FIX),,
+LUC5O,Ley Argentina,MEP,100.0,AA(arg) (FIX),Energias Renovables,Luz De Tres Picos S.A.
+M31G6,,,,,Soberano,Gobierno Argentino
+MCC1C,Ley Argentina,MEP,100.0,,,
+MCC1D,Ley Argentina,MEP,100.0,,,
+MCC1O,Ley Argentina,MEP,100.0,,O&G,Pecom Servicios Energã­A S.A.U.
+MCC2O,Ley Argentina,MEP,100.0,,O&G,Pecom Servicios Energã­A S.A.U.
+MCC3C,Ley Argentina,MEP,100.0,AA(arg) (FIX),,
+MCC3D,Ley Argentina,MEP,100.0,AA(arg) (FIX),,
+MCC3O,Ley Argentina,MEP,100.0,AA(arg) (FIX),O&G,Pecom Servicios Energã­A S.A.U.
+MGCMC,Ley N.Y.,CCL,10000.0,AAA(arg),,
+MGCMD,Ley N.Y.,CCL,10000.0,AAA(arg),,
+MGCMO,Ley N.Y.,CCL,10000.0,AAA(arg),O&G,Pampa Energía S.A.
+MGCNO,Ley Argentina,MEP,1.0,AAA(arg) (FIX),O&G,Pampa Energía S.A.
+MGCOC,Ley N.Y.,CCL,10000.0,AAA(arg),,
+MGCOD,Ley N.Y.,CCL,10000.0,AAA(arg),,
+MGCOO,Ley N.Y.,CCL,10000.0,AAA(arg),O&G,Pampa Energía S.A.
+MGCQC,Ley Argentina,CCL,100.0,AAA(arg) (FIX),,
+MGCQD,Ley Argentina,CCL,100.0,AAA(arg) (FIX),,
+MGCQO,Ley Argentina,CCL,100.0,AAA(arg) (FIX),O&G,Pampa Energía S.A.
+MGCRC,Ley N.Y.,CCL,10000.0,AAA(arg),,
+MGCRD,Ley N.Y.,CCL,10000.0,AAA(arg),,
+MGCRO,Ley N.Y.,CCL,10000.0,AAA(arg),O&G,Pampa Energía S.A.
+MGCTC,Ley Argentina,MEP,1000.0,AAA(arg) (FIX),,
+MGCTD,Ley Argentina,MEP,1000.0,AAA(arg) (FIX),,
+MGCTO,Ley Argentina,MEP,1000.0,AAA(arg) (FIX),O&G,Pampa Energía S.A.
+MIC3C,Ley Argentina,MEP,100.0,ML A-1.ar,,
+MIC3D,Ley Argentina,MEP,100.0,ML A-1.ar,,
+MIC3O,Ley Argentina,MEP,100.0,ML A-1.ar,Industria,Mirgor
+MIC4C,Ley Argentina,MEP,100.0,,,
+MIC4D,Ley Argentina,MEP,100.0,,,
+MIC4O,Ley Argentina,MEP,100.0,,Industria,Mirgor
+MIC6C,Ley Argentina,MEP,100.0,,,
+MIC6D,Ley Argentina,MEP,100.0,,,
+MIC6O,Ley Argentina,MEP,100.0,,Industria,Mirgor
+MJC1D,Ley Argentina,MEP,,,,
+MJC1O,Ley Argentina,MEP,,,Mineria,Minas Argentinas S.A.
+MR44C,Ley Argentina,MEP,,,,
+MR44D,Ley Argentina,MEP,,,,
+MR44O,Ley Argentina,MEP,,,Servicios,Generacion Mediterranea S.A.
+MR46C,Ley N.Y.,CCL,1000.0,,,
+MR46D,Ley N.Y.,CCL,1000.0,,,
+MR46O,Ley N.Y.,CCL,1000.0,,Servicios,Generacion Mediterranea S.A.
+MR47C,Ley N.Y.,CCL,1000.0,,,
+MR47D,Ley N.Y.,CCL,1000.0,,,
+MR47O,Ley N.Y.,CCL,1000.0,,Servicios,Generacion Mediterranea S.A.
+MR48D,Ley Argentina,MEP,1.0,,,
+MR48O,Ley Argentina,MEP,1.0,,Servicios,Generacion Mediterranea S.A.
+MR49D,Ley Argentina,MEP,,,,
+MR49O,Ley Argentina,MEP,,,Servicios,Generacion Mediterranea S.A.
+MSSFO,Ley Argentina,MEP,1.0,,Agro,Msu S.A
+MSSGO,Ley Argentina,MEP,1.0,,Agro,Msu S.A
+MTC2C,Ley Argentina,MEP,100.0,,,
+MTC2D,Ley Argentina,MEP,100.0,,,
+MTC2O,Ley Argentina,MEP,100.0,,Alimentos y Consumo,Mastellone Hermanos S.A.
+NDT25,,,,,Subsoberano,
+NPCCC,Ley Argentina,MEP,100.0,,,
+NPCCD,Ley Argentina,MEP,100.0,,,
+NPCCO,Ley Argentina,MEP,100.0,,Servicios,Central Puerto
+NPCDC,Ley Argentina,MEP,100.0,AAA.ar (Moodys),,
+NPCDD,Ley Argentina,MEP,100.0,AAA.ar (Moodys),,
+NPCDO,Ley Argentina,MEP,100.0,AAA.ar (Moodys),Servicios,Central Puerto
+NZC5D,Ley Argentina,MEP,,,,
+NZC5O,Ley Argentina,MEP,,,Financiera,BNA
+OLC5C,Ley Argentina,MEP,100.0,AAA (FIX),,
+OLC5D,Ley Argentina,MEP,100.0,AAA (FIX),,
+OLC5O,Ley Argentina,MEP,100.0,AAA (FIX),O&G,Oleoductos Del Valle S.A.
+OLC6C,Ley Argentina,MEP,100.0,AAA(arg) (FIX),,
+OLC6D,Ley Argentina,MEP,100.0,AAA(arg) (FIX),,
+OLC6O,Ley Argentina,MEP,100.0,AAA(arg) (FIX),O&G,Oleoductos Del Valle S.A.
+OLC7C,Ley Argentina,MEP,1.0,AAA(arg) (FIX),,
+OLC7D,Ley Argentina,MEP,1.0,AAA(arg) (FIX),,
+OLC7O,Ley Argentina,MEP,1.0,AAA(arg) (FIX),O&G,Oleoductos Del Valle S.A.
+OR3BP,Ley Argentina,MEP,,,Agro,Agronorte S.R.L.
+OT41D,Ley Argentina,MEP,100.0,AA.ar (Moodys),,
+OT41O,Ley Argentina,MEP,100.0,AA.ar (Moodys),O&G,Oiltanking Ebytem S.A.
+OT42C,Ley Argentina,MEP,100.0,AA.ar (Moodys),,
+OT42D,Ley Argentina,MEP,100.0,AA.ar (Moodys),,
+OT42O,Ley Argentina,MEP,100.0,AA.ar (Moodys),O&G,Oiltanking Ebytem S.A.
+OTS2D,Ley Argentina,MEP,1.0,,,
+OTS2O,Ley Argentina,MEP,1.0,,O&G,Oiltanking Ebytem S.A.
+OTS3D,Ley Argentina,MEP,1.0,,,
+OTS3O,Ley Argentina,MEP,1.0,,O&G,Oiltanking Ebytem S.A.
+OTS5C,Ley Argentina,MEP,100.0,,,
+OTS5D,Ley Argentina,MEP,100.0,,,
+OTS5O,Ley Argentina,MEP,100.0,,O&G,Oiltanking Ebytem S.A.
+OTS6D,Ley Argentina,MEP,100.0,,,
+OTS6O,Ley Argentina,MEP,100.0,,O&G,Oiltanking Ebytem S.A.
+OZC3D,Ley Argentina,MEP,100.0,,,
+OZC3O,Ley Argentina,MEP,100.0,,Servicios,Edemsa S.A.
+OZC6C,,CCL,,,,
+OZC6D,,CCL,,,,
+OZC6O,,CCL,,,Servicios,Edemsa S.A.
+PAP0,,,,,Soberano,Gobierno Argentino
+PARP,,,,,Soberano,Gobierno Argentino
+PBA27,,,,,Subsoberano,
+PBM27,,,,,Subsoberano,
+PECNC,Ley Argentina,MEP,1.0,,,
+PECND,Ley Argentina,MEP,1.0,,,
+PECNO,Ley Argentina,MEP,1.0,,Servicios,Tango Energy
+PFC2C,Ley Argentina,MEP,100.0,,,
+PFC2D,Ley Argentina,MEP,100.0,,,
+PFC2O,Ley Argentina,MEP,100.0,,Agro,Profertil
+PFC3D,Ley Argentina,MEP,100.0,,,
+PFC3O,Ley Argentina,MEP,100.0,,Agro,Profertil
+PLC1C,Ley Argentina,MEP,100.0,AAA(arg) (FIX),,
+PLC1D,Ley Argentina,MEP,100.0,AAA(arg) (FIX),,
+PLC1O,Ley Argentina,MEP,100.0,AAA(arg) (FIX),O&G,Pluspetrol S.A.
+PLC2C,Ley Argentina,MEP,100.0,AAA(arg) (FIX),,
+PLC2D,Ley Argentina,MEP,100.0,AAA(arg) (FIX),,
+PLC2O,Ley Argentina,MEP,100.0,AAA(arg) (FIX),O&G,Pluspetrol S.A.
+PLC3C,Ley Argentina,MEP,100.0,,,
+PLC3D,Ley Argentina,MEP,100.0,,,
+PLC3O,Ley Argentina,MEP,100.0,,O&G,Pluspetrol S.A.
+PLC4C,Ley N.Y.,CCL,1000.0,BB (Fitch),,
+PLC4D,Ley N.Y.,CCL,1000.0,BB (Fitch),,
+PLC4O,Ley N.Y.,CCL,1000.0,BB (Fitch),O&G,Pluspetrol S.A.
+PLC5C,Ley N.Y.,CCL,1000.0,AAA(arg),,
+PLC5D,Ley N.Y.,CCL,1000.0,AAA(arg),,
+PLC5O,Ley N.Y.,CCL,1000.0,AAA(arg),O&G,Pluspetrol S.A.
+PLC6C,Ley Argentina,MEP,100.0,AAA(arg) (FIX),,
+PLC6D,Ley Argentina,MEP,100.0,AAA(arg) (FIX),,
+PLC6O,Ley Argentina,MEP,100.0,AAA(arg) (FIX),O&G,Pluspetrol S.A.
+PLC7C,Ley N.Y.,CCL,1000.0,AAA (Fix SCR),,
+PLC7D,Ley N.Y.,CCL,1000.0,AAA (Fix SCR),,
+PLC7O,Ley N.Y.,CCL,1000.0,AAA (Fix SCR),O&G,Pluspetrol S.A.
+PMA28,,,,,Subsoberano,
+PMD26,,,,,Subsoberano,
+PMM27,,,,,Subsoberano,
+PMM29,,,,,Subsoberano,
+PN34C,Ley Argentina,MEP,1.0,,,
+PN34D,Ley Argentina,MEP,1.0,,,
+PN34O,Ley Argentina,MEP,1.0,,O&G,Pan American Energy Llc.
+PN35C,Ley Argentina,MEP,1.0,,,
+PN35D,Ley Argentina,MEP,1.0,,,
+PN35O,Ley Argentina,MEP,1.0,,O&G,Pan American Energy Llc.
+PN36C,Ley Argentina,MEP,50.0,,,
+PN36D,Ley Argentina,MEP,50.0,,,
+PN36O,Ley Argentina,MEP,50.0,,O&G,Pan American Energy Llc.
+PN37C,Ley Argentina,MEP,50.0,,,
+PN37D,Ley Argentina,MEP,50.0,,,
+PN37O,Ley Argentina,MEP,50.0,,O&G,Pan American Energy Llc.
+PN38C,Ley Argentina,CCL,50.0,,,
+PN38D,Ley Argentina,CCL,50.0,,,
+PN38O,Ley Argentina,CCL,50.0,,O&G,Pan American Energy Llc.
+PN41C,Ley Argentina,CCL,50.0,AAA(arg) (FIX),,
+PN41D,Ley Argentina,CCL,50.0,AAA(arg) (FIX),,
+PN41O,Ley Argentina,CCL,50.0,AAA(arg) (FIX),O&G,Pan American Energy Llc.
+PN42C,Ley Argentina,MEP,50.0,AAA(arg) (FIX),,
+PN42D,Ley Argentina,MEP,50.0,AAA(arg) (FIX),,
+PN42O,Ley Argentina,MEP,50.0,AAA(arg) (FIX),O&G,Pan American Energy Llc.
+PN43C,Ley N.Y.,CCL,1000.0,,,
+PN43D,Ley N.Y.,CCL,1000.0,,,
+PN43O,Ley N.Y.,CCL,1000.0,,O&G,Pan American Energy Llc.
+PNDCC,Ley N.Y.,CCL,1000.0,AAA(arg),,
+PNDCD,Ley N.Y.,CCL,1000.0,AAA(arg),,
+PNDCO,Ley N.Y.,CCL,1000.0,AAA(arg),O&G,Pan American Energy Llc.
+PNXCC,Ley N.Y.,CCL,1000.0,AAA(arg),,
+PNXCD,Ley N.Y.,CCL,1000.0,AAA(arg),,
+PNXCO,Ley N.Y.,CCL,1000.0,AAA(arg),O&G,Pan American Energy Llc.
+PQCRD,Ley Argentina,MEP,1.0,AA(arg) (FIX),,
+PQCRO,Ley Argentina,MEP,1.0,AA(arg) (FIX),O&G,Petroquimica Comodoro Rivadavia S.A.
+PQCSC,Ley Argentina,MEP,50.0,AA(arg) (FIX),,
+PQCSD,Ley Argentina,MEP,50.0,AA(arg) (FIX),,
+PQCSO,Ley Argentina,MEP,50.0,AA(arg) (FIX),O&G,Petroquimica Comodoro Rivadavia S.A.
+PQCTC,Ley Argentina,MEP,50.0,AA(arg) (FIX),,
+PQCTD,Ley Argentina,MEP,50.0,AA(arg) (FIX),,
+PQCTO,Ley Argentina,MEP,50.0,AA(arg) (FIX),O&G,Petroquimica Comodoro Rivadavia S.A.
+PR17,,,,,Soberano,Gobierno Argentino
+PUA36,,,,,Subsoberano,
+PUA6C,,,,,Subsoberano,
+PUA6D,,,,,Subsoberano,
+PUL26,,,,,Subsoberano,
+PVC3D,Ley Argentina,MEP,,,,
+PVC3O,Ley Argentina,MEP,,,Financiera,Banco Provincia Bs As
+PZCGD,Ley Argentina,MEP,100.0,AA (FIX),,
+PZCGO,Ley Argentina,MEP,100.0,AA (FIX),Real Estate,Plaza Logistica S.R.L.
+RC1CC,Ley N.Y.,CCL,1000.0,B+ (Fitch),,
+RC1CD,Ley N.Y.,CCL,1000.0,B+ (Fitch),,
+RC1CO,Ley N.Y.,CCL,1000.0,B+ (Fitch),Alimentos y Consumo,Arcor S.A.I.C.
+RC2CC,Ley Argentina,MEP,1.0,,,
+RC2CD,Ley Argentina,MEP,1.0,,,
+RC2CO,Ley Argentina,MEP,1.0,,Alimentos y Consumo,Arcor S.A.I.C.
+RC5CC,Ley Argentina,MEP,100.0,,,
+RC5CD,Ley Argentina,MEP,100.0,,,
+RC5CO,Ley Argentina,MEP,100.0,,Alimentos y Consumo,Arcor S.A.I.C.
+RCCRC,Ley Argentina,MEP,100.0,AAA (FIX),,
+RCCRD,Ley Argentina,MEP,100.0,AAA (FIX),,
+RCCRO,Ley Argentina,MEP,100.0,AAA (FIX),Alimentos y Consumo,Arcor S.A.I.C.
+RUCDC,Ley N.Y.,CCL,1.0,CCC (Fitch),,
+RUCDD,Ley N.Y.,CCL,1.0,CCC (Fitch),,
+RUCDO,Ley N.Y.,CCL,1.0,CCC (Fitch),O&G,Msu Energy Sa
+RUCEC,Ley Argentina,MEP,100.0,AA-(arg) (FIX),,
+RUCED,Ley Argentina,MEP,100.0,AA-(arg) (FIX),,
+RUCEO,Ley Argentina,MEP,100.0,AA-(arg) (FIX),O&G,Msu Energy Sa
+RZABD,Ley Argentina,MEP,100.0,A+ (FIX),,
+RZABO,Ley Argentina,MEP,100.0,A+ (FIX),Agro,Rizobacter Argentina S.A
+RZBBD,Ley Argentina,MEP,100.0,,,
+RZBBO,Ley Argentina,MEP,100.0,,Agro,Rizobacter Argentina S.A
+RZBCD,Ley Argentina,MEP,100.0,,,
+RZBCO,Ley Argentina,MEP,100.0,,Agro,Rizobacter Argentina S.A
+S13N6,,,,,Soberano,Gobierno Argentino
+S14G6,,,,,Soberano,Gobierno Argentino
+S15S6,,,,,Soberano,Gobierno Argentino
+S17L6,,,,,Soberano,Gobierno Argentino
+S24DD,,,,,Subsoberano,
+S30N6,,,,,Soberano,Gobierno Argentino
+S30O6,,,,,Soberano,Gobierno Argentino
+S30S6,,,,,Soberano,Gobierno Argentino
+S31G6,,,,,Soberano,Gobierno Argentino
+S31L6,,,,,Soberano,Gobierno Argentino
+SA24D,,,,,Subsoberano,
+SBC1C,Ley Argentina,MEP,100.0,AA (FIX),,
+SBC1D,Ley Argentina,MEP,100.0,AA (FIX),,
+SBC1O,Ley Argentina,MEP,100.0,AA (FIX),Financiera,Scania Credit
+SBC2C,Ley Argentina,MEP,1.0,AA(arg) (FIX),,
+SBC2D,Ley Argentina,MEP,1.0,AA(arg) (FIX),,
+SBC2O,Ley Argentina,MEP,1.0,AA(arg) (FIX),Financiera,Scania Credit
+SBC3C,Ley Argentina,MEP,100.0,,,
+SBC3D,Ley Argentina,MEP,100.0,,,
+SBC3O,Ley Argentina,MEP,100.0,,Financiera,Scania Credit
+SFD34,,,,,Subsoberano,
+SFN27,,,,,Subsoberano,
+SIC1C,Ley Argentina,MEP,100.0,A+(arg) (FIX),,
+SIC1D,Ley Argentina,MEP,100.0,A+(arg) (FIX),,
+SIC1O,Ley Argentina,MEP,100.0,A+(arg) (FIX),Industria,Sidersa S.A.
+SIC2C,Ley Argentina,MEP,100.0,,,
+SIC2D,Ley Argentina,MEP,100.0,,,
+SIC2O,Ley Argentina,MEP,100.0,,Industria,Sidersa S.A.
+SNABD,Ley Argentina,MEP,50.0,,,
+SNABO,Ley Argentina,MEP,50.0,,Agro,Sa San Miguel Agici Y F
+SNEBC,Ley Argentina,MEP,1.0,,,
+SNEBD,Ley Argentina,MEP,1.0,,,
+SNEBO,Ley Argentina,MEP,1.0,,Agro,Sa San Miguel Agici Y F
+SNSBD,Ley Argentina,MEP,1.0,A- (FIX),,
+SNSBO,Ley Argentina,MEP,1.0,A- (FIX),Agro,Sa San Miguel Agici Y F
+SNSDD,Ley Argentina,MEP,50.0,,,
+SNSDO,Ley Argentina,MEP,50.0,,Agro,Sa San Miguel Agici Y F
+STCFD,Ley Argentina,MEP,,,,
+STCFO,Ley Argentina,MEP,,,Financiera,Grupo St S.A.
+SXC4C,Ley Argentina,MEP,100.0,,,
+SXC4D,Ley Argentina,MEP,100.0,,,
+SXC4O,Ley Argentina,MEP,100.0,,Financiera,Mercado Pago
+SXC6O,Ley Argentina,MEP,,,Financiera,Mercado Pago
+T15E7,,,,,Soberano,Gobierno Argentino
+T30A7,,,,,Soberano,Gobierno Argentino
+T30J7,,,,,Soberano,Gobierno Argentino
+T31Y7,,,,,Soberano,Gobierno Argentino
+T641C,Ley Argentina,MEP,1200.0,AA (FIX),,
+T641D,Ley Argentina,MEP,1200.0,AA (FIX),,
+T641O,Ley Argentina,MEP,1200.0,AA (FIX),,
+T662C,Ley Argentina,MEP,100.0,A1+(arg) (FIX),,
+T662D,Ley Argentina,MEP,100.0,A1+(arg) (FIX),,
+T662O,Ley Argentina,MEP,100.0,A1+(arg) (FIX),Financiera,Tarjeta Naranja S.A.
+T672D,Ley Argentina,MEP,100.0,,,
+T672O,Ley Argentina,MEP,100.0,,Financiera,Tarjeta Naranja S.A.
+T673C,Ley Argentina,CCL,,,,
+T673D,Ley Argentina,CCL,,,,
+T673O,Ley Argentina,CCL,,,Financiera,Tarjeta Naranja S.A.
+TFU27,,,,,Subsoberano,
+TLCMC,Ley N.Y.,CCL,1000.0,AA+(arg),,
+TLCMD,Ley N.Y.,CCL,1000.0,AA+(arg),,
+TLCMO,Ley N.Y.,CCL,1000.0,AA+(arg),Telecomunicaciones,Telecom Argentina S.A
+TLCOC,Ley Argentina,MEP,100.0,AA+ (FIX),,
+TLCOD,Ley Argentina,MEP,100.0,AA+ (FIX),,
+TLCOO,Ley Argentina,MEP,100.0,AA+ (FIX),Telecomunicaciones,Telecom Argentina S.A
+TLCPC,Ley N.Y.,CCL,1.0,B (Fitch),,
+TLCPD,Ley N.Y.,CCL,1.0,B (Fitch),,
+TLCPO,Ley N.Y.,CCL,1.0,B (Fitch),Telecomunicaciones,Telecom Argentina S.A
+TLCQC,Ley Argentina,MEP,100.0,,,
+TLCQD,Ley Argentina,MEP,100.0,,,
+TLCQO,Ley Argentina,MEP,100.0,,Telecomunicaciones,Telecom Argentina S.A
+TLCTC,Ley N.Y.,CCL,1.0,B2 (Moodys),,
+TLCTD,Ley N.Y.,CCL,1.0,B2 (Moodys),,
+TLCTO,Ley N.Y.,CCL,1.0,B2 (Moodys),Telecomunicaciones,Telecom Argentina S.A
+TLCUC,Ley Argentina,MEP,100.0,,,
+TLCUD,Ley Argentina,MEP,100.0,,,
+TLCUO,Ley Argentina,MEP,100.0,,Telecomunicaciones,Telecom Argentina S.A
+TLCVC,Ley Argentina,MEP,100.0,,,
+TLCVD,Ley Argentina,MEP,100.0,,,
+TLCVO,Ley Argentina,MEP,100.0,,Telecomunicaciones,Telecom Argentina S.A
+TLCWC,Ley Argentina,MEP,100.0,,,
+TLCWD,Ley Argentina,MEP,100.0,,,
+TLCWO,Ley Argentina,MEP,100.0,,Telecomunicaciones,Telecom Argentina S.A
+TMF27,,,,,Soberano,Gobierno Argentino
+TMF28,,,,,Soberano,Gobierno Argentino
+TMG27,,,,,Soberano,Gobierno Argentino
+TMG28,,,,,Soberano,Gobierno Argentino
+TML27,,,,,Soberano,Gobierno Argentino
+TO26,,,,,Soberano,Gobierno Argentino
+TSC3C,Ley N.Y.,CCL,10000.0,B (Fitch),,
+TSC3D,Ley N.Y.,CCL,10000.0,B (Fitch),,
+TSC3O,Ley N.Y.,CCL,10000.0,B (Fitch),O&G,Transportadora De Gas Del Sur S.A.
+TSC4C,Ley N.Y.,CCL,1000.0,B (Fitch),,
+TSC4D,Ley N.Y.,CCL,1000.0,B (Fitch),,
+TSC4O,Ley N.Y.,CCL,1000.0,B (Fitch),O&G,Transportadora De Gas Del Sur S.A.
+TTC8C,Ley Argentina,MEP,1.0,,,
+TTC8D,Ley Argentina,MEP,1.0,,,
+TTC8O,Ley Argentina,MEP,1.0,,O&G,Tecpetrol S.A.
+TTC9C,Ley Argentina,MEP,1.0,,,
+TTC9D,Ley Argentina,MEP,1.0,,,
+TTC9O,Ley Argentina,MEP,1.0,,O&G,Tecpetrol S.A.
+TTCAC,Ley N.Y.,CCL,1000.0,AAA(arg),,
+TTCAD,Ley N.Y.,CCL,1000.0,AAA(arg),,
+TTCAO,Ley N.Y.,CCL,1000.0,AAA(arg),O&G,Tecpetrol S.A.
+TTCBC,Ley Argentina,MEP,1.0,AAA (FIX),,
+TTCBD,Ley Argentina,MEP,1.0,AAA (FIX),,
+TTCBO,Ley Argentina,MEP,1.0,AAA (FIX),O&G,Tecpetrol S.A.
+TTCDC,Ley N.Y.,CCL,1000.0,AAA(arg),,
+TTCDD,Ley N.Y.,CCL,1000.0,AAA(arg),,
+TTCDO,Ley N.Y.,CCL,1000.0,AAA(arg),O&G,Tecpetrol S.A.
+TTCEC,Ley Argentina,MEP,1.0,AAA(arg) (FIX),,
+TTCED,Ley Argentina,MEP,1.0,AAA(arg) (FIX),,
+TTCEO,Ley Argentina,MEP,1.0,AAA(arg) (FIX),O&G,Tecpetrol S.A.
+TTD26,,,,,Soberano,Gobierno Argentino
+TTS26,,,,,Soberano,Gobierno Argentino
+TX26,,,,,Soberano,Gobierno Argentino
+TX28,,,,,Soberano,Gobierno Argentino
+TX31,,,,,Soberano,Gobierno Argentino
+TXMD8,,,,,Soberano,Gobierno Argentino
+TXMD9,,,,,Soberano,Gobierno Argentino
+TXMJ0,,,,,Soberano,Gobierno Argentino
+TXMJ8,,,,,Soberano,Gobierno Argentino
+TXMJ9,,,,,Soberano,Gobierno Argentino
+TY30P,,,,,Soberano,Gobierno Argentino
+TZV27,,,,,Soberano,Gobierno Argentino
+TZV28,,,,,Soberano,Gobierno Argentino
+TZVD8,,,,,Soberano,Gobierno Argentino
+TZX27,,,,,Soberano,Gobierno Argentino
+TZX28,,,,,Soberano,Gobierno Argentino
+TZXA7,,,,,Soberano,Gobierno Argentino
+TZXD6,,,,,Soberano,Gobierno Argentino
+TZXD7,,,,,Soberano,Gobierno Argentino
+TZXD8,,,,,Soberano,Gobierno Argentino
+TZXM7,,,,,Soberano,Gobierno Argentino
+TZXM8,,,,,Soberano,Gobierno Argentino
+TZXM9,,,,,Soberano,Gobierno Argentino
+TZXO6,,,,,Soberano,Gobierno Argentino
+TZXO7,,,,,Soberano,Gobierno Argentino
+TZXS7,,,,,Soberano,Gobierno Argentino
+TZXS8,,,,,Soberano,Gobierno Argentino
+TZXY7,,,,,Soberano,Gobierno Argentino
+VAC3P,Ley Argentina,MEP,,,Alimentos y Consumo,Vitalcan S.A.
+VBC1C,Ley Argentina,MEP,1000.0,AA+ (FIX),,
+VBC1D,Ley Argentina,MEP,1000.0,AA+ (FIX),,
+VBC1O,Ley Argentina,MEP,1000.0,AA+ (FIX),Financiera,Banco De Valores S.A.
+VBC2C,Ley Argentina,MEP,1.0,ML A-1.ar (Moodys),,
+VBC2D,Ley Argentina,MEP,1.0,ML A-1.ar (Moodys),,
+VBC2O,Ley Argentina,MEP,1.0,ML A-1.ar (Moodys),Financiera,Banco De Valores S.A.
+VSCOC,Ley Argentina,MEP,,,,
+VSCOD,Ley Argentina,MEP,,,,
+VSCOO,Ley Argentina,MEP,,,O&G,Vista Energy Argentina S.A.U.
+VSCPC,Ley Argentina,CCL,100.0,AAA (FIX),,
+VSCPD,Ley Argentina,CCL,100.0,AAA (FIX),,
+VSCPO,Ley Argentina,CCL,100.0,AAA (FIX),O&G,Vista Energy Argentina S.A.U.
+VSCRC,Ley Argentina,CCL,1.0,AAA (FIX),,
+VSCRD,Ley Argentina,CCL,1.0,AAA (FIX),,
+VSCRO,Ley Argentina,CCL,1.0,AAA (FIX),O&G,Vista Energy Argentina S.A.U.
+VSCTC,Ley N.Y.,CCL,10000.0,AAA(arg),,
+VSCTD,Ley N.Y.,CCL,10000.0,AAA(arg),,
+VSCTO,Ley N.Y.,CCL,10000.0,AAA(arg),O&G,Vista Energy Argentina S.A.U.
+VSCUC,Ley Argentina,CCL,1000.0,AAA (FIX),,
+VSCUD,Ley Argentina,CCL,1000.0,AAA (FIX),,
+VSCUO,Ley Argentina,CCL,1000.0,AAA (FIX),O&G,Vista Energy Argentina S.A.U.
+VSCVC,Ley N.Y.,CCL,1000.0,BB- (Fitch),,
+VSCVD,Ley N.Y.,CCL,1000.0,BB- (Fitch),,
+VSCVO,Ley N.Y.,CCL,1000.0,BB- (Fitch),O&G,Vista Energy Argentina S.A.U.
+VSCWC,Ley Argentina,MEP,,,,
+VSCWD,Ley Argentina,MEP,,,,
+VSCWO,Ley Argentina,MEP,,,O&G,Vista Energy Argentina S.A.U.
+VSCXC,Ley N.Y.,CCL,1000.0,AAA(arg),,
+VSCXD,Ley N.Y.,CCL,1000.0,AAA(arg),,
+VSCXO,Ley N.Y.,CCL,1000.0,AAA(arg),O&G,Vista Energy Argentina S.A.U.
+VSCYC,Ley Argentina,CCL,,,,
+VSCYD,Ley Argentina,CCL,,,,
+VSCYO,Ley Argentina,CCL,,,O&G,Vista Energy Argentina S.A.U.
+VSCZC,Ley Argentina,MEP,100.0,,,
+VSCZD,Ley Argentina,MEP,100.0,,,
+VSCZO,Ley Argentina,MEP,100.0,,O&G,Vista Energy Argentina S.A.U.
+WBS1D,Ley Argentina,MEP,1.0,ML A-1.ar (Moodys),,
+WBS1O,Ley Argentina,MEP,1.0,ML A-1.ar (Moodys),Financiera,Banco Mariva
+WBS3D,Ley Argentina,MEP,1000.0,,,
+WBS3O,Ley Argentina,MEP,1000.0,,Financiera,Banco Mariva
+X30N6,,,,,Soberano,Gobierno Argentino
+X30S6,,,,,Soberano,Gobierno Argentino
+X31L6,,,,,Soberano,Gobierno Argentino
+XMC1C,Ley Argentina,MEP,100.0,AA(arg) (FIX),,
+XMC1D,Ley Argentina,MEP,100.0,AA(arg) (FIX),,
+XMC1O,Ley Argentina,MEP,100.0,AA(arg) (FIX),Mineria,Minera Exar S.A.
+YCAMC,Ley N.Y.,CCL,10000.0,AAA(arg),,
+YCAMD,Ley N.Y.,CCL,10000.0,AAA(arg),,
+YCAMO,Ley N.Y.,CCL,10000.0,AAA(arg),O&G,YPF S.A.
+YFCGD,Ley Argentina,MEP,100.0,,,
+YFCGO,Ley Argentina,MEP,100.0,,Servicios,YPF LUZ S.A
+YFCIC,Ley Argentina,MEP,100.0,,,
+YFCID,Ley Argentina,MEP,100.0,,,
+YFCIO,Ley Argentina,MEP,100.0,,Servicios,YPF LUZ S.A
+YFCJC,Ley N.Y.,CCL,1000.0,AAA(arg),,
+YFCJD,Ley N.Y.,CCL,1000.0,AAA(arg),,
+YFCJO,Ley N.Y.,CCL,1000.0,AAA(arg),Servicios,YPF LUZ S.A
+YFCKO,Ley Argentina,MEP,100.0,AAA(arg) (FIX),Servicios,YPF LUZ S.A
+YFCLC,Ley Argentina,MEP,100.0,AAA(arg) (FIX),,
+YFCLD,Ley Argentina,MEP,100.0,AAA(arg) (FIX),,
+YFCLO,Ley Argentina,MEP,100.0,AAA(arg) (FIX),Servicios,YPF LUZ S.A
+YFCMD,Ley Argentina,MEP,100.0,AAA(arg) (FIX),,
+YFCMO,Ley Argentina,MEP,100.0,AAA(arg) (FIX),Servicios,YPF LUZ S.A
+YFCNC,Ley Argentina,MEP,100.0,,,
+YFCND,Ley Argentina,MEP,100.0,,,
+YFCNO,Ley Argentina,MEP,100.0,,Servicios,YPF LUZ S.A
+YFCOC,Ley Argentina,MEP,100.0,,,
+YFCOD,Ley Argentina,MEP,100.0,,,
+YFCOO,Ley Argentina,MEP,100.0,,Servicios,YPF LUZ S.A
+YM34C,Ley N.Y.,CCL,1000.0,AAA(arg),,
+YM34D,Ley N.Y.,CCL,1000.0,AAA(arg),,
+YM34O,Ley N.Y.,CCL,1000.0,AAA(arg),O&G,YPF S.A.
+YM35C,Ley Argentina,MEP,100.0,AAA(arg) (FIX),,
+YM35D,Ley Argentina,MEP,100.0,AAA(arg) (FIX),,
+YM35O,Ley Argentina,MEP,100.0,AAA(arg) (FIX),O&G,YPF S.A.
+YM37C,Ley Argentina,MEP,100.0,AAA (FIX),,
+YM37D,Ley Argentina,MEP,100.0,AAA (FIX),,
+YM37O,Ley Argentina,MEP,100.0,AAA (FIX),O&G,YPF S.A.
+YM38C,Ley Argentina,MEP,100.0,AAA(arg) (FIX),,
+YM38D,Ley Argentina,MEP,100.0,AAA(arg) (FIX),,
+YM38O,Ley Argentina,MEP,100.0,AAA(arg) (FIX),O&G,YPF S.A.
+YM39C,Ley Argentina,CCL,100.0,AAA(arg) (FIX),,
+YM39D,Ley Argentina,CCL,100.0,AAA(arg) (FIX),,
+YM39O,Ley Argentina,CCL,100.0,AAA(arg) (FIX),O&G,YPF S.A.
+YM40C,Ley Argentina,MEP,1.0,AAA(arg) (FIX),,
+YM40D,Ley Argentina,MEP,1.0,AAA(arg) (FIX),,
+YM40O,Ley Argentina,MEP,1.0,AAA(arg) (FIX),O&G,YPF S.A.
+YM41C,Ley Argentina,MEP,1.0,AAA(arg) (FIX),,
+YM41D,Ley Argentina,MEP,1.0,AAA(arg) (FIX),,
+YM41O,Ley Argentina,MEP,1.0,AAA(arg) (FIX),O&G,YPF S.A.
+YM42C,Ley Argentina,MEP,100.0,AAA(arg) (FIX),,
+YM42D,Ley Argentina,MEP,100.0,AAA(arg) (FIX),,
+YM42O,Ley Argentina,MEP,100.0,AAA(arg) (FIX),O&G,YPF S.A.
+YM43C,Ley Argentina,MEP,100.0,AAA(arg) (FIX),,
+YM43D,Ley Argentina,MEP,100.0,AAA(arg) (FIX),,
+YM43O,Ley Argentina,MEP,100.0,AAA(arg) (FIX),O&G,YPF S.A.
+YMC1C,Ley N.Y.,CCL,,,,
+YMC1D,Ley N.Y.,CCL,,,,
+YMC1O,Ley N.Y.,CCL,,,O&G,YPF S.A.
+YMCIC,Ley N.Y.,CCL,1.0,AAA(arg),,
+YMCID,Ley N.Y.,CCL,1.0,AAA(arg),,
+YMCIO,Ley N.Y.,CCL,1.0,AAA(arg),O&G,YPF S.A.
+YMCJC,Ley N.Y.,CCL,1.0,AAA(arg),,
+YMCJD,Ley N.Y.,CCL,1.0,AAA(arg),,
+YMCJO,Ley N.Y.,CCL,1.0,AAA(arg),O&G,YPF S.A.
+YMCPO,Ley Argentina,MEP,,,O&G,YPF S.A.
+YMCXC,Ley N.Y.,CCL,1.0,AAA(arg),,
+YMCXD,Ley N.Y.,CCL,1.0,AAA(arg),,
+YMCXO,Ley N.Y.,CCL,1.0,AAA(arg),O&G,YPF S.A.
+YMCYC,Ley Argentina,MEP,1.0,AAA(arg) (FIX),,
+YMCYD,Ley Argentina,MEP,1.0,AAA(arg) (FIX),,
+YMCYO,Ley Argentina,MEP,1.0,AAA(arg) (FIX),O&G,YPF S.A.
+YMCZC,Ley Argentina,CCL,1.0,AAA(arg) (FIX),,
+YMCZD,Ley Argentina,CCL,1.0,AAA(arg) (FIX),,
+YMCZO,Ley Argentina,CCL,1.0,AAA(arg) (FIX),O&G,YPF S.A.
+YPC4O,Ley N.Y.,CCL,,,O&G,YPF S.A.
+ZPC2O,Ley Argentina,MEP,1.0,AA(arg) (FIX),Real Estate,Plaza Logistica S.R.L.
+ZPC3C,Ley Argentina,MEP,1.0,AA(arg) (FIX),,
+ZPC3D,Ley Argentina,MEP,1.0,AA(arg) (FIX),,
+ZPC3O,Ley Argentina,MEP,1.0,AA(arg) (FIX),Real Estate,Plaza Logistica S.R.L.
+ZPC5D,Ley Argentina,MEP,100.0,,,
+ZPC5O,Ley Argentina,MEP,100.0,,Real Estate,Plaza Logistica S.R.L.
+ZZC1C,Ley Argentina,MEP,100.0,,,
+ZZC1D,Ley Argentina,MEP,100.0,,,
+ZZC1O,Ley Argentina,MEP,100.0,,Servicios,Camuzzi Gas Pampeana S.A.
