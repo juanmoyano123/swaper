@@ -16,8 +16,8 @@ desde `/build-feature` a medida que cada una se implementa.
 | F-006 | Cliente del feed de cashflow de Docta | Stage 1 | 240,0 | completada |
 | F-007 | Consolidador multi-fuente | Stage 1 | 160,0 | completada |
 | F-008 | Job programado de ingesta | Stage 1 | 266,7 | completada |
-| F-009 | condiciones_emision: semilla y herencia | Stage 1 | 200,0 | pendiente |
-| F-010 | Sanidad del dato en dos capas | Stage 1 | 400,0 | pendiente |
+| F-009 | condiciones_emision: semilla y herencia | Stage 1 | 200,0 | completada |
+| F-010 | Sanidad del dato en dos capas | Stage 1 | 400,0 | completada |
 | F-011 | Deduplicación de especies | Stage 1 | 400,0 | pendiente |
 | F-012 | Tipo de cambio implícito y normalización | Stage 1 | 266,7 | pendiente |
 
@@ -109,8 +109,37 @@ criterio de paralelizar sólo lo que con certeza no comparte archivos, tablas ni
 serializar toda duda.
 
 **Tanda 1 cerrada el 06/08/2026** — F-008, F-014 y F-028 en paralelo, 313 tests offline y 45 de
-integración en el backend, 96 en el frontend. Siguiente paso: **Tanda 2 — F-009
-(condiciones_emision) ∥ F-010 (sanidad del dato)**.
+integración en el backend, 96 en el frontend.
+
+**Tanda 2 cerrada el 06/08/2026** — F-009 ∥ F-010, 428 tests offline y 58 de integración
+(1 skipped preexistente). Siguiente paso: **Tanda 3 — F-011 (deduplicación de especies), sola**,
+porque F-010, F-011 y F-012 exponen el mismo módulo y el plan las serializa.
+
+### Lo que la Tanda 2 dejó verificado, y lo que dejó abierto
+
+- **La sanidad de F-010 descarta cero sobre el universo de hoy, y es correcto.** Verificado contra
+  la base: de los 2.894 instrumentos, 1.417 son renta variable (salen antes de segmentar, no tienen
+  tasa), 535 quedan sin segmento porque su tipo de tasa no se reconoce, y de los 942 comparables
+  sólo 217 tienen rendimiento. El máximo entre los comparables es BPCSO con 275 % contra un tope de
+  300 %. SNSBO, el caso que la spec nombra como dato correcto, sobrevive con 242 %.
+- **La capa 1 no puede dispararse hoy, y no porque esté rota.** F-007 asigna la TIR sólo al ticker
+  exacto que IAMC reporta, así que dos especies de la misma emisión nunca tienen las dos una TIR
+  con la que discrepar. VSCQD —el caso de la spec, que figuraba con 34.627.917 %— hoy tiene TIR
+  nula. El escenario venía del pipeline viejo de Excel, que propagaba los rendimientos por raíz. La
+  capa está portada y testeada, pero va a marcar cero mientras la precedencia de F-007 siga así.
+- **Los tres rendimientos más altos del universo no pasan por ningún tope**: VE32P (614 %), CAC4O
+  (316 %) y PQCKO (228 %) están entre los 535 sin segmento, y sin segmento no hay tope que aplicar.
+  Es fiel al motor original, que también los dejaba pasar. El hueco no es de F-010 sino de la
+  cobertura de `tipo_tasa`, que viene del `type` de Docta.
+- **El dato curado de F-009 todavía no llega a la vista `resumen`.** F-009 puebla
+  `condiciones_emision` y mide cobertura leyendo `instrumentos`, pero no escribe `instrumentos` ni
+  la vista los cruza. `docs/esquema-datos.md` declara que F-009 escribe las dos tablas; la spec de
+  la feature pide sólo que la tabla quede "poblada y consultable", que es lo que está. **F-020
+  (concentración por sector y ley) y F-024 (redondeo por lámina) necesitan que ese dato llegue al
+  universo**, así que hay que decidir por dónde: extender la vista, o que la corrida de F-007
+  propague desde `condiciones_emision`.
+- La lámina de los bonos del Tesoro sigue en cero: el artefacto curado no la trae para ningún
+  soberano. Es un hueco declarado, no uno que F-009 pueda llenar.
 
 ### Deuda declarada de la Tanda 1
 

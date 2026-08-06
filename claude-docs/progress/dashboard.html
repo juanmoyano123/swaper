@@ -26,19 +26,19 @@
 </head>
 <body>
   <h1>10-Swaper — Progreso de features</h1>
-  <p class="sub">Actualizado al <strong>06/08/2026</strong> (Tanda 1 cerrada). Este dashboard es estático: el estado
+  <p class="sub">Actualizado al <strong>06/08/2026</strong> (Tanda 2 cerrada). Este dashboard es estático: el estado
   real vive en <code>claude-docs/progress/PROGRESS.md</code> y el orden de ejecución en
   <code>claude-docs/planning/plan-ejecucion-tandas.md</code>.</p>
 
   <div class="cards">
-    <div class="card"><div class="v completada">10 / 42</div><div class="l">Features Stage 1</div></div>
-    <div class="card"><div class="v">44 / 185</div><div class="l">Person-days</div></div>
+    <div class="card"><div class="v completada">12 / 42</div><div class="l">Features Stage 1</div></div>
+    <div class="card"><div class="v">51 / 185</div><div class="l">Person-days</div></div>
     <div class="card"><div class="v">2.894</div><div class="l">Instrumentos en base</div></div>
-    <div class="card"><div class="v">409 + 45</div><div class="l">Tests offline + integración</div></div>
+    <div class="card"><div class="v">428 + 58</div><div class="l">Tests offline + integración</div></div>
   </div>
-  <div class="bar"><div style="width:23.8%"></div></div>
+  <div class="bar"><div style="width:27.6%"></div></div>
 
-  <h2>Ciclo 1 — Cimientos e ingesta · 8 de 12 completadas</h2>
+  <h2>Ciclo 1 — Cimientos e ingesta · 10 de 12 completadas</h2>
   <table>
     <thead><tr><th>ID</th><th>Feature</th><th class="num">RICE</th><th>Estado</th></tr></thead>
     <tbody>
@@ -50,9 +50,9 @@
       <tr><td>F-006</td><td>Cliente del feed de cashflow de Docta</td><td class="num">240,0</td><td class="completada">completada</td></tr>
       <tr><td>F-007</td><td>Consolidador multi-fuente</td><td class="num">160,0</td><td class="completada">completada</td></tr>
       <tr><td>F-008</td><td>Job programado de ingesta</td><td class="num">266,7</td><td class="completada">completada</td></tr>
-      <tr><td>F-009</td><td>condiciones_emision: semilla y herencia</td><td class="num">200,0</td><td class="pendiente">pendiente — tanda 2 (siguiente)</td></tr>
-      <tr><td>F-010</td><td>Sanidad del dato en dos capas</td><td class="num">400,0</td><td class="pendiente">pendiente — tanda 2 (siguiente)</td></tr>
-      <tr><td>F-011</td><td>Deduplicación de especies</td><td class="num">400,0</td><td class="pendiente">pendiente — tanda 3</td></tr>
+      <tr><td>F-009</td><td>condiciones_emision: semilla y herencia</td><td class="num">200,0</td><td class="completada">completada</td></tr>
+      <tr><td>F-010</td><td>Sanidad del dato en dos capas</td><td class="num">400,0</td><td class="completada">completada</td></tr>
+      <tr><td>F-011</td><td>Deduplicación de especies</td><td class="num">400,0</td><td class="pendiente">pendiente — tanda 3 (siguiente)</td></tr>
       <tr><td>F-012</td><td>Tipo de cambio implícito y normalización</td><td class="num">266,7</td><td class="pendiente">pendiente — tanda 4</td></tr>
     </tbody>
   </table>
@@ -66,32 +66,44 @@
   <table>
     <thead><tr><th>Ciclo</th><th class="num">Features</th><th class="num">Person-days</th><th class="num">Semanas (est.)</th><th>Estado</th></tr></thead>
     <tbody>
-      <tr><td>1 — Cimientos e ingesta</td><td class="num">12</td><td class="num">47</td><td class="num">~9,5</td><td><span class="completada">8 completadas</span>, 4 pendientes</td></tr>
+      <tr><td>1 — Cimientos e ingesta</td><td class="num">12</td><td class="num">47</td><td class="num">~9,5</td><td><span class="completada">10 completadas</span>, 2 pendientes</td></tr>
       <tr><td>2 — Armador completo</td><td class="num">12</td><td class="num">55</td><td class="num">~11</td><td><span class="completada">1 completada</span> (F-014), 11 pendientes</td></tr>
       <tr><td>3 — RV, carga y diagnóstico</td><td class="num">9</td><td class="num">41</td><td class="num">~8</td><td><span class="completada">1 completada</span> (F-028), 8 pendientes</td></tr>
       <tr><td>4 — Optimizador y persistencia</td><td class="num">9</td><td class="num">42</td><td class="num">~8,5</td><td class="pendiente">pendiente</td></tr>
-      <tr><td><strong>Stage 1 (total)</strong></td><td class="num"><strong>42</strong></td><td class="num"><strong>185</strong></td><td class="num"><strong>~37</strong></td><td class="num"><strong>24 %</strong></td></tr>
+      <tr><td><strong>Stage 1 (total)</strong></td><td class="num"><strong>42</strong></td><td class="num"><strong>185</strong></td><td class="num"><strong>~37</strong></td><td class="num"><strong>29 %</strong></td></tr>
       <tr><td>Stage 2</td><td class="num">8</td><td class="num">72</td><td class="num">~14,5</td><td class="pendiente">pendiente</td></tr>
     </tbody>
   </table>
 
   <h2>Próximo paso</h2>
-  <p class="nota"><strong>Tanda 1 cerrada el 06/08/2026</strong> — F-008, F-014 y F-028 construidas
-  en paralelo. Sigue la <strong>Tanda 2: F-009 (condiciones_emision) ∥ F-010 (sanidad del dato)</strong>,
-  que es la que completa la ley y la lámina del universo (hoy cubren 592 de 2.894 instrumentos) y
-  arranca la capa de integridad. El orden completo está en
-  <code>claude-docs/planning/plan-ejecucion-tandas.md</code>.</p>
+  <p class="nota"><strong>Tanda 2 cerrada el 06/08/2026</strong> — F-009 y F-010 construidas en
+  paralelo. Sigue la <strong>Tanda 3: F-011 (deduplicación de especies), sola</strong>: F-010, F-011
+  y F-012 exponen el mismo paquete <code>app/universo/</code> y el plan las serializa para no
+  producir tres envolturas incompatibles. F-010 ya dejó documentado dónde se engancha. El orden
+  completo está en <code>claude-docs/planning/plan-ejecucion-tandas.md</code>.</p>
 
   <h2>Deuda declarada</h2>
   <ul class="nota">
+    <li><strong>El dato curado no llega todavía al universo.</strong> F-009 puebla
+    <code>condiciones_emision</code> (823 especies), pero la vista <code>resumen</code> no la cruza y
+    F-009 no escribe <code>instrumentos</code>. <strong>F-020</strong> (concentración por sector y
+    ley) y <strong>F-024</strong> (redondeo por lámina) lo necesitan: hay que decidir si se extiende
+    la vista o si la corrida de F-007 propaga.</li>
+    <li><strong>La capa 1 de la sanidad no puede dispararse hoy.</strong> F-007 asigna la TIR sólo al
+    ticker exacto que IAMC reporta, así que dos especies de la misma emisión nunca tienen las dos una
+    TIR con la que discrepar. Está portada y testeada, pero marca cero por construcción.</li>
+    <li><strong>535 instrumentos quedan sin segmento</strong> y entre ellos están los tres
+    rendimientos más altos del universo — VE32P (614 %), CAC4O (316 %), PQCKO (228 %) —, que por lo
+    tanto no pasan por ningún tope de sanidad. El hueco es de la cobertura de <code>tipo_tasa</code>,
+    que viene del <code>type</code> de Docta.</li>
     <li><code>SUPABASE_JWT_SECRET</code> está vacío en el <code>.env</code>: hasta que se cargue,
     <code>GET /api/v1/auth/me</code> responde 503. El aislamiento no depende de esto — lo aplica RLS
     adentro de la base.</li>
     <li>El pool del backend se conecta con un rol que <strong>saltea RLS</strong>. Hoy no se
     materializa porque ningún endpoint sirve tablas de usuario, pero F-041 no puede exponer carteras
     por <code>/api/v1/</code> sin resolverlo antes.</li>
-    <li><code>tna</code> sigue vacía en todo el universo y la ley cubre 592 de 2.894 instrumentos
-    (llega con F-009).</li>
+    <li><code>tna</code> sigue vacía en todo el universo, y la lámina de los bonos del Tesoro también:
+    el artefacto curado no la trae para ningún soberano.</li>
   </ul>
 </body>
 </html>
