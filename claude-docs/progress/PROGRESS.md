@@ -8,7 +8,7 @@ desde `/build-feature` a medida que cada una se implementa.
 
 | ID | Feature | Etiqueta | RICE | Estado |
 |---|---|---|---|---|
-| F-001 | Esqueleto de servicio backend | Foundation | 400,0 | pendiente |
+| F-001 | Esqueleto de servicio backend | Foundation | 400,0 | completada |
 | F-002 | Esquema de datos y migraciones | Foundation | 300,0 | pendiente |
 | F-003 | Esqueleto de aplicación frontend | Foundation | 400,0 | pendiente |
 | F-004 | Cliente de la API abierta de BYMA | Stage 1 | 300,0 | pendiente |
