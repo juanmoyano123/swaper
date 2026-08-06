@@ -476,7 +476,7 @@ distintos, no se elige fuente por cuenta propia, se vacían las dos y se reporta
 **Input:** los CSV de semilla; el universo consolidado de F-007.
 **Output:** `condiciones_emision` poblada y consultable, cobertura por campo, y lista de conflictos.
 **Depende de:** F-002, F-007
-**Habilita:** F-013, F-024, F-025, F-031, F-039
+**Habilita:** F-013, F-020, F-024, F-025, F-031, F-039
 
 **RICE:** R = 400 · I = 2 · C = 100 % · E = 4 → **Score 200**
 
@@ -892,12 +892,22 @@ escritas y verificadas de `armar_cartera.py`: `resolver_mix`, `candidatos_del_se
 `elegir_siguiente` y `armar`, con 15 casos de regresión. Lo que se descarta es la cáscara: `main()`
 con argparse y `exportar_excel()` con openpyxl; los flags de CLI pasan a ser un modelo Pydantic.
 
-**Input:** parámetros de la cartera; universo filtrado de F-017.
+El armado no solo respeta los topes: **reparte**. `resolver_mix` ya distribuye por naturaleza de
+tasa según el objetivo de cobertura; se suma un criterio determinístico de reparto sectorial:
+entre candidatos comparables, `elegir_siguiente` prefiere el de un sector aún no representado en
+la cartera, y cada perfil declara un **mínimo de sectores distintos** (el parámetro
+`min_sectores` de `PERFILES`, definido en F-020 y calibrado contra el universo real — el tramo
+hard-dollar tiene a O&G con ~40 % de las ONs y un mínimo demasiado exigente dejaría sin
+candidatos). Si el universo no alcanza para cumplir el mínimo, la cartera sale igual y **se
+declara qué quedó concentrado y por qué** — nunca se rellena con instrumentos de otra naturaleza
+ni se inventa diversificación.
+
+**Input:** parámetros de la cartera; universo filtrado de F-017; `min_sectores` de F-020.
 **Output:** cartera de arranque cargada en el panel editable de F-018.
-**Depende de:** F-017, F-018
+**Depende de:** F-017, F-018, F-020
 **Habilita:** —
 
-**RICE:** R = 250 · I = 2 · C = 100 % · E = 5 → **Score 100**
+**RICE:** R = 250 · I = 2 · C = 100 % · E = 6 → **Score 83,3**
 
 ```
 GIVEN los parámetros monto, moneda de referencia, objetivo, perfil y horizonte
@@ -912,6 +922,16 @@ GIVEN un objetivo de cobertura para el que no hay candidatos suficientes en el u
 WHEN se pide el armado asistido
 THEN el sistema devuelve la cartera parcial y declara qué parte del objetivo no pudo cubrir, sin
      rellenar con instrumentos de otra naturaleza
+
+GIVEN un perfil con min_sectores = 4 y un universo con candidatos comparables de 6 sectores
+WHEN se pide el armado asistido
+THEN la cartera resultante contiene posiciones de al menos 4 sectores distintos, sin contar
+     Soberano ni Subsoberano, que ya los acota el tope soberano
+
+GIVEN un objetivo de cobertura cuyo universo elegible tiene un solo sector corporativo
+WHEN se pide el armado asistido
+THEN la cartera sale con ese sector y una advertencia que nombra el mínimo incumplido y la
+     causa, sin bloquear ni rellenar
 ```
 
 ---
@@ -927,12 +947,20 @@ acota el tope soberano. El Tesoro emite bajo muchos prefijos —GD, AE, DIC, TZX
 mismo crédito: se agrupan bajo la clave única **`SOBERANO_AR`**. Sin esta separación, una cartera
 100 % soberana pasaba como diversificada. La advertencia no bloquea: informa.
 
-**Input:** cartera de F-018; clave de riesgo y sector del universo; vista colapsada de F-011.
-**Output:** estado de cumplimiento por tope y advertencias en vivo.
-**Depende de:** F-011, F-018
-**Habilita:** F-031
+Junto a los topes se muestra la **distribución** de la cartera en tres cortes: por sector, por
+legislación (ley N.Y. / ley Argentina, el proxy de país en renta fija) y por naturaleza de tasa.
+Cuando la cartera queda por debajo del mínimo de sectores del perfil se advierte igual que con un
+tope excedido: **informa, no bloquea**. Las posiciones sin sector figuran como "sector no
+informado", nunca repartidas entre los conocidos.
 
-**RICE:** R = 350 · I = 2 · C = 100 % · E = 3 → **Score 233,3**
+**Input:** cartera de F-018; clave de riesgo y sector del universo; ley de F-009; naturaleza de
+tasa de la segmentación; vista colapsada de F-011.
+**Output:** estado de cumplimiento por tope, distribución por sector / ley / naturaleza de tasa y
+advertencias en vivo. Define `min_sectores` en `PERFILES`; F-019 lo reusa en la selección.
+**Depende de:** F-009, F-011, F-018
+**Habilita:** F-019, F-031
+
+**RICE:** R = 350 · I = 2 · C = 100 % · E = 4 → **Score 175**
 
 ```
 GIVEN una cartera con GD30, AE38 y TZX26
@@ -951,6 +979,15 @@ THEN se advierte nombrando el emisor y el exceso, y la posición se puede dejar 
 GIVEN una cartera con posiciones de clase Soberano y Subsoberano
 WHEN se calcula el tope por sector
 THEN esas posiciones quedan exentas del tope sectorial
+
+GIVEN una cartera dentro de todos los topes pero con solo 2 sectores en perfil moderado
+WHEN se evalúan los límites en vivo
+THEN se advierte que la cartera está por debajo del mínimo de sectores del perfil, nombrando
+     los sectores presentes y su peso
+
+GIVEN posiciones sin sector informado
+WHEN se muestra la distribución por sector
+THEN aparecen agrupadas como "sector no informado" con su porcentaje
 ```
 
 ---
@@ -1178,13 +1215,19 @@ solo lugar del motor —`cargar_universo()` devuelve renta fija y nada más; la 
 aparte y a propósito— y la interfaz la replica. Existe porque la cartera estándar del cliente es
 60-70 / 30-40 y una propuesta que sólo cubre renta fija no es la que el asesor lleva a la reunión.
 
+Cada acción y CEDEAR lleva **país de la empresa o índice de referencia**, como dato recopilado con
+origen y fecha declarados (mismo tratamiento que `condiciones_emision`: si falta, queda vacío y se
+alerta — no se infiere del ticker). El bloque muestra su propia **distribución por país y por
+rubro**, separada de la de renta fija: acá sí se puede diversificar geográficamente, y es donde el
+criterio de reparto tiene más universo.
+
 **Input:** `cedears` y `general-equity` de F-004; cartera de F-018.
 **Output:** posiciones de renta variable con su total propio, integradas al monto de la cartera y
 excluidas de todo cálculo de renta fija.
 **Depende de:** F-004, F-018
 **Habilita:** F-027
 
-**RICE:** R = 300 · I = 2 · C = 80 % · E = 5 → **Score 96**
+**RICE:** R = 300 · I = 2 · C = 80 % · E = 6 → **Score 80**
 
 ```
 GIVEN una cartera con 65 % de renta fija y 35 % de renta variable
@@ -1203,6 +1246,15 @@ THEN la renta variable no participa de ninguno de los cuatro
 GIVEN una cartera mixta
 WHEN se muestra el monto total
 THEN incluye las dos porciones, cada una con su subtotal identificado
+
+GIVEN un CEDEAR con país de la empresa recopilado
+WHEN se muestra el bloque de renta variable
+THEN la distribución por país lo incluye con su peso dentro del bloque, sin mezclarse con la
+     renta fija
+
+GIVEN una acción sin país ni índice recopilado
+WHEN se muestra la distribución por país
+THEN figura como "país no informado", y en ningún caso se le asigna uno derivado del ticker
 ```
 
 ---
@@ -2067,13 +2119,13 @@ THEN declara la demora real de la nueva fuente, no la de 20 minutos de la anteri
 | 9 | F-008 | Job programado de ingesta | Stage 1 | 400 | 2 | 100 % | 3 | 266,7 |
 | 10 | F-012 | Tipo de cambio implícito y normalización | Stage 1 | 400 | 2 | 100 % | 3 | 266,7 |
 | 11 | F-006 | Cliente del feed de cashflow de Docta | Stage 1 | 400 | 3 | 80 % | 4 | 240,0 |
-| 12 | F-020 | Límites de concentración en vivo | Stage 1 | 350 | 2 | 100 % | 3 | 233,3 |
-| 13 | F-009 | condiciones_emision: semilla y herencia | Stage 1 | 400 | 2 | 100 % | 4 | 200,0 |
-| 14 | F-013 | Barra de estado del dato | Stage 1 | 400 | 2 | 100 % | 4 | 200,0 |
-| 15 | F-014 | Autenticación y aislamiento por asesor | Stage 1 | 400 | 2 | 100 % | 4 | 200,0 |
-| 16 | F-024 | Redondeo por lámina y diferencia | Stage 1 | 300 | 2 | 100 % | 3 | 200,0 |
-| 17 | F-035 | Costo real de rotar y cupón próximo | Stage 1 | 180 | 3 | 100 % | 3 | 180,0 |
-| 18 | F-041 | Guardar, listar, reabrir y revaluar | Stage 1 | 300 | 3 | 100 % | 5 | 180,0 |
+| 12 | F-009 | condiciones_emision: semilla y herencia | Stage 1 | 400 | 2 | 100 % | 4 | 200,0 |
+| 13 | F-013 | Barra de estado del dato | Stage 1 | 400 | 2 | 100 % | 4 | 200,0 |
+| 14 | F-014 | Autenticación y aislamiento por asesor | Stage 1 | 400 | 2 | 100 % | 4 | 200,0 |
+| 15 | F-024 | Redondeo por lámina y diferencia | Stage 1 | 300 | 2 | 100 % | 3 | 200,0 |
+| 16 | F-035 | Costo real de rotar y cupón próximo | Stage 1 | 180 | 3 | 100 % | 3 | 180,0 |
+| 17 | F-041 | Guardar, listar, reabrir y revaluar | Stage 1 | 300 | 3 | 100 % | 5 | 180,0 |
+| 18 | F-020 | Límites de concentración en vivo | Stage 1 | 350 | 2 | 100 % | 4 | 175,0 |
 | 19 | F-022 | Rendimientos por naturaleza y plazo | Stage 1 | 350 | 2 | 100 % | 4 | 175,0 |
 | 20 | F-007 | Consolidador multi-fuente | Stage 1 | 400 | 3 | 80 % | 6 | 160,0 |
 | 21 | F-030 | Valuación y diagnóstico de cartera | Stage 1 | 200 | 3 | 100 % | 4 | 150,0 |
@@ -2083,13 +2135,13 @@ THEN declara la demora real de la nueva fuente, no la de 20 minutos de la anteri
 | 25 | F-039 | Ficha de instrumento | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
 | 26 | F-029 | Resolución de tickers | Stage 1 | 200 | 2 | 80 % | 3 | 106,7 |
 | 27 | F-038 | Monitor de mercado | Stage 1 | 400 | 2 | 80 % | 6 | 106,7 |
-| 28 | F-019 | Armado asistido | Stage 1 | 250 | 2 | 100 % | 5 | 100,0 |
-| 29 | F-031 | Vector de riesgo de seis ejes | Stage 1 | 250 | 3 | 80 % | 6 | 100,0 |
-| 30 | F-032 | Motor de rotaciones intra-segmento | Stage 1 | 200 | 3 | 100 % | 6 | 100,0 |
-| 31 | F-042 | Exportación a Excel y PDF | Stage 1 | 250 | 2 | 80 % | 4 | 100,0 |
-| 32 | F-026 | Bloque de renta variable | Stage 1 | 300 | 2 | 80 % | 5 | 96,0 |
-| 33 | F-028 | Ingreso de cartera por tres vías | Stage 1 | 200 | 3 | 80 % | 5 | 96,0 |
-| 34 | F-034 | Modo subir TIR con contrapartida | Stage 1 | 180 | 3 | 80 % | 5 | 86,4 |
+| 28 | F-031 | Vector de riesgo de seis ejes | Stage 1 | 250 | 3 | 80 % | 6 | 100,0 |
+| 29 | F-032 | Motor de rotaciones intra-segmento | Stage 1 | 200 | 3 | 100 % | 6 | 100,0 |
+| 30 | F-042 | Exportación a Excel y PDF | Stage 1 | 250 | 2 | 80 % | 4 | 100,0 |
+| 31 | F-028 | Ingreso de cartera por tres vías | Stage 1 | 200 | 3 | 80 % | 5 | 96,0 |
+| 32 | F-034 | Modo subir TIR con contrapartida | Stage 1 | 180 | 3 | 80 % | 5 | 86,4 |
+| 33 | F-019 | Armado asistido | Stage 1 | 250 | 2 | 100 % | 6 | 83,3 |
+| 34 | F-026 | Bloque de renta variable | Stage 1 | 300 | 2 | 80 % | 6 | 80,0 |
 | 35 | F-050 | API Market Data oficial de BYMA | Stage 2 | 400 | 2 | 50 % | 5 | 80,0 |
 | 36 | F-037 | Comparación original contra propuesta | Stage 1 | 180 | 2 | 80 % | 4 | 72,0 |
 | 37 | F-040 | Sensibilidad por repricing completo | Stage 1 | 200 | 1 | 100 % | 3 | 66,7 |
@@ -2281,7 +2333,8 @@ F-001 → F-006 ─┘
 **Track C — Integridad** (arranca cuando F-007 cierra)
 ```
 F-007 → F-010 → F-011 → F-015 → F-016 → F-017 → F-019
-          └───→ F-012
+          └───→ F-012                       ↑
+                              F-020 ────────┘  (min_sectores)
 ```
 
 **Track D — Frontend y auth** (paralelo total a A/B/C hasta F-013)

@@ -33,8 +33,8 @@ desde `/build-feature` a medida que cada una se implementa.
 | F-016 | Grilla-selector de doce meses | Stage 1 | 114,0 | pendiente |
 | F-017 | Filtros de la grilla | Stage 1 | 112,0 | pendiente |
 | F-018 | Cartera editable y ponderación | Stage 1 | 140,0 | pendiente |
-| F-019 | Armado asistido | Stage 1 | 100,0 | pendiente |
-| F-020 | Límites de concentración en vivo | Stage 1 | 233,3 | pendiente |
+| F-019 | Armado asistido | Stage 1 | 83,3 | pendiente |
+| F-020 | Límites de concentración en vivo | Stage 1 | 175,0 | pendiente |
 | F-021 | Panel de renta y renta anual | Stage 1 | 285,0 | pendiente |
 | F-022 | Rendimientos por naturaleza y plazo | Stage 1 | 175,0 | pendiente |
 | F-023 | Composición y curva TIR/duración | Stage 1 | 48,0 | pendiente |
@@ -48,7 +48,7 @@ desde `/build-feature` a medida que cada una se implementa.
 | ID | Feature | Etiqueta | RICE | Estado |
 |---|---|---|---|---|
 | F-025 | Carga asistida de lámina | Stage 1 | 53,3 | pendiente |
-| F-026 | Bloque de renta variable | Stage 1 | 96,0 | pendiente |
+| F-026 | Bloque de renta variable | Stage 1 | 80,0 | pendiente |
 | F-027 | Calendario de balances | Stage 1 | 16,7 | pendiente |
 | F-028 | Ingreso de cartera por tres vías | Stage 1 | 96,0 | pendiente |
 | F-029 | Resolución de tickers | Stage 1 | 106,7 | pendiente |

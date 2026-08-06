@@ -48,8 +48,8 @@ de ejecución**. Si contradice a `plan.md` en una dependencia, gana `plan.md` y 
 | 6 | **F-016** (grilla 12 meses) ∥ **F-038** (monitor) | Pantallas y rutas distintas. F-038 estaba en el Ciclo 4 del plan pero sus dependencias (F-003, F-010, F-012, F-013) ya están al llegar acá: se adelanta para tener la primera pantalla con datos reales | pendiente |
 | 7 | **F-018** (cartera editable) ∥ **F-039** (ficha) | F-018 no puede ir con F-016/F-017 (mismo store del armador, mandato del plan); F-039 no puede ir con F-038 (misma pantalla y navegación). Cruzadas entre sí, cero contacto | pendiente |
 | 8 | **F-017** (filtros) ∥ **F-024** (redondeo lámina) ∥ **F-040** (sensibilidad) | Barra de filtros de la grilla / cálculo backend de nominales / tabla de repricing dentro de la ficha | pendiente |
-| 9 | **F-020** (concentración) ∥ **F-021** (panel de renta) ∥ **F-026** (renta variable) | Tres paneles distintos del armador, tres servicios backend distintos (`verificar_concentracion`, `cupones.py`, equity de BYMA) | pendiente |
-| 10 | **F-019** (armado asistido) ∥ **F-022** (rendimientos) ∥ **F-025** (carga de lámina) | F-022 recién acá porque comparte el servicio de métricas con F-021 (tanda 9); F-025 recién acá porque escribe lo que F-024 (tanda 8) lee | pendiente |
+| 9 | **F-020** (concentración) ∥ **F-021** (panel de renta) ∥ **F-026** (renta variable) | Tres paneles distintos del armador, tres servicios backend distintos (`verificar_concentracion`, `cupones.py`, equity de BYMA). Alcance ampliado (08/2026): F-020 suma el panel de distribución por sector/ley/naturaleza de tasa, define `min_sectores` en `PERFILES` y advierte cuando no se cumple; F-026 suma el dato recopilado país/índice y la distribución por país del bloque. Ver duda de solape 6 | pendiente |
+| 10 | **F-019** (armado asistido) ∥ **F-022** (rendimientos) ∥ **F-025** (carga de lámina) | F-022 recién acá porque comparte el servicio de métricas con F-021 (tanda 9); F-025 recién acá porque escribe lo que F-024 (tanda 8) lee. Alcance ampliado (08/2026): F-019 suma el criterio de reparto sectorial — reusa el `min_sectores` que F-020 (tanda 9) definió en `PERFILES` y agrega el desempate por sector no representado en `elegir_siguiente`; por eso F-019 ahora también depende de F-020, lo que esta secuencia ya respetaba | pendiente |
 
 ### Fase C — Diagnóstico y optimizador (Milestones 3 y 4)
 
@@ -81,6 +81,11 @@ confidence 50 % porque la disponibilidad programática de las fechas de CNV no e
 4. **F-011, F-013, F-034 y toda la cola 15–18 van solas.**
 5. **F-038 y F-039 adelantadas** del Ciclo 4 a las tandas 6–7: sus dependencias ya están y son las
    pantallas que muestran datos; no rompen ningún orden del plan porque el grafo lo permite.
+6. **F-020 y F-026 siguen juntas en la tanda 9** pese al alcance ampliado (08/2026): las dos
+   muestran ahora un panel de distribución (F-020 por sector/ley/naturaleza en renta fija, F-026
+   por país/rubro en renta variable). Se resuelve con la regla 2: el componente de distribución
+   compartido se crea a mano antes de soltar la tanda. Si al planificar aparece más contacto que
+   ese componente, F-026 sale de la tanda y va después, sola (regla 3).
 
 ## Cifras
 
