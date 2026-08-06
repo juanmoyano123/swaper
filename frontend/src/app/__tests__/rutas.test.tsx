@@ -13,6 +13,20 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+// F-014: todas las rutas menos /login viven detrás de `RequiereSesion`. Estas pantallas no
+// prueban el guard en sí -eso es `features/auth/__tests__/RequiereSesion.test.tsx`- así que acá
+// se simula una sesión siempre presente para poder seguir probando lo que este archivo prueba de
+// verdad: que cada una de las seis pantallas renderiza su layout.
+vi.mock('@/lib/supabase', () => ({
+  supabase: {
+    auth: {
+      getSession: () =>
+        Promise.resolve({ data: { session: { access_token: 'jwt-de-prueba' } } }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: vi.fn() } } }),
+    },
+  },
+}))
+
 import { AppRoutes } from '../rutas'
 import { crearQueryClient } from '../queryClient'
 

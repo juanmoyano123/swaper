@@ -1,10 +1,21 @@
 /**
  * Criterio 2, primera mitad: cuando la API devuelve un error, el cliente lo traduce al contrato
  * en vez de dejar pasar un objeto a medias.
+ *
+ * También cubre la parte de F-014 que le toca a este archivo: el JWT de la sesión viaja en el
+ * header `Authorization`, no en un parámetro que cada feature tenga que acordarse de mandar. El
+ * aislamiento por asesor en sí lo verifica RLS contra la base real
+ * (`backend/tests/test_auth_integration.py`); acá sólo se prueba que el token llegue.
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
+
+const getSessionMock = vi.fn().mockResolvedValue({ data: { session: null } })
+
+vi.mock('@/lib/supabase', () => ({
+  supabase: { auth: { getSession: () => getSessionMock() } },
+}))
 
 import { apiFetch } from '../client'
 import { ApiError, ErrorDeRed } from '../errors'
@@ -27,6 +38,7 @@ function responderCon(cuerpo: unknown, status = 200, headers: Record<string, str
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  getSessionMock.mockReset().mockResolvedValue({ data: { session: null } })
 })
 
 describe('apiFetch', () => {
@@ -87,5 +99,26 @@ describe('apiFetch', () => {
 
     expect(error).toBeInstanceOf(ErrorDeRed)
     expect((error as ErrorDeRed).message).toBe('No hay conexión con el servicio')
+  })
+
+  it('con sesión, manda el access_token como Bearer', async () => {
+    getSessionMock.mockResolvedValue({ data: { session: { access_token: 'jwt-de-prueba' } } })
+    responderCon({ ok: true })
+
+    await apiFetch('/api/v1/x', esquema)
+
+    const [, init] = vi.mocked(fetch).mock.calls[0]
+    const headers = new Headers(init?.headers)
+    expect(headers.get('Authorization')).toBe('Bearer jwt-de-prueba')
+  })
+
+  it('sin sesión, el request sale sin header Authorization', async () => {
+    responderCon({ ok: true })
+
+    await apiFetch('/api/v1/x', esquema)
+
+    const [, init] = vi.mocked(fetch).mock.calls[0]
+    const headers = new Headers(init?.headers)
+    expect(headers.has('Authorization')).toBe(false)
   })
 })

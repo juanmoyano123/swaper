@@ -8,6 +8,8 @@
 
 import type { z } from 'zod'
 
+import { supabase } from '@/lib/supabase'
+
 import { ApiError, ErrorDeRed } from './errors'
 import { esquemaError } from './schemas'
 
@@ -79,9 +81,20 @@ export async function apiFetch<T>(
 ): Promise<T> {
   let respuesta: Response
   try {
+    // El aislamiento por asesor lo aplica RLS del lado de la base, contra el `user_id` que trae
+    // el JWT — no un filtro que arme el cliente. Este token es cómo ese JWT llega al backend: sin
+    // sesión, `access_token` es `undefined` y el request sale sin el header (rutas públicas como
+    // /health siguen andando igual).
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+
     respuesta = await fetch(`${BASE}${ruta}`, {
       ...init,
-      headers: { Accept: 'application/json', ...init?.headers },
+      headers: {
+        Accept: 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...init?.headers,
+      },
     })
   } catch (causa) {
     throw new ErrorDeRed(causa)
