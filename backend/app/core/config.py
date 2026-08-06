@@ -64,6 +64,17 @@ class Settings(BaseSettings):
     # como las de Docta: obligatoria recién en la feature que la consume.
     supabase_jwt_secret: str | None = None
 
+    # F-009 — semilla del dato curado. Es una ruta y no un secreto: el archivo está versionado en
+    # el repo. Se declara acá porque en el contenedor la raíz del proyecto no está donde el código
+    # cree, y porque el CSV no tiene fuente de origen viva —se rescató después de que se borraran
+    # los originales—, así que apuntar mal no da un error ruidoso: da una semilla vacía.
+    condiciones_csv: str = "data/condiciones_emision.csv"
+
+    # F-010 no declara settings a propósito. Los topes de sanidad (300 % hard-dollar, 100 % de tasa
+    # real CER, 500 % de TNA nominal) y el umbral de discordancia entre especies son criterio de
+    # dominio verificado, no configuración: hacerlos ajustables por entorno invitaría a subirlos
+    # cuando descarten algo molesto, y lo que descartan es dato roto.
+
     log_level: str = "INFO"
     environment: str = "development"
 

@@ -10,7 +10,7 @@ este archivo a la vez.
 
 from fastapi import APIRouter
 
-from app.api.v1 import auth, byma, consolidar, docta, health, iamc, jobs
+from app.api.v1 import auth, byma, condiciones, consolidar, docta, health, iamc, jobs, universo
 
 router = APIRouter()
 router.include_router(health.router)
@@ -20,3 +20,5 @@ router.include_router(docta.router)
 router.include_router(consolidar.router)
 router.include_router(jobs.router)
 router.include_router(auth.router)
+router.include_router(condiciones.router)
+router.include_router(universo.router)

@@ -148,6 +148,32 @@ tiene fuente viva.
 La herencia entre especies (si AL30 tiene la ley, AL30D y AL30C la tienen) y la detección de
 conflictos las implementa **F-009**. El esquema no las resuelve, pero tampoco las impide.
 
+### Qué escribe F-009 en `origen` y en `fecha`
+
+Sólo hay **dos valores posibles de origen**, y no hay un tercero:
+
+| `origen` | Qué significa |
+|---|---|
+| `condiciones_emision.csv (curado)` | el valor vino del artefacto |
+| `herencia de AL30` | lo declaró otra especie de la misma emisión, nombrada |
+
+**La fecha es la del artefacto, no la del dato.** El CSV curado no trae una fecha por valor: no se
+sabe cuándo fue cierta cada lámina. Toda la semilla lleva la misma fecha —la del archivo tal como
+está versionado, declarada a mano en `app/condiciones/semilla.py`— y el rótulo dice exactamente eso:
+"esto es lo que sabíamos a esta fecha". Inventar una fecha por valor daría un dato que parece más
+preciso y no lo es. Un valor heredado lleva **la fecha de su donante**, no la de la corrida.
+
+Se siembra desde `data/condiciones_emision.csv` y de ningún otro archivo: los otros dos CSV que la
+spec de F-009 nombra no existen en el repositorio y el curado ya los trae fusionados.
+
+**El upsert de la semilla pisa, no completa.** Es al revés que el de `instrumentos`, y a propósito:
+ahí el `COALESCE` protege de una fuente caída, acá vaciar un valor es una decisión —la detección de
+conflictos lo vació— y conservar el anterior la revertiría en silencio.
+
+**La tabla se consulta por `GET /api/v1/condiciones`** (paginado, con el triplete completo) y
+`GET /api/v1/condiciones/cobertura` (cuántos instrumentos del universo tienen cada campo, abierto
+por origen). `POST /api/v1/condiciones/semilla` la vuelve a cargar; es idempotente.
+
 ---
 
 ## Mapeo: puntas
