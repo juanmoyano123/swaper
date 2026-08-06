@@ -2,13 +2,11 @@
 
 import { QueryClientProvider } from '@tanstack/react-query'
 import { useState } from 'react'
-import { RouterProvider, createBrowserRouter } from 'react-router-dom'
+import { BrowserRouter } from 'react-router-dom'
 
 import { ErrorBoundary } from './ErrorBoundary'
+import { AppRoutes } from './rutas'
 import { crearQueryClient } from './queryClient'
-import { rutas } from './rutas'
-
-const router = createBrowserRouter(rutas)
 
 export function App() {
   // El cliente se crea una sola vez por montaje y no en el módulo: así cada test levanta el suyo
@@ -18,7 +16,9 @@ export function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
       </QueryClientProvider>
     </ErrorBoundary>
   )

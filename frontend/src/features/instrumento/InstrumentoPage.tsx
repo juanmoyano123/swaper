@@ -1,14 +1,15 @@
 import { useParams } from 'react-router-dom'
 
-import { EstadoVacio } from '@/components/EstadoVacio'
 import { Pantalla } from '@/components/Pantalla'
-import { Panel } from '@/components/Panel'
+
+import { FichaInstrumento } from './FichaInstrumento'
 
 /**
- * Ficha de un instrumento: condiciones de emisión, las tres especies y el flujo de fondos.
+ * La ficha como pantalla completa.
  *
- * Tiene URL propia para poder compartir el link de un papel. F-039 la convierte en el drawer
- * lateral del diseño, sin cambiar la ruta.
+ * Es lo que se ve al entrar por un link compartido o al recargar: sin pantalla de fondo no hay
+ * sobre qué superponer el drawer. Abriéndola desde adentro de la aplicación se ve como panel
+ * lateral, con el mismo contenido y la misma URL.
  */
 export function InstrumentoPage() {
   const { ticker } = useParams<{ ticker: string }>()
@@ -18,12 +19,7 @@ export function InstrumentoPage() {
       titulo={<span className="mono">{ticker}</span>}
       bajada="Condiciones de emisión, el mismo papel en las tres monedas y el cronograma de pagos."
     >
-      <Panel rotulo="Ficha">
-        <EstadoVacio
-          titulo="No hay datos de este instrumento todavía."
-          detalle="La ficha completa la construye F-039 y se alimenta del universo consolidado que puebla la ingesta."
-        />
-      </Panel>
+      <FichaInstrumento ticker={ticker} />
     </Pantalla>
   )
 }

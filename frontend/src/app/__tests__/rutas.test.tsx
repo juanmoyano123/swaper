@@ -8,12 +8,13 @@
  */
 
 import { QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
-import { RouterProvider, createMemoryRouter } from 'react-router-dom'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { AppRoutes } from '../rutas'
 import { crearQueryClient } from '../queryClient'
-import { rutas } from '../rutas'
 
 // La barra superior consulta el health apenas monta. Que el backend conteste o no es asunto de
 // otro test; acá solo importa que no reviente el render.
@@ -41,11 +42,19 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-function montar(ruta: string) {
-  const router = createMemoryRouter(rutas, { initialEntries: [ruta] })
+type Entrada = string | { pathname: string; state: unknown }
+
+/**
+ * Monta la aplicación en las ubicaciones dadas. Aceptar varias entradas permite reproducir un
+ * historial de verdad, que es lo que necesita cualquier prueba de "volver atrás".
+ */
+function montar(entradas: Entrada | Entrada[]) {
+  const lista = Array.isArray(entradas) ? entradas : [entradas]
   return render(
     <QueryClientProvider client={crearQueryClient()}>
-      <RouterProvider router={router} />
+      <MemoryRouter initialEntries={lista} initialIndex={lista.length - 1}>
+        <AppRoutes />
+      </MemoryRouter>
     </QueryClientProvider>,
   )
 }
@@ -85,5 +94,42 @@ describe('navegación de borde', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Esa pantalla no existe' }),
     ).toBeInTheDocument()
+  })
+
+  it('el ingreso queda fuera del layout: sin barra superior', async () => {
+    montar('/login')
+    await screen.findByRole('heading', { level: 1, name: 'Ingresar' })
+    expect(screen.queryByRole('link', { name: 'Monitor' })).not.toBeInTheDocument()
+  })
+})
+
+describe('la ficha de instrumento se ve de dos formas', () => {
+  it('entrando por la URL directa es una página completa', async () => {
+    montar('/instrumento/AL30D')
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'AL30D' })).toBeInTheDocument()
+    // Sin pantalla de fondo no hay drawer que superponer.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('abriéndola desde otra pantalla es un panel superpuesto que conserva el fondo', async () => {
+    montar({ pathname: '/instrumento/AL30D', state: { fondo: { pathname: '/armador' } } })
+
+    const drawer = await screen.findByRole('dialog', { name: 'Ficha de AL30D' })
+    expect(drawer).toBeInTheDocument()
+    // Lo que importa: la pantalla desde la que se abrió sigue montada detrás.
+    expect(screen.getByRole('heading', { level: 1, name: 'Armador' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cerrar la ficha' })).toBeInTheDocument()
+  })
+
+  it('se cierra con Escape y devuelve la pantalla de fondo', async () => {
+    // Con el historial real: se venía del armador y desde ahí se abrió la ficha.
+    montar(['/armador', { pathname: '/instrumento/AL30D', state: { fondo: { pathname: '/armador' } } }])
+    await screen.findByRole('dialog', { name: 'Ficha de AL30D' })
+
+    await userEvent.keyboard('{Escape}')
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByRole('heading', { level: 1, name: 'Armador' })).toBeInTheDocument()
   })
 })
