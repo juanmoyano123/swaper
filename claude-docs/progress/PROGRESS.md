@@ -10,7 +10,7 @@ desde `/build-feature` a medida que cada una se implementa.
 |---|---|---|---|---|
 | F-001 | Esqueleto de servicio backend | Foundation | 400,0 | completada |
 | F-002 | Esquema de datos y migraciones | Foundation | 300,0 | completada |
-| F-003 | Esqueleto de aplicación frontend | Foundation | 400,0 | pendiente |
+| F-003 | Esqueleto de aplicación frontend | Foundation | 400,0 | completada |
 | F-004 | Cliente de la API abierta de BYMA | Stage 1 | 300,0 | pendiente |
 | F-005 | Parser del informe diario de IAMC | Stage 1 | 50,0 | pendiente |
 | F-006 | Cliente del feed de cashflow de Docta | Stage 1 | 240,0 | pendiente |
@@ -99,5 +99,6 @@ desde `/build-feature` a medida que cada una se implementa.
 | **Stage 1** | **42** | **185** | **~37 semanas** | |
 | Stage 2 | 8 | 72 | ~14,5 | |
 
-Siguiente paso: `/build-feature F-003` (frontend), `F-004`, `F-005` o `F-006` (ingesta) — con F-001
-y F-002 terminadas, los cuatro frentes quedan habilitados y no se pisan entre sí.
+Siguiente paso: la ingesta — `F-004` (BYMA), `F-005` (IAMC) y `F-006` (Docta), que pueden correr en
+paralelo. Del frontend, F-003 destrabó además `F-014` (auth) y `F-028` (ingreso de cartera); el resto
+de la UI espera a que haya datos.
