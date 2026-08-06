@@ -16,7 +16,14 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Linting */
+    /* Alias @/ → src/, en espejo con resolve.alias de vite.config.ts.
+       Sin `baseUrl`: está deprecado desde TypeScript 6 y los paths relativos ya se resuelven
+       contra la ubicación de este archivo. */
+    "paths": { "@/*": ["./src/*"] },
+
+    /* Linting. `strict` se enciende acá, con cuatro archivos en el proyecto: activarlo más
+       adelante, con cuarenta features encima, sería una migración en vez de una línea. */
+    "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,

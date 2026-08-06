@@ -2,8 +2,10 @@
 
 /*
   Tokens de claude-docs/planning/design-system.md — Fase 3, diseño "Cordillera v2".
-  Oscuro es el tema default; :root[data-theme] permite forzar uno u otro
-  independientemente de prefers-color-scheme.
+
+  El tema lo decide `data-theme` en <html>, que fija el script inline de index.html antes de la
+  primera pintura. No se consulta `prefers-color-scheme`: la spec pide oscuro por defecto, y seguir
+  al sistema haría que un asesor con el SO en claro arrancara en claro.
 */
 
 :root {
@@ -19,42 +21,15 @@
   --pos: #5ee39a;
   --sd: #516373;
 
-  color-scheme: dark light;
+  /* Fondo de selección; cambia por tema porque el acento cambia de luminosidad. */
+  --sel: rgba(94, 227, 154, 0.1);
+
+  color-scheme: dark;
   font: 13.5px/1.45 ui-sans-serif, system-ui, "Helvetica Neue", sans-serif;
   color: var(--tx);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg: #f2f4f7;
-    --pan: #ffffff;
-    --pan2: #eef1f5;
-    --lin: #d5dce4;
-    --tx: #182430;
-    --dim: #61717f;
-    --ac: #0e8a55;
-    --ac2: #a86a06;
-    --neg: #c0392b;
-    --pos: #0e8a55;
-    --sd: #94a4b4;
-  }
-}
-
-:root[data-theme="dark"] {
-  --bg: #0a0e13;
-  --pan: #111820;
-  --pan2: #0d141b;
-  --lin: #1d2833;
-  --tx: #dce6f0;
-  --dim: #7e91a5;
-  --ac: #5ee39a;
-  --ac2: #f2b13c;
-  --neg: #ff6b6b;
-  --pos: #5ee39a;
-  --sd: #516373;
 }
 
 :root[data-theme="light"] {
@@ -69,6 +44,10 @@
   --neg: #c0392b;
   --pos: #0e8a55;
   --sd: #94a4b4;
+
+  --sel: rgba(14, 138, 85, 0.08);
+
+  color-scheme: light;
 }
 
 * {
@@ -83,7 +62,33 @@ body {
   min-height: 100svh;
 }
 
+/*
+  Todo dato numérico va en mono y alineado a la derecha: es lo que hace legible una tabla densa.
+  `tabular-nums` mantiene el ancho de los dígitos para que las columnas no bailen al refrescar.
+*/
 .mono {
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-variant-numeric: tabular-nums;
+}
+
+/* Rótulo en mayúsculas de cabecera de panel (10 px, letter-spacing .13em, en acento). */
+.rotulo {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ac);
+}
+
+@keyframes pulso {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
