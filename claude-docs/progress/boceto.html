@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="es-AR" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>10-Swaper — Boceto del producto</title>
+<!--
+  BOCETO DEL PRODUCTO FINAL. No es la aplicación: es un artefacto de comunicación para poder
+  mirar a dónde apunta el proyecto mientras las features se construyen de a una.
+
+  Lenguaje visual copiado de `claude-docs/planning/design-system.md` (Fase 3, "Cordillera v2") y
+  de los tokens ya implementados en `frontend/src/index.css`.
+
+  Los datos son REALES, extraídos de la base el 07/08/2026. Lo que la base no tiene aparece como
+  `s/d` y no se rellena: es la regla 1 del proyecto hecha interfaz.
+-->
+<link rel="stylesheet" href="boceto.css">
+</head>
+<body>
+
+<div class="barra">
+  <div class="marca">10-Swaper <span>boceto</span></div>
+  <nav class="nav" id="nav">
+    <button data-p="monitor" aria-current="page">Monitor</button>
+    <button data-p="armador">Armador</button>
+    <button data-p="optimizador">Optimizador</button>
+    <button data-p="carteras">Mis carteras</button>
+  </nav>
+  <div class="vivo"><span class="punto"></span><span class="mono">EN VIVO · refresco en 8s</span></div>
+  <div class="derecha">
+    <button class="tema" id="tema" title="Cambiar tema">☾</button>
+  </div>
+</div>
+
+<!-- F-013 — barra de estado del dato. Transversal a las cinco pantallas.
+     Dice la hora del SNAPSHOT y la demora declarada, nunca la hora actual como si fuera el dato. -->
+<div class="estado" id="estado"></div>
+
+<!-- ============================================================ 1. MONITOR (F-038) -->
+<main class="pantalla" id="p-monitor">
+  <h1>Monitor de mercado</h1>
+  <p class="bajada">La entrada diaria. El universo entero, con los rendimientos abiertos por
+  naturaleza de tasa: un segmento por vez, y el rótulo de la columna de rendimiento cambia con la
+  unidad del segmento activo. Nunca hay dos naturalezas en la misma columna.</p>
+
+  <div class="panel">
+    <header>
+      <span class="rotulo">Números del día</span>
+      <span class="meta">cada número dice de qué par de tickers sale, para que sea auditable</span>
+    </header>
+    <div class="kpis" id="numeros-dia" style="grid-template-columns:repeat(4,1fr)"></div>
+  </div>
+
+  <div class="panel">
+    <header>
+      <h2>Universo</h2>
+      <span class="ficha-feature">F-038 · tanda 6</span>
+      <span class="meta" id="conteo-universo"></span>
+    </header>
+    <div class="chips" id="segmentos" style="margin-bottom:10px"></div>
+    <div class="tabla-scroll"><table class="t" id="tabla-universo"></table></div>
+    <p class="nota" id="nota-universo"></p>
+  </div>
+</main>
+
+<!-- ============================================================ 2. ARMADOR -->
+<main class="pantalla" id="p-armador" hidden>
+  <h1>Armador de carteras</h1>
+  <p class="bajada">El calendario de cobros no es un reporte final: es el criterio de armado.
+  <em>«La predecibilidad del cashflow es la piedra fundamental sobre la que fomentamos la inversión
+  en bonos.»</em> Se elige mes por mes hasta que los doce estén cubiertos.</p>
+
+  <div class="panel">
+    <header>
+      <h2>Mandato del cliente</h2>
+      <span class="ficha-feature">F-019 · tanda 10</span>
+    </header>
+    <div class="cols" style="grid-template-columns:1.3fr 1fr 1fr">
+      <div>
+        <div class="rotulo">Qué busca</div>
+        <p class="nota" style="margin-top:4px">Renta mensual pareja en dólares, sin exposición a
+        ley argentina. Piso <b class="mono at">US$ 400</b> por mes.</p>
+      </div>
+      <div>
+        <div class="rotulo">Contra qué se quiere cubrir</div>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip on">Devaluación</span><span class="chip on">Inflación local</span>
+          <span class="chip">Riesgo soberano</span><span class="chip">Suba de tasas</span>
+        </div>
+      </div>
+      <div>
+        <div class="rotulo">Restricciones</div>
+        <div class="chips" style="margin-top:6px">
+          <span class="chip no">Sin ley Argentina</span><span class="chip no">Sin provinciales</span>
+          <span class="chip">Máx. 30 % renta variable</span>
+        </div>
+        <p class="nota">Las restricciones se muestran en rojo porque son prohibiciones, no preferencias.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="cols cols-armador">
+    <div>
+      <div class="panel destacado">
+        <header>
+          <h2>Cordillera en dólares</h2>
+          <span class="ficha-feature">F-016 · tanda 6</span>
+          <span class="meta">tocá un mes para ver qué papeles pagan</span>
+        </header>
+        <div class="cordillera" id="cordillera"></div>
+        <div class="meses" id="meses"></div>
+        <div class="leyenda">
+          <span><i class="rombo amort"></i> amortización</span>
+          <span><i class="rombo bal"></i> balance / dividendo</span>
+          <span style="color:var(--ac)">▬ renta (cupón) en dólares</span>
+          <span style="color:var(--ac2)">┄ piso mensual pedido</span>
+        </div>
+        <p class="nota">Al elegir un papel se ilumina en <b>todos</b> los meses en que paga, a la vez.
+        Los meses sin cobertura muestran cero explícito, nunca quedan ausentes.</p>
+      </div>
+
+      <div class="panel">
+        <header>
+          <h2>Cordillera en pesos</h2>
+          <span class="ficha-feature">F-016</span>
+          <span class="meta">escala y total propios</span>
+        </header>
+        <div class="cordillera pesos" id="cordillera-pesos"></div>
+        <p class="nota"><b>Los cobros en pesos nunca se suman a los dólares</b> ni se convierten para
+        el total, y la TIR de esta parte no se promedia con la del segmento hard-dollar. Son unidades
+        distintas: por eso hay dos gráficos y no uno.</p>
+      </div>
+
+      <div class="panel" id="detalle-mes"></div>
+
+      <div class="panel">
+        <header>
+          <h2>Cartera</h2>
+          <span class="ficha-feature">F-018 · F-024 · tandas 7 y 8</span>
+          <span class="meta" id="meta-cartera"></span>
+        </header>
+        <div class="tabla-scroll"><table class="t" id="tabla-cartera"></table></div>
+        <p class="nota">La ponderación <b>pedida</b> y la <b>real</b> conviven siempre: el nominal se
+        redondea hacia abajo al múltiplo de la lámina, y la diferencia se marca en ámbar cuando pasa
+        los 0,6 pp. La Σ nunca se normaliza a 100 en silencio.</p>
+      </div>
+
+      <div class="cols cols-2">
+        <div class="panel">
+          <header><h2>Concentración</h2><span class="ficha-feature">F-020 · tanda 9</span></header>
+          <div id="concentracion"></div>
+          <p class="nota">El riesgo soberano se agrupa aparte bajo la clave única
+          <span class="mono">SOBERANO_AR</span>: GD30, AE38 y TZX26 cuentan juntos, no como tres
+          emisores distintos. Los topes informan, nunca bloquean.</p>
+        </div>
+        <div class="panel">
+          <header><h2>Distribución</h2><span class="ficha-feature">F-020</span></header>
+          <div id="distribucion"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <header>
+          <h2>Rendimientos por naturaleza y plazo</h2>
+          <span class="ficha-feature">F-022 · tanda 10</span>
+        </header>
+        <div class="tabla-scroll"><table class="t" id="tabla-rendimientos"></table></div>
+        <p class="nota"><b>Cuatro números, nunca uno solo.</b> No existe ningún control que los
+        promedie, y la ausencia de ese control es la feature. Una naturaleza sin posiciones aparece
+        en 0 % de la cartera, no ausente.</p>
+      </div>
+
+      <div class="panel">
+        <header>
+          <h2>Curva TIR / duración</h2>
+          <span class="ficha-feature">F-023 · tanda 11</span>
+          <span class="meta">segmento hard-dollar · TIR anual en dólares</span>
+        </header>
+        <div id="scatter"></div>
+        <p class="nota">Un segmento por gráfico, con la unidad del eje declarada. Nunca dos
+        naturalezas de tasa en el mismo par de ejes.</p>
+      </div>
+
+      <div class="panel">
+        <header><h2>Renta variable</h2><span class="ficha-feature">F-026 · tanda 9</span></header>
+        <div class="tabla-scroll"><table class="t" id="tabla-rv"></table></div>
+        <p class="nota">Sin TIR, sin duración y sin cupón: <b>no participa de ninguno de los cuatro
+        rendimientos ponderados</b>. Suma al monto total con subtotal identificado, pero no al
+        cálculo de renta. Los dividendos estimados van siempre rotulados «no garantizado».</p>
+      </div>
+    </div>
+
+    <aside class="fija">
+      <div class="panel destacado">
+        <div class="rotulo">Renta anual en dólares</div>
+        <div class="renta-grande mono" id="renta-pct">—</div>
+        <p class="nota mono" id="renta-cuenta"></p>
+        <p class="nota">Sólo cupones. Sin ganancia de capital, sin amortización en el numerador y
+        sin dividendos estimados. <b>La cuenta está expuesta siempre.</b></p>
+        <div class="kpis" id="kpis"></div>
+        <span class="ficha-feature" style="margin-top:10px">F-021 · tanda 9</span>
+      </div>
+      <div class="panel">
+        <div class="rotulo">Lo que falta</div>
+        <div id="lo-que-falta" style="margin-top:8px"></div>
+      </div>
+      <div class="panel">
+        <div class="rotulo">Flujo mes por mes</div>
+        <div class="mono" id="flujo" style="margin-top:8px;font-size:10.5px"></div>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<!-- ============================================================ 3. OPTIMIZADOR -->
+<main class="pantalla" id="p-optimizador" hidden>
+  <h1>Optimizador de carteras</h1>
+  <p class="bajada">Se carga la cartera que el cliente ya tiene, se la diagnostica con la misma vara
+  que el armador, y se proponen rotaciones de a una. <b>Nunca se propone una mejora de TIR sin
+  nombrar qué riesgo se asume a cambio.</b></p>
+
+  <div class="panel">
+    <header>
+      <h2>Ingreso de la cartera</h2>
+      <span class="ficha-feature">F-028 · construida</span>
+      <span class="meta">única pantalla del boceto que ya existe en el código</span>
+    </header>
+    <div class="chips">
+      <span class="chip on">Pegar del portapapeles</span>
+      <span class="chip">Subir CSV o Excel</span>
+      <span class="chip">Cargar posición por posición</span>
+    </div>
+    <p class="nota">Una fila con un nominal no numérico <b>se marca inválida con el motivo</b>: no se
+    descarta en silencio ni se interpreta como cero. Los tickers que no se reconocen quedan en la
+    cartera, con su monto, marcados como no resueltos — nunca se reemplazan por el más parecido.</p>
+  </div>
+
+  <div class="cols cols-2">
+    <div class="panel">
+      <header><h2>Vector de riesgo</h2><span class="ficha-feature">F-031 · tanda 12</span></header>
+      <div id="ejes"></div>
+      <p class="nota"><b>Seis ejes, no un score.</b> No hay número único de riesgo ni control que los
+      combine: ponderar años contra una calificación que sólo existe para el 39 % del universo sería
+      un juicio inventado presentado como dato. Por eso son seis barras paralelas y no un radar —
+      el área de un radar se lee como puntaje.</p>
+    </div>
+    <div class="panel">
+      <header><h2>Diagnóstico</h2><span class="ficha-feature">F-030 · tanda 11</span></header>
+      <div class="tabla-scroll"><table class="t" id="tabla-diagnostico"></table></div>
+      <p class="nota">Usa exactamente los mismos servicios que el armador, así la cartera cargada y
+      la que se arma se leen con la misma vara.</p>
+    </div>
+  </div>
+
+  <div class="panel">
+    <header>
+      <h2>Rotaciones propuestas</h2>
+      <span class="ficha-feature">F-032 … F-036 · tandas 12 a 15</span>
+      <span class="meta">se aceptan de a una; al aceptar, el resto se recalcula</span>
+    </header>
+    <div class="tabla-scroll"><table class="t" id="tabla-rotaciones"></table></div>
+    <p class="nota">La columna de <b>contrapartida es estructuralmente obligatoria</b>: sin deltas por
+    eje calculables la fila no se renderiza. Si una rotación no empeora nada, lo dice explícitamente
+    en vez de dejar la celda vacía. El costo real incluye arancel y los spreads de las dos patas, y
+    se marca cuando supera el 5 %.</p>
+  </div>
+
+  <div class="panel">
+    <header><h2>Original contra propuesta</h2><span class="ficha-feature">F-037 · tanda 16</span></header>
+    <div class="tabla-scroll"><table class="t" id="tabla-comparacion"></table></div>
+    <p class="nota">Es la pantalla que lee el jefe de mesa para aprobar o devolver. El costo total de
+    rotación acumulado va a la vista, al lado de la mejora.</p>
+  </div>
+</main>
+
+<!-- ============================================================ 4. MIS CARTERAS -->
+<main class="pantalla" id="p-carteras" hidden>
+  <h1>Mis carteras</h1>
+  <p class="bajada">Se guardan carteras, no clientes: no hay ningún campo de identificación
+  personal. El aislamiento entre asesores lo aplica Row Level Security adentro de la base.</p>
+  <div class="panel">
+    <header><h2>Guardadas</h2><span class="ficha-feature">F-041 · tanda 17</span></header>
+    <div class="tabla-scroll"><table class="t" id="tabla-carteras"></table></div>
+    <p class="nota">Cada cartera se guarda <b>con los precios del momento</b>: una propuesta tiene que
+    poder reproducirse tal como se presentó. «Revaluar a hoy» muestra las dos valuaciones y la
+    diferencia, con la fecha de cada snapshot.</p>
+  </div>
+</main>
+
+<!-- ============================================================ 5. FICHA (drawer) -->
+<aside class="drawer" id="drawer" hidden></aside>
+
+<script src="boceto.js"></script>
+</body>
+</html>
