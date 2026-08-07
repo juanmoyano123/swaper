@@ -7,8 +7,9 @@
  *
  * Precio, moneda y emisor salen de `/emisiones/especies` (F-038), pedido entero y sin filtro de
  * segmento — no hay un endpoint "dame estas N especies" y el número de posiciones de una cartera
- * es chico. La lámina real todavía no está cableada (la trae F-024, tanda 8): viaja `null` siempre,
- * y la fila lo declara en vez de asumir un valor.
+ * es chico. La lámina real viaja desde ahí (F-024, de `condiciones_emision` vía la base común de
+ * la tanda 8b): `null` es no informada, y la fila y la cabecera lo declaran en vez de asumir un
+ * valor.
  *
  * **Desvío contra el plan**: `moneda_cotizacion` llega del backend en mayúsculas ("ARS"/"USD",
  * `BYMA` sin traducir — ver `backend/app/ingesta/byma/normalizacion.py`), mientras que
@@ -29,7 +30,13 @@ import { useCalendarioCartera } from '../hooks/useCalendarioCartera'
 import { useEspeciesUniverso } from '../hooks/useEspeciesUniverso'
 import { useTipoDeCambio } from '../hooks/useTipoDeCambio'
 import type { Especie } from '../lib/schema'
-import { resolver, type EntradaResolver, type PosicionResuelta } from '../lib/resolver'
+import {
+  resolver,
+  resumenAjuste,
+  type EntradaResolver,
+  type PosicionResuelta,
+  type ResumenAjuste,
+} from '../lib/resolver'
 import { useArmador, useArmadorAcciones, type PosicionArmador } from '../store/carteraStore'
 
 /** Tolerancia de la cabecera: por debajo no vale la pena teñir el total en `--ac2`. */
@@ -65,12 +72,16 @@ export function CarteraEditable() {
         peso: p.peso,
         precio: sinBase ? null : (especie?.precio ?? null),
         monedaCotizacion: monedaCotizacion ?? 'usd', // irrelevante: `resolver` no la usa con precio null
-        lamina: null, // F-024 (tanda 8) todavía no cablea la lámina real: nunca se inventa una acá.
+        // F-024: la lámina real, de condiciones_emision vía /especies. `null` = no informada: el
+        // resolver no redondea y la fila lo declara. Jamás un default (regla 1 del proyecto).
+        lamina: p.esFci ? null : (especie?.lamina ?? null),
         esFci: p.esFci,
       }
     })
     return resolver(entradas, montoTotal, tcValor)
   }, [pos, porTicker, montoTotal, tcValor])
+
+  const ajuste = useMemo(() => resumenAjuste(resueltas), [resueltas])
 
   const posicionesParaCalendario = useMemo(
     () =>
@@ -118,6 +129,11 @@ export function CarteraEditable() {
             {hayAlgunaResuelta ? fmtMonto(sumaInvertidoUsd, 'usd') : SIN_DATO}
           </span>
         </Campo>
+        <Campo etiqueta="Invertido ajustado">
+          <span className="mono" style={{ color: 'var(--tx)' }}>
+            {ajuste.totalAjustadoUsd !== null ? fmtMonto(ajuste.totalAjustadoUsd, 'usd') : SIN_DATO}
+          </span>
+        </Campo>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--dim)' }}>
           Monto total (USD)
           <input
@@ -148,6 +164,11 @@ export function CarteraEditable() {
             Vaciar
           </BotonAccion>
         </div>
+        {pos.length > 0 && (
+          <span style={{ flexBasis: '100%', fontSize: 11, color: 'var(--dim)' }}>
+            {leyendaAjuste(ajuste)}
+          </span>
+        )}
       </header>
 
       {pos.length === 0 ? (
@@ -172,6 +193,20 @@ export function CarteraEditable() {
       {calendario.data && <AlertasCalendario alertas={calendario.data.alertas} />}
     </div>
   )
+}
+
+/** El texto de la leyenda de cobertura de la cabecera — F-024. Un cero se explica, no se acepta:
+ *  cero sin lámina es cobertura total declarada, no la ausencia de la leyenda. */
+function leyendaAjuste(ajuste: ResumenAjuste): string {
+  if (ajuste.sinLamina > 0) {
+    const cierre =
+      ajuste.pctSinAjustar === null
+        ? 'porcentaje sin calcular: posiciones sin resolver'
+        : `${fmtPct(ajuste.pctSinAjustar)} de la cartera fuera del total ajustado`
+    return `${ajuste.sinLamina} de ${ajuste.ajustables} posiciones sin lámina informada — ${cierre}`
+  }
+  if (ajuste.ajustables > 0) return 'todas las posiciones con lámina informada: el total ajustado cubre la cartera'
+  return 'sólo FCI en la cartera: no hay nominales que redondear'
 }
 
 function Campo({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
@@ -215,6 +250,9 @@ function BotonAccion({
   )
 }
 
+// Columnas, en orden: ticker+moneda · emisor+VN/invertido/lámina · peso pedido · peso real ·
+// minicalendario · quitar.
+// F-020 (tanda 9): para agregar columnas, extender GRID_FILA y FilaCartera acá — no crear otra fila.
 const GRID_FILA = 'minmax(70px,86px) 1fr 52px 62px 52px 22px'
 
 function FilaCartera({
@@ -241,7 +279,7 @@ function FilaCartera({
 
   const pesoReal = resuelta?.pesoReal ?? null
   const difiere = pesoReal !== null && Math.abs(pesoReal - posicion.peso) > TOLERANCIA_DIFERENCIA_FILA
-  const motivoDiferencia = resuelta?.laminaConocida ? 'redondeado a lámina conocida' : 'sin lámina conocida'
+  const motivoDiferencia = resuelta?.laminaConocida ? 'redondeado a lámina conocida' : 'lámina no informada'
 
   return (
     <div
@@ -275,6 +313,12 @@ function FilaCartera({
           {resuelta?.invertido !== null && resuelta?.invertido !== undefined
             ? fmtMonto(resuelta.invertido, especie?.moneda_cotizacion === 'ARS' ? 'ars' : 'usd')
             : SIN_DATO}
+          {resuelta?.laminaConocida === true && especie?.lamina != null && (
+            <> · lám. {fmtNumero(especie.lamina, 0)}</>
+          )}
+          {resuelta?.laminaConocida === false && !posicion.esFci && (
+            <span style={{ color: 'var(--ac2)' }}> · lámina no informada</span>
+          )}
         </div>
       </div>
 

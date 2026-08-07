@@ -18,7 +18,13 @@ ESPECIES = "/api/v1/universo/emisiones/especies"
 DUPLICADO = "/api/v1/universo/emisiones/duplicado"
 
 
-def fila(ticker: str, *, duration: float | None = 6.4, completa: bool = True) -> dict[str, Any]:
+def fila(
+    ticker: str,
+    *,
+    duration: float | None = 6.4,
+    completa: bool = True,
+    lamina: float | None = None,
+) -> dict[str, Any]:
     return {
         "ticker": ticker,
         "clase_activo": "bono_soberano",
@@ -30,6 +36,7 @@ def fila(ticker: str, *, duration: float | None = 6.4, completa: bool = True) ->
         "law": "Ley N.Y." if completa else None,
         "couponCurrency": "MEP" if completa else None,
         "underlying": "Tesoro Nacional" if completa else None,
+        "lamina": lamina,
     }
 
 
@@ -224,6 +231,32 @@ async def test_la_paridad_viaja_por_la_vista_viva_y_es_none_cuando_es_null(crear
 
     assert por_ticker["AL30"]["paridad"] == 0.875
     assert por_ticker["GD30"]["paridad"] is None
+
+
+# --- F-024: la lámina real, de condiciones_emision vía la base común de la tanda 8b ---------------
+
+
+async def test_la_lamina_viaja_por_la_vista_viva_como_numero(crear_app) -> None:
+    """Con lámina informada llega como número, no como string: acá se caería el `Decimal` de
+    Postgres sin convertir (el cast a `float8` vive en `lectura.py`, ver su docstring)."""
+    universo = [fila("AL30", lamina=100.0), fila("GD30", lamina=None)]
+
+    async with cliente(app_con(crear_app, universo)) as http:
+        por_ticker = {i["ticker"]: i for i in (await http.get(ESPECIES)).json()["items"]}
+
+    assert por_ticker["AL30"]["lamina"] == 100.0
+    assert not isinstance(por_ticker["AL30"]["lamina"], str)
+
+
+async def test_una_especie_sin_lamina_informada_no_asume_ninguna(crear_app) -> None:
+    """Regla 1 del proyecto: sin dato curado, `lamina` es `None`, no 1 ni 1.000 ni un estándar de
+    mercado (F-024)."""
+    universo = [fila("AL30", lamina=None)]
+
+    async with cliente(app_con(crear_app, universo)) as http:
+        por_ticker = {i["ticker"]: i for i in (await http.get(ESPECIES)).json()["items"]}
+
+    assert por_ticker["AL30"]["lamina"] is None
 
 
 async def test_el_filtro_por_segmento_deja_afuera_las_demas(crear_app) -> None:

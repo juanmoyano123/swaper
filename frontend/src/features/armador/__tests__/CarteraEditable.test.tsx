@@ -48,6 +48,8 @@ function especie(extra: Partial<Especie> = {}): Especie {
     volumen: 100_000,
     volumen_usd: 100_000,
     paridad: 0.98,
+    lamina: null,
+    sector: null,
     dato_sano: true,
     hermanas: [],
     ...extra,
@@ -240,6 +242,84 @@ describe('una línea de FCI (GWT-4)', () => {
     // Todo lo demás —VN, invertido, peso real— se declara sin dato, nunca en blanco.
     expect(within(filaFci).getByText(/VN s\/d · s\/d/)).toBeInTheDocument()
     expect(within(filaFci).getByText('s/d')).toBeInTheDocument()
+  })
+})
+
+// --- F-024: redondeo por lámina y resumen de cobertura --------------------------------------------
+
+describe('F-024: redondeo por lámina', () => {
+  it('GWT-1: con lámina informada, la fila redondea el VN a su múltiplo y muestra pedido y real distintos', async () => {
+    responderCon({ especies: [especie({ lamina: 100 })] })
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar AL30' }))
+    await userEvent.click(screen.getByRole('button', { name: 'peso AL30 a 50' }))
+    await userEvent.click(screen.getByRole('button', { name: 'monto 10.000' }))
+
+    const fila = await screen.findByRole('row', { name: 'AL30' })
+    // objetivo 5.000 USD / (105/100) = 4.761,9..., floor a múltiplo de 100 → 4.700.
+    expect(within(fila).getByText(/VN 4\.700/)).toBeInTheDocument()
+    expect(within(fila).getByRole('spinbutton')).toHaveValue(50)
+    // Única posición: su peso real es 100%, distinto del 50% pedido — la pantalla no los iguala.
+    expect(within(fila).getByText('100,00%')).toBeInTheDocument()
+  })
+
+  it('GWT-2: sin lámina informada, la fila lo marca y no redondea a ningún múltiplo', async () => {
+    responderCon({ especies: [especie({ lamina: null })] })
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar AL30' }))
+    await userEvent.click(screen.getByRole('button', { name: 'peso AL30 a 50' }))
+    await userEvent.click(screen.getByRole('button', { name: 'monto 10.000' }))
+
+    const fila = await screen.findByRole('row', { name: 'AL30' })
+    expect(within(fila).getByText(/lámina no informada/)).toBeInTheDocument()
+    // Sin lámina, el VN de F-018 no cae en ningún múltiplo inventado: 4.761,90... redondeado a
+    // enteros para mostrar (4.762), no floreado a 100 como en GWT-1 (4.700).
+    expect(within(fila).getByText(/VN 4\.762/)).toBeInTheDocument()
+  })
+
+  it('GWT-3: la cabecera declara cuántas posiciones y qué % quedaron sin lámina, y el total ajustado excluye esa parte', async () => {
+    responderCon({
+      especies: [
+        especie({ lamina: 100 }),
+        especie({ ticker: 'GD30', emision: 'GD30', precio: 100, emisor: 'República Argentina', lamina: null }),
+      ],
+    })
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar AL30' }))
+    await userEvent.click(screen.getByRole('button', { name: 'agregar GD30' }))
+    await userEvent.click(screen.getByRole('button', { name: 'peso AL30 a 50' }))
+    // No se toca el peso de GD30: al agregarse segunda queda en 50 (equiponderado automático de
+    // `alternarPapel`), así que las dos posiciones piden el mismo 50% y el cálculo de referencia
+    // es simple.
+    await userEvent.click(screen.getByRole('button', { name: 'monto 10.000' }))
+
+    await screen.findByRole('row', { name: 'AL30' })
+
+    expect(
+      await screen.findByText(/1 de 2 posiciones sin lámina informada — \d+,\d\d% de la cartera fuera del total ajustado/),
+    ).toBeInTheDocument()
+
+    const filaAjustado = screen.getByText('Invertido ajustado').closest('div')
+    // Sólo AL30 (con lámina) entra al total ajustado: 4.700 VN x 105 / 100 = US$ 4.935,00.
+    expect(within(filaAjustado as HTMLElement).getByText('US$ 4.935,00')).toBeInTheDocument()
+  })
+
+  it('cobertura total: si todas las posiciones tienen lámina, la leyenda lo dice y no hay faltante que declarar', async () => {
+    responderCon({ especies: [especie({ lamina: 100 })] })
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar AL30' }))
+    await userEvent.click(screen.getByRole('button', { name: 'peso AL30 a 50' }))
+    await userEvent.click(screen.getByRole('button', { name: 'monto 10.000' }))
+
+    await screen.findByRole('row', { name: 'AL30' })
+
+    expect(
+      await screen.findByText('todas las posiciones con lámina informada: el total ajustado cubre la cartera'),
+    ).toBeInTheDocument()
   })
 })
 

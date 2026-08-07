@@ -132,6 +132,12 @@ export const esquemaEspecie = z.object({
   volumen: z.number().nullable(),
   volumen_usd: z.number().nullable(),
   paridad: z.number().nullable(),
+  /** Lámina mínima de la emisión, de `condiciones_emision` vía la base común de la tanda 8b.
+   *  `null` = no informada: no se redondea y se declara (F-024, regla 1 del proyecto). */
+  lamina: z.number().nullable(),
+  /** Sector del emisor, del dato curado de F-009 vía la base común de la tanda 8b. `null` = no
+   *  informado y agrupa aparte: no se le asigna uno por parecido con otro emisor (F-017). */
+  sector: z.string().nullable(),
   dato_sano: z.boolean(),
   hermanas: z.array(z.string()),
 })

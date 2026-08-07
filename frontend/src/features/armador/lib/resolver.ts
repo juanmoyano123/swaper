@@ -8,6 +8,10 @@
  *
  * **Nunca redondea hacia arriba.** `Math.floor` en la lámina es a propósito: comprar de más que lo
  * pedido no es una aproximación razonable, es plata puesta sin que el asesor la haya pedido.
+ *
+ * F-024 cablea acá la lámina real, de `condiciones_emision` (vía `/especies`), y agrega
+ * `resumenAjuste`: el total ajustado y la cobertura de la cartera viven en este módulo puro para
+ * poder testearse sin la pantalla.
  */
 
 export interface EntradaResolver {
@@ -34,6 +38,9 @@ export interface PosicionResuelta {
   /** `invertidoUsd / Σ invertidoUsd * 100`, sobre las posiciones que sí lo tienen. */
   pesoReal: number | null
   laminaConocida: boolean
+  /** Una lámina faltante en un FCI no es un dato faltante: a un FCI no le corresponde lámina.
+   *  El resumen de ajuste lo necesita para no contarlo como "lámina no informada". */
+  esFci: boolean
 }
 
 function sinResolver(entrada: EntradaResolver): PosicionResuelta {
@@ -45,6 +52,7 @@ function sinResolver(entrada: EntradaResolver): PosicionResuelta {
     invertidoUsd: null,
     pesoReal: null,
     laminaConocida: entrada.lamina !== null,
+    esFci: entrada.esFci,
   }
 }
 
@@ -90,6 +98,7 @@ export function resolver(
       invertidoUsd,
       pesoReal: null,
       laminaConocida: entrada.lamina !== null,
+      esFci: entrada.esFci,
     }
   })
 
@@ -100,4 +109,42 @@ export function resolver(
     pesoReal:
       r.invertidoUsd !== null && sumaInvertidoUsd > 0 ? (r.invertidoUsd / sumaInvertidoUsd) * 100 : null,
   }))
+}
+
+/** Lo que la cabecera del armador declara sobre el redondeo por lámina — F-024. */
+export interface ResumenAjuste {
+  /** Posiciones a las que una lámina les corresponde (excluye FCI). */
+  ajustables: number
+  /** De esas, cuántas quedaron sin lámina informada. */
+  sinLamina: number
+  /** Σ invertidoUsd de las posiciones con lámina informada y resueltas.
+   *  `null` cuando ninguna posición ajustable tiene lámina: un total que no existe no es 0. */
+  totalAjustadoUsd: number | null
+  /** Σ pesoReal de las posiciones sin lámina: el % de la cartera fuera del total ajustado.
+   *  `null` cuando ninguna posición está resuelta (no hay cartera medible sobre la que declarar
+   *  un porcentaje). Una posición sin lámina y además sin resolver (sin precio o sin TC) cuenta en
+   *  `sinLamina` pero no puede aportar al porcentaje: su pesoReal es null y no se le inventa uno. */
+  pctSinAjustar: number | null
+}
+
+export function resumenAjuste(resueltas: PosicionResuelta[]): ResumenAjuste {
+  const ajustables = resueltas.filter((r) => !r.esFci)
+  const sinLamina = ajustables.filter((r) => !r.laminaConocida)
+
+  const conLamina = ajustables.filter((r) => r.laminaConocida && r.invertidoUsd !== null)
+  const totalAjustadoUsd =
+    conLamina.length > 0 ? conLamina.reduce((acumulado, r) => acumulado + (r.invertidoUsd ?? 0), 0) : null
+
+  const resueltasDeLaCartera = resueltas.filter((r) => r.pesoReal !== null)
+  const pctSinAjustar =
+    resueltasDeLaCartera.length > 0
+      ? sinLamina.reduce((acumulado, r) => acumulado + (r.pesoReal ?? 0), 0)
+      : null
+
+  return {
+    ajustables: ajustables.length,
+    sinLamina: sinLamina.length,
+    totalAjustadoUsd,
+    pctSinAjustar,
+  }
 }
