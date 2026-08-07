@@ -12,7 +12,9 @@ se propone. `operables()` es el corte para quien necesita la lista corta.
 F-011 y F-012 se enganchan acá: las dos parten del universo **ya saneado** —deduplicar tomando como
 representante de una emisión a la especie con el precio roto, o derivar el tipo de cambio de un
 precio mal escalado, sería propagar el error en vez de contenerlo— así que ambas consumen el
-resultado de `sanear_universo` y no la lectura cruda.
+resultado de `sanear_universo` y no la lectura cruda. F-011 ya lo hace: la deduplicación vive en
+`UniversoSaneado.emisiones()`, y recibe los descartes de la sanidad como lo que son, el veredicto de
+la capa de más abajo.
 """
 
 from collections import Counter
@@ -22,6 +24,7 @@ from typing import Any
 import structlog
 
 from app.ingesta.alertas import Alerta
+from app.universo.emisiones import UniversoDeduplicado, deduplicar
 from app.universo.lectura import leer_universo
 from app.universo.sanidad import Descarte, MotivoDescarte, Sanidad, evaluar_sanidad
 from app.universo.segmentacion import (
@@ -68,6 +71,15 @@ class UniversoSaneado:
         return [
             e for e in self.especies if e.rendimiento is not None and e.ticker not in descartados
         ]
+
+    def emisiones(self) -> UniversoDeduplicado:
+        """El mismo universo visto por emisión: la doble vista de F-011.
+
+        Se calcula sobre `especies` —el universo entero, descartados incluidos— y no sobre
+        `operables()`: deduplicar no es filtrar. Lo que la sanidad aporta es el veredicto que
+        impide que una especie descartada represente a su emisión, y por eso viaja aparte.
+        """
+        return deduplicar(self.especies, self.sanidad.descartados)
 
     def resumen(self) -> dict[str, object]:
         """Los conteos que hacen falta para saber si el universo de esta corrida sirve.

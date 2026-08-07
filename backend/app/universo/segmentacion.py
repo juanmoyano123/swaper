@@ -23,6 +23,7 @@ taparía el caso que esa alerta existe para mostrar — un bono cuyo tipo de tas
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from datetime import date, datetime
 from math import isnan
 
 from app.ingesta.consolidacion import raiz_emision
@@ -109,10 +110,16 @@ def rendimiento_declarado(segmento: str, tir: float | None, tna: float | None) -
 class EspecieUniverso:
     """Una especie del universo, ya segmentada y con su rendimiento en la unidad que le corresponde.
 
-    Es el tipo sobre el que trabaja todo el paquete. F-011 le va a agregar lo que necesita para
-    decidir el representante de una emisión (duración, completitud, volumen) y F-012 lo que necesita
-    para derivar el tipo de cambio (precio y moneda de cotización); ninguna de las dos tiene que
-    tocar lo que ya está acá.
+    Es el tipo sobre el que trabaja todo el paquete. F-011 le sumó lo que decide el representante de
+    una emisión —la duración y los cuatro campos cuya presencia mide la completitud del dato— y
+    F-012 le va a sumar lo que necesita para derivar el tipo de cambio (precio y moneda de
+    cotización); ninguna de las dos tiene que tocar lo que ya estaba.
+
+    **La división entre lo que es de la emisión y lo que es de la especie no es decorativa.**
+    Vencimiento, ley, moneda de pago y emisor son atributos de la emisión: las tres especies de
+    liquidación del mismo bono los comparten, y por eso sirven para elegir cuál de ellas la
+    representa. El precio, la punta y el volumen son de cada especie y nunca se cruzan entre
+    hermanas.
     """
 
     ticker: str
@@ -125,9 +132,52 @@ class EspecieUniverso:
     """`None` cuando la fuente no publicó el número. No se estima: la sanidad no opina sobre lo
     que no existe, y el armador no propone lo que no tiene rendimiento."""
 
+    duracion: float | None = None
+    """`duration` de la vista. Es de la emisión, no de la especie: el mismo bono liquidado en pesos
+    o en dólares tiene la misma duración, y ése es justamente el chequeo que decide si un grupo de
+    especies es de verdad una sola emisión (F-011)."""
+
+    vencimiento: date | None = None
+    ley: str | None = None
+    moneda_cupon: str | None = None
+    emisor: str | None = None
+    """El nombre del emisor tal como lo publica la fuente (columna `underlying` de la vista)."""
+
     @property
     def naturaleza(self) -> str:
         return NATURALEZA_TASA[self.segmento]
+
+    @property
+    def sufijo_liquidacion(self) -> str | None:
+        """Lo que separa a esta especie de sus hermanas: la letra que `raiz_emision` le cortó.
+
+        `None` cuando el ticker ya es la raíz. Es un hecho del ticker, no una interpretación: acá
+        no se dice qué moneda significa cada letra, porque establecer que la D es MEP y la C es
+        Cable —y que los separa el canje— es de F-012, que es donde vive el tipo de cambio.
+        """
+        return self.ticker[len(self.raiz) :] or None
+
+    def como_dict(self) -> dict[str, object]:
+        """La especie como viaja por el API, con su clave de emisión siempre explícita.
+
+        La clave va en **las dos vistas**, colapsada y viva: quien mira la vista viva tiene que
+        poder ver que MR46O y MR46D son el mismo bono sin volver a cortar el ticker por su cuenta.
+        """
+        return {
+            "ticker": self.ticker,
+            "emision": self.raiz,
+            "sufijo_liquidacion": self.sufijo_liquidacion,
+            "clase_activo": self.clase_activo,
+            "segmento": self.segmento,
+            "naturaleza": self.naturaleza,
+            "naturaleza_nombre": NOMBRE_NATURALEZA[self.naturaleza],
+            "rendimiento": self.rendimiento,
+            "duracion": self.duracion,
+            "vencimiento": self.vencimiento.isoformat() if self.vencimiento else None,
+            "ley": self.ley,
+            "moneda_cupon": self.moneda_cupon,
+            "emisor": self.emisor,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -174,6 +224,11 @@ def segmentar(filas: Iterable[Mapping[str, object]]) -> Segmentacion:
                 rendimiento=rendimiento_declarado(
                     segmento, _numero(fila.get("tir")), _numero(fila.get("tna"))
                 ),
+                duracion=_numero(fila.get("duration")),
+                vencimiento=_fecha(fila.get("maturity")),
+                ley=_texto(fila.get("law")),
+                moneda_cupon=_texto(fila.get("couponCurrency")),
+                emisor=_texto(fila.get("underlying")),
             )
         )
 
@@ -203,3 +258,46 @@ def _numero(valor: object) -> float | None:
         except (TypeError, ValueError):
             return None
     return None if isnan(numero) else numero
+
+
+def _texto(valor: object) -> str | None:
+    """Un texto de la fuente, o `None` si no hay ninguno.
+
+    Lo único que se hace es recortar espacios y tratar la cadena vacía como faltante. **No se
+    normaliza el contenido**: traducir un código de la fuente a una categoría "equivalente" es
+    exactamente el error que una vez inventó una ley que no existe. Lo que la fuente dice, se
+    guarda; lo que no dice, queda vacío.
+
+    Un `NaN` de pandas llega acá como `float` y sale como `None`, igual que en `_numero`: es su
+    forma de decir que la celda estaba vacía, no un valor.
+    """
+    if not isinstance(valor, str):
+        return None
+    limpio = valor.strip()
+    return limpio or None
+
+
+def _fecha(valor: object) -> date | None:
+    """El vencimiento como fecha, o `None`.
+
+    Acepta lo que devuelven las dos fuentes que alimentan esto: un `date` de asyncpg y un
+    `Timestamp` de pandas —que es un `datetime` y por eso entra por la misma puerta— más la cadena
+    ISO, que es la única forma de texto que se interpreta. **Un `10/03/2030` no se parsea**: sin
+    saber si el 10 es el día o el mes habría que elegir, y elegir sería inventar una fecha de
+    vencimiento, que es de las peores cosas que se pueden inventar sobre un bono.
+
+    `NaT` de pandas es un `datetime` y no se puede distinguir por tipo: se lo detecta por ser el
+    único valor que no es igual a sí mismo.
+    """
+    if valor is None or valor != valor:  # `None`, `NaN` o `NaT`
+        return None
+    if isinstance(valor, datetime):
+        return valor.date()
+    if isinstance(valor, date):
+        return valor
+    if isinstance(valor, str):
+        try:
+            return date.fromisoformat(valor[:10])
+        except ValueError:
+            return None
+    return None

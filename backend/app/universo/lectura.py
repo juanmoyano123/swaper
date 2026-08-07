@@ -8,12 +8,19 @@ sin levantar Postgres.
 mal: quedarse con la fila de precios más reciente de cada ticker, entera y del mismo instante. Un
 JOIN propio contra `precios` mezclaría métricas de capturas distintas en la misma fila.
 
-Las columnas se piden por nombre y no con `SELECT *`. Hoy son cinco: las cuatro que la sanidad
-necesita más la clase de activo, que es lo que saca a la renta variable antes de segmentar. **F-011
-va a sumar `duration`, `maturity`, `law`, `couponCurrency` y `underlying`** —lo que decide qué
-especie representa a una emisión— **y F-012 `lastPrice` y `effectiveVolume`**, que son las dos
-puntas del cociente del que sale el tipo de cambio implícito. Agregar una columna acá es agregarla
-a `COLUMNAS` y al `EspecieUniverso`; nada más de este módulo cambia.
+Las columnas se piden por nombre y no con `SELECT *`. Hoy son diez: las cuatro que la sanidad
+necesita, la clase de activo —que es lo que saca a la renta variable antes de segmentar— y las cinco
+que F-011 agregó para decidir qué especie representa a una emisión: `duration` para el chequeo de
+sanidad del colapso, y `maturity`, `law`, `couponCurrency` y `underlying` para medir completitud de
+datos. **Falta `lastPrice` y `effectiveVolume`, que son de F-012**: son las dos puntas del cociente
+del que sale el tipo de cambio implícito, y hasta que exista ese tipo de cambio el volumen crudo no
+se puede comparar entre especies de distinta moneda. Agregar una columna acá es agregarla a
+`COLUMNAS` y al `EspecieUniverso`; nada más de este módulo cambia.
+
+Los identificadores van entrecomillados porque `couponCurrency` viene en camelCase de la fuente
+original y sin comillas PostgreSQL lo plegaría a minúsculas y no encontraría la columna. Se
+entrecomillan todos y no sólo ése: una regla que aplica a veces es una regla que alguien va a
+olvidar cuando agregue la siguiente columna.
 """
 
 from typing import Any
@@ -22,9 +29,24 @@ VISTA_UNIVERSO = "public.resumen"
 
 # Las columnas del universo que consume este paquete. `tir` y `tna` viajan las dos porque cuál de
 # las dos mide a una especie lo decide su segmento, y el segmento se calcula después de leer.
-COLUMNAS: tuple[str, ...] = ("ticker", "clase_activo", "tipo_tasa", "tir", "tna")
+COLUMNAS: tuple[str, ...] = (
+    "ticker",
+    "clase_activo",
+    "tipo_tasa",
+    "tir",
+    "tna",
+    # F-011: `duration` decide si un grupo de especies es de verdad la misma emisión, y las cuatro
+    # que siguen deciden cuál de ellas la representa.
+    "duration",
+    "maturity",
+    "law",
+    "couponCurrency",
+    "underlying",
+)
 
-SQL_UNIVERSO = f"SELECT {', '.join(COLUMNAS)} FROM {VISTA_UNIVERSO} ORDER BY ticker"
+_SELECT = ", ".join(f'"{columna}"' for columna in COLUMNAS)
+
+SQL_UNIVERSO = f"SELECT {_SELECT} FROM {VISTA_UNIVERSO} ORDER BY ticker"
 
 
 async def leer_universo(conn: Any) -> list[dict[str, Any]]:
