@@ -21,6 +21,7 @@ import { fmtCompacto, fmtFecha, fmtMonto, fmtNumero, fmtPct, NO_APLICA, SIN_DATO
 import { useCondicionesInstrumento } from './hooks/useCondicionesInstrumento'
 import { useCronogramaInstrumento } from './hooks/useCronogramaInstrumento'
 import { useFichaInstrumento } from './hooks/useFichaInstrumento'
+import { useSensibilidadInstrumento } from './hooks/useSensibilidadInstrumento'
 import type { CondicionesDetalle, EspecieFicha } from './lib/schema'
 
 /**
@@ -36,6 +37,7 @@ export function FichaInstrumento({ ticker }: { ticker: string | undefined }) {
   const fichaQuery = useFichaInstrumento(ticker)
   const condicionesQuery = useCondicionesInstrumento(ticker)
   const cronogramaQuery = useCronogramaInstrumento(ticker)
+  const sensibilidadQuery = useSensibilidadInstrumento(ticker)
 
   if (ticker === undefined) {
     return (
@@ -91,6 +93,10 @@ export function FichaInstrumento({ ticker }: { ticker: string | undefined }) {
 
       <Panel rotulo="Cronograma">
         <BloqueCronograma query={cronogramaQuery} />
+      </Panel>
+
+      <Panel rotulo="Sensibilidad">
+        <BloqueSensibilidad query={sensibilidadQuery} />
       </Panel>
     </div>
   )
@@ -311,6 +317,69 @@ function BloqueCronograma({ query }: { query: ReturnType<typeof useCronogramaIns
         Montos por cada 100 de valor nominal; el flujo en plata del cliente depende del nominal que
         tenga asignado.
       </p>
+    </div>
+  )
+}
+
+// --- Sensibilidad -----------------------------------------------------------------------------
+
+function fmtDeltaBps(delta: number): string {
+  if (delta === 0) return '0 bps'
+  const signo = delta > 0 ? '+' : '−'
+  return `${signo}${Math.abs(delta)} bps`
+}
+
+function BloqueSensibilidad({ query }: { query: ReturnType<typeof useSensibilidadInstrumento> }) {
+  if (query.isPending) return <EstadoCarga que="la sensibilidad del precio" />
+  if (query.isError) {
+    return <EstadoError error={query.error} onRetry={() => void query.refetch()} />
+  }
+
+  const data = query.data
+  if (!data.calculable) {
+    return (
+      <EstadoVacio titulo="No se puede calcular la sensibilidad." detalle={data.motivo ?? undefined} />
+    )
+  }
+
+  const unidad = unidadDeNaturaleza(data.naturaleza ?? '')
+
+  return (
+    <div>
+      <table className="mono" style={{ width: '100%', fontSize: 11.5, borderCollapse: 'collapse' }}>
+        <thead>
+          <tr style={{ color: 'var(--dim)', textAlign: 'left' }}>
+            <th style={{ fontWeight: 400, padding: '2px 6px 4px 0' }}>movimiento</th>
+            <th style={{ fontWeight: 400, padding: '2px 6px 4px', textAlign: 'right' }}>
+              TIR escenario ({unidad})
+            </th>
+            <th style={{ fontWeight: 400, padding: '2px 0 4px', textAlign: 'right' }}>
+              retorno del precio
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.escenarios.map((esc) => (
+            <tr key={esc.delta_bps} style={{ borderTop: '1px solid var(--lin)' }}>
+              <td style={{ padding: '3px 6px 3px 0' }}>{fmtDeltaBps(esc.delta_bps)}</td>
+              <td style={{ padding: '3px 6px', textAlign: 'right' }}>
+                {fmtPct(esc.tir_escenario * 100)}
+              </td>
+              <td style={{ padding: '3px 0', textAlign: 'right' }}>{fmtPct(esc.retorno * 100)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 8, textWrap: 'pretty' }}>
+        Repricing completo del cashflow contractual a la TIR de cada escenario — no es la
+        aproximación lineal por duración.
+      </p>
+      {data.omitidos_bps.length > 0 && (
+        <p style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 4, textWrap: 'pretty' }}>
+          {data.omitidos_bps.length} escenarios omitidos: la TIR resultante quedaría en −99 % o
+          menos y el descuento degenera.
+        </p>
+      )}
     </div>
   )
 }

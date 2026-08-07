@@ -107,3 +107,31 @@ export const esquemaCronograma = z.object({
 })
 
 export type Cronograma = z.infer<typeof esquemaCronograma>
+
+/**
+ * Un escenario de la tabla de sensibilidad — F-040: repricing completo del cashflow contractual a
+ * la TIR de ese escenario, nunca la aproximación lineal por duración.
+ */
+export const esquemaEscenarioSensibilidad = z.object({
+  delta_bps: z.number(),
+  /** Fracción en la unidad del instrumento, igual que `rendimiento`: multiplicar por 100 recién al formatear. */
+  tir_escenario: z.number(),
+  /** Fracción: 0.18 es +18 % de precio. Repricing completo, nunca duración por delta. */
+  retorno: z.number(),
+})
+
+export type EscenarioSensibilidad = z.infer<typeof esquemaEscenarioSensibilidad>
+
+export const esquemaSensibilidad = z.object({
+  ticker: z.string(),
+  tir_actual: z.number().nullable(),
+  naturaleza: z.string().nullable(),
+  naturaleza_nombre: z.string().nullable(),
+  calculable: z.boolean(),
+  /** El porqué cuando no se puede calcular. Se muestra tal cual: la declaración es el dato. */
+  motivo: z.string().nullable(),
+  escenarios: z.array(esquemaEscenarioSensibilidad),
+  omitidos_bps: z.array(z.number()),
+})
+
+export type Sensibilidad = z.infer<typeof esquemaSensibilidad>

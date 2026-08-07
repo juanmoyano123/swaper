@@ -134,14 +134,32 @@ function renderizar(ticker: string | undefined) {
 const RUTA_FICHA = (t: string) => `/api/v1/instrumentos/${t}`
 const RUTA_CONDICIONES = (t: string) => `/api/v1/instrumentos/${t}/condiciones`
 const RUTA_CRONOGRAMA = (t: string) => `/api/v1/instrumentos/${t}/cronograma`
+const RUTA_SENSIBILIDAD = (t: string) => `/api/v1/instrumentos/${t}/sensibilidad`
 
-/** Las tres rutas resolviendo en éxito, con datos mínimos — el punto de partida de la mayoría de
- * los tests, que después pisan sólo la que les interesa. */
+/** Las cuatro rutas resolviendo en éxito, con datos mínimos — el punto de partida de la mayoría de
+ * los tests, que después pisan sólo la que les interesa.
+ *
+ * La sensibilidad la agregó F-040 (tanda 8b): es la cuarta query independiente de la ficha, y sin
+ * mockearla los tests de "las queries son independientes" veían dos alertas en pantalla en vez de
+ * una — la del panel que el test rompe a propósito, más la de esta ruta cayendo en el `throw` de
+ * ruta no mockeada. Se responde `calculable: false`, que es el caso más barato y no dibuja tabla. */
 function rutasOk(ticker: string, overrides: Partial<Record<string, Ruta>> = {}) {
   return {
     [RUTA_FICHA(ticker)]: { body: ficha(ticker) },
     [RUTA_CONDICIONES(ticker)]: { body: condiciones(null) },
     [RUTA_CRONOGRAMA(ticker)]: { body: cronograma([]) },
+    [RUTA_SENSIBILIDAD(ticker)]: {
+      body: {
+        ticker,
+        tir_actual: null,
+        naturaleza: null,
+        naturaleza_nombre: null,
+        calculable: false,
+        motivo: 'sin TIR vigente: no se calcula',
+        escenarios: [],
+        omitidos_bps: [],
+      },
+    },
     ...overrides,
   }
 }

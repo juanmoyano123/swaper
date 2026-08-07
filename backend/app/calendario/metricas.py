@@ -207,3 +207,40 @@ def _motivo_sin_tir(t: Sequence[float], cf: Sequence[float], precio_sucio: float
     if valor_presente(t, cf, TASA_TECHO) - precio_sucio >= 0.0:
         return MOTIVO_TIR_SOBRE_TECHO
     return MOTIVO_SIN_CONVERGENCIA
+
+
+def retorno_por_tir(
+    pagos: Sequence[Pago],
+    tir_actual: float | None,
+    deltas: Sequence[float],
+    hoy: date,
+) -> dict[float, float] | None:
+    """Cuánto se movería el precio si la TIR del bono cambiara.
+
+    Repricing completo del cashflow contractual, no una aproximación por duración: se descuentan
+    todos los flujos futuros a la TIR nueva y se compara contra descontarlos a la TIR de hoy. En
+    bonos largos la aproximación lineal subestima fuerte la suba ante compresiones grandes, y
+    justamente esos son los escenarios que interesan (F-040). Port de `tools/cupones.py`.
+
+    `deltas` en fracciones (-0.01 = comprime 100 bps). Devuelve {delta: retorno} o `None` si falta
+    TIR, no quedan pagos futuros o el valor presente base no es positivo. Un delta que deje la tasa
+    en `TASA_PISO` o por debajo se omite del resultado: descuento degenerado, no se reporta un
+    número inventado.
+    """
+    if tir_actual is None:
+        return None
+    futuros = [p for p in pagos if p.fecha > hoy]
+    if not futuros:
+        return None
+    t = [anios_entre(hoy, p.fecha) for p in futuros]
+    cf = [p.total for p in futuros]
+    base = valor_presente(t, cf, tir_actual)
+    if base <= 0:
+        return None
+    out: dict[float, float] = {}
+    for d in deltas:
+        y = tir_actual + d
+        if y <= TASA_PISO:
+            continue
+        out[d] = valor_presente(t, cf, y) / base - 1
+    return out or None

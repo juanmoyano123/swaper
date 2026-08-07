@@ -21,6 +21,7 @@ from tests.conftest import cliente
 FICHA = "/api/v1/instrumentos/{ticker}"
 CONDICIONES = "/api/v1/instrumentos/{ticker}/condiciones"
 CRONOGRAMA = "/api/v1/instrumentos/{ticker}/cronograma"
+SENSIBILIDAD = "/api/v1/instrumentos/{ticker}/sensibilidad"
 
 # AL30 / AL30D / AL30C: la misma emisión en pesos, MEP y cable — mismas duraciones, así que
 # deduplica en una sola emisión con dos hermanas por especie. S30J6 no comparte raíz con nadie:
@@ -305,5 +306,98 @@ async def test_cronograma_sin_universo_declara_moneda_nula(app_con_instrumentos)
 async def test_cronograma_sin_base_de_datos_responde_503(crear_app) -> None:
     async with cliente(crear_app(None)) as http:
         respuesta = await http.get(CRONOGRAMA.format(ticker="AL30D"))
+
+    assert respuesta.status_code == 503
+
+
+# --- GET /instrumentos/{ticker}/sensibilidad --------------------------------------------------
+
+
+async def test_sensibilidad_de_un_bono_usd_hard_repricea_los_ocho_escenarios(
+    app_con_instrumentos,
+) -> None:
+    async with cliente(app_con_instrumentos()) as http:
+        respuesta = await http.get(SENSIBILIDAD.format(ticker="AL30D"))
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["calculable"] is True
+    assert cuerpo["naturaleza"] == "tir_usd"
+    assert cuerpo["tir_actual"] == pytest.approx(0.121)
+    assert cuerpo["omitidos_bps"] == []
+
+    escenarios = cuerpo["escenarios"]
+    assert [e["delta_bps"] for e in escenarios] == [-500, -400, -300, -200, -100, 0, 100, 200]
+
+    nulo = next(e for e in escenarios if e["delta_bps"] == 0)
+    assert nulo["retorno"] == pytest.approx(0.0)
+
+    compresion = next(e for e in escenarios if e["delta_bps"] == -100)
+    apertura = next(e for e in escenarios if e["delta_bps"] == 100)
+    assert compresion["retorno"] > 0
+    assert apertura["retorno"] < 0
+
+
+async def test_sensibilidad_de_tasa_fija_declara_tna_nominal_y_no_calcula(
+    app_con_instrumentos,
+) -> None:
+    """S30J6 es tasa_fija: su rendimiento es TNA nominal, no una tasa efectiva descontable."""
+    async with cliente(app_con_instrumentos()) as http:
+        respuesta = await http.get(SENSIBILIDAD.format(ticker="S30J6"))
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["calculable"] is False
+    assert "TNA nominal" in cuerpo["motivo"]
+    assert cuerpo["escenarios"] == []
+    # Nunca un número derivado de duración: ningún campo numérico de escenario en la respuesta.
+    assert "tir_escenario" not in str(cuerpo["escenarios"])
+
+
+async def test_sensibilidad_sin_cronograma_declara_y_no_estima_por_duracion(
+    app_con_instrumentos,
+) -> None:
+    async with cliente(app_con_instrumentos(cashflow=[])) as http:
+        respuesta = await http.get(SENSIBILIDAD.format(ticker="AL30D"))
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["calculable"] is False
+    assert cuerpo["motivo"] == "sin cronograma de pagos en la fuente"
+    assert cuerpo["escenarios"] == []
+
+
+async def test_sensibilidad_de_un_ticker_fuera_del_universo_da_200_no_404(
+    app_con_instrumentos,
+) -> None:
+    """GWT-3 en su forma de endpoint: éste es un recurso derivado, el 404 de existencia lo da la
+    ficha (`GET /instrumentos/{t}`)."""
+    async with cliente(app_con_instrumentos()) as http:
+        respuesta = await http.get(SENSIBILIDAD.format(ticker="NOEXISTE"))
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["calculable"] is False
+    assert cuerpo["tir_actual"] is None
+    assert cuerpo["naturaleza"] is None
+    assert "no está en el universo de hoy" in cuerpo["motivo"]
+
+
+async def test_sensibilidad_sin_tir_vigente_declara_el_motivo(app_con_instrumentos) -> None:
+    universo_sin_tir = [
+        {**fila, "tir": None} if fila["ticker"] == "AL30D" else fila for fila in FILAS_UNIVERSO
+    ]
+    async with cliente(app_con_instrumentos(universo=universo_sin_tir)) as http:
+        respuesta = await http.get(SENSIBILIDAD.format(ticker="AL30D"))
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["calculable"] is False
+    assert cuerpo["motivo"] == "sin TIR vigente publicada ni calculada hoy"
+
+
+async def test_sensibilidad_sin_base_de_datos_responde_503(crear_app) -> None:
+    async with cliente(crear_app(None)) as http:
+        respuesta = await http.get(SENSIBILIDAD.format(ticker="AL30D"))
 
     assert respuesta.status_code == 503
