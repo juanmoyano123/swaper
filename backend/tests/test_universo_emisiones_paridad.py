@@ -5,12 +5,28 @@ test que la compare no es un port: es una segunda implementación que va a diver
 entere, y el día que diverja el motor y el producto van a estar armando carteras sobre universos
 distintos. Es la misma razón por la que existe `test_universo_paridad_motor.py` para la sanidad.
 
-**Los dos no tienen que coincidir en todo, y eso también se prueba acá.** El motor desempata por
-volumen normalizado a dólares, que es F-012 y todavía no existe; el backend desempata por ticker.
-Entonces se exige coincidencia exacta en lo que sí está portado —qué grupos son una emisión, cuántas
-filas quedan, y que el representante elegido sea igual de sano y de completo— y se mide, sin
-exigirla, la coincidencia del representante. Cuando F-012 cierre el hueco, ese último número tiene
-que llegar al 100 %: el test lo deja escrito.
+**Los dos no tienen que coincidir en todo, y eso también se prueba acá.** Se exige coincidencia
+exacta en lo que decide qué es una emisión —qué grupos se colapsan, cuántas filas quedan, y que el
+representante elegido sea igual de sano y de completo— y se mide, sin exigirla, la coincidencia del
+representante.
+
+## Por qué ese último número no llega al 100 % con F-012, y por qué está bien
+
+F-011 dejó escrito que cuando el desempate por volumen normalizado existiera los dos iban a elegir
+siempre lo mismo. Con F-012 enchufado son **272 de 279**, y las 7 que faltan no son un port mal
+hecho: son un bug numérico del motor.
+
+El motor no ordena por una tupla, ordena por un único número:
+`sano * 1e24 + completitud * 1e12 + volumen_usd`, y se queda con el `idxmax`. En float64 el espacio
+entre dos números representables alrededor de 1e24 es 134.217.728, y los volúmenes del consolidado
+llegan hasta 1,9e8: **casi todos caen por debajo de un ulp y la suma los descarta enteros**. Cuando
+eso pasa, las hermanas quedan con la misma clave bit a bit y `idxmax` devuelve la primera fila, que
+en un universo ordenado por ticker es la alfabética.
+
+Las 7 diferencias son exactamente los grupos donde el volumen sí debería haber decidido, y en los 7
+el backend elige la especie más operada: BA7DD (333.383 USD) contra BA7DC (3.455), BB7DD (115.402)
+contra BB7DC (80), y así. Reproducir el redondeo para que el número diera 279 sería portar el error,
+no el criterio.
 
 Se compara sobre el consolidado histórico y no sobre la base porque el Excel es lo que el motor lee,
 y porque ahí hay especies con `duration` cargada — sin duraciones, el chequeo del 5 % no puede
@@ -23,6 +39,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from app.universo.cambio import derivar_tipo_de_cambio, normalizar_volumen
 from app.universo.emisiones import deduplicar
 from app.universo.sanidad import evaluar_sanidad
 from app.universo.segmentacion import segmentar
@@ -59,7 +76,14 @@ def dedup_del_motor(motor, universo: list[dict]) -> pd.DataFrame:
 
 @pytest.fixture(scope="module")
 def dedup_del_backend(universo: list[dict]):
-    especies = segmentar(universo).especies
+    """El universo del backend con el camino entero: segmentar, normalizar el volumen, deduplicar.
+
+    El tipo de cambio se deriva acá y no se pasa a mano porque es lo que hace `sanear`: si el
+    desempate por volumen se probara con una columna cargada a dedo, este test no verificaría que el
+    volumen que llega al desempate es el que F-012 produce.
+    """
+    crudas = segmentar(universo).especies
+    especies = normalizar_volumen(crudas, derivar_tipo_de_cambio(crudas))
     return deduplicar(especies, evaluar_sanidad(especies).descartados)
 
 
@@ -125,24 +149,33 @@ def test_el_representante_del_backend_es_igual_de_sano_y_de_completo_que_el_del_
     assert peores == []
 
 
-def test_el_desempate_pendiente_es_la_unica_diferencia_medible(
+def test_donde_los_dos_difieren_es_donde_el_motor_pierde_el_volumen(
     elegido_por_el_motor, dedup_del_backend, capsys
 ):
-    """Cuánto se parecen las dos elecciones hoy. **Este test tiene que llegar al 100 % con F-012**:
-    si el desempate por volumen normalizado estuviera, los dos elegirían siempre lo mismo.
+    """Cuánto se parecen las dos elecciones, y que cada diferencia esté explicada por el volumen.
 
-    No falla por debajo del 100 % a propósito —el hueco está declarado y es la decisión de la
-    feature— pero sí falla si el universo dejara de tener emisiones multiespecie, porque ahí este
-    archivo entero dejaría de probar algo.
+    No se exige coincidencia total —el porqué está en el docstring del módulo: el motor suma el
+    volumen a un 1e24 que lo redondea a cero— pero sí se exige que **cada** diferencia sea un caso
+    donde el backend eligió la especie más operada. Una diferencia en la que el backend eligiera la
+    menos líquida no sería el bug del motor: sería el port mal hecho.
     """
     multiespecie = [e for e in dedup_del_backend.emisiones if len(e.especies) > 1 and e.colapsada]
     assert multiespecie, "el consolidado dejó de tener emisiones con varias especies"
 
-    coinciden = sum(
-        1 for e in multiespecie if elegido_por_el_motor.get(e.raiz) == e.representante.ticker
-    )
+    difieren = [
+        e for e in multiespecie if elegido_por_el_motor.get(e.raiz) != e.representante.ticker
+    ]
+    menos_liquidas = [
+        e.raiz
+        for e in difieren
+        if any((h.volumen_usd or 0) > (e.representante.volumen_usd or 0) for h in e.especies)
+    ]
+    assert menos_liquidas == []
+
     with capsys.disabled():
         print(
-            f"\nrepresentante coincidente con el motor: {coinciden}/{len(multiespecie)} emisiones "
-            "multiespecie (el resto es el desempate por volumen que espera a F-012)"
+            f"\nrepresentante coincidente con el motor: "
+            f"{len(multiespecie) - len(difieren)}/{len(multiespecie)} emisiones multiespecie; "
+            f"las {len(difieren)} que difieren son las que el motor decide con un volumen que su "
+            f"propia suma en float64 redondeó a cero ({', '.join(e.raiz for e in difieren)})"
         )

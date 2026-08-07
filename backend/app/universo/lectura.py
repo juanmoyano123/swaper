@@ -8,14 +8,29 @@ sin levantar Postgres.
 mal: quedarse con la fila de precios más reciente de cada ticker, entera y del mismo instante. Un
 JOIN propio contra `precios` mezclaría métricas de capturas distintas en la misma fila.
 
-Las columnas se piden por nombre y no con `SELECT *`. Hoy son diez: las cuatro que la sanidad
-necesita, la clase de activo —que es lo que saca a la renta variable antes de segmentar— y las cinco
-que F-011 agregó para decidir qué especie representa a una emisión: `duration` para el chequeo de
+Las columnas se piden por nombre y no con `SELECT *`. Hoy son doce: las cuatro que la sanidad
+necesita, la clase de activo —que es lo que saca a la renta variable antes de segmentar—, las cinco
+que F-011 agregó para decidir qué especie representa a una emisión (`duration` para el chequeo de
 sanidad del colapso, y `maturity`, `law`, `couponCurrency` y `underlying` para medir completitud de
-datos. **Falta `lastPrice` y `effectiveVolume`, que son de F-012**: son las dos puntas del cociente
-del que sale el tipo de cambio implícito, y hasta que exista ese tipo de cambio el volumen crudo no
-se puede comparar entre especies de distinta moneda. Agregar una columna acá es agregarla a
-`COLUMNAS` y al `EspecieUniverso`; nada más de este módulo cambia.
+datos) y las dos de F-012: `lastPrice` y `effectiveVolume`. El precio es la punta del cociente del
+que sale el tipo de cambio implícito y el volumen es lo que ese tipo de cambio permite comparar
+entre especies de distinta moneda. Agregar una columna de la vista es agregarla a `COLUMNAS` y al
+`EspecieUniverso`; nada más de este módulo cambia.
+
+## La moneda de cotización no está en la vista, y por eso hay un JOIN
+
+F-012 necesita saber en qué moneda está el volumen de cada especie, y eso es
+`instrumentos.moneda_cotizacion` — el `denominationCcy` que declara BYMA. **No está en la vista**:
+F-007 la agregó a la tabla pero dejó el contrato de 21 columnas de `resumen` intacto a propósito,
+para que el motor Python siguiera leyendo lo mismo. Meterla ahí sería tocar el esquema.
+
+Así que se trae con un `LEFT JOIN` contra `instrumentos`, que es seguro por una razón concreta:
+`instrumentos` tiene una fila por ticker y no es una serie temporal, así que unirla no reintroduce
+el problema que la vista existe para resolver —mezclar métricas de capturas distintas en la misma
+fila—, que sí aparecería si se unieran `precios` o `puntas`. Es `LEFT` y no `INNER` porque una
+especie sin fila en `instrumentos` tiene que seguir apareciendo en el universo con la moneda vacía:
+perderla del listado sería peor que no saber su moneda, y qué hacer con el faltante lo decide
+`cambio.py`.
 
 Los identificadores van entrecomillados porque `couponCurrency` viene en camelCase de la fuente
 original y sin comillas PostgreSQL lo plegaría a minúsculas y no encontraría la columna. Se
@@ -26,6 +41,7 @@ olvidar cuando agregue la siguiente columna.
 from typing import Any
 
 VISTA_UNIVERSO = "public.resumen"
+TABLA_INSTRUMENTOS = "public.instrumentos"
 
 # Las columnas del universo que consume este paquete. `tir` y `tna` viajan las dos porque cuál de
 # las dos mide a una especie lo decide su segmento, y el segmento se calcula después de leer.
@@ -42,11 +58,25 @@ COLUMNAS: tuple[str, ...] = (
     "law",
     "couponCurrency",
     "underlying",
+    # F-012: las dos puntas de la comparación de liquidez. El precio deriva el tipo de cambio y el
+    # volumen es lo que ese tipo de cambio hace comparable.
+    "lastPrice",
+    "effectiveVolume",
 )
 
-_SELECT = ", ".join(f'"{columna}"' for columna in COLUMNAS)
+# Lo que la vista no tiene y hay que ir a buscar a la tabla. Ver el porqué en el docstring.
+COLUMNAS_INSTRUMENTOS: tuple[str, ...] = ("moneda_cotizacion",)
 
-SQL_UNIVERSO = f"SELECT {_SELECT} FROM {VISTA_UNIVERSO} ORDER BY ticker"
+_SELECT = ", ".join(
+    [f'u."{columna}"' for columna in COLUMNAS]
+    + [f'i."{columna}"' for columna in COLUMNAS_INSTRUMENTOS]
+)
+
+SQL_UNIVERSO = (
+    f"SELECT {_SELECT} FROM {VISTA_UNIVERSO} u "
+    f"LEFT JOIN {TABLA_INSTRUMENTOS} i ON i.ticker = u.ticker "
+    "ORDER BY u.ticker"
+)
 
 
 async def leer_universo(conn: Any) -> list[dict[str, Any]]:

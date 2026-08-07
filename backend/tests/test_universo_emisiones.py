@@ -31,6 +31,7 @@ def especie(
     emisor: str | None = "Tesoro Nacional",
     rendimiento: float | None = 0.13,
     segmento: str = "usd_hard",
+    volumen_usd: float | None = None,
 ) -> EspecieUniverso:
     """Una especie con todos los datos cargados, para que cada test cambie sólo lo que prueba."""
     raiz = ticker[:-1] if len(ticker) >= 4 and ticker[-1] in ("O", "D", "C") else ticker
@@ -45,6 +46,7 @@ def especie(
         ley=ley,
         moneda_cupon=moneda_cupon,
         emisor=emisor,
+        volumen_usd=volumen_usd,
     )
 
 
@@ -220,11 +222,42 @@ def test_a_igualdad_de_sanidad_gana_la_especie_de_datos_mas_completos() -> None:
     assert dedup.por_raiz["MR46"].representante.ticker == "MR46D"
 
 
-def test_el_desempate_es_estable_y_no_mira_volumen() -> None:
-    """El hueco de F-012, explícito. El desempate por volumen exige el volumen normalizado a
-    dólares: con el crudo siempre ganaría la especie en pesos por el tipo de cambio y no por
-    liquidez. Mientras tanto desempata el ticker, que es arbitrario pero no miente ni cambia entre
-    corridas."""
+def test_a_igual_completitud_gana_la_especie_mas_operada() -> None:
+    """El cuarto criterio, que F-012 enchufó. El volumen entra **en dólares**: con el crudo ganaría
+    siempre la especie en pesos por el tipo de cambio y no por liquidez."""
+    con_volumen = [
+        especie("MR46O", volumen_usd=10.0),
+        especie("MR46D", volumen_usd=333_382.0),
+        especie("MR46C", volumen_usd=3_455.0),
+    ]
+    representantes = {
+        deduplicar(orden).por_raiz["MR46"].representante.ticker
+        for orden in (con_volumen, list(reversed(con_volumen)))
+    }
+    assert representantes == {"MR46D"}
+
+
+def test_la_liquidez_no_le_gana_a_la_completitud() -> None:
+    """El orden de los criterios importa: la especie que mejor describe a la emisión sigue siendo
+    la que más datos de la emisión tiene, aunque casi no se opere."""
+    dedup = deduplicar(
+        [
+            especie("MR46O", volumen_usd=1_000_000.0, ley=None, emisor=None),
+            especie("MR46D", volumen_usd=1.0),
+        ]
+    )
+    assert dedup.por_raiz["MR46"].representante.ticker == "MR46D"
+
+
+def test_una_liquidez_que_no_se_conoce_no_le_gana_a_una_que_si() -> None:
+    """`volumen_usd` en `None` es "no se pudo normalizar", no "operó muchísimo"."""
+    dedup = deduplicar([especie("MR46C", volumen_usd=None), especie("MR46D", volumen_usd=1.0)])
+    assert dedup.por_raiz["MR46"].representante.ticker == "MR46D"
+
+
+def test_sin_volumen_en_ninguna_el_desempate_sigue_siendo_estable() -> None:
+    """En un día sin tipo de cambio ninguna especie tiene volumen comparable y decide el ticker:
+    arbitrario, pero igual en las dos corridas del mismo universo."""
     representantes = {
         deduplicar(orden).por_raiz["MR46"].representante.ticker
         for orden in ([*MR46], list(reversed(MR46)), [MR46[1], MR46[2], MR46[0]])
@@ -253,10 +286,12 @@ def test_el_resumen_dice_cuantas_especies_se_colapsaron_y_cuantas_no() -> None:
     assert resumen["no_colapsadas_por_duracion"] == {"cantidad": 1, "muestra": ["XXXX"]}
 
 
-def test_el_resumen_declara_que_el_desempate_por_volumen_no_esta(mr46) -> None:
-    """No es un detalle de implementación: quien lea el resumen tiene que saber que el
-    representante se eligió sin mirar liquidez."""
+def test_el_resumen_declara_si_el_desempate_miro_la_liquidez(mr46) -> None:
+    """No es un detalle de implementación: quien lea el resumen tiene que saber si el representante
+    se eligió mirando liquidez o si en esa corrida no hubo tipo de cambio con qué normalizarla."""
     assert mr46.resumen()["desempate_por_volumen"] is False
+    con_volumen = deduplicar([especie("MR46O", volumen_usd=10.0), especie("MR46D")])
+    assert con_volumen.resumen()["desempate_por_volumen"] is True
 
 
 def test_las_alertas_nombran_lo_que_se_colapso_y_lo_que_no() -> None:

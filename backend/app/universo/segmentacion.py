@@ -112,8 +112,9 @@ class EspecieUniverso:
 
     Es el tipo sobre el que trabaja todo el paquete. F-011 le sumó lo que decide el representante de
     una emisión —la duración y los cuatro campos cuya presencia mide la completitud del dato— y
-    F-012 le va a sumar lo que necesita para derivar el tipo de cambio (precio y moneda de
-    cotización); ninguna de las dos tiene que tocar lo que ya estaba.
+    F-012 le sumó lo que hace falta para derivar el tipo de cambio y comparar liquidez: el precio,
+    el volumen, la moneda en la que están los dos y el volumen ya llevado a dólares. Ninguna de las
+    dos tocó lo que ya estaba.
 
     **La división entre lo que es de la emisión y lo que es de la especie no es decorativa.**
     Vencimiento, ley, moneda de pago y emisor son atributos de la emisión: las tres especies de
@@ -142,6 +143,25 @@ class EspecieUniverso:
     moneda_cupon: str | None = None
     emisor: str | None = None
     """El nombre del emisor tal como lo publica la fuente (columna `underlying` de la vista)."""
+
+    precio: float | None = None
+    """`lastPrice`, en la moneda de cotización de esta especie. Es la punta del cociente del que
+    F-012 deriva el tipo de cambio: el precio en pesos sobre el precio en dólares del mismo bono."""
+
+    volumen: float | None = None
+    """`effectiveVolume`: monto operado, en la moneda de cotización de esta especie. **Crudo no es
+    comparable entre hermanas** —la especie en pesos muestra ~1.500 veces más por el tipo de cambio
+    y no por operarse más—, y por eso quien compare liquidez usa `volumen_usd`."""
+
+    moneda_cotizacion: str | None = None
+    """`denominationCcy` tal como lo declara BYMA: `ARS`, `USD` o `EXT`, sin traducir. Es lo que
+    dice en qué unidad están `precio` y `volumen`. Se lee y no se deduce del sufijo del ticker: hay
+    seis especies con sufijo D declaradas en pesos, y sus precios lo confirman."""
+
+    volumen_usd: float | None = None
+    """El volumen llevado a dólares por F-012, que es la única forma de comparar liquidez entre
+    especies de distinta moneda. `None` cuando no se pudo: sin tipo de cambio del día, o sin saber
+    en qué moneda estaba el número. Un faltante acá no se rellena con el volumen crudo."""
 
     @property
     def naturaleza(self) -> str:
@@ -177,6 +197,10 @@ class EspecieUniverso:
             "ley": self.ley,
             "moneda_cupon": self.moneda_cupon,
             "emisor": self.emisor,
+            "precio": self.precio,
+            "moneda_cotizacion": self.moneda_cotizacion,
+            "volumen": self.volumen,
+            "volumen_usd": self.volumen_usd,
         }
 
 
@@ -222,20 +246,23 @@ def segmentar(filas: Iterable[Mapping[str, object]]) -> Segmentacion:
                 clase_activo=clase,
                 segmento=segmento,
                 rendimiento=rendimiento_declarado(
-                    segmento, _numero(fila.get("tir")), _numero(fila.get("tna"))
+                    segmento, a_numero(fila.get("tir")), a_numero(fila.get("tna"))
                 ),
-                duracion=_numero(fila.get("duration")),
+                duracion=a_numero(fila.get("duration")),
                 vencimiento=_fecha(fila.get("maturity")),
                 ley=_texto(fila.get("law")),
                 moneda_cupon=_texto(fila.get("couponCurrency")),
                 emisor=_texto(fila.get("underlying")),
+                precio=a_numero(fila.get("lastPrice")),
+                volumen=a_numero(fila.get("effectiveVolume")),
+                moneda_cotizacion=_texto(fila.get("moneda_cotizacion")),
             )
         )
 
     return Segmentacion(especies=especies, renta_variable=renta_variable, sin_segmento=sin_segmento)
 
 
-def _numero(valor: object) -> float | None:
+def a_numero(valor: object) -> float | None:
     """`Decimal` de asyncpg, `float` de un test o `None`. Un valor que no es número es `None`.
 
     No se intenta interpretar un string ni completar un faltante: si la fuente no publicó un número,
@@ -268,7 +295,7 @@ def _texto(valor: object) -> str | None:
     exactamente el error que una vez inventó una ley que no existe. Lo que la fuente dice, se
     guarda; lo que no dice, queda vacío.
 
-    Un `NaN` de pandas llega acá como `float` y sale como `None`, igual que en `_numero`: es su
+    Un `NaN` de pandas llega acá como `float` y sale como `None`, igual que en `numero`: es su
     forma de decir que la celda estaba vacía, no un valor.
     """
     if not isinstance(valor, str):

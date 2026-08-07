@@ -1,4 +1,4 @@
-"""Endpoints del universo saneado — F-010 y F-011, y después F-012.
+"""Endpoints del universo saneado — F-010, F-011 y F-012.
 
 Las tres features que envuelven `tools/segmentos.py` —sanidad, deduplicación y tipo de cambio
 implícito— exponen el mismo universo bajo este prefijo, y por eso el plan las serializa: son tres
@@ -44,7 +44,7 @@ async def sanidad(conn: Annotated[object, Depends(get_db)]) -> dict[str, object]
     Los instrumentos descartados **siguen en el universo**. Lo que dice este endpoint es cuáles no
     se proponen y por qué; ninguno se corrige ni se estima.
     """
-    saneado = await sanear_universo(conn)
+    saneado = await sanear_universo(conn, con_contraste=True)
     return saneado.como_dict()
 
 
@@ -78,6 +78,29 @@ async def descartes(
 
     filas = [d.como_dict() for d in listado[: params.limit + 1]]
     return build_page(filas, params.limit, lambda f: {"ticker": f["ticker"]})
+
+
+@router.get(
+    "/tipo-de-cambio",
+    summary="El tipo de cambio implícito del día, derivado del propio universo",
+    responses={503: {"description": "La base de datos no está disponible"}},
+)
+async def tipo_de_cambio(conn: Annotated[object, Depends(get_db)]) -> dict[str, object]:
+    """El cociente entre el precio en pesos y el precio en dólares de las mismas emisiones.
+
+    **No hay fuente externa acá y no la va a haber.** El tipo de cambio al que opera el mercado ya
+    está adentro del universo: la misma emisión cotiza en las dos monedas y ese cociente es el
+    número. Lo que se devuelve es la mediana, con cuántos pares la formaron y cuánto se dispersan —
+    sin esos dos no se puede saber si creerle.
+
+    El contraste contra los índices que publica BYMA viene en `contraste` y es exactamente eso: un
+    control. Si difiere, sale alerta y **se sigue usando el implícito**.
+    """
+    saneado = await sanear_universo(conn, con_contraste=True)
+    return {
+        "tipo_de_cambio": saneado.cambio.como_dict(),
+        "alertas": [a.como_dict() for a in saneado.cambio.alertas],
+    }
 
 
 @router.get(
@@ -152,11 +175,15 @@ async def vista_viva(
     Es la vista del optimizador y no se filtra: los swaps de perfil rotan justamente entre especies
     de la misma emisión —de MEP a Cable—, y una vista colapsada no los dejaría ni ver.
 
-    **El precio, la punta y la moneda de cotización todavía no viajan acá.** El precio y el volumen
-    son las columnas que F-012 necesita para derivar el tipo de cambio implícito y le pertenecen; la
-    punta compradora y vendedora no existe en la vista `resumen`, así que hoy no hay de dónde
-    sacarla. Lo que sí es de cada especie y ya viaja es su rendimiento declarado y su sufijo de
-    liquidación.
+    Cada especie viaja con su precio, su moneda de cotización declarada, su volumen crudo y su
+    **volumen en dólares**, que es el único de los dos que se puede comparar entre hermanas: el
+    crudo está en la moneda de cada especie y la que cotiza en pesos muestra ~1.500 veces más por
+    el tipo de cambio, no por operarse más. Los dos viajan porque el crudo es lo que la fuente
+    publicó y el normalizado lo que se deriva de él: esconder el primero haría imposible auditar
+    el segundo.
+
+    **La punta compradora y vendedora sigue sin viajar**: no existe en la vista `resumen`, así que
+    hoy no hay de dónde sacarla.
     """
     saneado = await sanear_universo(conn)
     dedup = saneado.emisiones()

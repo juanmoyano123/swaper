@@ -8,11 +8,28 @@ from typing import Any
 
 import pytest
 
+from app.universo import servicio
 from tests.conftest import cliente
 from tests.test_universo_servicio import UNIVERSO, FakeConexionLectura
 
 SANIDAD = "/api/v1/universo/sanidad"
 DESCARTES = "/api/v1/universo/sanidad/descartes"
+
+
+@pytest.fixture(autouse=True)
+def sin_byma(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`/sanidad` es uno de los dos endpoints que piden el índice de contraste, y sin esto la suite
+    offline saldría a Internet: un test que dependiera de que la API abierta esté arriba fallaría
+    los días que BYMA falla, y con los reintentos del cliente tardaría 30 s en hacerlo.
+
+    Que devuelva vacío no debilita lo que se prueba acá —el contrato HTTP del resumen—: el implícito
+    se deriva del propio universo y el contraste es un control, no una fuente.
+    """
+
+    async def _vacio() -> list:
+        return []
+
+    monkeypatch.setattr(servicio, "leer_indices", _vacio)
 
 
 @pytest.fixture
@@ -24,6 +41,13 @@ def app_con_universo(crear_app):
 
 
 async def test_el_resumen_declara_los_descartes_y_sus_alertas(app_con_universo) -> None:
+    """Las alertas del universo son las de la sanidad **y** las del tipo de cambio.
+
+    Las de F-012 aparecen acá porque van a la misma lista: la barra de estado del dato tiene una
+    sola, y un universo cuya liquidez no se puede comparar está tan incompleto como uno con
+    instrumentos descartados. Sobre este universo de prueba las dos que salen son las esperables —
+    seis especies y ningún par en dólares, y ninguna con la moneda declarada.
+    """
     async with cliente(app_con_universo()) as http:
         respuesta = await http.get(SANIDAD)
 
@@ -32,7 +56,12 @@ async def test_el_resumen_declara_los_descartes_y_sus_alertas(app_con_universo) 
     assert cuerpo["resumen"]["descartados"] == 2
     assert cuerpo["resumen"]["por_capa"]["especie_incoherente"] == 1
     codigos = {a["codigo"] for a in cuerpo["alertas"]}
-    assert codigos == {"especie_incoherente", "rendimiento_fuera_de_rango"}
+    assert codigos == {
+        "especie_incoherente",
+        "rendimiento_fuera_de_rango",
+        "tipo_de_cambio_sin_pares",
+        "moneda_de_cotizacion_asumida",
+    }
 
 
 async def test_el_listado_dice_ticker_motivo_y_el_valor_que_lo_disparo(app_con_universo) -> None:

@@ -194,7 +194,7 @@ def test_una_especie_sin_rendimiento_no_se_descarta() -> None:
 
 
 def test_un_nan_que_se_colara_hasta_aca_tampoco_se_descarta() -> None:
-    """Segundo cinturón del mismo error. `segmentacion._numero` traduce el `NaN` a `None`, pero la
+    """Segundo cinturón del mismo error. `segmentacion.numero` traduce el `NaN` a `None`, pero la
     comparación de la capa 2 está escrita en positivo —"descartar lo que supera el techo"— para que
     un valor incomparable caiga del lado de conservar y no del lado de condenar."""
     resultado = evaluar_sanidad([especie("CONNAN", "usd_hard", float("nan"))])

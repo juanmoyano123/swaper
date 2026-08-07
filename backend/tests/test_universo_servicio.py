@@ -158,7 +158,10 @@ def test_como_dict_no_arrastra_la_coleccion_de_descartes(saneado) -> None:
     """El resumen contesta "¿sirve el universo de hoy?"; el listado es otro recurso, paginado."""
     payload = saneado.como_dict()
     assert set(payload) == {"resumen", "alertas"}
-    assert len(payload["alertas"]) == 2
+    codigos = [a["codigo"] for a in payload["alertas"]]
+    assert codigos.count("especie_incoherente") == 1
+    assert codigos.count("rendimiento_fuera_de_rango") == 1
+    assert "descartes" not in payload
 
 
 # --- La lectura ---------------------------------------------------------------------------------
@@ -178,8 +181,14 @@ async def test_sanear_universo_lee_la_vista_resumen_entera() -> None:
 
 
 async def test_un_universo_vacio_no_rompe_ni_alerta() -> None:
-    """Una base recién migrada devuelve cero filas y eso no es un error de sanidad."""
+    """Una base recién migrada devuelve cero filas y eso no es un error de sanidad.
+
+    Lo que sí dice es que no hay tipo de cambio, y eso es distinto: sin especies no hay pares de
+    los que derivarlo, así que la comparación de liquidez no está disponible. La sanidad no opina
+    sobre un universo vacío; F-012 sí, porque su alerta habla de lo que no se puede hacer.
+    """
     resultado = await sanear_universo(FakeConexionLectura([]))
     assert resultado.descartes == []
-    assert resultado.alertas == []
+    assert resultado.sanidad.alertas == []
+    assert [a.codigo for a in resultado.alertas] == ["tipo_de_cambio_sin_pares"]
     assert resultado.resumen()["evaluados"] == 0

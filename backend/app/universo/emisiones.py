@@ -15,8 +15,8 @@ cuente tres posiciones donde hay una está midiendo mal el riesgo.
 Las dos llevan la clave de emisión explícita (`EspecieUniverso.raiz`). Ésa es la única forma de que
 el armador pueda avisar que MR46C no suma diversificación sobre un MR46D que la cartera ya tiene.
 
-Portado de `tools/segmentos.py:399-444` (`deduplicar_emisiones`), con **un criterio menos**, y la
-diferencia está declarada abajo.
+Portado de `tools/segmentos.py:399-444` (`deduplicar_emisiones`). F-011 lo dejó con **un criterio
+menos** —el desempate por volumen, que necesitaba el tipo de cambio— y F-012 lo completó.
 
 ## Qué especie representa a la emisión
 
@@ -30,40 +30,32 @@ diferencia está declarada abajo.
 3. **Completitud de datos.** A igualdad de sanidad gana la especie con más campos presentes entre
    vencimiento, ley, moneda de pago y emisor: los cuatro son atributos de la emisión, así que la
    especie que más de ellos tenga es la que mejor la describe.
+4. **Liquidez.** A igualdad de completitud gana la que más se opera, y ese número es el volumen
+   **en dólares** (`volumen_usd`), nunca el crudo. El comentario del motor dice por qué: *"con el
+   volumen crudo siempre ganaba la especie en pesos por el tipo de cambio, no por liquidez"* — la
+   especie en pesos muestra ~1.500 veces más volumen porque el número está en otra unidad. Ese
+   volumen normalizado lo produce F-012 (`cambio.normalizar_volumen`) y llega en `EspecieUniverso`.
+5. **El ticker, de último recurso.** Cuando ninguna de las hermanas se operó —o cuando no se pudo
+   normalizar su volumen— decide el orden alfabético. Es arbitrario y se sabe: lo único que se le
+   pide es ser estable, para que dos corridas sobre el mismo universo elijan el mismo representante.
 
-## El cuarto criterio no existe todavía, y es a propósito
+## Lo que el desempate por liquidez arregló, y lo que no
 
-El motor desempata por volumen, pero **en dólares** (`volumen_usd`), no en la moneda de cotización
-de cada especie. Su propio comentario dice por qué: *"El desempate va en NOMINALES: con el volumen
-crudo siempre ganaba la especie en pesos por el tipo de cambio, no por liquidez."* La especie en
-pesos de un bono muestra ~1.500 veces más volumen que su hermana en dólares porque el número está
-en otra unidad, no porque se opere más.
+El desempate decide **todos** los grupos multiespecie, porque las hermanas empatan en completitud:
+los cuatro campos son de la emisión y vienen iguales en las tres. Eso arrastra un efecto que
+importa: IAMC publica la TIR **sólo en el ticker que su informe nombra**, y si ese ticker no gana el
+desempate, la fila colapsada queda sin rendimiento y el armador no la propone, aunque el número
+exista en la vista viva.
 
-Ese volumen normalizado lo produce **F-012, que todavía no existe**. Usar `effectiveVolume` crudo
-mientras tanto reintroduciría exactamente ese error y violaría la regla 3 del dominio —nada se
-compara entre monedas sin normalizar—, así que acá **no se lee esa columna en absoluto**: no está en
-`lectura.COLUMNAS` y no está en `EspecieUniverso`. Un desempate que no se puede hacer bien no se
-hace mal: se declara.
+Medido sobre el universo real, enchufar el volumen normalizado bajó ese número de **199 a 146** de
+431 emisiones, cambiando de representante en 190. De las 146 que siguen sin rendimiento, 28 son
+grupos donde ninguna especie se operó —el desempate no tiene con qué decidir— y 118 son grupos donde
+la especie más líquida sencillamente **no es** la que IAMC nombra.
 
-En su lugar desempata el ticker en orden alfabético. Es arbitrario y se sabe: lo único que se le
-pide es ser estable, para que dos corridas sobre el mismo universo elijan el mismo representante.
-**El punto de enganche de F-012 es `_prioridad`**, donde entra un elemento más entre la completitud
-y el ticker.
-
-## Lo que ese hueco cuesta hoy, medido
-
-Sobre el universo real el desempate decide **todos** los grupos multiespecie, porque las hermanas
-empatan en completitud: los cuatro campos son de la emisión y vienen iguales en las tres. Eso por sí
-solo no sería grave —dos especies igual de completas describen a la emisión igual de bien— pero
-arrastra un efecto que sí importa: IAMC publica la TIR **sólo en el ticker que su informe nombra**,
-y si ese ticker no gana el desempate, la fila colapsada queda sin rendimiento y el armador no la
-propone, aunque el número exista en la vista viva.
-
-No se corrige acá. Preferir a la especie que publica rendimiento sería un cuarto criterio que el
-motor no tiene, y agregarlo por cuenta propia sería cambiar el criterio de armado sin que nadie lo
-haya decidido. Lo que sí se hace es contarlo y alertarlo en cada corrida
-(`rendimiento_perdido_al_colapsar`), para que la decisión se tome mirando el número y no cuando el
-armador muestre una lista corta sin explicación.
+**Ese resto no se corrige acá.** Preferir a la especie que publica rendimiento sería un quinto
+criterio que el motor no tiene, y agregarlo por cuenta propia sería cambiar el criterio de armado
+sin que nadie lo haya decidido. Se sigue contando y alertando en cada corrida
+(`rendimiento_perdido_al_colapsar`), para que la decisión se tome mirando el número.
 """
 
 from collections import defaultdict
@@ -138,13 +130,13 @@ class Emision:
     def perdio_el_rendimiento_al_colapsar(self) -> bool:
         """Si la emisión tiene rendimiento publicado pero su representante no lo trae.
 
-        Es un efecto colateral del desempate pendiente y no un error: hoy IAMC publica la TIR sólo
-        en el ticker que su informe nombra —la especie en pesos— así que las tres hermanas empatan
-        en completitud, gana el desempate alfabético, y la fila colapsada queda sin el número. El
+        Es un efecto colateral del desempate y no un error: IAMC publica la TIR sólo en el ticker
+        que su informe nombra, así que las hermanas empatan en completitud y decide la liquidez; si
+        la especie más operada no es la que trae el número, la fila colapsada queda sin él. El
         armador no propone lo que no tiene rendimiento, así que la emisión desaparece de su lista
-        aunque el dato exista en el universo.
+        aunque el dato exista en la vista viva.
 
-        No se corrige acá: corregirlo sería agregar un cuarto criterio que el motor no tiene, y eso
+        No se corrige acá: corregirlo sería agregar un quinto criterio que el motor no tiene, y eso
         es una decisión de dominio. Se cuenta y se alerta, que es lo que corresponde ante algo que
         se sabe y no se puede resolver sin inventar un criterio.
         """
@@ -273,8 +265,21 @@ class UniversoDeduplicado:
                 "muestra": [e.raiz for e in sin_rendimiento[:MUESTRA_ALERTA]],
             },
             "tolerancia_duracion": TOLERANCIA_DURACION,
-            "desempate_por_volumen": False,
+            "desempate_por_volumen": self._desempata_por_volumen(),
         }
+
+    def _desempata_por_volumen(self) -> bool:
+        """Si el volumen normalizado de F-012 llegó a este universo o si sigue decidiendo el ticker.
+
+        Es un hecho de la corrida y no una constante: el criterio está enchufado siempre, pero en un
+        día sin tipo de cambio del día `volumen_usd` viene vacío en todas las especies y el orden lo
+        termina fijando el alfabeto. Quien lee el resumen tiene que poder distinguir los dos casos.
+        """
+        return any(
+            especie.volumen_usd is not None
+            for emision in self.por_raiz.values()
+            for especie in emision.especies
+        )
 
     def como_dict(self) -> dict[str, object]:
         """El resumen más las alertas. Las dos vistas no viajan acá: son colecciones propias."""
@@ -347,22 +352,31 @@ def _dispersion_duracion(especies: Sequence[EspecieUniverso]) -> float | None:
 def _representante(
     especies: Sequence[EspecieUniverso], descartados: Collection[str]
 ) -> EspecieUniverso:
-    """La especie que mejor describe a su emisión: sana, completa y —por ahora— alfabética."""
+    """La especie que mejor describe a su emisión: sana, completa, líquida y al final alfabética."""
     return min(especies, key=lambda e: _prioridad(e, descartados))
 
 
-def _prioridad(especie: EspecieUniverso, descartados: Collection[str]) -> tuple[bool, int, str]:
-    """La clave de orden del representante: gana el menor. **Acá se engancha F-012.**
+def _prioridad(
+    especie: EspecieUniverso, descartados: Collection[str]
+) -> tuple[bool, int, float, str]:
+    """La clave de orden del representante: gana el menor.
 
-    Los dos primeros elementos van negados porque `min` ordena ascendente y lo que se quiere es lo
-    mejor: primero lo sano (`False` antes que `True`), después lo más completo.
+    Los tres primeros elementos van negados porque `min` ordena ascendente y lo que se quiere es lo
+    mejor: primero lo sano (`False` antes que `True`), después lo más completo, después lo más
+    líquido. El ticker cierra sin negar, porque ahí lo que se pide es orden alfabético.
 
-    El tercer elemento es el hueco declarado: en el motor ahí va el volumen **normalizado a
-    dólares**, que produce F-012. Mientras no exista, desempata el ticker alfabético — arbitrario
-    pero estable. Cuando F-012 esté, el volumen entra como elemento intermedio (negado, como los
-    otros dos) y el ticker queda de último recurso; no hay que tocar nada más de este módulo.
+    **El volumen entra en dólares y sin volumen no hay crédito.** Un `volumen_usd` en `None`
+    significa que no se pudo normalizar —no hubo tipo de cambio del día, o no se supo en qué moneda
+    estaba el número— y cuenta como cero, no como "mucho": una liquidez que no se conoce no puede
+    ganarle a una que sí. Entre las que empatan en cero decide el ticker, que es el mismo desempate
+    arbitrario y estable de antes.
     """
-    return (especie.ticker in descartados, -_completitud(especie), especie.ticker)
+    return (
+        especie.ticker in descartados,
+        -_completitud(especie),
+        -(especie.volumen_usd or 0.0),
+        especie.ticker,
+    )
 
 
 def _completitud(especie: EspecieUniverso) -> int:
@@ -417,13 +431,13 @@ def _alerta_emisiones_no_colapsadas(emisiones: Sequence[Emision]) -> Alerta:
 def _alerta_rendimiento_perdido_al_colapsar(emisiones: Sequence[Emision]) -> Alerta:
     """Emisiones que tienen rendimiento publicado pero cuya fila colapsada no lo trae.
 
-    Es la consecuencia medible del desempate pendiente, y por eso se cuenta en cada corrida en vez
-    de descubrirse cuando el armador muestre una lista corta. IAMC publica la TIR sólo en el ticker
-    que su informe nombra, así que las hermanas empatan en completitud y elige el desempate; si la
-    ganadora no es la que trae el número, la emisión entera queda sin rendimiento para el armador
+    Es la consecuencia medible del desempate, y por eso se cuenta en cada corrida en vez de
+    descubrirse cuando el armador muestre una lista corta. IAMC publica la TIR sólo en el ticker que
+    su informe nombra, así que las hermanas empatan en completitud y elige la liquidez; si la más
+    operada no es la que trae el número, la emisión entera queda sin rendimiento para el armador
     aunque el dato exista en la vista viva.
 
-    **No se corrige solo.** Preferir a la especie que publica rendimiento sería un cuarto criterio
+    **No se corrige solo.** Preferir a la especie que publica rendimiento sería un quinto criterio
     que el motor no tiene, y agregarlo por cuenta propia sería cambiar el criterio de armado sin que
     nadie lo haya decidido. Lo que corresponde es alertarlo con el número exacto.
     """
@@ -438,8 +452,8 @@ def _alerta_rendimiento_perdido_al_colapsar(emisiones: Sequence[Emision]) -> Ale
         ),
         severidad=Severidad.ADVERTENCIA,
         accion_requerida=(
-            "Decidir si el representante se elige con el volumen normalizado de F-012 o si hace "
-            "falta un criterio que prefiera a la especie que publica rendimiento."
+            "El desempate por volumen normalizado ya está aplicado: decidir si hace falta además "
+            "un criterio que prefiera a la especie que publica rendimiento."
         ),
         detalle={"cantidad": len(emisiones), "emisiones": raices},
     )

@@ -12,19 +12,36 @@ se propone. `operables()` es el corte para quien necesita la lista corta.
 F-011 y F-012 se enganchan acá: las dos parten del universo **ya saneado** —deduplicar tomando como
 representante de una emisión a la especie con el precio roto, o derivar el tipo de cambio de un
 precio mal escalado, sería propagar el error en vez de contenerlo— así que ambas consumen el
-resultado de `sanear_universo` y no la lectura cruda. F-011 ya lo hace: la deduplicación vive en
+resultado de `sanear_universo` y no la lectura cruda. La deduplicación vive en
 `UniversoSaneado.emisiones()`, y recibe los descartes de la sanidad como lo que son, el veredicto de
 la capa de más abajo.
+
+## Por qué el tipo de cambio se calcula antes que la deduplicación
+
+El orden de `sanear` es: segmentar, derivar el tipo de cambio, normalizar el volumen, evaluar
+sanidad. **La deduplicación desempata por volumen normalizado**, así que si el tipo de cambio se
+calculara después, el representante de cada emisión se elegiría con la columna vacía y el desempate
+volvería a caer en el ticker sin que nada lo dijera.
+
+El tipo de cambio se deriva sobre el universo segmentado entero, descartados incluidos, que es el
+mismo conjunto que usa el motor. No hace falta sacarles los descartes: la sanidad juzga el
+*rendimiento* y no el precio, y contra un precio mal cargado ya protege el chequeo de rango de
+`cambio._cocientes` — un cociente fuera de rango no entra a la mediana y se nombra aparte.
 """
 
+import asyncio
 from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
 import structlog
 
 from app.ingesta.alertas import Alerta
+from app.ingesta.byma.normalizacion import FilaIndice
+from app.universo.cambio import TipoDeCambio, derivar_tipo_de_cambio, normalizar_volumen
 from app.universo.emisiones import UniversoDeduplicado, deduplicar
+from app.universo.indice import leer_indices
 from app.universo.lectura import leer_universo
 from app.universo.sanidad import Descarte, MotivoDescarte, Sanidad, evaluar_sanidad
 from app.universo.segmentacion import (
@@ -52,10 +69,21 @@ class UniversoSaneado:
     renta_variable: int = 0
     sin_segmento: list[str] = field(default_factory=list)
     leidos: int = 0
+    cambio: TipoDeCambio = field(default_factory=TipoDeCambio)
+    """El tipo de cambio implícito del día. Viaja con el universo porque es el que normalizó el
+    volumen de estas especies: separarlos dejaría números en dólares sin el número que los
+    produjo."""
 
     @property
     def alertas(self) -> list[Alerta]:
-        return self.sanidad.alertas
+        """Las de la sanidad y las del tipo de cambio, juntas.
+
+        Van en la misma lista porque quien las lee —la barra de estado del dato de F-013— tiene una
+        sola: un universo del que no se puede comparar la liquidez está tan incompleto como uno con
+        instrumentos descartados, y presentarlos en dos lugares distintos haría que uno se mire
+        menos que el otro.
+        """
+        return self.sanidad.alertas + self.cambio.alertas
 
     @property
     def descartes(self) -> list[Descarte]:
@@ -100,6 +128,7 @@ class UniversoSaneado:
             "evaluados": len(self.especies),
             "descartados": len(descartados),
             "operables": len(self.operables()),
+            "tipo_de_cambio": self.cambio.como_dict(),
             "por_capa": {
                 motivo.value: len(self.sanidad.por_motivo(motivo)) for motivo in MotivoDescarte
             },
@@ -123,30 +152,58 @@ class UniversoSaneado:
         }
 
 
-def sanear(segmentacion: Segmentacion, leidos: int) -> UniversoSaneado:
-    """La parte pura: sobre un universo ya segmentado, corre las dos capas y arma el resultado.
+def sanear(
+    segmentacion: Segmentacion,
+    leidos: int,
+    indices: Sequence[FilaIndice] | None = None,
+) -> UniversoSaneado:
+    """La parte pura: sobre un universo ya segmentado, deriva el tipo de cambio y corre las capas.
 
-    Está separada de `sanear_universo` para que toda la lógica se pueda probar sin Postgres, que es
-    la misma división que `armar_consolidacion` / `consolidar` en F-007.
+    Está separada de `sanear_universo` para que toda la lógica se pueda probar sin Postgres y sin
+    red, que es la misma división que `armar_consolidacion` / `consolidar` en F-007. `indices` entra
+    por parámetro justamente por eso: es lo único de acá que sale de una fuente viva, y sin ellos
+    todo lo demás sale igual.
     """
+    cambio = derivar_tipo_de_cambio(segmentacion.especies, indices)
+    especies = normalizar_volumen(segmentacion.especies, cambio)
     return UniversoSaneado(
-        especies=segmentacion.especies,
-        sanidad=evaluar_sanidad(segmentacion.especies),
+        especies=especies,
+        sanidad=evaluar_sanidad(especies),
         renta_variable=segmentacion.renta_variable,
         sin_segmento=segmentacion.sin_segmento,
         leidos=leidos,
+        cambio=cambio,
     )
 
 
-async def sanear_universo(conn: Any) -> UniversoSaneado:
-    """Lee el universo de la vista `resumen`, lo segmenta y le aplica las dos capas de sanidad."""
-    filas = await leer_universo(conn)
-    saneado = sanear(segmentar(filas), leidos=len(filas))
+async def sanear_universo(conn: Any, *, con_contraste: bool = False) -> UniversoSaneado:
+    """Lee el universo, deriva el tipo de cambio del día y le aplica las dos capas de sanidad.
+
+    **El índice de BYMA no se pide salvo que lo pidan.** El contraste es lo único de este servicio
+    que sale a la red, y sólo dos de los siete endpoints de `/universo` lo exponen: los otros cinco
+    resuelven con `cambio.valor`, que se deriva del propio universo y no necesita a BYMA. Traerlo
+    siempre acoplaba consultas puramente SQL a que una fuente externa esté viva — y no sólo por
+    latencia: `descargar_endpoint` reintenta cinco veces con 90 s de timeout, así que un BYMA
+    colgado bloqueaba hasta ocho minutos endpoints que no lo usan para nada. Lo mismo hacía que la
+    suite offline saliera a Internet sin que ningún test lo hubiera decidido.
+
+    Cuando sí se pide, **la lectura y el índice van en paralelo**: no dependen uno del otro y en
+    serie la corrida tarda 0,55 s contra 0,20 s, medido sobre el universo real. `leer_indices`
+    devuelve una lista vacía ante cualquier fallo, así que el `gather` nunca ve una excepción de
+    BYMA y el implícito se calcula igual: **el contraste es un control, no una fuente**.
+    """
+    if con_contraste:
+        filas, indices = await asyncio.gather(leer_universo(conn), leer_indices())
+    else:
+        filas, indices = await leer_universo(conn), None
+    saneado = sanear(segmentar(filas), leidos=len(filas), indices=indices)
     logger.info(
         "universo_saneado",
         leidos=saneado.leidos,
         evaluados=len(saneado.especies),
         descartados=len(saneado.sanidad.descartados),
         sin_segmento=len(saneado.sin_segmento),
+        tipo_de_cambio=saneado.cambio.valor,
+        pares_tipo_de_cambio=saneado.cambio.pares,
     )
     return saneado

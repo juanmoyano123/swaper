@@ -13,7 +13,7 @@ los dos coinciden en no hacer nada.
 Este test es también el que encontró la única diferencia real que tuvo el port: pandas escribe `NaN`
 donde no hay dato, `NaN <= tope` es `False`, y la condición escrita como negación convertía 366
 faltantes en descartes. El motor no tenía el problema porque pandas filtra los `NaN` antes de
-comparar. Ver `_numero` en `segmentacion.py`.
+comparar. Ver `numero` en `segmentacion.py`.
 """
 
 import sys
