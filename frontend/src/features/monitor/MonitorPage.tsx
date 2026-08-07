@@ -12,8 +12,12 @@ import { useEffect, useState } from 'react'
 import { EstadoVacio } from '@/components/EstadoVacio'
 import { Pantalla } from '@/components/Pantalla'
 import { Panel } from '@/components/Panel'
-import { SelectorSegmento, ordenarSegmentos } from '@/components/SelectorSegmento'
+import { CLAVES_RENTA_VARIABLE, SelectorSegmento, nombreSegmento, ordenarSegmentos } from '@/components/SelectorSegmento'
+import { TablaRentaVariable } from '@/components/TablaRentaVariable'
 import { fmtNumero } from '@/lib/fmt'
+import { useRentaVariable } from '@/lib/rentaVariable'
+
+import { useAbrirInstrumento } from '@/features/instrumento/useAbrirInstrumento'
 
 import { CurvaSegmento } from './components/CurvaSegmento'
 import { FILTROS_VACIOS, FiltrosNumericos, type FiltrosUniverso } from './components/FiltrosNumericos'
@@ -67,7 +71,11 @@ export function MonitorPage() {
         {segmentos.data && segmentos.data.segmentos.length > 0 && activo && (
           <>
             <SelectorSegmento
-              segmentos={segmentos.data.segmentos.map((s) => s.clave)}
+              segmentos={
+                segmentos.data.renta_variable > 0
+                  ? [...segmentos.data.segmentos.map((s) => s.clave), ...CLAVES_RENTA_VARIABLE]
+                  : segmentos.data.segmentos.map((s) => s.clave)
+              }
               activo={activo}
               onCambio={(clave) => {
                 setActivo(clave)
@@ -75,16 +83,19 @@ export function MonitorPage() {
               }}
             />
             <p className="mono" style={{ margin: '8px 0 0', fontSize: 11, color: 'var(--dim)' }}>
-              {fmtNumero(segmentos.data.renta_variable, 0)} de renta variable y {fmtNumero(segmentos.data.sin_segmento, 0)} sin
-              segmento no se muestran acá.
+              {fmtNumero(segmentos.data.sin_segmento, 0)} sin segmento no se muestran acá.
             </p>
 
-            <UniversoDelSegmento
-              segmento={activo}
-              naturaleza={segmentos.data.segmentos.find((s) => s.clave === activo)?.naturaleza ?? ''}
-              filtros={filtros}
-              onCambioFiltros={setFiltros}
-            />
+            {(CLAVES_RENTA_VARIABLE as readonly string[]).includes(activo) ? (
+              <RentaVariableDelMonitor clase={activo} />
+            ) : (
+              <UniversoDelSegmento
+                segmento={activo}
+                naturaleza={segmentos.data.segmentos.find((s) => s.clave === activo)?.naturaleza ?? ''}
+                filtros={filtros}
+                onCambioFiltros={setFiltros}
+              />
+            )}
           </>
         )}
       </Panel>
@@ -137,5 +148,44 @@ function UniversoDelSegmento({
         <CurvaSegmento especies={universo.data} naturaleza={naturaleza} />
       </div>
     </>
+  )
+}
+
+/**
+ * Las pestañas de acciones y CEDEARs — F-052. Sin `FiltrosNumericos` (sus tres campos son
+ * rendimiento mín/máx y duración máx, magnitudes que la renta variable no tiene) y sin
+ * `CurvaSegmento` (es rendimiento vs duración: no hay ejes que dibujar).
+ */
+function RentaVariableDelMonitor({ clase }: { clase: string }) {
+  const rentaVariable = useRentaVariable(clase)
+  const abrirInstrumento = useAbrirInstrumento()
+
+  if (rentaVariable.isPending) {
+    return <p style={{ margin: '14px 0', color: 'var(--dim)', fontSize: 12.5 }}>consultando el segmento…</p>
+  }
+
+  if (rentaVariable.isError) {
+    return (
+      <EstadoVacio
+        titulo="No se pudo traer este segmento."
+        detalle={
+          <button
+            type="button"
+            onClick={() => void rentaVariable.refetch()}
+            style={{ color: 'var(--ac)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+          >
+            reintentar
+          </button>
+        }
+      />
+    )
+  }
+
+  return (
+    <TablaRentaVariable
+      especies={rentaVariable.data}
+      etiqueta={nombreSegmento(clase)}
+      onAbrirTicker={abrirInstrumento}
+    />
   )
 }

@@ -624,3 +624,31 @@ def test_una_especie_sin_metricas_ni_previas_queda_vacia() -> None:
     assert precio["tir"] is None
     assert precio["fecha_metricas"] is None
     assert precio["fuente"] == "byma"
+
+
+# --- Cierre anterior (F-052) -------------------------------------------------------------------
+
+
+def test_el_cierre_anterior_de_byma_se_persiste_en_precios() -> None:
+    resultado = armar_consolidacion(
+        hoy=HOY,
+        especies_por_endpoint={
+            "negociable-obligations": [especie("PLC7O", previousClosingPrice=100.0)]
+        },
+        filas_cashflow=[cashflow("PLC7", "ON")],
+    )
+
+    assert resultado.filas_precios[0]["cierre_anterior"] == 100.0
+
+
+def test_un_cierre_anterior_en_cero_no_es_un_precio_y_queda_vacio() -> None:
+    """Misma semántica que `last_price`: un cero no es un cierre, es que no operó (`_precio`)."""
+    resultado = armar_consolidacion(
+        hoy=HOY,
+        especies_por_endpoint={
+            "negociable-obligations": [especie("PLC7O", previousClosingPrice=0.0)]
+        },
+        filas_cashflow=[cashflow("PLC7", "ON")],
+    )
+
+    assert resultado.filas_precios[0]["cierre_anterior"] is None

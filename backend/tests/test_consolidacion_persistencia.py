@@ -58,6 +58,16 @@ async def test_las_banderas_de_calidad_se_reescriben_enteras() -> None:
     assert "COALESCE(EXCLUDED.revisar" not in sql
 
 
+async def test_cierre_anterior_esta_en_columnas_precios_y_en_el_sql() -> None:
+    """F-052: la columna se agrega al final de la tupla, y `sql_precios()` sale de esa tupla."""
+    assert "cierre_anterior" in COLUMNAS_PRECIOS
+    conn = FakeConexionEscritura()
+
+    await persistir(conn, consolidacion_minima(), CAPTURADO_EN)
+
+    assert "cierre_anterior" in conn.sql_de("precios")
+
+
 async def test_las_columnas_van_en_el_orden_declarado() -> None:
     """Si el orden del INSERT y el de las tuplas se separan, los valores entran en otra columna."""
     conn = FakeConexionEscritura()

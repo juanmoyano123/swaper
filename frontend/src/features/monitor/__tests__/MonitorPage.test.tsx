@@ -244,7 +244,7 @@ describe('un solo segmento a la vez', () => {
     mockearApi()
     renderizar()
 
-    expect(await screen.findByText(/1\.417 de renta variable y 535 sin/)).toBeInTheDocument()
+    expect(await screen.findByText(/535 sin segmento no se muestran acá/)).toBeInTheDocument()
   })
 })
 

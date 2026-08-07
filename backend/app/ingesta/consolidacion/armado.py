@@ -597,6 +597,7 @@ def armar_consolidacion(
                 "tna": None,
                 "effective_volume": fila["monto_operado"],
                 "fuente": _fuente_de(propias, metricas["fecha_metricas"]),
+                "cierre_anterior": _precio(fila["precio_cierre_anterior"]),
                 **metricas,
             }
         )

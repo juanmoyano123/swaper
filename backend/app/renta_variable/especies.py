@@ -1,0 +1,121 @@
+"""La lógica de renta variable, pura y probable sin Postgres — F-052.
+
+**Sin campo `rendimiento`.** Una acción no tiene TIR, ni duración, ni cronograma: la regla 2 del
+dominio prohíbe presentar cualquier magnitud en el lugar de un rendimiento que no existe, y la
+ausencia acá es el contrato, no un TODO.
+
+**La variación nunca se estima.** Es un cociente entre dos datos publicados —el precio y el cierre
+anterior de BYMA (`previousClosingPrice`)— y sólo se calcula cuando los dos están. Faltando
+cualquiera de los dos, o con un cierre anterior que no es un precio válido, queda `None`.
+
+**El volumen en dólares nunca cae a la regla del sufijo D/C.** Esa regla es de especies de
+liquidación de renta fija (`cotiza_en_dolares` en `app.universo.cambio`): aplicarla acá sería
+completar por analogía la moneda de una acción, que es justo lo que la regla 1 prohíbe. Sin
+`moneda_cotizacion` declarada, `volumen_usd` queda `None` y se cuenta como faltante.
+"""
+
+from dataclasses import dataclass
+from typing import Any
+
+from app.universo.cambio import MONEDAS_EN_DOLARES, TipoDeCambio
+from app.universo.segmentacion import a_numero
+
+
+@dataclass(frozen=True, slots=True)
+class EspecieRentaVariable:
+    """Una acción o un CEDEAR, tal como se muestra en el monitor. Nunca lleva rendimiento."""
+
+    ticker: str
+    clase_activo: str
+    precio: float | None
+    moneda_cotizacion: str | None
+    cierre_anterior: float | None
+    variacion: float | None
+    volumen: float | None
+    volumen_usd: float | None
+    px_bid: float | None
+    px_ask: float | None
+    operaciones: int | None
+
+    def como_dict(self) -> dict[str, object]:
+        return {
+            "ticker": self.ticker,
+            "clase_activo": self.clase_activo,
+            "precio": self.precio,
+            "moneda_cotizacion": self.moneda_cotizacion,
+            "cierre_anterior": self.cierre_anterior,
+            "variacion": self.variacion,
+            "volumen": self.volumen,
+            "volumen_usd": self.volumen_usd,
+            "px_bid": self.px_bid,
+            "px_ask": self.px_ask,
+            "operaciones": self.operaciones,
+        }
+
+
+def variacion_diaria(precio: float | None, cierre_anterior: float | None) -> float | None:
+    """`(precio - cierre_anterior) / cierre_anterior`, como fracción, sólo con los dos datos.
+
+    `0.031` es `+3,1%` — misma convención que `rendimiento` y `paridad` en el resto del API.
+    Un cierre anterior que no es un precio válido (`None` o `<= 0`) no produce una variación
+    inventada: se propaga `None`.
+    """
+    if precio is None or cierre_anterior is None or cierre_anterior <= 0:
+        return None
+    return (precio - cierre_anterior) / cierre_anterior
+
+
+def volumen_en_dolares(
+    cambio: TipoDeCambio, volumen: float | None, moneda_cotizacion: str | None
+) -> float | None:
+    """El volumen llevado a dólares, sin caer nunca a la regla del sufijo de ticker."""
+    if volumen is None:
+        return None
+    if moneda_cotizacion is None:
+        return None
+    if moneda_cotizacion.upper() in MONEDAS_EN_DOLARES:
+        return volumen
+    return cambio.a_dolares(volumen, en_dolares=False)
+
+
+def _texto(valor: object) -> str | None:
+    """Un texto de la fuente, recortado, o `None`. No se importa `_texto` de `segmentacion`: es
+    privado de ese módulo."""
+    if not isinstance(valor, str):
+        return None
+    limpio = valor.strip()
+    return limpio or None
+
+
+def _entero(valor: object) -> int | None:
+    """`operaciones` como entero, o `None`. Reusa `a_numero` para manejar `Decimal` y `NaN`."""
+    numero = a_numero(valor)
+    return None if numero is None else int(numero)
+
+
+def armar_renta_variable(
+    filas: list[dict[str, Any]], cambio: TipoDeCambio
+) -> list[EspecieRentaVariable]:
+    """Las filas crudas de `leer_renta_variable`, convertidas en especies con variación y USD."""
+    especies: list[EspecieRentaVariable] = []
+    for fila in filas:
+        precio = a_numero(fila.get("lastPrice"))
+        cierre_anterior = a_numero(fila.get("cierre_anterior"))
+        volumen = a_numero(fila.get("effectiveVolume"))
+        moneda = _texto(fila.get("moneda_cotizacion"))
+        especies.append(
+            EspecieRentaVariable(
+                ticker=str(fila["ticker"]),
+                clase_activo=str(fila["clase_activo"]),
+                precio=precio,
+                moneda_cotizacion=moneda,
+                cierre_anterior=cierre_anterior,
+                variacion=variacion_diaria(precio, cierre_anterior),
+                volumen=volumen,
+                volumen_usd=volumen_en_dolares(cambio, volumen, moneda),
+                px_bid=a_numero(fila.get("px_bid")),
+                px_ask=a_numero(fila.get("px_ask")),
+                operaciones=_entero(fila.get("operaciones")),
+            )
+        )
+    return especies

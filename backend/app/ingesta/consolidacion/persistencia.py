@@ -72,6 +72,7 @@ COLUMNAS_PRECIOS: tuple[str, ...] = (
     "effective_volume",
     "fuente",
     "fecha_metricas",
+    "cierre_anterior",
 )
 
 # Por ticker, las métricas del informe más reciente que se haya llegado a guardar. Lo consulta la
