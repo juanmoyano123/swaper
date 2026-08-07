@@ -18,7 +18,7 @@ desde `/build-feature` a medida que cada una se implementa.
 | F-008 | Job programado de ingesta | Stage 1 | 266,7 | completada |
 | F-009 | condiciones_emision: semilla y herencia | Stage 1 | 200,0 | completada |
 | F-010 | Sanidad del dato en dos capas | Stage 1 | 400,0 | completada |
-| F-011 | Deduplicación de especies | Stage 1 | 400,0 | pendiente |
+| F-011 | Deduplicación de especies | Stage 1 | 400,0 | completada |
 | F-012 | Tipo de cambio implícito y normalización | Stage 1 | 266,7 | pendiente |
 
 > Milestone 1 — "El universo existe y es confiable."
@@ -111,9 +111,28 @@ serializar toda duda.
 **Tanda 1 cerrada el 06/08/2026** — F-008, F-014 y F-028 en paralelo, 313 tests offline y 45 de
 integración en el backend, 96 en el frontend.
 
-**Tanda 2 cerrada el 06/08/2026** — F-009 ∥ F-010, 428 tests offline y 58 de integración
-(1 skipped preexistente). Siguiente paso: **Tanda 3 — F-011 (deduplicación de especies), sola**,
-porque F-010, F-011 y F-012 exponen el mismo módulo y el plan las serializa.
+**Tanda 2 cerrada el 06/08/2026** — F-009 ∥ F-010, 428 tests offline y 58 de integración.
+
+**Tanda 3 cerrada el 07/08/2026** — F-011 sola, 476 tests offline y 63 de integración
+(1 skipped preexistente). Siguiente paso: **Tanda 4 — F-012 (tipo de cambio implícito) ∥ F-015
+(API del calendario) ∥ F-029 (resolución de tickers)**, que cierra el ciclo 1.
+
+### Lo que la Tanda 3 dejó abierto, y necesita decisión
+
+- **199 de las 431 emisiones quedan sin rendimiento en la vista colapsada.** El representante que
+  elige el desempate no es la especie cuya TIR publica IAMC, así que en la vista del armador esas
+  emisiones aparecen sin número y no se van a proponer. **El dato sigue entero en la vista viva**,
+  y la corrida lo alerta en vez de esconderlo. Hay que decidir si lo resuelve el volumen normalizado
+  de F-012 o si hace falta un criterio que prefiera a la especie que publica rendimiento. No corre
+  apuro: el armador (F-018) todavía no existe.
+- **El desempate por volumen quedó como hueco declarado.** El motor lo hace con volumen normalizado
+  a dólares, que produce F-012. Usar `effectiveVolume` crudo haría ganar siempre a la especie en
+  pesos por el tipo de cambio y no por liquidez — el bug que `segmentos.py` documenta. Mientras
+  tanto desempata el ticker alfabético: arbitrario pero estable. El punto de enganche está marcado.
+- **Una sola causa raíz deja inertes tres controles.** F-007 asigna las métricas por ticker sólo al
+  ticker exacto que IAMC reporta (240 instrumentos con TIR y duración sobre 2.894). Por eso no puede
+  dispararse la capa 1 de la sanidad de F-010, ni el chequeo del 5 % de duración de F-011, ni el
+  desempate por rendimiento. Los tres están portados y testeados; lo que falta es dato, no código.
 
 ### Lo que la Tanda 2 dejó verificado, y lo que dejó abierto
 

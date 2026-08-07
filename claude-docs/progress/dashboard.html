@@ -26,19 +26,19 @@
 </head>
 <body>
   <h1>10-Swaper — Progreso de features</h1>
-  <p class="sub">Actualizado al <strong>06/08/2026</strong> (Tanda 2 cerrada). Este dashboard es estático: el estado
+  <p class="sub">Actualizado al <strong>07/08/2026</strong> (Tanda 3 cerrada). Este dashboard es estático: el estado
   real vive en <code>claude-docs/progress/PROGRESS.md</code> y el orden de ejecución en
   <code>claude-docs/planning/plan-ejecucion-tandas.md</code>.</p>
 
   <div class="cards">
-    <div class="card"><div class="v completada">12 / 42</div><div class="l">Features Stage 1</div></div>
-    <div class="card"><div class="v">51 / 185</div><div class="l">Person-days</div></div>
-    <div class="card"><div class="v">2.894</div><div class="l">Instrumentos en base</div></div>
-    <div class="card"><div class="v">428 + 58</div><div class="l">Tests offline + integración</div></div>
+    <div class="card"><div class="v completada">13 / 42</div><div class="l">Features Stage 1</div></div>
+    <div class="card"><div class="v">53 / 185</div><div class="l">Person-days</div></div>
+    <div class="card"><div class="v">2.894 → 431</div><div class="l">Especies → emisiones</div></div>
+    <div class="card"><div class="v">476 + 63</div><div class="l">Tests offline + integración</div></div>
   </div>
-  <div class="bar"><div style="width:27.6%"></div></div>
+  <div class="bar"><div style="width:28.6%"></div></div>
 
-  <h2>Ciclo 1 — Cimientos e ingesta · 10 de 12 completadas</h2>
+  <h2>Ciclo 1 — Cimientos e ingesta · 11 de 12 completadas</h2>
   <table>
     <thead><tr><th>ID</th><th>Feature</th><th class="num">RICE</th><th>Estado</th></tr></thead>
     <tbody>
@@ -52,8 +52,8 @@
       <tr><td>F-008</td><td>Job programado de ingesta</td><td class="num">266,7</td><td class="completada">completada</td></tr>
       <tr><td>F-009</td><td>condiciones_emision: semilla y herencia</td><td class="num">200,0</td><td class="completada">completada</td></tr>
       <tr><td>F-010</td><td>Sanidad del dato en dos capas</td><td class="num">400,0</td><td class="completada">completada</td></tr>
-      <tr><td>F-011</td><td>Deduplicación de especies</td><td class="num">400,0</td><td class="pendiente">pendiente — tanda 3 (siguiente)</td></tr>
-      <tr><td>F-012</td><td>Tipo de cambio implícito y normalización</td><td class="num">266,7</td><td class="pendiente">pendiente — tanda 4</td></tr>
+      <tr><td>F-011</td><td>Deduplicación de especies</td><td class="num">400,0</td><td class="completada">completada</td></tr>
+      <tr><td>F-012</td><td>Tipo de cambio implícito y normalización</td><td class="num">266,7</td><td class="pendiente">pendiente — tanda 4 (siguiente)</td></tr>
     </tbody>
   </table>
   <p class="nota">La base está poblada: F-007 corrió contra Supabase el 06/08/2026 y dejó 2.894
@@ -66,7 +66,7 @@
   <table>
     <thead><tr><th>Ciclo</th><th class="num">Features</th><th class="num">Person-days</th><th class="num">Semanas (est.)</th><th>Estado</th></tr></thead>
     <tbody>
-      <tr><td>1 — Cimientos e ingesta</td><td class="num">12</td><td class="num">47</td><td class="num">~9,5</td><td><span class="completada">10 completadas</span>, 2 pendientes</td></tr>
+      <tr><td>1 — Cimientos e ingesta</td><td class="num">12</td><td class="num">47</td><td class="num">~9,5</td><td><span class="completada">11 completadas</span>, 1 pendiente</td></tr>
       <tr><td>2 — Armador completo</td><td class="num">12</td><td class="num">55</td><td class="num">~11</td><td><span class="completada">1 completada</span> (F-014), 11 pendientes</td></tr>
       <tr><td>3 — RV, carga y diagnóstico</td><td class="num">9</td><td class="num">41</td><td class="num">~8</td><td><span class="completada">1 completada</span> (F-028), 8 pendientes</td></tr>
       <tr><td>4 — Optimizador y persistencia</td><td class="num">9</td><td class="num">42</td><td class="num">~8,5</td><td class="pendiente">pendiente</td></tr>
@@ -76,22 +76,29 @@
   </table>
 
   <h2>Próximo paso</h2>
-  <p class="nota"><strong>Tanda 2 cerrada el 06/08/2026</strong> — F-009 y F-010 construidas en
-  paralelo. Sigue la <strong>Tanda 3: F-011 (deduplicación de especies), sola</strong>: F-010, F-011
-  y F-012 exponen el mismo paquete <code>app/universo/</code> y el plan las serializa para no
-  producir tres envolturas incompatibles. F-010 ya dejó documentado dónde se engancha. El orden
+  <p class="nota"><strong>Tanda 3 cerrada el 07/08/2026</strong> — F-011 construida sola. Sigue la
+  <strong>Tanda 4: F-012 (tipo de cambio implícito) ∥ F-015 (API del calendario) ∥ F-029 (resolución
+  de tickers)</strong>, que cierra el ciclo 1 y vuelve a tener paralelismo. F-012 es la que completa
+  la serie de <code>app/universo/</code> y la que destraba el desempate pendiente de F-011. El orden
   completo está en <code>claude-docs/planning/plan-ejecucion-tandas.md</code>.</p>
 
   <h2>Deuda declarada</h2>
   <ul class="nota">
+    <li><strong>199 de las 431 emisiones quedan sin rendimiento en la vista colapsada.</strong> El
+    representante que elige el desempate no es la especie cuya TIR publica IAMC, así que el armador
+    no las va a proponer. El dato sigue entero en la vista viva y la corrida lo alerta. Hay que
+    decidir si lo resuelve el volumen normalizado de F-012 o si hace falta un criterio que prefiera
+    a la especie que publica rendimiento.</li>
+    <li><strong>Una sola causa raíz deja inertes tres controles.</strong> F-007 asigna las métricas
+    por ticker sólo al ticker exacto que IAMC reporta — 240 instrumentos con TIR y duración sobre
+    2.894—, y por eso no pueden dispararse la capa 1 de la sanidad de F-010, el chequeo del 5 % de
+    duración de F-011 ni el desempate por rendimiento. Los tres están portados y testeados: lo que
+    falta es dato, no código.</li>
     <li><strong>El dato curado no llega todavía al universo.</strong> F-009 puebla
     <code>condiciones_emision</code> (823 especies), pero la vista <code>resumen</code> no la cruza y
     F-009 no escribe <code>instrumentos</code>. <strong>F-020</strong> (concentración por sector y
     ley) y <strong>F-024</strong> (redondeo por lámina) lo necesitan: hay que decidir si se extiende
     la vista o si la corrida de F-007 propaga.</li>
-    <li><strong>La capa 1 de la sanidad no puede dispararse hoy.</strong> F-007 asigna la TIR sólo al
-    ticker exacto que IAMC reporta, así que dos especies de la misma emisión nunca tienen las dos una
-    TIR con la que discrepar. Está portada y testeada, pero marca cero por construcción.</li>
     <li><strong>535 instrumentos quedan sin segmento</strong> y entre ellos están los tres
     rendimientos más altos del universo — VE32P (614 %), CAC4O (316 %), PQCKO (228 %) —, que por lo
     tanto no pasan por ningún tope de sanidad. El hueco es de la cobertura de <code>tipo_tasa</code>,

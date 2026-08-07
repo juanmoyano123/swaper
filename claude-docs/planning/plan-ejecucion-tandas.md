@@ -37,7 +37,7 @@ de ejecución**. Si contradice a `plan.md` en una dependencia, gana `plan.md` y 
 |---|---|---|---|
 | 1 | **F-008** (job de ingesta) ∥ **F-014** (auth) ∥ **F-028** (carga de cartera) | Tres áreas sin un archivo en común: F-008 en `backend/app/jobs/`, F-014 en auth/RLS + guard de rutas del frontend, F-028 frontend puro (depende sólo de F-003) | **completada 06/08/2026** |
 | 2 | **F-009** (condiciones_emision) ∥ **F-010** (sanidad) | Tablas y módulos distintos: F-009 escribe `condiciones_emision`; F-010 envuelve la sanidad de `segmentos.py`, que no lee ley ni lámina | **completada 06/08/2026** |
-| 3 | **F-011** (dedup) — **sola** | El plan manda serializar F-010·F-011·F-012: las tres exponen `segmentos.py` como servicio | pendiente |
+| 3 | **F-011** (dedup) — **sola** | El plan manda serializar F-010·F-011·F-012: las tres exponen `segmentos.py` como servicio | **completada 07/08/2026** |
 | 4 | **F-012** (FX implícito) ∥ **F-015** (API calendario) ∥ **F-029** (resolución tickers) | F-012 extiende la envoltura ya creada en 2–3; F-015 envuelve `cupones.py` (otro módulo); F-029 es un servicio nuevo de matching | pendiente |
 | 5 | **F-013** (barra de estado) — **sola** | Nada más tiene dependencias listas en este punto; es transversal a todas las pantallas y conviene que nadie la pise | pendiente |
 
@@ -127,6 +127,25 @@ confidence 50 % porque la disponibilidad programática de las fechas de CNV no e
   decir por qué: la capa 1 es estructuralmente inerte por la precedencia de F-007, y la capa 2 no
   tiene a quién descartar porque el máximo comparable está debajo de su tope. **Pedirle a cada
   feature que declare qué pasa cuando su resultado es cero.**
+
+## Lo que enseñó la Tanda 3
+
+- **Serializar F-010·F-011·F-012 valió la pena, y se nota.** F-011 extendió el paquete que F-010
+  dejó sin rehacer nada: agregó las columnas en `lectura.COLUMNAS` y en `EspecieUniverso`, y el
+  resto del paquete no se enteró, exactamente como F-010 había documentado. Sale barato porque la
+  primera de la serie escribió dónde se engancha la siguiente. **Repetir el patrón en la Tanda 4**,
+  donde F-012 cierra la serie.
+- **Revisar el criterio antes de soltar al agente evitó un bug conocido.** El desempate por volumen
+  del motor usa volumen *normalizado a dólares*, que produce F-012 y todavía no existe. Con el
+  volumen crudo siempre gana la especie en pesos por el tipo de cambio y no por liquidez. Se
+  instruyó dejar el hueco declarado en vez de implementarlo con el número equivocado. **Cuando una
+  feature porta lógica del motor, revisar de qué depende cada criterio antes de encargarla:** parte
+  de lo portado puede necesitar una feature que todavía no está.
+- **Un cero se explica dos veces si hace falta.** El chequeo del 5 % de duración no rechazó ningún
+  grupo, igual que la capa 1 de F-010 no descartó nada, y por la misma causa: las métricas por
+  ticker existen sólo para el ticker exacto que IAMC reporta. Rastrear el cero hasta la causa
+  mostró que **son tres controles inertes por un único motivo**, que es un hallazgo de arquitectura
+  y no tres rarezas sueltas.
 
 ## Cifras
 
