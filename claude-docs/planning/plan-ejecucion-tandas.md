@@ -38,7 +38,7 @@ de ejecución**. Si contradice a `plan.md` en una dependencia, gana `plan.md` y 
 | 1 | **F-008** (job de ingesta) ∥ **F-014** (auth) ∥ **F-028** (carga de cartera) | Tres áreas sin un archivo en común: F-008 en `backend/app/jobs/`, F-014 en auth/RLS + guard de rutas del frontend, F-028 frontend puro (depende sólo de F-003) | **completada 06/08/2026** |
 | 2 | **F-009** (condiciones_emision) ∥ **F-010** (sanidad) | Tablas y módulos distintos: F-009 escribe `condiciones_emision`; F-010 envuelve la sanidad de `segmentos.py`, que no lee ley ni lámina | **completada 06/08/2026** |
 | 3 | **F-011** (dedup) — **sola** | El plan manda serializar F-010·F-011·F-012: las tres exponen `segmentos.py` como servicio | **completada 07/08/2026** |
-| 4 | **F-012** (FX implícito) ∥ **F-015** (API calendario) ∥ **F-029** (resolución tickers) | F-012 extiende la envoltura ya creada en 2–3; F-015 envuelve `cupones.py` (otro módulo); F-029 es un servicio nuevo de matching | pendiente |
+| 4 | **F-012** (FX implícito) ∥ **F-015** (API calendario) ∥ **F-029** (resolución tickers) | F-012 extiende la envoltura ya creada en 2–3; F-015 envuelve `cupones.py` (otro módulo); F-029 es un servicio nuevo de matching | **F-012 completada 07/08/2026** — se hizo sola por decisión del usuario, para cerrar el Ciclo 1 antes de seguir. Quedan F-015 ∥ F-029 |
 | 5 | **F-013** (barra de estado) — **sola** | Nada más tiene dependencias listas en este punto; es transversal a todas las pantallas y conviene que nadie la pise | pendiente |
 
 ### Fase B — Las pantallas grandes (Milestone 2: "Un asesor arma una cartera desde el calendario")
@@ -146,6 +146,25 @@ confidence 50 % porque la disponibilidad programática de las fechas de CNV no e
   ticker existen sólo para el ticker exacto que IAMC reporta. Rastrear el cero hasta la causa
   mostró que **son tres controles inertes por un único motivo**, que es un hallazgo de arquitectura
   y no tres rarezas sueltas.
+
+## Lo que enseñó F-012 (cierre del Ciclo 1)
+
+- **La serie F-010 · F-011 · F-012 cerró como se planeó, y el patrón se pagó tres veces.** Cada una
+  dejó escrito por nombre dónde se enganchaba la siguiente: `lectura.py` decía *"falta `lastPrice` y
+  `effectiveVolume`, que son de F-012"* y `_prioridad` decía *"acá se engancha F-012"*. La tercera
+  feature no tuvo que decidir nada de arquitectura. **Repetir el patrón en cualquier serie
+  serializada**: que la primera escriba el punto de entrada de las que siguen.
+- **Los revisores automáticos de la feature encontraron dos defectos reales que el reporte no
+  mencionó**, y hubo que verificarlos y arreglarlos a mano al cerrar: un `NaN` sin filtrar y una
+  llamada de red viva metida en el punto de entrada compartido de siete endpoints. **Leer lo que
+  reportan los revisores y comprobar que se hayan aplicado**, en vez de asumir que sí.
+- **Una feature puede desmentir su propia ficha, y hay que dejarla.** F-012 midió contra la fuente
+  real que `index-price` no publica ningún «Índice Dólar» —lo que la spec daba por sentado— y que
+  seis especies con sufijo D cotizan en pesos, lo que rompe la regla del sufijo que usa el motor.
+  Las dos cosas quedaron documentadas con el número medido en vez de seguir la ficha al pie.
+- **Los tests de integración contra fuentes vivas son sensibles a la hora.** El de BYMA falla antes
+  de que abra la rueda porque la fuente devuelve 896 filas contra las 3.000 que el test exige. No es
+  un problema del código, pero hay que saberlo antes de leer un rojo como una regresión.
 
 ## Cifras
 

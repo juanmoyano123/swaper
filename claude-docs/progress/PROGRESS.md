@@ -19,7 +19,7 @@ desde `/build-feature` a medida que cada una se implementa.
 | F-009 | condiciones_emision: semilla y herencia | Stage 1 | 200,0 | completada |
 | F-010 | Sanidad del dato en dos capas | Stage 1 | 400,0 | completada |
 | F-011 | Deduplicación de especies | Stage 1 | 400,0 | completada |
-| F-012 | Tipo de cambio implícito y normalización | Stage 1 | 266,7 | pendiente |
+| F-012 | Tipo de cambio implícito y normalización | Stage 1 | 266,7 | completada |
 
 > Milestone 1 — "El universo existe y es confiable."
 
@@ -113,9 +113,36 @@ integración en el backend, 96 en el frontend.
 
 **Tanda 2 cerrada el 06/08/2026** — F-009 ∥ F-010, 428 tests offline y 58 de integración.
 
-**Tanda 3 cerrada el 07/08/2026** — F-011 sola, 476 tests offline y 63 de integración
-(1 skipped preexistente). Siguiente paso: **Tanda 4 — F-012 (tipo de cambio implícito) ∥ F-015
-(API del calendario) ∥ F-029 (resolución de tickers)**, que cierra el ciclo 1.
+**Tanda 3 cerrada el 07/08/2026** — F-011 sola, 476 tests offline y 63 de integración.
+
+**F-012 cerrada el 07/08/2026, y con ella el Ciclo 1: 12 de 12.** 517 tests offline y 69 de
+integración. El milestone 1 —"El universo existe y es confiable"— está completo. Siguiente paso:
+**F-015 (API del calendario) ∥ F-029 (resolución de tickers)**, lo que quedaba de la Tanda 4.
+
+### La decisión que F-012 dejó abierta
+
+Con el volumen normalizado enganchado en el desempate, las emisiones sin rendimiento en la vista
+colapsada **bajaron de 199 a 146** sobre 431. Mejoró, pero no alcanza, y **no se inventó un criterio
+para tapar el resto**. Queda por decidir si hace falta uno que prefiera a la especie que publica
+rendimiento — con la contra de que sesgaría el representante hacia lo que IAMC elige reportar, que
+no es necesariamente la especie más líquida. No corre apuro: el armador (F-018) todavía no existe.
+
+### Lo que F-012 desmintió de su propia ficha
+
+- **`index-price` no publica ningún «Índice Dólar»**, que era lo que la spec daba por sentado. Son
+  16 filas y ninguna lo es. Se contrasta contra el cociente entre `M` y `SPMERVDT` —el mismo índice
+  en las dos monedas—, que da 1.519,47 contra el implícito de 1.521,53: 0,14 % de diferencia.
+- **La moneda de cotización se lee de `moneda_cotizacion`, no se deduce del sufijo del ticker.** Hay
+  seis especies con sufijo D declaradas en ARS; la regla del sufijo —la del motor— les habría
+  multiplicado la liquidez por 1.500.
+- **El canje MEP/cable está medido**: 1.521,53 contra la especie D y 1.576,21 contra la C, 3,6 %.
+
+### Fragilidad del suite que quedó a la vista
+
+El test de integración de BYMA exige más de 3.000 filas y **falla antes de que abra la rueda**: a las
+08:00 la fuente devuelve 0 CEDEARs, 0 bonos públicos y 12 ONs. No es un problema del código, pero
+conviene saberlo antes de correr `pytest -m integration` a la mañana temprano — y vale revisar si la
+corrida matinal de F-008, programada a las 09:00, no cae en la misma ventana vacía.
 
 ### Lo que la Tanda 3 dejó abierto, y necesita decisión
 

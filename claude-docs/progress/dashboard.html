@@ -26,19 +26,19 @@
 </head>
 <body>
   <h1>10-Swaper — Progreso de features</h1>
-  <p class="sub">Actualizado al <strong>07/08/2026</strong> (Tanda 3 cerrada). Este dashboard es estático: el estado
+  <p class="sub">Actualizado al <strong>07/08/2026</strong> (Ciclo 1 completo). Este dashboard es estático: el estado
   real vive en <code>claude-docs/progress/PROGRESS.md</code> y el orden de ejecución en
   <code>claude-docs/planning/plan-ejecucion-tandas.md</code>.</p>
 
   <div class="cards">
-    <div class="card"><div class="v completada">13 / 42</div><div class="l">Features Stage 1</div></div>
-    <div class="card"><div class="v">53 / 185</div><div class="l">Person-days</div></div>
+    <div class="card"><div class="v completada">14 / 42</div><div class="l">Features Stage 1</div></div>
+    <div class="card"><div class="v">56 / 185</div><div class="l">Person-days</div></div>
     <div class="card"><div class="v">2.894 → 431</div><div class="l">Especies → emisiones</div></div>
-    <div class="card"><div class="v">481 + 63</div><div class="l">Tests offline + integración</div></div>
+    <div class="card"><div class="v">517 + 69</div><div class="l">Tests offline + integración</div></div>
   </div>
-  <div class="bar"><div style="width:28.6%"></div></div>
+  <div class="bar"><div style="width:30.3%"></div></div>
 
-  <h2>Ciclo 1 — Cimientos e ingesta · 11 de 12 completadas</h2>
+  <h2>Ciclo 1 — Cimientos e ingesta · 12 de 12 · <span class="completada">completo</span></h2>
   <table>
     <thead><tr><th>ID</th><th>Feature</th><th class="num">RICE</th><th>Estado</th></tr></thead>
     <tbody>
@@ -53,7 +53,7 @@
       <tr><td>F-009</td><td>condiciones_emision: semilla y herencia</td><td class="num">200,0</td><td class="completada">completada</td></tr>
       <tr><td>F-010</td><td>Sanidad del dato en dos capas</td><td class="num">400,0</td><td class="completada">completada</td></tr>
       <tr><td>F-011</td><td>Deduplicación de especies</td><td class="num">400,0</td><td class="completada">completada</td></tr>
-      <tr><td>F-012</td><td>Tipo de cambio implícito y normalización</td><td class="num">266,7</td><td class="pendiente">pendiente — tanda 4 (siguiente)</td></tr>
+      <tr><td>F-012</td><td>Tipo de cambio implícito y normalización</td><td class="num">266,7</td><td class="completada">completada</td></tr>
     </tbody>
   </table>
   <p class="nota">La base está poblada: F-007 corrió contra Supabase el 06/08/2026 y dejó 2.894
@@ -66,29 +66,31 @@
   <table>
     <thead><tr><th>Ciclo</th><th class="num">Features</th><th class="num">Person-days</th><th class="num">Semanas (est.)</th><th>Estado</th></tr></thead>
     <tbody>
-      <tr><td>1 — Cimientos e ingesta</td><td class="num">12</td><td class="num">47</td><td class="num">~9,5</td><td><span class="completada">11 completadas</span>, 1 pendiente</td></tr>
+      <tr><td>1 — Cimientos e ingesta</td><td class="num">12</td><td class="num">47</td><td class="num">~9,5</td><td><span class="completada">12 completadas</span> — milestone 1 cerrado</td></tr>
       <tr><td>2 — Armador completo</td><td class="num">12</td><td class="num">55</td><td class="num">~11</td><td><span class="completada">1 completada</span> (F-014), 11 pendientes</td></tr>
       <tr><td>3 — RV, carga y diagnóstico</td><td class="num">9</td><td class="num">41</td><td class="num">~8</td><td><span class="completada">1 completada</span> (F-028), 8 pendientes</td></tr>
       <tr><td>4 — Optimizador y persistencia</td><td class="num">9</td><td class="num">42</td><td class="num">~8,5</td><td class="pendiente">pendiente</td></tr>
-      <tr><td><strong>Stage 1 (total)</strong></td><td class="num"><strong>42</strong></td><td class="num"><strong>185</strong></td><td class="num"><strong>~37</strong></td><td class="num"><strong>29 %</strong></td></tr>
+      <tr><td><strong>Stage 1 (total)</strong></td><td class="num"><strong>42</strong></td><td class="num"><strong>185</strong></td><td class="num"><strong>~37</strong></td><td class="num"><strong>33 %</strong></td></tr>
       <tr><td>Stage 2</td><td class="num">8</td><td class="num">72</td><td class="num">~14,5</td><td class="pendiente">pendiente</td></tr>
     </tbody>
   </table>
 
   <h2>Próximo paso</h2>
-  <p class="nota"><strong>Tanda 3 cerrada el 07/08/2026</strong> — F-011 construida sola. Sigue la
-  <strong>Tanda 4: F-012 (tipo de cambio implícito) ∥ F-015 (API del calendario) ∥ F-029 (resolución
-  de tickers)</strong>, que cierra el ciclo 1 y vuelve a tener paralelismo. F-012 es la que completa
-  la serie de <code>app/universo/</code> y la que destraba el desempate pendiente de F-011. El orden
-  completo está en <code>claude-docs/planning/plan-ejecucion-tandas.md</code>.</p>
+  <p class="nota"><strong>Ciclo 1 completo el 07/08/2026</strong> — F-012 cerró la serie de
+  <code>app/universo/</code> y con ella el milestone «El universo existe y es confiable». El tipo de
+  cambio implícito da <strong>1.521,53</strong> con 216 pares y 0,37 % de dispersión, y coincide con
+  el que publica BYMA dentro del 0,14 %. Sigue lo que quedaba de la Tanda 4: <strong>F-015 (API del
+  calendario) ∥ F-029 (resolución de tickers)</strong>. El orden completo está en
+  <code>claude-docs/planning/plan-ejecucion-tandas.md</code>.</p>
 
   <h2>Deuda declarada</h2>
   <ul class="nota">
-    <li><strong>199 de las 431 emisiones quedan sin rendimiento en la vista colapsada.</strong> El
-    representante que elige el desempate no es la especie cuya TIR publica IAMC, así que el armador
-    no las va a proponer. El dato sigue entero en la vista viva y la corrida lo alerta. Hay que
-    decidir si lo resuelve el volumen normalizado de F-012 o si hace falta un criterio que prefiera
-    a la especie que publica rendimiento.</li>
+    <li><strong>146 de las 431 emisiones quedan sin rendimiento en la vista colapsada.</strong>
+    Con el volumen normalizado de F-012 enganchado en el desempate bajaron de 199 a 146, pero no
+    alcanzó, y <strong>no se inventó un criterio para tapar el resto</strong>. Queda por decidir si
+    hace falta uno que prefiera a la especie que publica rendimiento — con la contra de que sesgaría
+    el representante hacia lo que IAMC elige reportar, que no es la más líquida. El dato sigue entero
+    en la vista viva y la corrida lo alerta.</li>
     <li><strong>Una sola causa raíz deja inertes tres controles.</strong> F-007 asigna las métricas
     por ticker sólo al ticker exacto que IAMC reporta — 240 instrumentos con TIR y duración sobre
     2.894—, y por eso no pueden dispararse la capa 1 de la sanidad de F-010, el chequeo del 5 % de
