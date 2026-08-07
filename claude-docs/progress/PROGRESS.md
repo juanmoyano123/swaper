@@ -29,7 +29,7 @@ desde `/build-feature` a medida que cada una se implementa.
 |---|---|---|---|---|
 | F-013 | Barra de estado del dato | Stage 1 | 200,0 | pendiente |
 | F-014 | Autenticación y aislamiento por asesor | Stage 1 | 200,0 | completada |
-| F-015 | API del calendario de doce meses | Stage 1 | 285,0 | pendiente |
+| F-015 | API del calendario de doce meses | Stage 1 | 285,0 | completada |
 | F-016 | Grilla-selector de doce meses | Stage 1 | 114,0 | pendiente |
 | F-017 | Filtros de la grilla | Stage 1 | 112,0 | pendiente |
 | F-018 | Cartera editable y ponderación | Stage 1 | 140,0 | pendiente |
@@ -51,7 +51,7 @@ desde `/build-feature` a medida que cada una se implementa.
 | F-026 | Bloque de renta variable | Stage 1 | 80,0 | pendiente |
 | F-027 | Calendario de balances | Stage 1 | 16,7 | pendiente |
 | F-028 | Ingreso de cartera por tres vías | Stage 1 | 96,0 | completada |
-| F-029 | Resolución de tickers | Stage 1 | 106,7 | pendiente |
+| F-029 | Resolución de tickers | Stage 1 | 106,7 | completada |
 | F-030 | Valuación y diagnóstico de cartera | Stage 1 | 150,0 | pendiente |
 | F-031 | Vector de riesgo de seis ejes | Stage 1 | 100,0 | pendiente |
 | F-032 | Motor de rotaciones intra-segmento | Stage 1 | 100,0 | pendiente |
@@ -116,8 +116,32 @@ integración en el backend, 96 en el frontend.
 **Tanda 3 cerrada el 07/08/2026** — F-011 sola, 476 tests offline y 63 de integración.
 
 **F-012 cerrada el 07/08/2026, y con ella el Ciclo 1: 12 de 12.** 517 tests offline y 69 de
-integración. El milestone 1 —"El universo existe y es confiable"— está completo. Siguiente paso:
-**F-015 (API del calendario) ∥ F-029 (resolución de tickers)**, lo que quedaba de la Tanda 4.
+integración. El milestone 1 —"El universo existe y es confiable"— está completo.
+
+**Tanda 4 cerrada el 07/08/2026** — F-015 ∥ F-029, lo que quedaba después de que F-012 se hiciera
+sola. 618 tests offline, 86 de integración y 116 en el frontend. Van **16 de 42 features de Stage
+1**. Siguiente paso: **F-013 (barra de estado del dato)**, la Tanda 5, que va sola porque es
+transversal a todas las pantallas y conviene que nadie la pise.
+
+### Lo que la Tanda 4 dejó a la vista, y necesita decisión
+
+- **El calendario cubre 70 de las 431 emisiones (16 %).** 360 quedan afuera por no declarar paridad,
+  y sin paridad no hay precio sucio: el cupón no se puede expresar como fracción del monto invertido
+  sin traer un tipo de cambio de afuera, que es lo que la regla 3 prohíbe. **Es la cuarta
+  manifestación de la misma causa raíz** —IAMC publica la paridad y las métricas sólo para el ticker
+  exacto que su informe nombra— y por eso la alerta `cobertura_del_calendario` apunta la decisión a
+  F-011: si la grilla tiene que cubrir más universo, lo que hay que decidir es qué especie representa
+  a una emisión. Los doce meses igual dan cobertura completa con esos 70, así que **F-016 no está
+  bloqueada**; lo que está limitado es de cuántos papeles se puede elegir.
+- **El GWT-4 de F-015 quedó sin verificar, a propósito y por escrito.** Pide reproducir los nominales
+  de RUCED, SBC2D, CS47D y LOC5D contra el Excel real de la mesa ("Propuesta Base 7-26"), y ese Excel
+  no está en el repositorio. Lo que sí se verifica es que el backend reproduce al motor sobre el
+  mismo input versionado. Es una cadena de dos eslabones y el primero no se re-verificó: **si aparece
+  el Excel, ese test hay que cerrarlo**.
+- **El plazo de liquidación viaja sin mapear**, como `"1"` o `"2"` de BYMA, que es como lo escribió
+  F-007. Traducirlo a "contado inmediato" / "48 hs" sería inventar un mapeo que ninguna fuente del
+  proyecto declara. Cuando alguna pantalla tenga que mostrarlo, hay que decidir el mapeo con el
+  usuario y no derivarlo.
 
 ### La decisión que F-012 dejó abierta
 

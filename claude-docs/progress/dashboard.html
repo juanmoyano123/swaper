@@ -26,17 +26,17 @@
 </head>
 <body>
   <h1>10-Swaper — Progreso de features</h1>
-  <p class="sub">Actualizado al <strong>07/08/2026</strong> (Ciclo 1 completo). Este dashboard es estático: el estado
+  <p class="sub">Actualizado al <strong>07/08/2026</strong> (Tanda 4 cerrada). Este dashboard es estático: el estado
   real vive en <code>claude-docs/progress/PROGRESS.md</code> y el orden de ejecución en
   <code>claude-docs/planning/plan-ejecucion-tandas.md</code>.</p>
 
   <div class="cards">
-    <div class="card"><div class="v completada">14 / 42</div><div class="l">Features Stage 1</div></div>
-    <div class="card"><div class="v">56 / 185</div><div class="l">Person-days</div></div>
-    <div class="card"><div class="v">2.894 → 431</div><div class="l">Especies → emisiones</div></div>
-    <div class="card"><div class="v">517 + 69</div><div class="l">Tests offline + integración</div></div>
+    <div class="card"><div class="v completada">16 / 42</div><div class="l">Features Stage 1</div></div>
+    <div class="card"><div class="v">63 / 185</div><div class="l">Person-days</div></div>
+    <div class="card"><div class="v">431 → 70</div><div class="l">Emisiones → con calendario</div></div>
+    <div class="card"><div class="v">618 + 86</div><div class="l">Tests offline + integración</div></div>
   </div>
-  <div class="bar"><div style="width:30.3%"></div></div>
+  <div class="bar"><div style="width:38.1%"></div></div>
 
   <h2>Ciclo 1 — Cimientos e ingesta · 12 de 12 · <span class="completada">completo</span></h2>
   <table>
@@ -67,24 +67,35 @@
     <thead><tr><th>Ciclo</th><th class="num">Features</th><th class="num">Person-days</th><th class="num">Semanas (est.)</th><th>Estado</th></tr></thead>
     <tbody>
       <tr><td>1 — Cimientos e ingesta</td><td class="num">12</td><td class="num">47</td><td class="num">~9,5</td><td><span class="completada">12 completadas</span> — milestone 1 cerrado</td></tr>
-      <tr><td>2 — Armador completo</td><td class="num">12</td><td class="num">55</td><td class="num">~11</td><td><span class="completada">1 completada</span> (F-014), 11 pendientes</td></tr>
-      <tr><td>3 — RV, carga y diagnóstico</td><td class="num">9</td><td class="num">41</td><td class="num">~8</td><td><span class="completada">1 completada</span> (F-028), 8 pendientes</td></tr>
+      <tr><td>2 — Armador completo</td><td class="num">12</td><td class="num">55</td><td class="num">~11</td><td><span class="completada">2 completadas</span> (F-014, F-015), 10 pendientes</td></tr>
+      <tr><td>3 — RV, carga y diagnóstico</td><td class="num">9</td><td class="num">41</td><td class="num">~8</td><td><span class="completada">2 completadas</span> (F-028, F-029), 7 pendientes</td></tr>
       <tr><td>4 — Optimizador y persistencia</td><td class="num">9</td><td class="num">42</td><td class="num">~8,5</td><td class="pendiente">pendiente</td></tr>
-      <tr><td><strong>Stage 1 (total)</strong></td><td class="num"><strong>42</strong></td><td class="num"><strong>185</strong></td><td class="num"><strong>~37</strong></td><td class="num"><strong>33 %</strong></td></tr>
+      <tr><td><strong>Stage 1 (total)</strong></td><td class="num"><strong>42</strong></td><td class="num"><strong>185</strong></td><td class="num"><strong>~37</strong></td><td class="num"><strong>38 %</strong></td></tr>
       <tr><td>Stage 2</td><td class="num">8</td><td class="num">72</td><td class="num">~14,5</td><td class="pendiente">pendiente</td></tr>
     </tbody>
   </table>
 
   <h2>Próximo paso</h2>
-  <p class="nota"><strong>Ciclo 1 completo el 07/08/2026</strong> — F-012 cerró la serie de
-  <code>app/universo/</code> y con ella el milestone «El universo existe y es confiable». El tipo de
-  cambio implícito da <strong>1.521,53</strong> con 216 pares y 0,37 % de dispersión, y coincide con
-  el que publica BYMA dentro del 0,14 %. Sigue lo que quedaba de la Tanda 4: <strong>F-015 (API del
-  calendario) ∥ F-029 (resolución de tickers)</strong>. El orden completo está en
-  <code>claude-docs/planning/plan-ejecucion-tandas.md</code>.</p>
+  <p class="nota"><strong>Tanda 4 cerrada el 07/08/2026</strong> — F-015 puso el calendario de doce
+  meses en el backend y F-029 la resolución de tickers, así que ya existen las dos piezas que la
+  primera pantalla necesita. Sigue la <strong>Tanda 5: F-013 (barra de estado del dato)</strong>, que
+  va sola porque es transversal a todas las pantallas. Después, la <strong>Tanda 6</strong> trae las
+  dos primeras pantallas reales: F-016 (grilla de doce meses) ∥ F-038 (monitor). El orden completo
+  está en <code>claude-docs/planning/plan-ejecucion-tandas.md</code>.</p>
 
   <h2>Deuda declarada</h2>
   <ul class="nota">
+    <li><strong>El calendario cubre 70 de las 431 emisiones (16 %).</strong> 360 quedan afuera por no
+    declarar paridad, y sin paridad el cupón no se puede expresar como fracción del monto invertido
+    sin traer un tipo de cambio de afuera. <strong>Es la cuarta manifestación de la misma causa
+    raíz</strong>: IAMC publica paridad y métricas sólo para el ticker exacto que su informe nombra.
+    La alerta <code>cobertura_del_calendario</code> lo declara y apunta la decisión a F-011 — qué
+    especie representa a una emisión. Los doce meses igual quedan cubiertos con esos 70, así que
+    <strong>F-016 no está bloqueada</strong>; lo limitado es de cuántos papeles se puede elegir.</li>
+    <li><strong>El GWT-4 de F-015 quedó sin verificar, a propósito y por escrito.</strong> Pide
+    reproducir RUCED, SBC2D, CS47D y LOC5D contra el Excel real de la mesa, que no está en el
+    repositorio. Se verificó lo otro —que el backend reproduce al motor sobre el mismo input
+    versionado—, que es una cadena de dos eslabones donde el primero no se re-verificó.</li>
     <li><strong>146 de las 431 emisiones quedan sin rendimiento en la vista colapsada.</strong>
     Con el volumen normalizado de F-012 enganchado en el desempate bajaron de 199 a 146, pero no
     alcanzó, y <strong>no se inventó un criterio para tapar el resto</strong>. Queda por decidir si
