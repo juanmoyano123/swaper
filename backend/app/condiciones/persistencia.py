@@ -18,14 +18,15 @@ indistinguible de uno que no sabe nada: la corrida no tocaría la tabla en ningu
 pero cantaría éxito. Con el guardia, la alerta de `semilla.py` queda sola arriba del resultado.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Any
 
 import structlog
 
 from app.condiciones.resolucion import PREFIJO_HERENCIA
-from app.condiciones.semilla import CAMPOS, Condiciones
+from app.condiciones.semilla import CAMPOS, CAMPOS_NUMERICOS, Condiciones
 from app.ingesta.alertas import Alerta
 from app.ingesta.cobertura import Cobertura
 
@@ -50,6 +51,23 @@ COLUMNAS: tuple[str, ...] = (
     "ticker",
     *(parte for campo in CAMPOS for parte in (campo, f"{campo}_origen", f"{campo}_fecha")),
 )
+
+
+def fila_para_api(fila: Mapping[str, Any]) -> dict[str, Any]:
+    """La fila de `condiciones_emision` lista para serializar como JSON.
+
+    `lamina` es `numeric` en Postgres y asyncpg la devuelve como `Decimal`, que el encoder del API
+    serializa como string: `"1"` en vez de `1`, y el schema del frontend —que la declara numérica—
+    la rechaza entera con `contract_mismatch`. Se convierte acá, en el borde, para que los dos
+    endpoints que sirven esta fila (`GET /condiciones` y `GET /instrumentos/{ticker}/condiciones`)
+    lo hagan igual.
+    """
+    como_json = dict(fila)
+    for campo in CAMPOS_NUMERICOS:
+        valor = como_json.get(campo)
+        if isinstance(valor, Decimal):
+            como_json[campo] = float(valor)
+    return como_json
 
 
 @dataclass(frozen=True, slots=True)

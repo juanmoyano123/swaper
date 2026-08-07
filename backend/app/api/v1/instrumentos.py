@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.api.deps import get_db
 from app.calendario.cupones import indexar_cronograma
 from app.calendario.lectura import leer_cashflow
-from app.condiciones.persistencia import COLUMNAS, TABLA
+from app.condiciones.persistencia import COLUMNAS, TABLA, fila_para_api
 from app.ingesta.consolidacion import raiz_emision
 from app.instrumentos import ficha_de
 from app.universo.servicio import sanear_universo
@@ -65,7 +65,7 @@ async def condiciones(ticker: str, conn: Annotated[object, Depends(get_db)]) -> 
     estado normal y declarado — que no haya condiciones curadas no es que el ticker no exista.
     """
     fila = await conn.fetchrow(SQL_CONDICIONES_POR_TICKER, ticker)
-    return {"ticker": ticker, "condiciones": dict(fila) if fila is not None else None}
+    return {"ticker": ticker, "condiciones": fila_para_api(fila) if fila is not None else None}
 
 
 @router.get(

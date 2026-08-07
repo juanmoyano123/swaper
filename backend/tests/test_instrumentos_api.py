@@ -10,6 +10,7 @@ que devolviera lo mismo a las tres no probaría que cada endpoint lee lo que dic
 """
 
 from datetime import date
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -223,6 +224,26 @@ async def test_condiciones_presentes_traen_origen_y_fecha(app_con_instrumentos) 
     assert condiciones_["ley_origen"] == "condiciones_emision.csv (curado)"
     assert condiciones_["ley_fecha"] == "2026-08-05"
     assert condiciones_["calificacion"] is None
+
+
+async def test_lamina_decimal_sale_como_numero_no_como_string(app_con_instrumentos) -> None:
+    """`lamina` es `numeric` en Postgres y asyncpg la trae como `Decimal`; sin conversión el
+    encoder JSON la serializa como `"1"` y el schema del frontend —que la declara numérica—
+    rechaza la fila entera con `contract_mismatch`. Atrapado contra la base real con GYC4D: los
+    tests offline no lo veían porque el fake devolvía valores Python nativos."""
+    fila = _fila_condiciones(
+        "GYC4D",
+        lamina=Decimal("1"),
+        lamina_origen="condiciones_emision.csv (curado)",
+        lamina_fecha="2026-08-05",
+    )
+    async with cliente(app_con_instrumentos(condiciones={"GYC4D": fila})) as http:
+        respuesta = await http.get(CONDICIONES.format(ticker="GYC4D"))
+
+    assert respuesta.status_code == 200
+    lamina = respuesta.json()["condiciones"]["lamina"]
+    assert lamina == 1
+    assert not isinstance(lamina, str)
 
 
 async def test_condiciones_ausentes_no_es_404(app_con_instrumentos) -> None:

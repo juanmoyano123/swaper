@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends
 
 from app.api.deps import get_db
 from app.condiciones import medir_cobertura_curada, sembrar
-from app.condiciones.persistencia import COLUMNAS, TABLA
+from app.condiciones.persistencia import COLUMNAS, TABLA, fila_para_api
 from app.core.config import Settings, get_settings
 from app.core.pagination import CursorParams, Page, build_page
 
@@ -86,4 +86,6 @@ async def listado(
     """
     desde = params.decoded_cursor() or {}
     filas = await conn.fetch(SQL_LISTADO, str(desde.get("ticker", "")), params.limit + 1)
-    return build_page([dict(f) for f in filas], params.limit, lambda f: {"ticker": f["ticker"]})
+    return build_page(
+        [fila_para_api(f) for f in filas], params.limit, lambda f: {"ticker": f["ticker"]}
+    )
