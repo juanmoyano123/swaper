@@ -72,8 +72,13 @@ desde `/build-feature` a medida que cada una se implementa.
 | F-040 | Sensibilidad por repricing completo | Stage 1 | 66,7 | pendiente |
 | F-041 | Guardar, listar, reabrir y revaluar | Stage 1 | 180,0 | pendiente |
 | F-042 | Exportación a Excel y PDF | Stage 1 | 100,0 | pendiente |
+| F-051 | Métricas propias: TIR, duración y paridad | Stage 1 | 160,0 | **completada** |
+| F-052 | Renta variable en el monitor | Stage 1 | 106,7 | pendiente |
 
 > Milestone 4 — "Stage 1 completo: los tres flujos cierran."
+>
+> F-051 y F-052 se agregaron el 08/08/2026, después de auditar cómo resuelve estas dos cosas el
+> monitor de mesa. El plan pasó de 42 a 44 features de Stage 1.
 
 ## Stage 2 — se activa después de validar con usuarios reales (8 features · ~14,5 semanas)
 
@@ -184,8 +189,42 @@ la otra agrega un router de backend propio más `features/instrumento/`):
   que espera `number`) — invisible mientras las dos piezas no compilaban juntas. Se corrigió en el
   cierre.
 
-Siguiente paso: **Tanda 8 — F-017 (filtros de la grilla) ∥ F-024 (redondeo por lámina) ∥ F-040
-(sensibilidad por repricing)**. F-024 es la que le da a F-018 el dato de lámina que hoy falta.
+**Tanda 8a cerrada el 08/08/2026 — F-051 (métricas propias), sola.** La tanda 8 se partió en dos al
+planificarla: F-051 modifica la consolidación y deja escrita la matemática de descuento que F-040
+consume, así que ir en paralelo habría significado escribirla dos veces. 748 tests offline (eran
+692). Van **22 de 44 features de Stage 1**.
+
+- **El resultado, medido contra la base real**: la renta fija pasa de 240 especies con TIR a **284
+  calculadas**, y por primera vez las especies D y C tienen métricas — hoy son exactamente cero,
+  porque IAMC nombra una sola especie por emisión. El par que resume la feature es AE38C con 10,41 %
+  y AE38D con 9,59 %: el mismo bono, cada especie contra su propio precio.
+- **Lo que queda afuera, y por qué**: 300 especies por moneda cruzada (cotizan en pesos y pagan en
+  dólares: descontarlas pediría un tipo de cambio que sólo sale de su hermana), 46 CER, 66 dólar
+  linked, 49 tamar y 8 badlar por naturaleza del flujo, y 189 sin precio del día. Las tres cosas se
+  cuentan y se nombran en alertas propias. **CER se verificó sobre el dato, no se supuso**: el
+  cronograma trae los montos contractuales sin el coeficiente —TX26 paga 2 % semestral sobre un
+  residual de 100 exacto— mientras el precio en pesos sí lo incorpora.
+- **El ciclo de imports era peor de lo que decía el plan.** Importar `app.ingesta.consolidacion.raiz`
+  igual ejecuta el `__init__` del paquete, que importa `armado`: cambiar la línea no alcanzaba. Se
+  resolvió moviendo `raiz_emision` a `app/ingesta/raiz.py`, que es donde corresponde — es una
+  función hoja sin dependencias y vivía dentro del paquete que necesitaba importarla de vuelta.
+- **Un defecto que el plan anticipó y estaba a punto de morder**: el refresh intradiario le pasaba a
+  `armar_consolidacion` unas filas con sólo `ticker` y `type`. Con el armado nuevo eso se habría
+  indexado como cronograma vacío y **cada refresco habría dejado la fila de precios sin TIR**, que
+  la vista publica porque toma una sola fila por ticker. Ahora lee el cronograma entero, y el efecto
+  buscado es que cada refresco recalcule las métricas contra el precio vivo.
+- **Dos ceros explicados** (regla de la casa): la primera medición dio cero TIR calculadas dos veces
+  seguidas, y las dos veces fue la medición y no el código — el consolidado versionado no tiene
+  columna de moneda de cotización, y `asyncpg` devuelve los `numeric` como `Decimal`, que el
+  normalizador descarta (la misma trampa del fix de la lámina). El contraste contra IAMC dio cero
+  divergencias porque la medición se hizo sin informe: se ejercita en los tests, y en producción
+  recién tiene con qué contrastar cuando se suba el PDF del día.
+- **La medición se hizo en sólo lectura**: no se corrió la consolidación contra la base. Las
+  métricas aparecen en la vista con la próxima corrida matinal.
+
+Siguiente paso: **base común de la tanda 8b** (el JOIN a `condiciones_emision` con `lamina` y
+`sector`, el router vacío de renta variable y las claves nuevas en `SelectorSegmento`) y después
+**F-017 ∥ F-024 ∥ F-040 ∥ F-052**. Los cuatro planes ya están escritos y dan esa base por hecha.
 
 ### Lo que F-013 puso a la vista, y la decisión que dejó abierta
 
