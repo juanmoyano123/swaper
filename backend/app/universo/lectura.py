@@ -36,12 +36,36 @@ Los identificadores van entrecomillados porque `couponCurrency` viene en camelCa
 original y sin comillas PostgreSQL lo plegaría a minúsculas y no encontraría la columna. Se
 entrecomillan todos y no sólo ése: una regla que aplica a veces es una regla que alguien va a
 olvidar cuando agregue la siguiente columna.
+
+## La lámina y el sector vienen de la tabla curada, no del universo
+
+Base común de la tanda 8b (08/08/2026), para F-024 (redondeo por lámina) y F-017 (filtro por
+sector). Los dos campos existen en `instrumentos`, pero ahí no sirven:
+
+- **`instrumentos.lamina` está en `NULL` para todo el universo.** `armado.py` la escribe así a
+  propósito —ninguna fuente de F-007 la publica— y nada la propaga después. La única fuente viva es
+  `condiciones_emision`, el CSV curado que cargó F-009: 823 tickers, 568 con lámina. Leerla de
+  `instrumentos` devolvería vacío siempre y haría creer que el dato no existe.
+- **`instrumentos.sector` sólo distingue Soberano de Subsoberano**, que es lo que `SECTOR_POR_CLASE`
+  deduce de la clase de activo. El sector de una ON —energía, banca, agro— está en la tabla curada.
+  Por eso se lee con `COALESCE(ce.sector, i.sector)`: gana el curado, y el derivado de la clase
+  queda de respaldo para los soberanos, que en la tabla curada no están.
+
+El JOIN es `LEFT` por lo mismo que el de `instrumentos`: una especie sin condiciones curadas tiene
+que seguir en el universo con los dos campos vacíos. Que falten es un dato —F-024 lo cuenta y lo
+declara en pantalla— y perder la fila sería peor que no saber su lámina.
+
+**La lámina viaja como `float`.** En la base es `numeric`, y asyncpg devuelve eso como `Decimal`:
+si llega así al contrato de la API, sale serializado como string y el frontend lo recibe como texto
+donde espera un número. Ya pasó una vez con este mismo campo (commit `67ac5af`), y el mismo
+`Decimal` hizo que una medición de F-051 diera cero durante media hora. El cast está en el SQL.
 """
 
 from typing import Any
 
 VISTA_UNIVERSO = "public.resumen"
 TABLA_INSTRUMENTOS = "public.instrumentos"
+TABLA_CONDICIONES = "public.condiciones_emision"
 
 # Las columnas del universo que consume este paquete. `tir` y `tna` viajan las dos porque cuál de
 # las dos mide a una especie lo decide su segmento, y el segmento se calcula después de leer.
@@ -69,14 +93,23 @@ COLUMNAS: tuple[str, ...] = (
 # Lo que la vista no tiene y hay que ir a buscar a la tabla. Ver el porqué en el docstring.
 COLUMNAS_INSTRUMENTOS: tuple[str, ...] = ("moneda_cotizacion",)
 
+# Las de la tabla curada de F-009, con su expresión completa: la lámina castea a float y el sector
+# cae al derivado de la clase cuando el curado no lo tiene. El porqué está en el docstring.
+COLUMNAS_CURADAS: tuple[tuple[str, str], ...] = (
+    ("lamina", "ce.lamina::float8"),
+    ("sector", "COALESCE(ce.sector, i.sector)"),
+)
+
 _SELECT = ", ".join(
     [f'u."{columna}"' for columna in COLUMNAS]
     + [f'i."{columna}"' for columna in COLUMNAS_INSTRUMENTOS]
+    + [f'{expresion} AS "{columna}"' for columna, expresion in COLUMNAS_CURADAS]
 )
 
 SQL_UNIVERSO = (
     f"SELECT {_SELECT} FROM {VISTA_UNIVERSO} u "
     f"LEFT JOIN {TABLA_INSTRUMENTOS} i ON i.ticker = u.ticker "
+    f"LEFT JOIN {TABLA_CONDICIONES} ce ON ce.ticker = u.ticker "
     "ORDER BY u.ticker"
 )
 

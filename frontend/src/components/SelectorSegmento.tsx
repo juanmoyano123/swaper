@@ -21,7 +21,15 @@ export const NOMBRE_SEGMENTO: Record<string, string> = {
   dollar_linked: 'Dólar linked',
   badlar: 'Badlar',
   tamar: 'Tamar',
+  // Base común de la tanda 8b, para F-052. No son segmentos de renta fija y por eso no tienen
+  // entrada en UNIDAD_NATURALEZA: una acción no tiene rendimiento que rotular, y quien las muestre
+  // no debe ponerle una columna de rendimiento ni nada en su lugar. Van al final del orden.
+  accion: 'Acciones',
+  cedear: 'CEDEARs',
 }
+
+/** Las pestañas que no son de renta fija: quien las active muestra columnas propias, sin TIR. */
+export const CLAVES_RENTA_VARIABLE = ['accion', 'cedear'] as const
 
 /**
  * Rótulo corto de la unidad de rendimiento, por naturaleza (`NATURALEZA_TASA` del backend).
@@ -44,7 +52,16 @@ export function unidadDeNaturaleza(naturaleza: string): string {
 }
 
 /** Orden de pestañas del design system; los segmentos que no figuren van al final, en su orden. */
-const ORDEN = ['usd_hard', 'cer', 'tasa_fija', 'dollar_linked', 'badlar', 'tamar']
+const ORDEN = [
+  'usd_hard',
+  'cer',
+  'tasa_fija',
+  'dollar_linked',
+  'badlar',
+  'tamar',
+  'accion',
+  'cedear',
+]
 
 export function ordenarSegmentos(claves: readonly string[]): string[] {
   return [...claves].sort((a, b) => {

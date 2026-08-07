@@ -167,6 +167,18 @@ class EspecieUniverso:
     """`paridad` de la vista, para F-038: el monitor la muestra tal como la publica la fuente.
     `None` cuando la vista trae `NULL` — no se calcula ni se estima acá."""
 
+    lamina: float | None = None
+    """Lámina mínima de negociación, del dato curado de F-009. **`None` significa no informada, y
+    no 1.** Es la distinción que sostiene F-024: con lámina se redondea el nominal al múltiplo, sin
+    lámina no se redondea y la posición se marca y se excluye del total ajustado. Asumir un default
+    produciría nominales que parecen correctos y no lo son, en la pantalla que el asesor lleva a la
+    reunión. Son 568 de 823 tickers curados: el faltante es grande y por eso se declara."""
+
+    sector: str | None = None
+    """Sector del emisor, para el filtro de F-017. Sale del dato curado y cae al derivado de la
+    clase de activo —"Soberano", "Subsoberano"— cuando el curado no lo tiene. `None` es sector no
+    informado, y agrupa aparte: no se le asigna uno por parecido con otro emisor."""
+
     @property
     def naturaleza(self) -> str:
         return NATURALEZA_TASA[self.segmento]
@@ -206,6 +218,8 @@ class EspecieUniverso:
             "volumen": self.volumen,
             "volumen_usd": self.volumen_usd,
             "paridad": self.paridad,
+            "lamina": self.lamina,
+            "sector": self.sector,
         }
 
 
@@ -262,6 +276,8 @@ def segmentar(filas: Iterable[Mapping[str, object]]) -> Segmentacion:
                 volumen=a_numero(fila.get("effectiveVolume")),
                 moneda_cotizacion=_texto(fila.get("moneda_cotizacion")),
                 paridad=a_numero(fila.get("paridad")),
+                lamina=a_numero(fila.get("lamina")),
+                sector=_texto(fila.get("sector")),
             )
         )
 
