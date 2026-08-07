@@ -1,15 +1,15 @@
 /**
- * El store del armador — F-016, extendido por F-018 (ponderación) y por hacer por F-017 (filtros).
+ * El store del armador — F-016, extendido por F-018 (ponderación) y por F-017 (filtros de A7).
  *
  * Contexto de React + `useReducer`, sin dependencia nueva: lo que esta pantalla necesita recordar
- * —qué papeles están adentro, qué mes está abierto, cuánto pesa cada uno— es chico y vive sólo
- * mientras dura la sesión de armado, así que no justifica una librería de estado global.
- *
- * **F-017 extiende esta misma forma cuando le toque:** agrega los filtros de segmento/rendimiento/
- * duración de A7 a `EstadoArmador`, ampliando este shape en vez de armar un store paralelo.
+ * —qué papeles están adentro, qué mes está abierto, cuánto pesa cada uno, qué filtros de la grilla
+ * están activos— es chico y vive sólo mientras dura la sesión de armado, así que no justifica una
+ * librería de estado global.
  */
 
 import { createContext, type ReactNode, useContext, useMemo, useReducer } from 'react'
+
+import { FILTROS_ARMADOR_VACIOS, type FiltrosArmador } from '../lib/filtros'
 
 /** Una posición del armador. */
 export interface PosicionArmador {
@@ -31,8 +31,8 @@ interface EstadoArmador {
   /** Capital total a invertir, en dólares. 0 hasta que el asesor lo carga; con 0 no hay objetivo
    *  que repartir y `resolver` no calcula nominales (ver `lib/resolver.ts`). */
   montoTotal: number
-  // F-017 agrega acá los filtros de A7 (segmento, rendimiento mín/máx, duración máxima). No se
-  // agrega todavía.
+  /** Filtros de la barra de F-017 (A7): filtran la oferta que se ve en la grilla, nunca `pos`. */
+  filtros: FiltrosArmador
 }
 
 type AccionArmador =
@@ -43,8 +43,15 @@ type AccionArmador =
   | { tipo: 'equiponderar' }
   | { tipo: 'vaciar' }
   | { tipo: 'agregarFci'; nombre: string; peso: number }
+  | { tipo: 'fijarFiltros'; filtros: FiltrosArmador }
+  | { tipo: 'limpiarFiltros' }
 
-const ESTADO_INICIAL: EstadoArmador = { pos: [], selMes: null, montoTotal: 0 }
+const ESTADO_INICIAL: EstadoArmador = {
+  pos: [],
+  selMes: null,
+  montoTotal: 0,
+  filtros: FILTROS_ARMADOR_VACIOS,
+}
 
 /** 100/n a un decimal — el mismo redondeo que usan `alternarPapel` y `equiponderar`. */
 function pesoIgualitario(n: number): number {
@@ -82,6 +89,13 @@ function reducer(estado: EstadoArmador, accion: AccionArmador): EstadoArmador {
       return { ...estado, pos: [] }
     case 'agregarFci':
       return { ...estado, pos: [...estado.pos, { ticker: accion.nombre, peso: accion.peso, esFci: true }] }
+    // Los filtros filtran la oferta, no la cartera: estas dos acciones nunca tocan `pos`,
+    // `selMes` ni `montoTotal` — un papel ya seleccionado sigue en la cartera aunque un filtro
+    // le tape el renglón en la grilla.
+    case 'fijarFiltros':
+      return { ...estado, filtros: accion.filtros }
+    case 'limpiarFiltros':
+      return { ...estado, filtros: FILTROS_ARMADOR_VACIOS }
   }
 }
 
@@ -98,6 +112,11 @@ interface AccionesArmador {
   vaciar: () => void
   /** Agrega una línea de FCI: tiene peso pero no precio (GWT-4 de F-018). */
   agregarFci: (nombre: string, peso: number) => void
+  /** Pisa el objeto de filtros entero: el llamador arma el objeto (mismo patrón `onCambio` del
+   *  monitor). */
+  fijarFiltros: (filtros: FiltrosArmador) => void
+  /** Vuelve todos los filtros a `FILTROS_ARMADOR_VACIOS` de una sola vez (GWT-3). */
+  limpiarFiltros: () => void
 }
 
 const EstadoContext = createContext<EstadoArmador | null>(null)
@@ -118,6 +137,8 @@ export function ArmadorProvider({ children }: { children: ReactNode }) {
       equiponderar: () => dispatch({ tipo: 'equiponderar' }),
       vaciar: () => dispatch({ tipo: 'vaciar' }),
       agregarFci: (nombre: string, peso: number) => dispatch({ tipo: 'agregarFci', nombre, peso }),
+      fijarFiltros: (filtros: FiltrosArmador) => dispatch({ tipo: 'fijarFiltros', filtros }),
+      limpiarFiltros: () => dispatch({ tipo: 'limpiarFiltros' }),
     }),
     [],
   )

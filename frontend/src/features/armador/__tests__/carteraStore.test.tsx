@@ -1,27 +1,34 @@
 /**
- * El store del armador, aislado de la grilla — F-016, extendido por F-018 con peso y montoTotal.
+ * El store del armador, aislado de la grilla — F-016, extendido por F-018 con peso y montoTotal, y
+ * por F-017 con los filtros de A7 (este archivo es el que el docstring de `carteraStore.tsx`
+ * reserva para F-017).
  *
  * `alternarPapel` y `alternarMes` son las dos acciones sobre las que se apoya toda la pantalla: la
  * iluminación multi-mes de GWT-1/GWT-2 y la apertura/cierre del detalle de mes. Un arnés mínimo
  * alcanza para probarlas sin montar la grilla entera. F-018 agrega `fijarPeso`, `equiponderar` y
- * `vaciar` al mismo arnés, y expone el peso de cada posición para poder verificarlo.
+ * `vaciar` al mismo arnés, y expone el peso de cada posición para poder verificarlo. F-017 agrega
+ * `fijarFiltros`/`limpiarFiltros` y expone `filtros` serializado para verificar la mecánica sin
+ * depender del universo (eso lo cubre `FiltrosGrilla.test.tsx`, que sí monta `ArmadorPage`).
  */
 
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
+import { FILTROS_ARMADOR_VACIOS } from '../lib/filtros'
 import { ArmadorProvider, useArmador, useArmadorAcciones } from '../store/carteraStore'
 
 function Arnes() {
-  const { pos, selMes } = useArmador()
-  const { alternarPapel, alternarMes, fijarPeso, equiponderar, vaciar } = useArmadorAcciones()
+  const { pos, selMes, filtros } = useArmador()
+  const { alternarPapel, alternarMes, fijarPeso, equiponderar, vaciar, fijarFiltros, limpiarFiltros } =
+    useArmadorAcciones()
 
   return (
     <div>
       <p data-testid="pos">{pos.map((p) => p.ticker).join(',')}</p>
       <p data-testid="pesos">{pos.map((p) => `${p.ticker}:${p.peso}`).join(',')}</p>
       <p data-testid="selMes">{selMes === null ? 'ninguno' : String(selMes)}</p>
+      <p data-testid="filtros">{JSON.stringify(filtros)}</p>
       <button type="button" onClick={() => alternarPapel('AL30')}>
         alternar AL30
       </button>
@@ -45,6 +52,17 @@ function Arnes() {
       </button>
       <button type="button" onClick={() => vaciar()}>
         vaciar
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          fijarFiltros({ ...FILTROS_ARMADOR_VACIOS, segmento: 'cer', duracionMax: '3', ley: 'ARG' })
+        }
+      >
+        fijar filtros de prueba
+      </button>
+      <button type="button" onClick={() => limpiarFiltros()}>
+        limpiar filtros
       </button>
     </div>
   )
@@ -172,5 +190,55 @@ describe('vaciar (F-018)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'vaciar' }))
 
     expect(screen.getByTestId('pos')).toHaveTextContent('')
+  })
+})
+
+// --- F-017: filtros, sin tocar pos/selMes/montoTotal ------------------------------------------------
+
+describe('filtros (F-017)', () => {
+  it('arranca en FILTROS_ARMADOR_VACIOS', () => {
+    renderizar()
+
+    expect(screen.getByTestId('filtros')).toHaveTextContent(JSON.stringify(FILTROS_ARMADOR_VACIOS))
+  })
+
+  it('fijarFiltros pisa el objeto entero', async () => {
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'fijar filtros de prueba' }))
+
+    const filtros = JSON.parse(screen.getByTestId('filtros').textContent ?? '{}')
+    expect(filtros).toEqual({
+      ...FILTROS_ARMADOR_VACIOS,
+      segmento: 'cer',
+      duracionMax: '3',
+      ley: 'ARG',
+    })
+  })
+
+  it('limpiarFiltros vuelve a FILTROS_ARMADOR_VACIOS de una sola vez', async () => {
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'fijar filtros de prueba' }))
+    await userEvent.click(screen.getByRole('button', { name: 'limpiar filtros' }))
+
+    expect(screen.getByTestId('filtros')).toHaveTextContent(JSON.stringify(FILTROS_ARMADOR_VACIOS))
+  })
+
+  it('ninguna acción de filtro modifica pos, selMes ni pesos', async () => {
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'alternar AL30' }))
+    await userEvent.click(screen.getByRole('button', { name: 'alternar mes 3' }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'fijar filtros de prueba' }))
+    expect(screen.getByTestId('pos')).toHaveTextContent('AL30')
+    expect(screen.getByTestId('pesos')).toHaveTextContent('AL30:100')
+    expect(screen.getByTestId('selMes')).toHaveTextContent('3')
+
+    await userEvent.click(screen.getByRole('button', { name: 'limpiar filtros' }))
+    expect(screen.getByTestId('pos')).toHaveTextContent('AL30')
+    expect(screen.getByTestId('pesos')).toHaveTextContent('AL30:100')
+    expect(screen.getByTestId('selMes')).toHaveTextContent('3')
   })
 })
