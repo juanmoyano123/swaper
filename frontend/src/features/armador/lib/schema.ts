@@ -103,3 +103,51 @@ export type AlertaCalendario = z.infer<typeof esquemaAlertaCalendario>
 export type InstrumentoDelMes = z.infer<typeof esquemaInstrumentoDelMes>
 export type MesDelCalendario = z.infer<typeof esquemaMesDelCalendario>
 export type CalendarioUniverso = z.infer<typeof esquemaCalendarioUniverso>
+
+/**
+ * Contratos de F-018, agregados acá — no se importa el esquema de `features/monitor/`, que está
+ * prohibido para este agente y además es un contrato ajeno a esta feature.
+ */
+
+/**
+ * Una especie de `/api/v1/universo/emisiones/especies`, con el mismo shape que ya usa el monitor
+ * (F-038) — es el mismo endpoint, no un contrato nuevo. Redefinido acá en vez de importado.
+ */
+export const esquemaEspecie = z.object({
+  ticker: z.string(),
+  emision: z.string(),
+  sufijo_liquidacion: z.string().nullable(),
+  clase_activo: z.string(),
+  segmento: z.string(),
+  naturaleza: z.string(),
+  naturaleza_nombre: z.string(),
+  rendimiento: z.number().nullable(),
+  duracion: z.number().nullable(),
+  vencimiento: z.string().nullable(),
+  ley: z.string().nullable(),
+  moneda_cupon: z.string().nullable(),
+  emisor: z.string().nullable(),
+  precio: z.number().nullable(),
+  moneda_cotizacion: z.string().nullable(),
+  volumen: z.number().nullable(),
+  volumen_usd: z.number().nullable(),
+  paridad: z.number().nullable(),
+  dato_sano: z.boolean(),
+  hermanas: z.array(z.string()),
+})
+
+export type Especie = z.infer<typeof esquemaEspecie>
+
+/**
+ * El tramo que este panel necesita de `GET /api/v1/universo/tipo-de-cambio` — sólo `valor` y
+ * `disponible`. El backend manda más campos (dispersión, contraste, muestras de descarte); no
+ * hace falta tipar los que esta pantalla no usa, mismo criterio que `estado-dato/lib/schema.ts`.
+ */
+export const esquemaTipoDeCambio = z.object({
+  tipo_de_cambio: z.object({
+    valor: z.number().nullable(),
+    disponible: z.boolean(),
+  }),
+})
+
+export type RespuestaTipoDeCambio = z.infer<typeof esquemaTipoDeCambio>
