@@ -54,7 +54,18 @@ class Settings(BaseSettings):
     # los tests y el desarrollo local no necesitan que corra solo.
     ingesta_habilitada: bool = False
     ingesta_zona_horaria: str = "America/Argentina/Buenos_Aires"
-    ingesta_hora_matinal: str = "09:00"
+    # 11:30 y no las 09:00 que traía F-008: **antes de que abra la rueda BYMA no publica precios**.
+    # Medido el 07/08/2026 a las 08:00 y 08:15, la fuente devuelve HTTP 200 con `empty: true`, 826
+    # acciones sin una sola con precio, y cero bonos y cero CEDEARs. Como la fila de `precios` se
+    # inserta igual y la vista `resumen` toma la más reciente, una corrida a esa hora le pisaba el
+    # precio de ayer a todo el universo con un vacío.
+    #
+    # El número sale de dos datos y no de una intuición: la rueda abre 11:00 y la API abierta
+    # declara 20 minutos de demora, así que a las 11:30 se ve el mercado de las 11:10, ya operando.
+    # A las 11:15 se vería el de las 10:55, que sigue siendo mercado cerrado.
+    #
+    # Ninguna spec fija esta hora: el plan sólo habla de "la corrida matinal programada".
+    ingesta_hora_matinal: str = "11:30"
     ingesta_refresh_minutos: int = 15
     ingesta_rueda_desde: str = "11:00"
     ingesta_rueda_hasta: str = "17:00"

@@ -1,6 +1,13 @@
-"""Cálculo de horarios del scheduler: puro, sin reloj real. Todos los horarios de referencia
-salen de `settings_de_prueba`, con la misma zona y ventana que documenta F-008 en `product-
-definition.md`: matinal a las 09:00, rueda de 11:00 a 17:00, refresh cada 15 minutos.
+"""Cálculo de horarios del scheduler: puro, sin reloj real.
+
+Todos los horarios salen de `settings_de_prueba` y son **valores de prueba, no la configuración de
+producción**: acá se prueba la aritmética del scheduler, y por eso el fixture los fija en vez de
+leer los defaults. Se conserva el 09:00 histórico justamente para que estos tests no se muevan
+cuando cambie la hora real —hoy 11:30, ver el porqué en `app/core/config.py`—.
+
+La versión anterior de este docstring decía que la ventana la documentaba `product-definition.md`.
+No es así: ninguna spec del proyecto fija una hora, el plan sólo habla de "la corrida matinal
+programada". La hora fue una decisión de implementación, y conviene que se lea como tal.
 """
 
 from datetime import datetime
