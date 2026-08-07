@@ -63,7 +63,7 @@ from collections.abc import Collection, Iterable, Sequence
 from dataclasses import dataclass, field
 
 from app.ingesta.alertas import Alerta, Severidad
-from app.ingesta.consolidacion import raiz_emision
+from app.ingesta.raiz import raiz_emision
 from app.universo.segmentacion import EspecieUniverso
 
 # 5 % de diferencia entre las duraciones de un grupo. Por encima de eso no son la misma emisión.

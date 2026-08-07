@@ -22,7 +22,7 @@ from app.api.deps import get_db
 from app.calendario.cupones import indexar_cronograma
 from app.calendario.lectura import leer_cashflow
 from app.condiciones.persistencia import COLUMNAS, TABLA, fila_para_api
-from app.ingesta.consolidacion import raiz_emision
+from app.ingesta.raiz import raiz_emision
 from app.instrumentos import ficha_de
 from app.universo.servicio import sanear_universo
 

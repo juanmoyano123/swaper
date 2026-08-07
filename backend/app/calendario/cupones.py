@@ -52,7 +52,7 @@ from datetime import date, datetime
 
 from app.calendario.alertas import sin_cronograma, sin_paridad
 from app.ingesta.alertas import Alerta
-from app.ingesta.consolidacion import raiz_emision
+from app.ingesta.raiz import raiz_emision
 from app.universo.segmentacion import EspecieUniverso, a_numero
 
 # Residual de un bono que todavía no pagó ningún cupón, cada 100 nominales. No es un default

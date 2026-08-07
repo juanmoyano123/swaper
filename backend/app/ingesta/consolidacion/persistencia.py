@@ -93,6 +93,24 @@ async def leer_metricas_previas(conn: Any) -> dict[str, dict[str, object]]:
     return {fila["ticker"]: dict(fila) for fila in filas}
 
 
+# El cronograma que ya está persistido, para las corridas que no traen uno nuevo. Son las mismas
+# nueve columnas del contrato de Docta, porque de acá salen tanto la clasificación por submarket
+# como las métricas propias de F-051: leer sólo `ticker` y `type` alcanzaba para clasificar, pero
+# dejaría sin flujo al descuento y las métricas se vaciarían en cada corrida sin Docta.
+SQL_CRONOGRAMA_PERSISTIDO = """
+SELECT ticker, type, issue_date, payment_date, capital, interest_rate,
+       interest_amount, residual_value, cash_flow
+  FROM public.cashflow
+ ORDER BY ticker, payment_date
+"""
+
+
+async def leer_cronograma(conn: Any) -> list[dict[str, object]]:
+    """El cashflow persistido, en la forma que espera `indexar_cronograma`."""
+    filas = await conn.fetch(SQL_CRONOGRAMA_PERSISTIDO)
+    return [dict(fila) for fila in filas]
+
+
 COLUMNAS_PUNTAS: tuple[str, ...] = (
     "ticker",
     "capturado_en",

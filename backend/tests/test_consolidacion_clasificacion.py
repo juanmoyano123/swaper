@@ -13,7 +13,7 @@ from app.ingesta.consolidacion.clasificacion import (
     hay_discrepancia,
     subtipo_de,
 )
-from app.ingesta.consolidacion.raiz import raiz_emision
+from app.ingesta.raiz import raiz_emision
 
 # --- Raíz de emisión ---------------------------------------------------------------------------
 

@@ -50,7 +50,7 @@ from dataclasses import dataclass, field
 
 from app.condiciones.semilla import CAMPOS, Condiciones, Valor
 from app.ingesta.alertas import Alerta, condiciones_en_conflicto
-from app.ingesta.consolidacion import raiz_emision
+from app.ingesta.raiz import raiz_emision
 
 PREFIJO_HERENCIA = "herencia de"
 

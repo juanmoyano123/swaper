@@ -8,7 +8,7 @@ porque es donde vive toda la lógica de precedencia y es lo que hay que poder pr
 
 from app.ingesta.consolidacion.armado import Consolidacion, armar_consolidacion
 from app.ingesta.consolidacion.corrida import ResultadoConsolidacion, consolidar
-from app.ingesta.consolidacion.raiz import raiz_emision
+from app.ingesta.raiz import raiz_emision
 
 __all__ = [
     "Consolidacion",

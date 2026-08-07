@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from math import isnan
 
-from app.ingesta.consolidacion import raiz_emision
+from app.ingesta.raiz import raiz_emision
 
 # Clases del universo que no son renta fija: sin TIR, sin duración y sin cashflow.
 CLASES_RENTA_VARIABLE = ("accion", "cedear")

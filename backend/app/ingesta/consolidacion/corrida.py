@@ -24,7 +24,12 @@ from app.core.config import Settings
 from app.ingesta.alertas import CODIGO_FUENTE_CAIDA, Alerta, Severidad, fuente_caida
 from app.ingesta.byma import ingerir_rueda
 from app.ingesta.consolidacion.armado import Consolidacion, armar_consolidacion
-from app.ingesta.consolidacion.persistencia import Escritura, leer_metricas_previas, persistir
+from app.ingesta.consolidacion.persistencia import (
+    Escritura,
+    leer_cronograma,
+    leer_metricas_previas,
+    persistir,
+)
 from app.ingesta.docta import ConfiguracionFaltante, ingerir_cashflow
 from app.ingesta.iamc import InformeInvalido, parsear_informe
 from app.ingesta.iamc.almacen import ultimo_informe
@@ -162,16 +167,25 @@ async def consolidar(
         snapshots["docta"] = cashflow.snapshot
         filas_cashflow = cashflow.filas
 
+    # Sin cronograma nuevo se usa el persistido: es contractual y no envejece, así que reusarlo no
+    # es presentar un dato viejo como nuevo. Sin esto, una corrida sin Docta perdería la
+    # clasificación por submarket y todas las métricas calculadas de F-051.
+    cronograma_persistido = None if filas_cashflow is not None else await leer_cronograma(conn)
+
+    # El sello de la corrida se toma antes de armar porque el armado lo necesita: es la fecha
+    # contra la que se devengan los corridos y se miden los plazos al descuento.
+    capturado_en = datetime.now(UTC)
     consolidacion = armar_consolidacion(
         especies_por_endpoint=rueda.especies_por_endpoint if rueda else {},
         filas_iamc=informe.filas,
         filas_cashflow=filas_cashflow,
+        cronograma_persistido=cronograma_persistido,
         archivo_iamc=informe.archivo,
         fecha_informe=informe.fecha,
         metricas_previas=metricas_previas,
+        hoy=capturado_en.date(),
     )
 
-    capturado_en = datetime.now(UTC)
     escritura = await persistir(conn, consolidacion, capturado_en)
 
     logger.info(

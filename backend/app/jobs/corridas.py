@@ -5,10 +5,13 @@ dejaron listo y dejando su registro auditable en `corridas_ingesta`.
 correcto, con la asimetría entre fuentes ya resuelta. Acá sólo se cronometra y se registra.
 
 **El refresh intra-rueda** arma su propio `Consolidacion` a partir de `armar_consolidacion()`,
-pero sin `filas_iamc` (no se vuelve a leer el informe del día) y con el `type` del cronograma leído
-de `cashflow` en vez de pedido a Docta de nuevo —es la única forma de que `public-bonds`
-(soberanos y subsoberanos, que sólo se clasifican por ese campo) no queden afuera de cada
-refresco—. Sólo se persisten precios y puntas: `filas_instrumentos` se vacía antes de llamar a
+pero sin `filas_iamc` (no se vuelve a leer el informe del día) y con el cronograma leído de
+`cashflow` en vez de pedido a Docta de nuevo —es la única forma de que `public-bonds` (soberanos y
+subsoberanos, que sólo se clasifican por el `type` del cronograma) no queden afuera de cada
+refresco—. Desde F-051 se lee el cronograma **entero** y no sólo su `type`, porque de él salen
+además las métricas propias: cada refresco vuelve a calcular TIR, duración y paridad contra el
+precio que acaba de traer, que es lo que hace que el monitor muestre rendimientos vivos y no los de
+la matinal. Sólo se persisten precios y puntas: `filas_instrumentos` se vacía antes de llamar a
 `persistir()` y `filas_cashflow` queda en `None`, que es el contrato ya existente de F-007 para
 "no tocar esta tabla".
 
@@ -29,14 +32,14 @@ from app.core.config import Settings
 from app.ingesta.alertas import Alerta, Severidad
 from app.ingesta.byma import ingerir_rueda
 from app.ingesta.consolidacion import armar_consolidacion, consolidar
-from app.ingesta.consolidacion.persistencia import leer_metricas_previas, persistir
+from app.ingesta.consolidacion.persistencia import (
+    leer_cronograma,
+    leer_metricas_previas,
+    persistir,
+)
 from app.ingesta.snapshot import Snapshot
 from app.jobs.registro import EstadoCorrida, TipoCorrida, registrar_corrida
-from app.jobs.universo import (
-    filtrar_precios_al_universo,
-    leer_tickers_existentes,
-    leer_tipos_cronograma,
-)
+from app.jobs.universo import filtrar_precios_al_universo, leer_tickers_existentes
 
 logger = structlog.get_logger()
 
@@ -120,12 +123,17 @@ async def refresh_intra_rueda(
     inicio = datetime.now(UTC)
     rueda = await ingerir_rueda(settings=settings, dormir=dormir)
 
-    tipos_cronograma = await leer_tipos_cronograma(conn)
+    # El cronograma entero, no sólo `ticker` y `type`: de él salen la clasificación por submarket
+    # **y** las métricas propias de F-051. Con las dos columnas que este refresh leía antes, cada
+    # pasada intradiaria dejaría la fila de precios sin TIR y la vista —que toma una sola fila por
+    # ticker— publicaría el universo sin rendimiento hasta la matinal siguiente.
+    cronograma = await leer_cronograma(conn)
     metricas_previas = await leer_metricas_previas(conn)
     consolidacion = armar_consolidacion(
         especies_por_endpoint=rueda.especies_por_endpoint,
-        filas_cashflow=tipos_cronograma,
+        cronograma_persistido=cronograma,
         metricas_previas=metricas_previas,
+        hoy=inicio.date(),
     )
 
     tickers_existentes = await leer_tickers_existentes(conn)

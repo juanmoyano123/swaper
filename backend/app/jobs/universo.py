@@ -19,17 +19,11 @@ Dos cosas puntuales:
 from typing import Any
 
 SQL_TICKERS_EXISTENTES = "SELECT ticker FROM public.instrumentos"
-SQL_TIPOS_CRONOGRAMA = "SELECT DISTINCT ticker, type FROM public.cashflow"
 
 
 async def leer_tickers_existentes(conn: Any) -> set[str]:
     filas = await conn.fetch(SQL_TICKERS_EXISTENTES)
     return {fila["ticker"] for fila in filas}
-
-
-async def leer_tipos_cronograma(conn: Any) -> list[dict[str, object]]:
-    filas = await conn.fetch(SQL_TIPOS_CRONOGRAMA)
-    return [dict(fila) for fila in filas]
 
 
 def filtrar_precios_al_universo(

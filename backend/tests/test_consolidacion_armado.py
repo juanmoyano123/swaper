@@ -22,9 +22,15 @@ from app.ingesta.consolidacion.clasificacion import (
     CODIGO_CLASE_DISCREPANTE,
     CODIGO_CLASE_SIN_MAPEO,
 )
+from app.ingesta.consolidacion.metricas import (
+    CODIGO_METRICAS_FUERA_DE_NATURALEZA,
+)
 from app.ingesta.iamc.parser import FilaInforme
 
 FECHA_INFORME = date(2026, 8, 5)
+
+# El día de la corrida. Fijo, porque de él dependen los corridos y los plazos al descuento.
+HOY = date(2026, 8, 7)
 
 
 # --- Fábricas de filas -------------------------------------------------------------------------
@@ -70,17 +76,19 @@ def informe(ticker: str, **overrides) -> FilaInforme:
     return base  # type: ignore[return-value]
 
 
-def cashflow(ticker: str, tipo: str, payment_date=date(2027, 1, 1)) -> dict[str, object]:
+def cashflow(
+    ticker: str, tipo: str, payment_date=date(2027, 1, 1), *, capital: float = 0.0
+) -> dict[str, object]:
     return {
         "ticker": ticker,
         "type": tipo,
         "payment_date": payment_date,
         "issue_date": date(2020, 1, 1),
-        "capital": 0.0,
+        "capital": capital,
         "interest_rate": 5.0,
         "interest_amount": 2.5,
-        "residual_value": 100.0,
-        "cash_flow": 2.5,
+        "residual_value": 100.0 - capital,
+        "cash_flow": 2.5 + capital,
         "days_convention": "30/360",
     }
 
@@ -94,6 +102,7 @@ def por_ticker(filas):
 
 def test_las_tres_especies_heredan_los_atributos_de_la_emision() -> None:
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={
             "public-bonds": [
                 especie("AL30", moneda="ARS", ultimo=86320.0),
@@ -118,6 +127,7 @@ def test_las_tres_especies_heredan_los_atributos_de_la_emision() -> None:
 
 def test_cada_especie_conserva_su_precio_su_punta_y_su_moneda() -> None:
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={
             "public-bonds": [
                 especie("AL30", moneda="ARS", ultimo=86320.0),
@@ -143,6 +153,7 @@ def test_cada_especie_conserva_su_precio_su_punta_y_su_moneda() -> None:
 def test_un_cedear_no_hereda_de_un_bono_que_comparte_raiz() -> None:
     """AALD es la especie MEP de un CEDEAR y comparte raíz con un bono. No tienen nada que ver."""
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={
             "public-bonds": [especie("AAL")],
             "cedears": [especie("AALD")],
@@ -163,6 +174,7 @@ def test_un_cedear_no_hereda_de_un_bono_que_comparte_raiz() -> None:
 
 def test_un_instrumento_ausente_del_informe_queda_con_precio_y_sin_atributos() -> None:
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={"negociable-obligations": [especie("YMCXO", ultimo=168500.0)]},
         filas_iamc=[informe("PLC7O")],
         filas_cashflow=[cashflow("YMCX", "ON"), cashflow("PLC7", "ON")],
@@ -184,6 +196,7 @@ def test_un_instrumento_ausente_del_informe_queda_con_precio_y_sin_atributos() -
 
 def test_sin_informe_el_universo_entra_completo_pero_sin_atributos_de_emision() -> None:
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={"negociable-obligations": [especie("YMCXO"), especie("PLC7O")]},
         filas_iamc=None,
         filas_cashflow=[cashflow("YMCX", "ON"), cashflow("PLC7", "ON_TAMAR")],
@@ -200,6 +213,7 @@ def test_sin_informe_el_universo_entra_completo_pero_sin_atributos_de_emision() 
 
 def test_la_tir_se_persiste_desde_el_informe_y_la_fuente_lo_registra() -> None:
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={"negociable-obligations": [especie("PLC7O")]},
         filas_iamc=[informe("PLC7O", tir=7.92, paridad_pct=98.5, duracion_modificada=6.7)],
         filas_cashflow=[cashflow("PLC7", "ON")],
@@ -216,28 +230,62 @@ def test_la_tir_se_persiste_desde_el_informe_y_la_fuente_lo_registra() -> None:
 
 
 def test_la_tir_de_una_especie_no_se_copia_a_sus_hermanas() -> None:
-    """AL30 y AL30D tienen TIR distintas: el precio está en otra moneda. Copiarla sería inventar."""
+    """AL30 y AL30D tienen TIR distintas: el precio está en otra moneda. Copiarla sería inventar.
+
+    Con F-051 la invariante se prueba más fuerte que antes. AL30D cotiza en dólares como paga su
+    flujo, así que **calcula** su propia TIR; AL30 cotiza en pesos y conserva la de IAMC. Que los
+    dos números existan y sean distintos es la prueba de que ninguno viajó de una especie a la otra.
+    """
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={
-            "public-bonds": [especie("AL30", moneda="ARS"), especie("AL30D", moneda="USD")]
+            "public-bonds": [
+                especie("AL30", moneda="ARS", ultimo=86_320.0),
+                especie("AL30D", moneda="USD", ultimo=56.7),
+            ]
         },
         filas_iamc=[informe("AL30", tir=7.92)],
-        filas_cashflow=[cashflow("AL30", "HARD_DOLLAR")],
+        filas_cashflow=[
+            cashflow("AL30", "HARD_DOLLAR", payment_date=date(2027, 1, 9)),
+            cashflow("AL30", "HARD_DOLLAR", payment_date=date(2028, 1, 9)),
+            cashflow("AL30", "HARD_DOLLAR", payment_date=date(2029, 1, 9), capital=100.0),
+        ],
         fecha_informe=FECHA_INFORME,
     )
 
     precios = por_ticker(resultado.filas_precios)
+    # La especie en pesos no se calcula —su flujo está en dólares— y conserva lo publicado.
     assert precios["AL30"]["tir"] == pytest.approx(0.0792)
-    assert precios["AL30D"]["tir"] is None
     assert precios["AL30"]["fuente"] == "byma+iamc"
-    assert precios["AL30D"]["fuente"] == "byma"
+    # La especie en dólares calcula la suya, contra su propio precio.
+    assert precios["AL30D"]["tir"] is not None
+    assert precios["AL30D"]["tir"] != pytest.approx(0.0792), "no es la de IAMC con otro nombre"
+    # Sin `iamc` en la fuente: IAMC nombra a AL30, no a AL30D, y esta fila no le debe nada.
+    assert precios["AL30D"]["fuente"] == "byma+calculo"
     # Pero la ley sí se hereda: es de la emisión, no de la especie.
     assert por_ticker(resultado.filas_instrumentos)["AL30D"]["law"] == "Ley Argentina"
+
+
+def test_una_especie_que_cotiza_en_otra_moneda_que_su_flujo_no_se_calcula() -> None:
+    """La regla que gobierna el cálculo: sin precio y flujo en la misma moneda no hay rendimiento,
+    y el tipo de cambio que haría falta saldría de la propia emisión — o sea, de la hermana."""
+    resultado = armar_consolidacion(
+        hoy=HOY,
+        especies_por_endpoint={"public-bonds": [especie("AL30", moneda="ARS", ultimo=86_320.0)]},
+        filas_cashflow=[cashflow("AL30", "HARD_DOLLAR", payment_date=date(2029, 1, 9))],
+    )
+
+    (precio,) = resultado.filas_precios
+    assert precio["tir"] is None and precio["paridad"] is None
+    assert precio["fuente"] == "byma"
+    alerta = next(a for a in resultado.alertas if a.codigo == CODIGO_METRICAS_FUERA_DE_NATURALEZA)
+    assert "AL30" in alerta.detalle["por_motivo"]["moneda_cruzada"]["tickers"]
 
 
 def test_la_tna_queda_vacia_y_se_declara() -> None:
     """Ninguna fuente de F-007 la publica. Que quede nula en silencio sería el peor resultado."""
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={"negociable-obligations": [especie("PLC7O")]},
         filas_iamc=[informe("PLC7O")],
         filas_cashflow=[cashflow("PLC7", "ON")],
@@ -254,6 +302,7 @@ def test_la_tna_queda_vacia_y_se_declara() -> None:
 def test_un_bono_publico_sin_cronograma_no_entra_pero_su_punta_si() -> None:
     """Es el caso de AL30X. `puntas` no tiene FK justamente para no perder este dato."""
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={"public-bonds": [especie("AL30"), especie("AL30X", ultimo=12345.0)]},
         filas_cashflow=[cashflow("AL30", "HARD_DOLLAR")],
     )
@@ -269,6 +318,7 @@ def test_un_bono_publico_sin_cronograma_no_entra_pero_su_punta_si() -> None:
 
 def test_una_on_cuyo_cronograma_declara_otra_clase_se_declara_y_conserva_la_del_endpoint() -> None:
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={"negociable-obligations": [especie("RAROO")]},
         filas_cashflow=[cashflow("RAROO", "SUB_SOBERANO")],
     )
@@ -281,6 +331,7 @@ def test_una_on_cuyo_cronograma_declara_otra_clase_se_declara_y_conserva_la_del_
 def test_los_soberanos_reciben_emisor_y_sector_por_definicion() -> None:
     """No son datos que falten: la clase ya los determina, igual que en el motor viejo."""
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={"public-bonds": [especie("AL30"), especie("BA37D")]},
         filas_cashflow=[cashflow("AL30", "HARD_DOLLAR"), cashflow("BA37", "SUB_SOBERANO")],
     )
@@ -294,6 +345,7 @@ def test_los_soberanos_reciben_emisor_y_sector_por_definicion() -> None:
 
 def test_el_subtipo_se_deriva_cuando_hay_ley() -> None:
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={"public-bonds": [especie("GD30"), especie("AL30")]},
         filas_iamc=[
             informe("GD30", ley="Ley N.Y."),
@@ -312,6 +364,7 @@ def test_el_subtipo_se_deriva_cuando_hay_ley() -> None:
 
 def test_una_especie_en_dos_plazos_entra_una_sola_vez_y_queda_marcada() -> None:
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={
             "public-bonds": [
                 especie("AL30", plazo="1", ultimo=86320.0, monto=165561479768.4),
@@ -331,6 +384,7 @@ def test_una_especie_en_dos_plazos_entra_una_sola_vez_y_queda_marcada() -> None:
 
 def test_a_igualdad_de_plazo_gana_la_que_mas_opero() -> None:
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={
             "public-bonds": [
                 especie("AL30", plazo="2", ultimo=1.0, monto=10.0),
@@ -345,6 +399,7 @@ def test_a_igualdad_de_plazo_gana_la_que_mas_opero() -> None:
 
 def test_una_especie_que_solo_cotiza_en_un_plazo_no_se_marca_duplicada() -> None:
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={"public-bonds": [especie("AL30", plazo="1")]},
         filas_cashflow=[cashflow("AL30", "HARD_DOLLAR")],
     )
@@ -354,6 +409,7 @@ def test_una_especie_que_solo_cotiza_en_un_plazo_no_se_marca_duplicada() -> None
 
 def test_una_especie_en_dos_endpoints_se_declara() -> None:
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={
             "general-equity": [especie("GGAL")],
             "leading-equity": [especie("GGAL")],
@@ -370,6 +426,7 @@ def test_una_especie_en_dos_endpoints_se_declara() -> None:
 def test_dos_especies_de_la_misma_emision_con_leyes_distintas_no_propagan_ninguna() -> None:
     """No se elige una por cuenta propia. Vaciar lo ya guardado es tarea de F-009, no de acá."""
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={"negociable-obligations": [especie("PLC7O"), especie("PLC7D")]},
         filas_iamc=[
             informe("PLC7O", ley="Ley Argentina", moneda_pago="USD"),
@@ -392,6 +449,7 @@ def test_dos_especies_de_la_misma_emision_con_leyes_distintas_no_propagan_ningun
 
 def test_el_cronograma_viaja_con_las_nueve_columnas_del_contrato() -> None:
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={"negociable-obligations": [especie("PLC7O")]},
         filas_cashflow=[cashflow("PLC7O", "ON")],
     )
@@ -414,6 +472,7 @@ def test_el_cronograma_viaja_con_las_nueve_columnas_del_contrato() -> None:
 def test_un_cronograma_no_usable_se_propaga_como_none_y_no_como_lista_vacia() -> None:
     """El contrato de F-006: `None` significa conservar lo persistido, no borrarlo."""
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={"negociable-obligations": [especie("PLC7O")]},
         filas_cashflow=None,
     )
@@ -429,6 +488,7 @@ def test_un_cronograma_no_usable_se_propaga_como_none_y_no_como_lista_vacia() ->
 
 def test_un_precio_en_cero_es_una_especie_que_no_opero_y_no_un_precio() -> None:
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={
             "negociable-obligations": [
                 especie("PLC7O", ultimo=0.0, monto=0.0, bidPrice=0.0, offerPrice=0.0)
@@ -445,6 +505,7 @@ def test_un_precio_en_cero_es_una_especie_que_no_opero_y_no_un_precio() -> None:
 
 def test_un_vencimiento_ilegible_queda_vacio_y_se_alerta() -> None:
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={
             "negociable-obligations": [especie("PLC7O", maturityDate="30/07/2030")]
         },
@@ -457,6 +518,7 @@ def test_un_vencimiento_ilegible_queda_vacio_y_se_alerta() -> None:
 
 def test_una_especie_sin_ticker_se_descarta_y_se_cuenta() -> None:
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={"cedears": [especie("AAPL"), normalizar_fila_rueda({})]},
     )
 
@@ -466,6 +528,7 @@ def test_una_especie_sin_ticker_se_descarta_y_se_cuenta() -> None:
 
 def test_el_vencimiento_de_byma_se_parsea_a_fecha() -> None:
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={"public-bonds": [especie("AL30", maturityDate="2030-07-09")]},
         filas_cashflow=[cashflow("AL30", "HARD_DOLLAR")],
     )
@@ -479,6 +542,7 @@ def test_el_vencimiento_de_byma_se_parsea_a_fecha() -> None:
 def test_las_metricas_viajan_rotuladas_con_la_fecha_de_su_informe() -> None:
     """`capturado_en` fecha el precio de BYMA; `fecha_metricas`, el informe del que salió la TIR."""
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={"negociable-obligations": [especie("PLC7O")]},
         filas_iamc=[informe("PLC7O", tir=7.92)],
         filas_cashflow=[cashflow("PLC7", "ON")],
@@ -502,6 +566,7 @@ def test_sin_informe_se_conservan_las_metricas_conocidas_con_su_fecha() -> None:
         }
     }
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={"negociable-obligations": [especie("PLC7O", ultimo=157000.0)]},
         filas_iamc=None,
         filas_cashflow=[cashflow("PLC7", "ON")],
@@ -518,6 +583,7 @@ def test_sin_informe_se_conservan_las_metricas_conocidas_con_su_fecha() -> None:
 def test_el_informe_de_hoy_le_gana_a_lo_conservado() -> None:
     previas = {"PLC7O": {"tir": 0.05, "fecha_metricas": date(2026, 8, 4)}}
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={"negociable-obligations": [especie("PLC7O")]},
         filas_iamc=[informe("PLC7O", tir=7.92)],
         filas_cashflow=[cashflow("PLC7", "ON")],
@@ -534,6 +600,7 @@ def test_nunca_se_retrocede_a_una_metrica_mas_vieja_que_la_publicada() -> None:
     """Si alguien sube un informe atrasado, el universo no puede volver para atrás en silencio."""
     previas = {"PLC7O": {"tir": 0.0792, "fecha_metricas": date(2026, 8, 5)}}
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={"negociable-obligations": [especie("PLC7O")]},
         filas_iamc=[informe("PLC7O", tir=5.0)],
         filas_cashflow=[cashflow("PLC7", "ON")],
@@ -548,6 +615,7 @@ def test_nunca_se_retrocede_a_una_metrica_mas_vieja_que_la_publicada() -> None:
 
 def test_una_especie_sin_metricas_ni_previas_queda_vacia() -> None:
     resultado = armar_consolidacion(
+        hoy=HOY,
         especies_por_endpoint={"negociable-obligations": [especie("YMCXO")]},
         filas_cashflow=[cashflow("YMCX", "ON")],
     )
