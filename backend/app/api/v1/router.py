@@ -17,6 +17,7 @@ from app.api.v1 import (
     condiciones,
     consolidar,
     docta,
+    estado,
     health,
     iamc,
     jobs,
@@ -36,3 +37,4 @@ router.include_router(condiciones.router)
 router.include_router(universo.router)
 router.include_router(calendario.router)
 router.include_router(posiciones.router)
+router.include_router(estado.router)

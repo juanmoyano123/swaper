@@ -1,6 +1,15 @@
-/** Estructura que envuelve a todas las pantallas: barra superior fija y el contenido debajo. */
+/**
+ * Estructura que envuelve a todas las pantallas: barra superior fija, barra de estado del dato y
+ * el contenido debajo.
+ *
+ * La de F-013 vive acá y no en cada pantalla por lo que dice su GWT-1: tiene que estar visible en
+ * cualquier pantalla de la aplicación, sin navegar a ninguna parte. Montarla en el layout además
+ * hace que no se desmonte al cambiar de sección, así que las seis comparten una sola consulta.
+ */
 
 import { Outlet } from 'react-router-dom'
+
+import { BarraEstadoDato } from '@/features/estado-dato/components/BarraEstadoDato'
 
 import { BarraSuperior } from './BarraSuperior'
 
@@ -8,11 +17,7 @@ export function AppLayout() {
   return (
     <>
       <BarraSuperior />
-      {/*
-        Acá monta F-013 la barra de estado del dato —hora del último refresh, demora declarada de
-        la fuente, instrumentos descartados por sanidad y cobertura de campos—. Es transversal a
-        todas las pantallas y por eso vive en el layout y no en cada una.
-      */}
+      <BarraEstadoDato />
       <main>
         <Outlet />
       </main>

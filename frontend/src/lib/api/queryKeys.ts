@@ -14,6 +14,12 @@
 export const claves = {
   salud: ['salud'] as const,
 
+  // F-013. Fija y fuera de `mercado` a propósito: la barra de estado del dato está en las seis
+  // pantallas y una sola consulta las alimenta a todas. Si colgara de `mercado`, el refresh de
+  // precios la invalidaría junto con todo lo demás — y lo que la barra tiene que declarar es
+  // justamente **cuándo** entró ese refresh, así que se pide con su propio reloj.
+  estadoDelDato: ['estado-del-dato'] as const,
+
   mercado: {
     todas: ['mercado'] as const,
     universo: (segmento: string) => ['mercado', 'universo', segmento] as const,

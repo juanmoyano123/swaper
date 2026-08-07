@@ -8,7 +8,16 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { NO_APLICA, SIN_DATO, fmtCompacto, fmtFecha, fmtMonto, fmtNumero, fmtPct } from '../fmt'
+import {
+  NO_APLICA,
+  SIN_DATO,
+  fmtCompacto,
+  fmtFecha,
+  fmtFechaHora,
+  fmtMonto,
+  fmtNumero,
+  fmtPct,
+} from '../fmt'
 
 describe('formato es-AR', () => {
   it('usa coma decimal y punto de miles en los montos', () => {
@@ -36,6 +45,13 @@ describe('formato es-AR', () => {
     // Un vencimiento o un pago de cupón mostrado un día antes del real es un error de negocio.
     expect(fmtFecha('2026-01-01')).toBe('01/01/2026')
     expect(fmtFecha('2026-12-31')).toBe('31/12/2026')
+  })
+
+  it('escribe las horas en 24 y sin a. m. / p. m.', () => {
+    // La barra de estado del dato declara la hora del snapshot, y se la compara contra horarios de
+    // mercado que siempre se dicen en 24 horas: la rueda abre 11:00, la corrida matinal es 11:30.
+    expect(fmtFechaHora(new Date(2026, 7, 6, 16, 24))).toBe('06/08/2026, 16:24')
+    expect(fmtFechaHora(new Date(2026, 7, 6, 9, 5))).toBe('06/08/2026, 09:05')
   })
 })
 

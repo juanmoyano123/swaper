@@ -93,12 +93,17 @@ const FECHA = new Intl.DateTimeFormat('es-AR', {
   year: 'numeric',
 })
 
+// `hour12: false` explícito: sin él, el ICU de Node formatea es-AR como "11:02 a. m.", y este
+// dominio habla en 24 horas de punta a punta —la rueda abre 11:00, la corrida matinal es a las
+// 11:30, la barra de estado del dato declara la hora del snapshot—. Una hora con sufijo obliga a
+// traducirla mentalmente cada vez que se la compara con un horario de mercado.
 const FECHA_HORA = new Intl.DateTimeFormat('es-AR', {
   day: '2-digit',
   month: '2-digit',
   year: 'numeric',
   hour: '2-digit',
   minute: '2-digit',
+  hour12: false,
 })
 
 /** Fecha dd/mm/aaaa. Acepta el ISO que devuelve la API. */
