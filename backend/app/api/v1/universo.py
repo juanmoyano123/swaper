@@ -18,6 +18,7 @@ poder rotar entre ellas. Un flag las haría parecer la misma pregunta con un aju
 ese flag sería una decisión silenciosa sobre cuál de los dos se rompe.
 """
 
+from collections import Counter
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
@@ -25,6 +26,7 @@ from fastapi import APIRouter, Depends, Query
 from app.api.deps import get_db
 from app.core.pagination import CursorParams, Page, build_page
 from app.universo import EspecieUniverso, MotivoDescarte, UniversoDeduplicado
+from app.universo.segmentacion import DESC_SEGMENTO, NATURALEZA_TASA, NOMBRE_NATURALEZA
 from app.universo.servicio import sanear_universo
 
 router = APIRouter(prefix="/universo", tags=["universo"])
@@ -121,6 +123,44 @@ async def emisiones(conn: Annotated[object, Depends(get_db)]) -> dict[str, objec
 
 
 @router.get(
+    "/segmentos",
+    summary="De dónde saca el monitor sus pestañas: los segmentos con especies hoy, y su conteo",
+    responses={503: {"description": "La base de datos no está disponible"}},
+)
+async def segmentos(conn: Annotated[object, Depends(get_db)]) -> dict[str, object]:
+    """F-038: el monitor muestra un solo segmento por vez, y acá saca la lista de pestañas.
+
+    Reusa el mismo camino que `/emisiones/especies` — `sanear_universo` + `.emisiones().vivo()` —
+    para que el conteo de cada pestaña coincida exactamente con lo que esa vista devuelve al
+    filtrarla por `?segmento=`. Sólo viajan los segmentos con al menos una especie hoy: una pestaña
+    vacía no es una pestaña, es ruido.
+
+    `renta_variable` y `sin_segmento` viajan aparte y no como una pestaña más: son lo que no entra
+    en ninguna, y el monitor los declara para que no desaparezcan en silencio.
+    """
+    saneado = await sanear_universo(conn)
+    listado = saneado.emisiones().vivo()
+
+    conteos = Counter(e.segmento for e in listado)
+    presentes = [
+        {
+            "clave": clave,
+            "nombre": DESC_SEGMENTO[clave],
+            "naturaleza": NATURALEZA_TASA[clave],
+            "naturaleza_nombre": NOMBRE_NATURALEZA[NATURALEZA_TASA[clave]],
+            "especies": conteos[clave],
+        }
+        for clave in DESC_SEGMENTO
+        if conteos[clave] > 0
+    ]
+    return {
+        "segmentos": presentes,
+        "renta_variable": saneado.renta_variable,
+        "sin_segmento": len(saneado.sin_segmento),
+    }
+
+
+@router.get(
     "/emisiones/colapsada",
     summary="La vista del armador: una fila por emisión",
     responses={503: {"description": "La base de datos no está disponible"}},
@@ -169,11 +209,21 @@ def _fila_colapsada(dedup: UniversoDeduplicado, especie: EspecieUniverso) -> dic
 async def vista_viva(
     conn: Annotated[object, Depends(get_db)],
     params: Annotated[CursorParams, Depends()],
+    segmento: Annotated[
+        str | None,
+        Query(
+            description="Filtra por segmento comparable. F-038: un segmento inexistente hoy es "
+            "una consulta válida, y devuelve página vacía en vez de 404."
+        ),
+    ] = None,
 ) -> Page[dict[str, object]]:
     """Todas las especies individuales, cada una con su clave de emisión y su sanidad.
 
-    Es la vista del optimizador y no se filtra: los swaps de perfil rotan justamente entre especies
-    de la misma emisión —de MEP a Cable—, y una vista colapsada no los dejaría ni ver.
+    Es la vista del optimizador y no se filtra por defecto: los swaps de perfil rotan justamente
+    entre especies de la misma emisión —de MEP a Cable—, y una vista colapsada no las dejaría ver.
+    El filtro `segmento` es opcional y lo usa el monitor de F-038, que muestra un solo segmento a
+    la vez: rendimientos de distinta naturaleza no comparten columna, y filtrar del lado del
+    cliente obligaría a traer todo el universo para mirar uno solo.
 
     Cada especie viaja con su precio, su moneda de cotización declarada, su volumen crudo y su
     **volumen en dólares**, que es el único de los dos que se puede comparar entre hermanas: el
@@ -189,6 +239,8 @@ async def vista_viva(
     dedup = saneado.emisiones()
     descartados = saneado.sanidad.descartados
     listado = dedup.vivo()
+    if segmento is not None:
+        listado = [e for e in listado if e.segmento == segmento]
 
     desde = params.decoded_cursor()
     if desde is not None:

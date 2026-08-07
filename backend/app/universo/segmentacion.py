@@ -163,6 +163,10 @@ class EspecieUniverso:
     especies de distinta moneda. `None` cuando no se pudo: sin tipo de cambio del día, o sin saber
     en qué moneda estaba el número. Un faltante acá no se rellena con el volumen crudo."""
 
+    paridad: float | None = None
+    """`paridad` de la vista, para F-038: el monitor la muestra tal como la publica la fuente.
+    `None` cuando la vista trae `NULL` — no se calcula ni se estima acá."""
+
     @property
     def naturaleza(self) -> str:
         return NATURALEZA_TASA[self.segmento]
@@ -201,6 +205,7 @@ class EspecieUniverso:
             "moneda_cotizacion": self.moneda_cotizacion,
             "volumen": self.volumen,
             "volumen_usd": self.volumen_usd,
+            "paridad": self.paridad,
         }
 
 
@@ -256,6 +261,7 @@ def segmentar(filas: Iterable[Mapping[str, object]]) -> Segmentacion:
                 precio=a_numero(fila.get("lastPrice")),
                 volumen=a_numero(fila.get("effectiveVolume")),
                 moneda_cotizacion=_texto(fila.get("moneda_cotizacion")),
+                paridad=a_numero(fila.get("paridad")),
             )
         )
 

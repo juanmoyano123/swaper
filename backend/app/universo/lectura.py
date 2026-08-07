@@ -62,6 +62,8 @@ COLUMNAS: tuple[str, ...] = (
     # volumen es lo que ese tipo de cambio hace comparable.
     "lastPrice",
     "effectiveVolume",
+    # F-038: el monitor la muestra.
+    "paridad",
 )
 
 # Lo que la vista no tiene y hay que ir a buscar a la tabla. Ver el porqué en el docstring.

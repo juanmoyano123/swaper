@@ -113,12 +113,15 @@ class FakeConexionEstado:
         return self.snapshot
 
     async def fetch(self, query: str, *args: Any) -> list[Any]:
-        # El orden importa: las tres consultas nombran `resumen` o se le parecen, y la de paridades
-        # sólo se distingue por su columna.
+        # Las tres consultas nombran `resumen` o se le parecen, así que se rutea por lo distintivo
+        # de cada una. Discriminar paridades por `"paridad" in query` dejó de servir cuando F-038
+        # sumó la columna `paridad` a `COLUMNAS` del universo: las dos consultas la nombran. Lo que
+        # las separa es la forma — la de paridades pide exactamente esas dos columnas
+        # (`SQL_PARIDADES` en `app/calendario/lectura.py`), la del universo joinea `instrumentos`.
         if "cashflow" in query:
             self.lecturas.append("cashflow")
             return self.cashflow
-        if "paridad" in query:
+        if "SELECT ticker, paridad" in query:
             self.lecturas.append("paridades")
             return self.paridades
         self.lecturas.append("universo")

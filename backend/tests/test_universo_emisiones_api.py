@@ -193,3 +193,85 @@ async def test_sin_base_de_datos_las_dos_vistas_responden_503(crear_app) -> None
         assert (await http.get(EMISIONES)).status_code == 503
         assert (await http.get(COLAPSADA)).status_code == 503
         assert (await http.get(ESPECIES)).status_code == 503
+
+
+# --- F-038: paridad, filtro por segmento y `/segmentos` -------------------------------------------
+
+SEGMENTOS = "/api/v1/universo/segmentos"
+
+
+def fila_segmento(
+    ticker: str, tipo_tasa: str, *, tir: float | None = 0.13, paridad: float | None = None
+) -> dict[str, Any]:
+    """Una fila de un segmento a elección, con su paridad. `fila()` fija `hard-dollar`; acá se
+    necesita más de un segmento para probar el filtro y el endpoint de pestañas."""
+    return {**fila(ticker), "tipo_tasa": tipo_tasa, "tir": tir, "tna": None, "paridad": paridad}
+
+
+# Dos especies hard-dollar (una con paridad, otra sin) y una CER: alcanza para separar pestañas.
+# La paridad es adimensional y ronda 1.0 (`cupones.py`: "precio sucio = paridad x valor técnico"),
+# así que 0.875 es un bono que cotiza bajo la par y no un 87,5% escrito distinto.
+UNIVERSO_MULTISEGMENTO: list[dict[str, Any]] = [
+    fila_segmento("AL30", "hard-dollar", paridad=0.875),
+    fila_segmento("GD30", "hard-dollar", paridad=None),
+    fila_segmento("TX26", "cer", tir=0.05, paridad=0.95),
+]
+
+
+async def test_la_paridad_viaja_por_la_vista_viva_y_es_none_cuando_es_null(crear_app) -> None:
+    async with cliente(app_con(crear_app, UNIVERSO_MULTISEGMENTO)) as http:
+        por_ticker = {i["ticker"]: i for i in (await http.get(ESPECIES)).json()["items"]}
+
+    assert por_ticker["AL30"]["paridad"] == 0.875
+    assert por_ticker["GD30"]["paridad"] is None
+
+
+async def test_el_filtro_por_segmento_deja_afuera_las_demas(crear_app) -> None:
+    async with cliente(app_con(crear_app, UNIVERSO_MULTISEGMENTO)) as http:
+        items = (await http.get(ESPECIES, params={"segmento": "usd_hard"})).json()["items"]
+
+    assert {i["ticker"] for i in items} == {"AL30", "GD30"}
+    assert all(i["segmento"] == "usd_hard" for i in items)
+
+
+async def test_un_segmento_inexistente_es_una_pagina_vacia_no_un_404(crear_app) -> None:
+    async with cliente(app_con(crear_app, UNIVERSO_MULTISEGMENTO)) as http:
+        respuesta = await http.get(ESPECIES, params={"segmento": "no-existe"})
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["items"] == []
+    assert cuerpo["next_cursor"] is None
+
+
+async def test_segmentos_devuelve_forma_y_conteos_reales(crear_app) -> None:
+    async with cliente(app_con(crear_app, UNIVERSO_MULTISEGMENTO)) as http:
+        cuerpo = (await http.get(SEGMENTOS)).json()
+
+    por_clave = {s["clave"]: s for s in cuerpo["segmentos"]}
+    assert set(por_clave) == {"usd_hard", "cer"}
+    assert por_clave["usd_hard"] == {
+        "clave": "usd_hard",
+        "nombre": "Hard dollar (globales, bonares, ONs y bopreales en USD)",
+        "naturaleza": "tir_usd",
+        "naturaleza_nombre": "TIR en dólares (hard dollar)",
+        "especies": 2,
+    }
+    assert por_clave["cer"]["especies"] == 1
+    assert cuerpo["renta_variable"] == 0
+    assert cuerpo["sin_segmento"] == 0
+
+
+async def test_un_segmento_sin_especies_no_aparece_en_las_pestanas(crear_app) -> None:
+    """`tasa_fija`, `dollar_linked`, `badlar` y `tamar` no tienen ninguna especie en este universo
+    de prueba: una pestaña vacía no es una pestaña, es ruido."""
+    async with cliente(app_con(crear_app, UNIVERSO_MULTISEGMENTO)) as http:
+        claves = {s["clave"] for s in (await http.get(SEGMENTOS)).json()["segmentos"]}
+
+    assert claves == {"usd_hard", "cer"}
+    assert "tasa_fija" not in claves
+
+
+async def test_sin_base_de_datos_segmentos_responde_503(crear_app) -> None:
+    async with cliente(crear_app(None)) as http:
+        assert (await http.get(SEGMENTOS)).status_code == 503
