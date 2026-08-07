@@ -1,12 +1,13 @@
 /**
- * El final de F-028: la lista quedó confirmada, cruda todavía.
+ * El final de F-028 y el enganche con F-029: la lista quedó confirmada y se resuelve.
  *
- * A propósito no hay acá ni un instrumento resuelto, ni una emisión, ni un plazo de liquidación —
- * eso es F-029, que arranca de esta misma lista. Mostrar algo más que el ticker declarado y el
- * monto sería inventar una resolución que todavía no pasó.
+ * F-028 termina acá y no sabe nada de instrumentos: lo que produce es la lista cruda. Quién es cada
+ * ticker lo contesta `ResolucionCartera`, que es F-029 y vive en su propia feature — este
+ * componente sólo le pasa las posiciones. La división importa: si la resolución viviera acá, el
+ * ingreso de cartera dependería del backend para poder terminar, y hoy no depende de nada.
  */
 
-import { fmtNumero } from '@/lib/fmt'
+import { ResolucionCartera } from '@/features/cartera-resolucion/components/ResolucionCartera'
 
 import type { PosicionCruda } from '../types'
 
@@ -26,39 +27,14 @@ export function CarteraConfirmada({
       <p style={{ margin: '0 0 10px', fontSize: 12.5, color: 'var(--dim)' }}>
         Cartera cargada: {posiciones.length} {posiciones.length === 1 ? 'posición' : 'posiciones'}
         {invalidas > 0 && (
-          <span style={{ color: 'var(--neg)' }}>
-            {' '}
-            ({invalidas} sin resolver hasta corregirla)
-          </span>
+          <span style={{ color: 'var(--neg)' }}> ({invalidas} con la fila mal leída)</span>
         )}
-        {'. Lista para que F-029 resuelva cada ticker contra el universo.'}
+        {'.'}
       </p>
 
-      <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 4 }}>
-        {posiciones.map((p) => (
-          <li
-            key={p.id}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              padding: '5px 8px',
-              borderRadius: 3,
-              background: 'var(--pan2)',
-            }}
-          >
-            <span className="mono" style={{ fontSize: 12, minWidth: 90 }}>
-              {p.tickerDeclarado || '(sin ticker)'}
-            </span>
-            <span className="mono" style={{ fontSize: 11.5, color: 'var(--dim)', flex: 1 }}>
-              {p.nominal !== null && `nominal ${fmtNumero(p.nominal)}`}
-              {p.nominal !== null && p.monto !== null && ' · '}
-              {p.monto !== null && `monto US$ ${fmtNumero(p.monto)}`}
-            </span>
-            {!p.valida && <span style={{ fontSize: 11, color: 'var(--neg)' }}>{p.motivo}</span>}
-          </li>
-        ))}
-      </ul>
+      {/* Se mandan también las inválidas: una fila que no se pudo leer sigue siendo plata del
+          cliente, y sacarla del pedido la sacaría del diagnóstico de cobertura. */}
+      <ResolucionCartera posiciones={posiciones} />
 
       <div style={{ marginTop: 14 }}>
         <BotonAccion onClick={onCargarOtra}>Cargar otra cartera</BotonAccion>

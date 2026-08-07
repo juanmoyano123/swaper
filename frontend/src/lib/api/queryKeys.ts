@@ -19,6 +19,10 @@ export const claves = {
     universo: (segmento: string) => ['mercado', 'universo', segmento] as const,
     instrumento: (ticker: string) => ['mercado', 'instrumento', ticker] as const,
     puntas: (ticker: string) => ['mercado', 'puntas', ticker] as const,
+    // F-029: qué instrumento es cada ticker de una cartera cargada. Cuelga de mercado y no de
+    // carteras porque lo que resuelve el ticker es el universo del día: si entra una corrida de
+    // ingesta nueva, esto tiene que volver a preguntarse igual que un precio.
+    resolucion: (firma: string) => ['mercado', 'resolucion', firma] as const,
   },
 
   // Condiciones de emisión y demás dato curado: cambia por ingesta, no por paso del tiempo.

@@ -3,25 +3,76 @@
  * carga, error y renderizado base que le corresponden a cualquier feature.
  */
 
+import { QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('read-excel-file/browser', () => ({
   readSheet: vi.fn(),
 }))
 
+vi.mock('@/lib/supabase', () => ({
+  supabase: { auth: { getSession: () => Promise.resolve({ data: { session: null } }) } },
+}))
+
 import { readSheet } from 'read-excel-file/browser'
+
+import { crearQueryClient } from '@/app/queryClient'
 
 import { IngresoCarteraPanel } from '../components/IngresoCarteraPanel'
 
+/**
+ * El panel confirmado engancha con F-029 (`ResolucionCartera`), que consulta el backend, así que
+ * necesita el proveedor de consultas y un `fetch` que conteste.
+ *
+ * La respuesta es una resolución vacía a propósito: lo que estos tests prueban es F-028 —leer,
+ * previsualizar y confirmar—, y qué muestra la resolución tiene sus propios tests en
+ * `features/cartera-resolucion`. Lo único que hace falta acá es que la consulta no salga a la red.
+ */
+const RESOLUCION_VACIA = {
+  posiciones: [],
+  cobertura: {
+    posiciones: 0,
+    resueltas: 0,
+    no_resueltas: 0,
+    posiciones_con_monto: 0,
+    posiciones_sin_monto: 0,
+    posiciones_sin_monto_no_resueltas: 0,
+    monto_declarado: 0,
+    monto_no_resuelto: 0,
+    porcentaje_no_resuelto: null,
+  },
+  alertas: [],
+}
+
+function renderPanel() {
+  return render(
+    <QueryClientProvider client={crearQueryClient()}>
+      <IngresoCarteraPanel />
+    </QueryClientProvider>,
+  )
+}
+
+beforeEach(() => {
+  vi.stubGlobal('fetch', () =>
+    Promise.resolve(
+      new Response(JSON.stringify(RESOLUCION_VACIA), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    ),
+  )
+})
+
 afterEach(() => {
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 describe('estado inicial', () => {
   it('muestra las tres vías de ingreso y ninguna otra cosa', () => {
-    render(<IngresoCarteraPanel />)
+    renderPanel()
     expect(screen.getByRole('button', { name: /Pegar desde el portapapeles/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Subir un CSV o Excel/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Cargar posición por posición/ })).toBeInTheDocument()
@@ -31,7 +82,7 @@ describe('estado inicial', () => {
 describe('vía 1: pegado desde el portapapeles', () => {
   it('un resumen con decimales con coma se previsualiza con la cantidad de filas leídas', async () => {
     const usuario = userEvent.setup()
-    render(<IngresoCarteraPanel />)
+    renderPanel()
 
     await usuario.click(screen.getByRole('button', { name: /Pegar desde el portapapeles/ }))
 
@@ -60,7 +111,7 @@ describe('vía 1: pegado desde el portapapeles', () => {
 
   it('un pegado sin encabezado reconocible pide el mapeo en vez de asumir el orden', async () => {
     const usuario = userEvent.setup()
-    render(<IngresoCarteraPanel />)
+    renderPanel()
 
     await usuario.click(screen.getByRole('button', { name: /Pegar desde el portapapeles/ }))
     await usuario.type(screen.getByLabelText('Pegá acá el resumen de cuenta.'), 'AL30D\t850,50{Enter}GD35\t1200')
@@ -75,7 +126,7 @@ describe('vía 1: pegado desde el portapapeles', () => {
 describe('vía 2: archivo subido', () => {
   it('un CSV con columnas en distinto orden al esperado pide el mapeo en vez de asumir el orden', async () => {
     const usuario = userEvent.setup()
-    render(<IngresoCarteraPanel />)
+    renderPanel()
 
     await usuario.click(screen.getByRole('button', { name: /Subir un CSV o Excel/ }))
 
@@ -102,7 +153,7 @@ describe('vía 2: archivo subido', () => {
     // diálogo (arrastrado y soltado, por ejemplo). El guardarraíl de `leerArchivo` es quien tiene
     // que frenarlo, y este test lo ejercita directamente sin depender del filtro del navegador.
     const usuario = userEvent.setup({ applyAccept: false })
-    render(<IngresoCarteraPanel />)
+    renderPanel()
 
     await usuario.click(screen.getByRole('button', { name: /Subir un CSV o Excel/ }))
 
@@ -128,7 +179,7 @@ describe('vía 2: archivo subido', () => {
       >,
     )
 
-    render(<IngresoCarteraPanel />)
+    renderPanel()
     await usuario.click(screen.getByRole('button', { name: /Subir un CSV o Excel/ }))
 
     const archivo = new File(['x'], 'cartera.xlsx', {
@@ -150,7 +201,7 @@ describe('vía 2: archivo subido', () => {
 describe('vía 3: carga manual', () => {
   it('un nominal no numérico se agrega marcado como inválido, con motivo, sin descartarlo', async () => {
     const usuario = userEvent.setup()
-    render(<IngresoCarteraPanel />)
+    renderPanel()
 
     await usuario.click(screen.getByRole('button', { name: /Cargar posición por posición/ }))
 
@@ -173,7 +224,7 @@ describe('vía 3: carga manual', () => {
 
   it('permite cargar dos posiciones válidas y confirmar la cartera', async () => {
     const usuario = userEvent.setup()
-    render(<IngresoCarteraPanel />)
+    renderPanel()
 
     await usuario.click(screen.getByRole('button', { name: /Cargar posición por posición/ }))
 
