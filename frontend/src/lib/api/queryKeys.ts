@@ -29,6 +29,12 @@ export const claves = {
     // carteras porque lo que resuelve el ticker es el universo del día: si entra una corrida de
     // ingesta nueva, esto tiene que volver a preguntarse igual que un precio.
     resolucion: (firma: string) => ['mercado', 'resolucion', firma] as const,
+    // F-015/F-016: la grilla de doce meses. Cuelga de mercado porque el calendario se calcula
+    // sobre paridades y cronogramas del snapshot del día: un refresh de precios lo invalida.
+    calendarioUniverso: ['mercado', 'calendario', 'universo'] as const,
+    // La misma firma determinística de cartera que usa `resolucion` (F-029): mismas posiciones,
+    // misma clave, así el POST-que-es-lectura se cachea como cualquier consulta.
+    calendarioCartera: (firma: string) => ['mercado', 'calendario', 'cartera', firma] as const,
   },
 
   // Condiciones de emisión y demás dato curado: cambia por ingesta, no por paso del tiempo.
