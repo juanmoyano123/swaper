@@ -34,7 +34,7 @@
     <div class="card"><div class="v completada">13 / 42</div><div class="l">Features Stage 1</div></div>
     <div class="card"><div class="v">53 / 185</div><div class="l">Person-days</div></div>
     <div class="card"><div class="v">2.894 → 431</div><div class="l">Especies → emisiones</div></div>
-    <div class="card"><div class="v">476 + 63</div><div class="l">Tests offline + integración</div></div>
+    <div class="card"><div class="v">481 + 63</div><div class="l">Tests offline + integración</div></div>
   </div>
   <div class="bar"><div style="width:28.6%"></div></div>
 
@@ -103,9 +103,6 @@
     rendimientos más altos del universo — VE32P (614 %), CAC4O (316 %), PQCKO (228 %) —, que por lo
     tanto no pasan por ningún tope de sanidad. El hueco es de la cobertura de <code>tipo_tasa</code>,
     que viene del <code>type</code> de Docta.</li>
-    <li><code>SUPABASE_JWT_SECRET</code> está vacío en el <code>.env</code>: hasta que se cargue,
-    <code>GET /api/v1/auth/me</code> responde 503. El aislamiento no depende de esto — lo aplica RLS
-    adentro de la base.</li>
     <li>El pool del backend se conecta con un rol que <strong>saltea RLS</strong>. Hoy no se
     materializa porque ningún endpoint sirve tablas de usuario, pero F-041 no puede exponer carteras
     por <code>/api/v1/</code> sin resolverlo antes.</li>

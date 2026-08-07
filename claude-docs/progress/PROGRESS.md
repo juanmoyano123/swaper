@@ -162,9 +162,11 @@ integración en el backend, 96 en el frontend.
 
 ### Deuda declarada de la Tanda 1
 
-- **`SUPABASE_JWT_SECRET` está vacío en el `.env`.** Hasta que se cargue desde el panel de
-  Supabase, `GET /api/v1/auth/me` responde 503. No rompe nada más: el aislamiento lo aplica RLS
-  adentro de la base y no depende de esta variable.
+- ~~**`SUPABASE_JWT_SECRET` está vacío en el `.env`.**~~ **Resuelto el 07/08/2026, y el pedido
+  estaba mal planteado.** El proyecto firma con ES256 y su JWKS publica una clave EC: cargar ese
+  secreto habría cambiado el 503 por el rechazo de toda sesión genuina. El backend ahora verifica
+  contra la clave pública de `/auth/v1/.well-known/jwks.json` y **la variable ya no existe** — una
+  firma asimétrica se verifica con una clave pública, así que no hay secreto que configurar.
 - **El pool del backend se conecta con un rol que saltea RLS** (`postgres`, `rolbypassrls=true`).
   Hoy no se materializa porque ningún endpoint sirve tablas de usuario, pero **F-041 no puede
   exponer carteras por `/api/v1/` sin resolver esto antes**: o el frontend las lee directo de
