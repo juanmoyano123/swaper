@@ -30,7 +30,7 @@ desde `/build-feature` a medida que cada una se implementa.
 | F-013 | Barra de estado del dato | Stage 1 | 200,0 | completada |
 | F-014 | Autenticación y aislamiento por asesor | Stage 1 | 200,0 | completada |
 | F-015 | API del calendario de doce meses | Stage 1 | 285,0 | completada |
-| F-016 | Grilla-selector de doce meses | Stage 1 | 114,0 | pendiente |
+| F-016 | Grilla-selector de doce meses | Stage 1 | 114,0 | completada |
 | F-017 | Filtros de la grilla | Stage 1 | 112,0 | pendiente |
 | F-018 | Cartera editable y ponderación | Stage 1 | 140,0 | pendiente |
 | F-019 | Armado asistido | Stage 1 | 83,3 | pendiente |
@@ -67,7 +67,7 @@ desde `/build-feature` a medida que cada una se implementa.
 | F-034 | Modo subir TIR con contrapartida | Stage 1 | 86,4 | pendiente |
 | F-036 | Aceptación rotación por rotación | Stage 1 | 57,6 | pendiente |
 | F-037 | Comparación original contra propuesta | Stage 1 | 72,0 | pendiente |
-| F-038 | Monitor de mercado | Stage 1 | 106,7 | pendiente |
+| F-038 | Monitor de mercado | Stage 1 | 106,7 | completada |
 | F-039 | Ficha de instrumento | Stage 1 | 112,0 | pendiente |
 | F-040 | Sensibilidad por repricing completo | Stage 1 | 66,7 | pendiente |
 | F-041 | Guardar, listar, reabrir y revaluar | Stage 1 | 180,0 | pendiente |
@@ -124,8 +124,39 @@ sola. 618 tests offline, 86 de integración y 116 en el frontend.
 **Tanda 5 cerrada el 07/08/2026** — F-013 sola. 675 tests offline, 95 de integración y 143 en el
 frontend. Van **17 de 42 features de Stage 1**, y con esta se destrabó el cuello de botella: las 25
 que quedaban colgaban todas de F-013 por uno de dos caminos (F-016 → F-018 → el armador entero, o
-F-038 → F-039 → F-040). Siguiente paso: **Tanda 6 — F-016 (grilla de doce meses) ∥ F-038
-(monitor)**, las dos primeras pantallas con datos reales.
+F-038 → F-039 → F-040).
+
+**Tanda 6 cerrada el 07/08/2026** — F-016 (grilla de doce meses) ∥ F-038 (monitor), **las dos
+primeras pantallas con datos reales**. 681 tests offline, 97 de integración y 171 en el frontend.
+Van **19 de 42 features de Stage 1**. Primera tanda ejecutada con Sonnet sobre planes prescriptivos
+de Fable (`claude-docs/plans/F-016-plan.md` y `F-038-plan.md`), con verificación de cierre aparte:
+
+- **Base común previa a los agentes** (la práctica de siempre): `MiniCalendario` y
+  `SelectorSegmento` en `frontend/src/components/`, las claves de calendario en `queryKeys.ts` y
+  `@tanstack/react-virtual` preinstalado. Cero colisiones de archivos entre los dos agentes.
+- **F-016**: la grilla vive en `features/armador/` y crea el store (`store/carteraStore.tsx`,
+  Context + reducer) que F-017 y F-018 extienden — el shape quedó documentado en el propio archivo.
+  La iluminación multi-mes no se calcula: cada mes pinta contra el mismo `pos`. La cobertura
+  distingue "ningún papel de la selección paga este mes" (rojo, accionable) de "nadie en el
+  universo paga este mes" (gris, no hay nada que elegir). Las alertas del calendario se muestran
+  completas, cobertura del 16 % incluida.
+- **F-038**: el backend sumó `paridad` a la lectura del universo, `?segmento=` en
+  `/emisiones/especies` y el endpoint `/universo/segmentos` para las pestañas. Verificado contra la
+  base real: los conteos cierran exactos (942 en pestañas + 1.417 RV + 535 sin segmento = 2.894), y
+  lo que no entra en ninguna pestaña **se declara en pantalla**, no desaparece. Los soberanos van
+  con rendimiento `s/d`. Orden y filtros del lado del cliente sobre el segmento entero (bucle de
+  cursor con tope explícito que falla fuerte en vez de truncar), virtualización con TanStack
+  Virtual, conteo de filas siempre visible.
+- **Dos correcciones del cierre**: el plan de F-016 copiaba mal el shape de alerta (las del
+  calendario no llevan `origen` — el agente lo detectó y lo documentó en su schema), y la columna
+  `paridad` nueva rompió el ruteo por contenido de la conexión falsa de los tests de estado
+  (`if "paridad" in query` matcheaba ahora dos consultas): se afinó el discriminador al SQL exacto.
+- **Unidades fijadas por test**: `rendimiento` y `paridad` viajan como fracción (los techos de
+  sanidad lo confirman: 3.0 = 300 %) y las celdas muestran puntos porcentuales; hay un test que
+  fija la conversión para que nadie la "corrija" después.
+
+Siguiente paso: **Tanda 7 — F-018 (cartera editable) ∥ F-039 (ficha de instrumento)**. Con esa
+cerrada, el flujo de armado queda usable de punta a punta.
 
 ### Lo que F-013 puso a la vista, y la decisión que dejó abierta
 

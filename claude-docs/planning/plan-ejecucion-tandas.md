@@ -45,7 +45,7 @@ de ejecución**. Si contradice a `plan.md` en una dependencia, gana `plan.md` y 
 
 | Tanda | Features | Por qué no se pisan | Estado |
 |---|---|---|---|
-| 6 | **F-016** (grilla 12 meses) ∥ **F-038** (monitor) | Pantallas y rutas distintas. F-038 estaba en el Ciclo 4 del plan pero sus dependencias (F-003, F-010, F-012, F-013) ya están al llegar acá: se adelanta para tener la primera pantalla con datos reales | pendiente |
+| 6 | **F-016** (grilla 12 meses) ∥ **F-038** (monitor) | Pantallas y rutas distintas. F-038 estaba en el Ciclo 4 del plan pero sus dependencias (F-003, F-010, F-012, F-013) ya están al llegar acá: se adelanta para tener la primera pantalla con datos reales | **completada 07/08/2026** — primera tanda ejecutada con Sonnet sobre planes prescriptivos de Fable; verificación de cierre aparte |
 | 7 | **F-018** (cartera editable) ∥ **F-039** (ficha) | F-018 no puede ir con F-016/F-017 (mismo store del armador, mandato del plan); F-039 no puede ir con F-038 (misma pantalla y navegación). Cruzadas entre sí, cero contacto | pendiente |
 | 8 | **F-017** (filtros) ∥ **F-024** (redondeo lámina) ∥ **F-040** (sensibilidad) | Barra de filtros de la grilla / cálculo backend de nominales / tabla de repricing dentro de la ficha | pendiente |
 | 9 | **F-020** (concentración) ∥ **F-021** (panel de renta) ∥ **F-026** (renta variable) | Tres paneles distintos del armador, tres servicios backend distintos (`verificar_concentracion`, `cupones.py`, equity de BYMA). Alcance ampliado (08/2026): F-020 suma el panel de distribución por sector/ley/naturaleza de tasa, define `min_sectores` en `PERFILES` y advierte cuando no se cumple; F-026 suma el dato recopilado país/índice y la distribución por país del bloque. Ver duda de solape 6 | pendiente |
