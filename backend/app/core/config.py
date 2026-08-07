@@ -59,10 +59,11 @@ class Settings(BaseSettings):
     ingesta_rueda_desde: str = "11:00"
     ingesta_rueda_hasta: str = "17:00"
 
-    # F-014 — Supabase Auth. El frontend maneja la sesión con la anon key; el backend valida el
-    # JWT que llega en el header contra este secreto, que sale del panel de Supabase. Opcional
-    # como las de Docta: obligatoria recién en la feature que la consume.
-    supabase_jwt_secret: str | None = None
+    # F-014 — Supabase Auth no declara settings propios, y eso es un arreglo y no un olvido. El
+    # backend valida los JWT contra el JWKS público del proyecto, que cuelga de `supabase_url`:
+    # la clave con la que se verifica una firma asimétrica es pública por definición, así que no
+    # hay secreto que configurar. Hubo un `SUPABASE_JWT_SECRET` acá mientras la verificación era
+    # HS256; ver `app/core/seguridad.py` para por qué ese esquema no validaba ninguna sesión.
 
     # F-009 — semilla del dato curado. Es una ruta y no un secreto: el archivo está versionado en
     # el repo. Se declara acá porque en el contenedor la raíz del proyecto no está donde el código

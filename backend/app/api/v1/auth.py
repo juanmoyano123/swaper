@@ -28,7 +28,7 @@ class UsuarioActualResponse(BaseModel):
     summary="Quién es el asesor de la sesión actual",
     responses={
         401: {"description": "No hay sesión válida"},
-        503: {"description": "Falta configurar SUPABASE_JWT_SECRET"},
+        503: {"description": "No se pudo obtener la clave de firma del proyecto"},
     },
 )
 async def usuario_actual(

@@ -19,9 +19,16 @@ from typing import Annotated, Any
 
 import structlog
 from fastapi import Depends, Header, HTTPException, Request
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import Settings, get_settings
-from app.core.seguridad import TokenExpirado, TokenInvalido, UsuarioAutenticado, verificar_token
+from app.core.seguridad import (
+    ClaveDeFirmaNoDisponible,
+    TokenExpirado,
+    TokenInvalido,
+    UsuarioAutenticado,
+    verificar_token,
+)
 
 logger = structlog.get_logger()
 
@@ -72,20 +79,22 @@ async def get_usuario_actual(
     if not authorization or not authorization.startswith(PREFIJO_BEARER):
         raise HTTPException(status_code=401, detail="Falta el token de sesión.")
 
-    if not settings.supabase_jwt_secret:
-        # Mismo patrón que Docta en `app/ingesta/docta/url.py`: la variable es opcional en
-        # `Settings` y se exige recién acá, en la feature que la consume.
-        raise HTTPException(
-            status_code=503,
-            detail="El servicio no puede validar sesiones: falta configurar SUPABASE_JWT_SECRET.",
-        )
-
     token = authorization.removeprefix(PREFIJO_BEARER).strip()
     try:
-        return verificar_token(token, settings.supabase_jwt_secret)
+        # `verificar_token` bloquea la primera vez, cuando trae el JWKS del proyecto por HTTP.
+        # Después queda cacheado en memoria, pero el event loop no se entera de esa distinción:
+        # una sola llamada bloqueante frena todos los requests en vuelo.
+        return await run_in_threadpool(verificar_token, token, settings.supabase_url)
     except TokenExpirado as exc:
         raise HTTPException(
             status_code=401, detail="La sesión expiró. Volvé a iniciar sesión."
         ) from exc
     except TokenInvalido as exc:
         raise HTTPException(status_code=401, detail="La sesión no es válida.") from exc
+    except ClaveDeFirmaNoDisponible as exc:
+        # 503 y no 401: el que falló es este servicio, no la sesión del asesor. Devolver 401 lo
+        # mandaría a loguearse de nuevo para volver a fallar igual.
+        raise HTTPException(
+            status_code=503,
+            detail="El servicio no puede validar sesiones en este momento.",
+        ) from exc

@@ -2,7 +2,11 @@
 
 No prueba el aislamiento por asesor -eso es `test_auth_integration.py`, contra la base real-. Acá
 se prueba el contrato HTTP de la dependencia `get_usuario_actual`: qué responde con o sin token,
-con un token vencido, y qué pasa si el servicio no tiene configurado el secreto todavía.
+con un token vencido, y qué pasa si no se puede traer la clave de firma del proyecto.
+
+Los tokens se firman con una clave EC real y se verifican contra su clave pública servida como
+JWKS, igual que en `test_seguridad.py` y por el mismo motivo: firmarlos con un secreto simétrico
+inventado hacía que estos tests pasaran mientras el backend rechazaba todas las sesiones reales.
 """
 
 from collections.abc import Callable
@@ -13,11 +17,10 @@ import jwt
 import pytest
 from fastapi import FastAPI
 
-from app.core.config import get_settings
-from app.core.seguridad import AUDIENCIA_ESPERADA
+from app.core.seguridad import AUDIENCIA_ESPERADA, cliente_jwks
 from tests.conftest import FakeConnection, cliente
+from tests.test_seguridad import CLAVE, CLAVE_AJENA, KID, _jwks
 
-SECRETO = "el-secreto-de-prueba-no-es-el-real"
 RUTA = "/api/v1/auth/me"
 
 
@@ -33,18 +36,17 @@ def _token(id_usuario, *, email: str | None = "asesor@example.com", vencido: boo
     }
     if email is not None:
         payload["email"] = email
-    return jwt.encode(payload, SECRETO, algorithm="HS256")
+    return jwt.encode(payload, CLAVE, algorithm="ES256", headers={"kid": KID})
 
 
 @pytest.fixture(autouse=True)
-def con_jwt_secret_configurado(monkeypatch: pytest.MonkeyPatch):
-    """El secreto es opcional en `Settings` -mismo patrón que Docta- y acá sí hace falta: es la
-    feature que lo consume. Cada test que necesite probar el caso "no configurado" lo saca de
-    nuevo con `monkeypatch.delenv`."""
-    monkeypatch.setenv("SUPABASE_JWT_SECRET", SECRETO)
-    get_settings.cache_clear()
+def con_jwks_del_proyecto(monkeypatch: pytest.MonkeyPatch):
+    """El JWKS del proyecto, servido sin salir a la red. No hay ningún secreto que configurar:
+    la clave con la que se verifica una firma asimétrica es pública."""
+    cliente_jwks.cache_clear()
+    monkeypatch.setattr(jwt.PyJWKClient, "fetch_data", lambda self: _jwks(CLAVE))
     yield
-    get_settings.cache_clear()
+    cliente_jwks.cache_clear()
 
 
 async def test_sin_header_de_autorizacion_responde_401(crear_app: Callable[..., FastAPI]) -> None:
@@ -102,29 +104,35 @@ async def test_con_un_token_vencido_responde_401_y_pide_reloguear(
 async def test_con_un_token_con_otra_firma_responde_401(
     crear_app: Callable[..., FastAPI],
 ) -> None:
-    id_usuario = uuid4()
-    token_de_otro_secreto = jwt.encode(
+    token_ajeno = jwt.encode(
         {
-            "sub": str(id_usuario),
+            "sub": str(uuid4()),
             "aud": AUDIENCIA_ESPERADA,
             "exp": datetime.now(UTC) + timedelta(hours=1),
         },
-        "un-secreto-que-no-es-el-configurado",
-        algorithm="HS256",
+        CLAVE_AJENA,
+        algorithm="ES256",
+        headers={"kid": KID},
     )
     app = crear_app(FakeConnection())
 
     async with cliente(app) as c:
-        respuesta = await c.get(RUTA, headers={"Authorization": f"Bearer {token_de_otro_secreto}"})
+        respuesta = await c.get(RUTA, headers={"Authorization": f"Bearer {token_ajeno}"})
 
     assert respuesta.status_code == 401
 
 
-async def test_sin_supabase_jwt_secret_configurado_responde_503(
+async def test_si_no_se_puede_traer_la_clave_de_firma_responde_503(
     crear_app: Callable[..., FastAPI], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv("SUPABASE_JWT_SECRET", raising=False)
-    get_settings.cache_clear()
+    """503 y no 401: el que falló es el servicio, no la sesión. Un 401 acá mandaría al asesor a
+    loguearse de nuevo para volver a chocarse con lo mismo."""
+    cliente_jwks.cache_clear()
+
+    def _explota(self):
+        raise OSError("no hay red")
+
+    monkeypatch.setattr(jwt.PyJWKClient, "fetch_data", _explota)
     app = crear_app(FakeConnection())
 
     async with cliente(app) as c:
