@@ -15,6 +15,7 @@ import { EstadoVacio } from '@/components/EstadoVacio'
 import { Panel } from '@/components/Panel'
 import { nombreSegmento, unidadDeNaturaleza } from '@/components/SelectorSegmento'
 import { ApiError } from '@/lib/api/errors'
+import { etiquetaClase } from '@/lib/claseActivo'
 import { fmtCompacto, fmtFecha, fmtMonto, fmtNumero, fmtPct, NO_APLICA, SIN_DATO } from '@/lib/fmt'
 
 import { useCondicionesInstrumento } from './hooks/useCondicionesInstrumento'
@@ -170,6 +171,7 @@ function GrillaFicha({ especie }: { especie: EspecieFicha }) {
   const rendimientoPct = especie.rendimiento === null ? null : especie.rendimiento * 100
 
   const campos: [string, ReactNode][] = [
+    ['Tipo', etiquetaClase(especie.clase_activo)],
     ['Segmento', nombreSegmento(especie.segmento)],
     [`Rendimiento (${unidad})`, esRentaVariable ? NO_APLICA : fmtPct(rendimientoPct)],
     ['Duración', esRentaVariable ? NO_APLICA : fmtNumero(especie.duracion, 2)],

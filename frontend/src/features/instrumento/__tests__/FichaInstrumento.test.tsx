@@ -247,6 +247,20 @@ describe('un instrumento de renta variable', () => {
   })
 })
 
+// --- El tipo del instrumento, con la etiqueta compartida del monitor ------------------------------
+
+describe('el tipo del instrumento', () => {
+  it('la grilla declara la clase con su etiqueta legible', async () => {
+    mockearRutas(rutasOk('AL30D'))
+
+    renderizar('AL30D')
+
+    await screen.findByText('AL30D')
+    expect(screen.getByText('Tipo')).toBeInTheDocument()
+    expect(screen.getByText('Soberano')).toBeInTheDocument()
+  })
+})
+
 // --- GWT-3: el cronograma completo, interés separado de amortización -------------------------------
 
 describe('el cronograma', () => {
@@ -293,7 +307,9 @@ describe('las tres queries son independientes', () => {
     renderizar('AL30D')
 
     expect(await screen.findByText('AL30D')).toBeInTheDocument()
-    expect(await screen.findByText('Soberano')).toBeInTheDocument()
+    // Dos "Soberano": el tipo de la ficha (clase_activo) y el sector de condiciones. Lo que este
+    // test cuida es que el de condiciones haya llegado pese al cronograma roto.
+    expect(await screen.findAllByText('Soberano')).toHaveLength(2)
     expect(await screen.findByRole('alert')).toBeInTheDocument()
   })
 

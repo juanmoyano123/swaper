@@ -16,6 +16,7 @@ import type { ReactNode } from 'react'
 import { useMemo, useRef, useState } from 'react'
 
 import { unidadDeNaturaleza } from '@/components/SelectorSegmento'
+import { etiquetaClase } from '@/lib/claseActivo'
 import { fmtCompacto, fmtFecha, fmtNumero, fmtPct, SIN_DATO } from '@/lib/fmt'
 
 import { useAbrirInstrumento } from '@/features/instrumento/useAbrirInstrumento'
@@ -24,9 +25,18 @@ import type { FiltrosUniverso } from './FiltrosNumericos'
 import { pasaFiltros } from './FiltrosNumericos'
 import type { Especie } from '../lib/schema'
 
-/** Las columnas ordenables, en el orden en que se muestran. `emisor` incluido: es lo único de
- * texto que tiene sentido ordenar alfabéticamente además del ticker. */
-type Campo = 'ticker' | 'emisor' | 'precio' | 'rendimiento' | 'duracion' | 'paridad' | 'volumen_usd' | 'vencimiento'
+/** Las columnas ordenables, en el orden en que se muestran. Todas lo son. */
+type Campo =
+  | 'ticker'
+  | 'clase_activo'
+  | 'ley'
+  | 'emisor'
+  | 'precio'
+  | 'rendimiento'
+  | 'duracion'
+  | 'paridad'
+  | 'volumen_usd'
+  | 'vencimiento'
 
 type Direccion = 'asc' | 'desc'
 
@@ -35,7 +45,16 @@ interface Orden {
   direccion: Direccion
 }
 
-const PLANTILLA_COLUMNAS = 'minmax(92px,116px) 1fr 92px 108px 68px 72px 92px 96px'
+/**
+ * ticker · tipo · ley · emisor · precio · rendimiento · duración · paridad · volumen ·
+ * vencimiento · relleno. El emisor tiene techo (240px) para que un nombre corto no deje un bloque
+ * de blanco en el medio de la fila: el espacio sobrante se junta en la columna final vacía. TIPO
+ * son 108px porque "ON corporativa" —la etiqueta más larga— mide ~101px con padding; LEY son 96px
+ * porque "Ley Argentina" —el valor más largo de la fuente— entra completo sin truncar; PRECIO son
+ * 120px porque "156.560,00 ARS" —un precio en pesos con su moneda— mide ~117px y con menos se
+ * parte en dos líneas.
+ */
+const PLANTILLA_COLUMNAS = '64px 108px 96px minmax(120px,240px) 120px 108px 68px 72px 92px 96px 1fr'
 const ALTO_FILA = 32
 const ALTO_CONTENEDOR = 520
 
@@ -44,8 +63,11 @@ const ALTO_CONTENEDOR = 520
  * un dato que falta no es "el más chico" ni "el más grande", así que no puede decidir el orden.
  */
 function comparar(a: Especie, b: Especie, campo: Campo, direccion: Direccion): number {
-  const va = a[campo] as string | number | null
-  const vb = b[campo] as string | number | null
+  // TIPO se ordena por la etiqueta que se ve en pantalla, no por el valor interno: ordenado por
+  // `clase_activo` crudo, "Soberano" (bono_soberano) quedaría antes que "ON corporativa"
+  // (on_corporativo) en un orden supuestamente alfabético.
+  const va = campo === 'clase_activo' ? etiquetaClase(a.clase_activo) : (a[campo] as string | number | null)
+  const vb = campo === 'clase_activo' ? etiquetaClase(b.clase_activo) : (b[campo] as string | number | null)
   if (va === null && vb === null) return 0
   if (va === null) return 1
   if (vb === null) return -1
@@ -90,6 +112,8 @@ export function TablaUniverso({ especies, naturaleza, filtros }: { especies: Esp
 
       <div style={{ display: 'grid', gridTemplateColumns: PLANTILLA_COLUMNAS, gap: 0 }}>
         <Cabecera campo="ticker" orden={orden} onClick={alternarOrden}>ticker</Cabecera>
+        <Cabecera campo="clase_activo" orden={orden} onClick={alternarOrden}>tipo</Cabecera>
+        <Cabecera campo="ley" orden={orden} onClick={alternarOrden}>ley</Cabecera>
         <Cabecera campo="emisor" orden={orden} onClick={alternarOrden}>emisor</Cabecera>
         <Cabecera campo="precio" orden={orden} onClick={alternarOrden} alinear="right">precio</Cabecera>
         <Cabecera campo="rendimiento" orden={orden} onClick={alternarOrden} alinear="right">
@@ -99,6 +123,9 @@ export function TablaUniverso({ especies, naturaleza, filtros }: { especies: Esp
         <Cabecera campo="paridad" orden={orden} onClick={alternarOrden} alinear="right">paridad</Cabecera>
         <Cabecera campo="volumen_usd" orden={orden} onClick={alternarOrden} alinear="right">volumen USD</Cabecera>
         <Cabecera campo="vencimiento" orden={orden} onClick={alternarOrden} alinear="right">vencimiento</Cabecera>
+        {/* Relleno: la cabecera son botones con fondo y borde propios, así que la columna vacía
+            necesita su celda para que la línea del header llegue pareja hasta el final. */}
+        <div aria-hidden style={{ background: 'var(--pan2)', borderBottom: '1px solid var(--lin)' }} />
       </div>
 
       {filasOrdenadas.length === 0 ? (
@@ -193,11 +220,16 @@ function FilaEspecie({ especie, top, alto, onClick }: { especie: Especie; top: n
         cursor: 'pointer',
       }}
     >
-      <span className="mono" style={{ padding: '0 8px', fontSize: 12 }}>
+      <span className="mono" style={{ padding: '0 8px', fontSize: 12, whiteSpace: 'nowrap' }}>
         {especie.ticker}
-        {especie.ley && <span style={{ color: 'var(--dim)' }}> · {especie.ley}</span>}
       </span>
-      <span style={{ padding: '0 8px', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <span style={{ padding: '0 8px', fontSize: 12, whiteSpace: 'nowrap', color: 'var(--dim)' }}>
+        {etiquetaClase(especie.clase_activo)}
+      </span>
+      <span style={{ padding: '0 8px', fontSize: 12, whiteSpace: 'nowrap', color: 'var(--dim)' }}>
+        {especie.ley ?? SIN_DATO}
+      </span>
+      <span style={{ padding: '0 8px', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={especie.emisor ?? undefined}>
         {especie.emisor ?? SIN_DATO}
       </span>
       <span className="mono" style={{ padding: '0 8px', fontSize: 12, textAlign: 'right' }}>

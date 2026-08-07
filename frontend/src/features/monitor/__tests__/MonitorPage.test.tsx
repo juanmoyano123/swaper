@@ -7,7 +7,7 @@
  */
 
 import { QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -327,6 +327,32 @@ describe('una fila sin rendimiento publicado', () => {
     renderizar()
 
     expect(await screen.findByText(/1 especies sin rendimiento o duración no están en la curva/)).toBeInTheDocument()
+  })
+})
+
+// --- Tipo y ley: columnas propias, con la clase traducida a etiqueta legible ----------------------
+
+describe('las columnas de tipo y ley', () => {
+  it('clase_activo se muestra con su etiqueta legible y la ley en su propia celda', async () => {
+    mockearApiConUnaEspecie(especie({ clase_activo: 'on_corporativo', ley: 'Ley Argentina' }))
+    renderizar()
+
+    const fila = await screen.findByText('AL30').then((el) => el.closest('div[role="button"]'))
+    expect(fila).not.toBeNull()
+    expect(fila).toHaveTextContent('ON corporativa')
+    expect(fila).toHaveTextContent('Ley Argentina')
+    // El valor interno no se filtra a la pantalla.
+    expect(fila).not.toHaveTextContent('on_corporativo')
+  })
+
+  it('una clase no reconocida y una ley ausente se declaran s/d, nunca celda muda', async () => {
+    mockearApiConUnaEspecie(especie({ clase_activo: 'clase_inventada', ley: null }))
+    renderizar()
+
+    const fila = await screen.findByText('AL30').then((el) => el.closest('div[role="button"]'))
+    expect(fila).not.toBeNull()
+    // Dos s/d: el de tipo y el de ley. El resto de la fila tiene todos sus datos.
+    expect(within(fila as HTMLElement).getAllByText('s/d')).toHaveLength(2)
   })
 })
 
