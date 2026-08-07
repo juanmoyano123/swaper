@@ -32,7 +32,7 @@ desde `/build-feature` a medida que cada una se implementa.
 | F-015 | API del calendario de doce meses | Stage 1 | 285,0 | completada |
 | F-016 | Grilla-selector de doce meses | Stage 1 | 114,0 | completada |
 | F-017 | Filtros de la grilla | Stage 1 | 112,0 | pendiente |
-| F-018 | Cartera editable y ponderación | Stage 1 | 140,0 | pendiente |
+| F-018 | Cartera editable y ponderación | Stage 1 | 140,0 | completada |
 | F-019 | Armado asistido | Stage 1 | 83,3 | pendiente |
 | F-020 | Límites de concentración en vivo | Stage 1 | 175,0 | pendiente |
 | F-021 | Panel de renta y renta anual | Stage 1 | 285,0 | pendiente |
@@ -68,7 +68,7 @@ desde `/build-feature` a medida que cada una se implementa.
 | F-036 | Aceptación rotación por rotación | Stage 1 | 57,6 | pendiente |
 | F-037 | Comparación original contra propuesta | Stage 1 | 72,0 | pendiente |
 | F-038 | Monitor de mercado | Stage 1 | 106,7 | completada |
-| F-039 | Ficha de instrumento | Stage 1 | 112,0 | pendiente |
+| F-039 | Ficha de instrumento | Stage 1 | 112,0 | completada |
 | F-040 | Sensibilidad por repricing completo | Stage 1 | 66,7 | pendiente |
 | F-041 | Guardar, listar, reabrir y revaluar | Stage 1 | 180,0 | pendiente |
 | F-042 | Exportación a Excel y PDF | Stage 1 | 100,0 | pendiente |
@@ -155,8 +155,37 @@ de Fable (`claude-docs/plans/F-016-plan.md` y `F-038-plan.md`), con verificació
   sanidad lo confirman: 3.0 = 300 %) y las celdas muestran puntos porcentuales; hay un test que
   fija la conversión para que nadie la "corrija" después.
 
-Siguiente paso: **Tanda 7 — F-018 (cartera editable) ∥ F-039 (ficha de instrumento)**. Con esa
-cerrada, el flujo de armado queda usable de punta a punta.
+**Tanda 7 cerrada el 07/08/2026** — F-018 (cartera editable) ∥ F-039 (ficha de instrumento). **El
+flujo de armado queda usable de punta a punta**: elegir de la grilla, ajustar pesos, ver el peso
+real, y abrir la ficha de cualquier papel. 692 tests offline, 97 de integración y 202 en el
+frontend. Van **21 de 42 features de Stage 1**. Segunda tanda con el ruteo Fable-planifica /
+Sonnet-ejecuta, cero contacto entre las dos features (una es frontend puro sobre `features/armador/`,
+la otra agrega un router de backend propio más `features/instrumento/`):
+
+- **Base común**: `backend/app/api/v1/instrumentos.py` creado vacío y montado, igual que se hizo
+  con `calendario` y `posiciones` en la Tanda 4 — así F-039 no toca `universo.py` ni
+  `condiciones.py`, que ya usó F-038.
+- **F-018**: extiende el store de F-016 con peso pedido, FCI y monto total; el motor de redondeo
+  por lámina (`lib/resolver.ts`) queda escrito y testeado, pero **la lámina real todavía no está
+  cableada** — eso lo trae F-024 en la Tanda 8, así que hoy toda posición muestra "lámina s/d" y no
+  se redondea. El agente detectó y corrigió un desvío real: el backend manda `moneda_cotizacion`
+  en mayúsculas (texto crudo de BYMA sin traducir) y el motor comparaba contra literales en
+  minúscula — sin la normalización, ninguna posición real se hubiera resuelto nunca.
+- **F-039**: tres endpoints de sólo lectura (`GET /instrumentos/{ticker}` con sus hermanas de
+  liquidación, `/condiciones` con origen y fecha, `/cronograma` con los montos tal como vienen de
+  la fuente). **Las puntas de compra/venta no existen en la fuente hoy** — el diseño original las
+  simulaba con un spread inventado; no se portó, van `s/d` con el motivo declarado. Verificado
+  contra la base real: AL30 resuelve sus hermanas AL30C/AL30D, la alerta
+  `posicion_fuera_del_universo` se dispara con un ticker inexistente, y `moneda_cupon: null` en el
+  cronograma de AL30 es la fuente sin ese dato, no un bug.
+- **Un error real que atrapó la verificación de cierre, no los agentes**: los dos corrieron `tsc`
+  aislado a su propia carpeta y salieron limpios, pero el `tsc -b` del proyecto completo encontró
+  un error de tipos real en `FichaInstrumento.tsx` (un campo `string | number` pasado a una función
+  que espera `number`) — invisible mientras las dos piezas no compilaban juntas. Se corrigió en el
+  cierre.
+
+Siguiente paso: **Tanda 8 — F-017 (filtros de la grilla) ∥ F-024 (redondeo por lámina) ∥ F-040
+(sensibilidad por repricing)**. F-024 es la que le da a F-018 el dato de lámina que hoy falta.
 
 ### Lo que F-013 puso a la vista, y la decisión que dejó abierta
 

@@ -26,17 +26,17 @@
 </head>
 <body>
   <h1>10-Swaper — Progreso de features</h1>
-  <p class="sub">Actualizado al <strong>07/08/2026</strong> (Tanda 6 cerrada). Este dashboard es estático: el estado
+  <p class="sub">Actualizado al <strong>07/08/2026</strong> (Tanda 7 cerrada). Este dashboard es estático: el estado
   real vive en <code>claude-docs/progress/PROGRESS.md</code> y el orden de ejecución en
   <code>claude-docs/planning/plan-ejecucion-tandas.md</code>.</p>
 
   <div class="cards">
-    <div class="card"><div class="v completada">19 / 42</div><div class="l">Features Stage 1</div></div>
-    <div class="card"><div class="v">81 / 185</div><div class="l">Person-days</div></div>
-    <div class="card"><div class="v">2 / 5</div><div class="l">Pantallas con datos reales</div></div>
-    <div class="card"><div class="v">681 + 97</div><div class="l">Tests offline + integración</div></div>
+    <div class="card"><div class="v completada">21 / 42</div><div class="l">Features Stage 1</div></div>
+    <div class="card"><div class="v">93 / 185</div><div class="l">Person-days</div></div>
+    <div class="card"><div class="v">Sí</div><div class="l">Flujo de armado, punta a punta</div></div>
+    <div class="card"><div class="v">692 + 97</div><div class="l">Tests offline + integración</div></div>
   </div>
-  <div class="bar"><div style="width:45.2%"></div></div>
+  <div class="bar"><div style="width:50.3%"></div></div>
 
   <h2>Ciclo 1 — Cimientos e ingesta · 12 de 12 · <span class="completada">completo</span></h2>
   <table>
@@ -67,23 +67,24 @@
     <thead><tr><th>Ciclo</th><th class="num">Features</th><th class="num">Person-days</th><th class="num">Semanas (est.)</th><th>Estado</th></tr></thead>
     <tbody>
       <tr><td>1 — Cimientos e ingesta</td><td class="num">12</td><td class="num">47</td><td class="num">~9,5</td><td><span class="completada">12 completadas</span> — milestone 1 cerrado</td></tr>
-      <tr><td>2 — Armador completo</td><td class="num">12</td><td class="num">55</td><td class="num">~11</td><td><span class="completada">4 completadas</span> (F-013, F-014, F-015, F-016), 8 pendientes</td></tr>
+      <tr><td>2 — Armador completo</td><td class="num">12</td><td class="num">55</td><td class="num">~11</td><td><span class="completada">5 completadas</span> (F-013, F-014, F-015, F-016, F-018), 7 pendientes</td></tr>
       <tr><td>3 — RV, carga y diagnóstico</td><td class="num">9</td><td class="num">41</td><td class="num">~8</td><td><span class="completada">2 completadas</span> (F-028, F-029), 7 pendientes</td></tr>
-      <tr><td>4 — Optimizador y persistencia</td><td class="num">9</td><td class="num">42</td><td class="num">~8,5</td><td><span class="completada">1 completada</span> (F-038, adelantada), 8 pendientes</td></tr>
-      <tr><td><strong>Stage 1 (total)</strong></td><td class="num"><strong>42</strong></td><td class="num"><strong>185</strong></td><td class="num"><strong>~37</strong></td><td class="num"><strong>45 %</strong></td></tr>
+      <tr><td>4 — Optimizador y persistencia</td><td class="num">9</td><td class="num">42</td><td class="num">~8,5</td><td><span class="completada">2 completadas</span> (F-038, F-039, adelantadas), 7 pendientes</td></tr>
+      <tr><td><strong>Stage 1 (total)</strong></td><td class="num"><strong>42</strong></td><td class="num"><strong>185</strong></td><td class="num"><strong>~37</strong></td><td class="num"><strong>50 %</strong></td></tr>
       <tr><td>Stage 2</td><td class="num">8</td><td class="num">72</td><td class="num">~14,5</td><td class="pendiente">pendiente</td></tr>
     </tbody>
   </table>
 
   <h2>Próximo paso</h2>
-  <p class="nota"><strong>Tanda 6 cerrada el 07/08/2026</strong> — F-016 (grilla de doce meses) ∥
-  F-038 (monitor): <strong>las dos primeras pantallas con datos reales</strong>. El monitor declara
-  todo lo que no muestra (942 especies en pestañas + 1.417 de renta variable + 535 sin segmento =
-  2.894, cierre exacto) y los soberanos van con rendimiento <code>s/d</code>. Fue la primera tanda
-  ejecutada con Sonnet sobre planes prescriptivos de Fable, con verificación de cierre aparte.
-  Sigue la <strong>Tanda 7: F-018 (cartera editable) ∥ F-039 (ficha de instrumento)</strong> — con
-  esa cerrada, el flujo de armado queda usable de punta a punta. El orden completo está en
-  <code>claude-docs/planning/plan-ejecucion-tandas.md</code>.</p>
+  <p class="nota"><strong>Tanda 7 cerrada el 07/08/2026</strong> — F-018 (cartera editable) ∥ F-039
+  (ficha de instrumento). <strong>El flujo de armado queda usable de punta a punta</strong>: elegir
+  de la grilla, ajustar pesos, ver el peso real, y abrir la ficha de cualquier papel. Las puntas de
+  compra/venta van <code>s/d</code> porque no existen en la fuente hoy — no se simulan. Segunda
+  tanda con el ruteo Fable-planifica/Sonnet-ejecuta; la verificación de cierre encontró un error de
+  tipos real que sólo aparecía con el proyecto completo compilando junto (cada agente había
+  verificado sólo su propia carpeta). Sigue la <strong>Tanda 8: F-017 (filtros) ∥ F-024 (redondeo
+  por lámina) ∥ F-040 (sensibilidad)</strong> — F-024 es la que le da a F-018 el dato de lámina que
+  hoy le falta. El orden completo está en <code>claude-docs/planning/plan-ejecucion-tandas.md</code>.</p>
 
   <h2>Decisión pendiente del usuario</h2>
   <p class="nota"><strong>No hay alerta de «el dato está viejo», y es a propósito.</strong> Sería la
@@ -136,6 +137,14 @@
     por <code>/api/v1/</code> sin resolverlo antes.</li>
     <li><code>tna</code> sigue vacía en todo el universo, y la lámina de los bonos del Tesoro también:
     el artefacto curado no la trae para ningún soberano.</li>
+    <li><strong>La cartera editable de F-018 todavía no redondea por lámina.</strong> El motor de
+    cálculo ya lo sabe hacer y está testeado, pero el dato de lámina por ticker recién lo cablea
+    F-024 (Tanda 8) desde <code>condiciones_emision</code>. Hasta entonces toda posición muestra
+    "lámina s/d" y el nominal no se pisa a ningún múltiplo.</li>
+    <li><strong>Las puntas de compra y venta no existen en ninguna vista del API.</strong> Se
+    persisten en la tabla <code>puntas</code> pero ninguna consulta las expone todavía. La ficha de
+    instrumento (F-039) las muestra <code>s/d</code> con el motivo declarado en vez de simular un
+    spread, que es lo que hacía el prototipo de diseño original.</li>
   </ul>
 </body>
 </html>
