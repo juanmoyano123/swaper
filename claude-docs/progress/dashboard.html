@@ -26,17 +26,17 @@
 </head>
 <body>
   <h1>10-Swaper — Progreso de features</h1>
-  <p class="sub">Actualizado al <strong>07/08/2026</strong> (Tanda 4 cerrada). Este dashboard es estático: el estado
+  <p class="sub">Actualizado al <strong>07/08/2026</strong> (Tanda 5 cerrada). Este dashboard es estático: el estado
   real vive en <code>claude-docs/progress/PROGRESS.md</code> y el orden de ejecución en
   <code>claude-docs/planning/plan-ejecucion-tandas.md</code>.</p>
 
   <div class="cards">
-    <div class="card"><div class="v completada">16 / 42</div><div class="l">Features Stage 1</div></div>
-    <div class="card"><div class="v">63 / 185</div><div class="l">Person-days</div></div>
+    <div class="card"><div class="v completada">17 / 42</div><div class="l">Features Stage 1</div></div>
+    <div class="card"><div class="v">67 / 185</div><div class="l">Person-days</div></div>
     <div class="card"><div class="v">431 → 70</div><div class="l">Emisiones → con calendario</div></div>
-    <div class="card"><div class="v">618 + 86</div><div class="l">Tests offline + integración</div></div>
+    <div class="card"><div class="v">675 + 95</div><div class="l">Tests offline + integración</div></div>
   </div>
-  <div class="bar"><div style="width:38.1%"></div></div>
+  <div class="bar"><div style="width:40.5%"></div></div>
 
   <h2>Ciclo 1 — Cimientos e ingesta · 12 de 12 · <span class="completada">completo</span></h2>
   <table>
@@ -67,24 +67,36 @@
     <thead><tr><th>Ciclo</th><th class="num">Features</th><th class="num">Person-days</th><th class="num">Semanas (est.)</th><th>Estado</th></tr></thead>
     <tbody>
       <tr><td>1 — Cimientos e ingesta</td><td class="num">12</td><td class="num">47</td><td class="num">~9,5</td><td><span class="completada">12 completadas</span> — milestone 1 cerrado</td></tr>
-      <tr><td>2 — Armador completo</td><td class="num">12</td><td class="num">55</td><td class="num">~11</td><td><span class="completada">2 completadas</span> (F-014, F-015), 10 pendientes</td></tr>
+      <tr><td>2 — Armador completo</td><td class="num">12</td><td class="num">55</td><td class="num">~11</td><td><span class="completada">3 completadas</span> (F-013, F-014, F-015), 9 pendientes</td></tr>
       <tr><td>3 — RV, carga y diagnóstico</td><td class="num">9</td><td class="num">41</td><td class="num">~8</td><td><span class="completada">2 completadas</span> (F-028, F-029), 7 pendientes</td></tr>
       <tr><td>4 — Optimizador y persistencia</td><td class="num">9</td><td class="num">42</td><td class="num">~8,5</td><td class="pendiente">pendiente</td></tr>
-      <tr><td><strong>Stage 1 (total)</strong></td><td class="num"><strong>42</strong></td><td class="num"><strong>185</strong></td><td class="num"><strong>~37</strong></td><td class="num"><strong>38 %</strong></td></tr>
+      <tr><td><strong>Stage 1 (total)</strong></td><td class="num"><strong>42</strong></td><td class="num"><strong>185</strong></td><td class="num"><strong>~37</strong></td><td class="num"><strong>40 %</strong></td></tr>
       <tr><td>Stage 2</td><td class="num">8</td><td class="num">72</td><td class="num">~14,5</td><td class="pendiente">pendiente</td></tr>
     </tbody>
   </table>
 
   <h2>Próximo paso</h2>
-  <p class="nota"><strong>Tanda 4 cerrada el 07/08/2026</strong> — F-015 puso el calendario de doce
-  meses en el backend y F-029 la resolución de tickers, así que ya existen las dos piezas que la
-  primera pantalla necesita. Sigue la <strong>Tanda 5: F-013 (barra de estado del dato)</strong>, que
-  va sola porque es transversal a todas las pantallas. Después, la <strong>Tanda 6</strong> trae las
-  dos primeras pantallas reales: F-016 (grilla de doce meses) ∥ F-038 (monitor). El orden completo
-  está en <code>claude-docs/planning/plan-ejecucion-tandas.md</code>.</p>
+  <p class="nota"><strong>Tanda 5 cerrada el 07/08/2026</strong> — F-013 destrabó el cuello de
+  botella: las 25 features que quedaban colgaban todas de ella por uno de dos caminos (F-016 → F-018
+  → el armador entero, o F-038 → F-039 → F-040). Sigue la <strong>Tanda 6: F-016 (grilla de doce
+  meses) ∥ F-038 (monitor)</strong>, <strong>las dos primeras pantallas con datos reales</strong>. El
+  orden completo está en <code>claude-docs/planning/plan-ejecucion-tandas.md</code>.</p>
+
+  <h2>Decisión pendiente del usuario</h2>
+  <p class="nota"><strong>No hay alerta de «el dato está viejo», y es a propósito.</strong> Sería la
+  alerta más obvia de la barra de F-013. Declararlo exige un umbral, y fijar ese umbral es decidir
+  cuánta desactualización es aceptable para operar — depende de si la rueda está abierta, de qué
+  instrumento se mire y de para qué. <strong>Nadie tomó esa decisión</strong>, así que
+  <code>antiguedad_minutos</code> va crudo, con la hora del snapshot y la demora declarada de la
+  fuente al lado. Es criterio de dominio, no de código: hay que preguntárselo al usuario.</p>
 
   <h2>Deuda declarada</h2>
   <ul class="nota">
+    <li><strong>El dato de la base no tiene traza de origen.</strong> <code>corridas_ingesta</code>
+    está vacía: todo lo que hay entró por corridas manuales del endpoint de F-007, y el job
+    programado de F-008 nunca corrió de verdad. La barra lo declara con
+    <code>sin_corrida_registrada</code>. Se destraba solo la primera vez que corra la ingesta de las
+    11:30.</li>
     <li><strong>El calendario cubre 70 de las 431 emisiones (16 %).</strong> 360 quedan afuera por no
     declarar paridad, y sin paridad el cupón no se puede expresar como fracción del monto invertido
     sin traer un tipo de cambio de afuera. <strong>Es la cuarta manifestación de la misma causa

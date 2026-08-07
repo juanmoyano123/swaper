@@ -27,7 +27,7 @@ desde `/build-feature` a medida que cada una se implementa.
 
 | ID | Feature | Etiqueta | RICE | Estado |
 |---|---|---|---|---|
-| F-013 | Barra de estado del dato | Stage 1 | 200,0 | pendiente |
+| F-013 | Barra de estado del dato | Stage 1 | 200,0 | completada |
 | F-014 | Autenticación y aislamiento por asesor | Stage 1 | 200,0 | completada |
 | F-015 | API del calendario de doce meses | Stage 1 | 285,0 | completada |
 | F-016 | Grilla-selector de doce meses | Stage 1 | 114,0 | pendiente |
@@ -119,9 +119,46 @@ integración en el backend, 96 en el frontend.
 integración. El milestone 1 —"El universo existe y es confiable"— está completo.
 
 **Tanda 4 cerrada el 07/08/2026** — F-015 ∥ F-029, lo que quedaba después de que F-012 se hiciera
-sola. 618 tests offline, 86 de integración y 116 en el frontend. Van **16 de 42 features de Stage
-1**. Siguiente paso: **F-013 (barra de estado del dato)**, la Tanda 5, que va sola porque es
-transversal a todas las pantallas y conviene que nadie la pise.
+sola. 618 tests offline, 86 de integración y 116 en el frontend.
+
+**Tanda 5 cerrada el 07/08/2026** — F-013 sola. 675 tests offline, 95 de integración y 143 en el
+frontend. Van **17 de 42 features de Stage 1**, y con esta se destrabó el cuello de botella: las 25
+que quedaban colgaban todas de F-013 por uno de dos caminos (F-016 → F-018 → el armador entero, o
+F-038 → F-039 → F-040). Siguiente paso: **Tanda 6 — F-016 (grilla de doce meses) ∥ F-038
+(monitor)**, las dos primeras pantallas con datos reales.
+
+### Lo que F-013 puso a la vista, y la decisión que dejó abierta
+
+La barra no agregó datos nuevos: **hizo visible lo que seis servicios ya venían alertando y nadie
+miraba.** Contra la base real muestra 4 advertencias y 2 informativas, ninguna de error.
+
+- **`sin_corrida_registrada`** — hallazgo nuevo: `corridas_ingesta` está vacía. Todo lo que hay en la
+  base entró por corridas manuales del endpoint de F-007, así que **el dato no tiene traza de qué
+  fuente lo trajo ni cuándo**. El job de F-008 nunca corrió de verdad. Se destraba solo la primera
+  vez que corra la ingesta programada de las 11:30.
+- **`rendimiento_perdido_al_colapsar`** — las 146 emisiones que venían anotadas acá como deuda desde
+  F-012, ahora con tickers en pantalla en vez de en un documento.
+- **`cobertura_del_calendario`** — las 70 de 431 de la Tanda 4.
+- **`campo_sin_cobertura`** — `tna` vacío en las 2.894 filas.
+
+**⚠️ Decisión pendiente del usuario: no hay alerta de "el dato está viejo".** Sería la más obvia de
+la barra y no existe a propósito: declararlo exige un umbral, y fijar ese umbral es decidir cuánta
+desactualización es aceptable para operar — depende de si la rueda está abierta, de qué instrumento
+y de para qué se lo mire. Nadie tomó esa decisión, así que `antiguedad_minutos` va crudo, con la
+hora del snapshot y la demora declarada al lado. **Hay que preguntárselo al usuario**; es criterio
+de dominio, no de código.
+
+### Cómo se resolvió el costo de la barra, que era su riesgo de diseño
+
+La barra se pide en cada carga de cada pantalla. Un endpoint que recalculara el universo entero
+haría que todo el producto pague 2.894 filas más el cashflow por pantalla — la misma clase de
+problema que el contraste de BYMA vivo le causó a siete endpoints en F-012.
+
+Se cachea **por identidad de la corrida y no por reloj**: el análisis caro es función pura del
+contenido de la base, así que con la misma última fila de `corridas_ingesta` y el mismo
+`capturado_en` de `precios`, el resultado cacheado no es una aproximación sino el mismo resultado.
+El TTL de 300 s es red de seguridad, no política. El costo viaja en la respuesta: **625 ms medidos**
+contra la base real. Y **no hay red viva en el camino de la barra**.
 
 ### Lo que la Tanda 4 dejó a la vista, y necesita decisión
 

@@ -39,7 +39,7 @@ de ejecución**. Si contradice a `plan.md` en una dependencia, gana `plan.md` y 
 | 2 | **F-009** (condiciones_emision) ∥ **F-010** (sanidad) | Tablas y módulos distintos: F-009 escribe `condiciones_emision`; F-010 envuelve la sanidad de `segmentos.py`, que no lee ley ni lámina | **completada 06/08/2026** |
 | 3 | **F-011** (dedup) — **sola** | El plan manda serializar F-010·F-011·F-012: las tres exponen `segmentos.py` como servicio | **completada 07/08/2026** |
 | 4 | **F-012** (FX implícito) ∥ **F-015** (API calendario) ∥ **F-029** (resolución tickers) | F-012 extiende la envoltura ya creada en 2–3; F-015 envuelve `cupones.py` (otro módulo); F-029 es un servicio nuevo de matching | **completada 07/08/2026** — F-012 se hizo sola por decisión del usuario, para cerrar el Ciclo 1; F-015 ∥ F-029 cerraron la tanda el mismo día |
-| 5 | **F-013** (barra de estado) — **sola** | Nada más tiene dependencias listas en este punto; es transversal a todas las pantallas y conviene que nadie la pise | pendiente |
+| 5 | **F-013** (barra de estado) — **sola** | Nada más tiene dependencias listas en este punto; es transversal a todas las pantallas y conviene que nadie la pise | **completada 07/08/2026** |
 
 ### Fase B — Las pantallas grandes (Milestone 2: "Un asesor arma una cartera desde el calendario")
 
