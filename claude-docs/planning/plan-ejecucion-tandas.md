@@ -47,7 +47,8 @@ de ejecución**. Si contradice a `plan.md` en una dependencia, gana `plan.md` y 
 |---|---|---|---|
 | 6 | **F-016** (grilla 12 meses) ∥ **F-038** (monitor) | Pantallas y rutas distintas. F-038 estaba en el Ciclo 4 del plan pero sus dependencias (F-003, F-010, F-012, F-013) ya están al llegar acá: se adelanta para tener la primera pantalla con datos reales | **completada 07/08/2026** — primera tanda ejecutada con Sonnet sobre planes prescriptivos de Fable; verificación de cierre aparte |
 | 7 | **F-018** (cartera editable) ∥ **F-039** (ficha) | F-018 no puede ir con F-016/F-017 (mismo store del armador, mandato del plan); F-039 no puede ir con F-038 (misma pantalla y navegación). Cruzadas entre sí, cero contacto | **completada 07/08/2026** — segunda tanda Fable-planifica/Sonnet-ejecuta; verificación de cierre encontró un error de tipos real sólo visible con el proyecto completo compilando junto |
-| 8 | **F-017** (filtros) ∥ **F-024** (redondeo lámina) ∥ **F-040** (sensibilidad) | Barra de filtros de la grilla / cálculo backend de nominales / tabla de repricing dentro de la ficha | pendiente |
+| 8a | **F-051** (métricas propias) — **sola** | La salvedad de la duda 7 se activó: F-051 **modifica** `cupones.py` (import circular), la firma de `armar_consolidacion` y `corrida.py`. Además deja escrita la matemática de descuento que F-040 consume; en paralelo las dos la escribirían por duplicado. Evidencia y diseño completo en `claude-docs/plans/F-051-plan.md` | pendiente |
+| 8b | **F-017** (filtros) ∥ **F-024** (redondeo lámina) ∥ **F-040** (sensibilidad) ∥ **F-052** (renta variable en el monitor) | Barra de filtros de la grilla / cablear la lámina real en la cartera / repricing en la ficha / pestañas de acciones y CEDEARs en el monitor. Después de la base común no comparten un archivo: F-017 y F-024 tocan `features/armador/` pero archivos distintos (store y barra nueva vs `CarteraEditable`+`resolver`); F-040 vive en la ficha y en `calendario/`; F-052 en el monitor y en un paquete backend nuevo. **Base común a mano antes de soltar agentes**: JOIN a `condiciones_emision` en `universo/lectura.py` + campos `lamina` y `sector` en `EspecieUniverso`; router vacío `api/v1/renta_variable.py`; claves `accion`/`cedear` en `SelectorSegmento` | pendiente |
 | 9 | **F-020** (concentración) ∥ **F-021** (panel de renta) ∥ **F-026** (renta variable) | Tres paneles distintos del armador, tres servicios backend distintos (`verificar_concentracion`, `cupones.py`, equity de BYMA). Alcance ampliado (08/2026): F-020 suma el panel de distribución por sector/ley/naturaleza de tasa, define `min_sectores` en `PERFILES` y advierte cuando no se cumple; F-026 suma el dato recopilado país/índice y la distribución por país del bloque. Ver duda de solape 6 | pendiente |
 | 10 | **F-019** (armado asistido) ∥ **F-022** (rendimientos) ∥ **F-025** (carga de lámina) | F-022 recién acá porque comparte el servicio de métricas con F-021 (tanda 9); F-025 recién acá porque escribe lo que F-024 (tanda 8) lee. Alcance ampliado (08/2026): F-019 suma el criterio de reparto sectorial — reusa el `min_sectores` que F-020 (tanda 9) definió en `PERFILES` y agrega el desempate por sector no representado en `elegir_siguiente`; por eso F-019 ahora también depende de F-020, lo que esta secuencia ya respetaba | pendiente |
 
@@ -86,6 +87,31 @@ confidence 50 % porque la disponibilidad programática de las fechas de CNV no e
    por país/rubro en renta variable). Se resuelve con la regla 2: el componente de distribución
    compartido se crea a mano antes de soltar la tanda. Si al planificar aparece más contacto que
    ese componente, F-026 sale de la tanda y va después, sola (regla 3).
+7. **F-051 va primera y sola: la salvedad se activó** (planteada y resuelta el 08/08/2026). La
+   duda era si podía consumir `cupones.py` desde un módulo nuevo sin modificarlo. No puede, por
+   tres razones verificadas contra el código: (a) `cupones.py:55` y `universo/segmentacion.py:29`
+   importan `raiz_emision` del `__init__` del paquete de consolidación, así que en cuanto
+   `armado.py` importe matemática de calendario la cadena se cierra sobre sí misma y da
+   `ImportError` — hay que cambiar esas dos líneas; (b) `armar_consolidacion` es "sin base, sin
+   red, sin reloj" y el valor técnico necesita la fecha: cambia la firma, y con ella `corrida.py`
+   y `jobs/corridas.py`, que era un segundo llamador que nadie tenía anotado; (c) el solver de
+   TIR, el valor presente y la duración no existen en el backend —sólo en `tools/`, que el
+   backend no importa— y son exactamente lo que F-040 necesita: en paralelo, las dos features
+   escribirían la misma matemática por duplicado. Serializando, F-040 la consume ya escrita y su
+   insumo "TIR vigente" pasa de ~234 tickers a todo lo que tenga precio y cronograma en su
+   moneda, sin cambio de contrato.
+8. **F-052 pasa a la 8b y toca más de lo que decía la duda original** (revisada el 08/08/2026).
+   Lo que se creía "un filtro más sobre el universo consolidado" no existe: la renta variable se
+   descarta *antes* de segmentar y `Segmentacion.renta_variable` es un contador, no una lista, así
+   que la feature necesita paquete y endpoint backend propios. Además agrega una migración
+   (`cierre_anterior` en `precios`) y una línea en `armado.py` para la columna de variación —
+   contacto real con F-051, resuelto por la serialización: F-052 corre después. Sigue en pie el
+   riesgo hacia adelante: **F-026 (tanda 9)** también muestra renta variable, en el armador, y el
+   armador tiene prohibido importar de `features/monitor/`. Por eso F-052 deja los componentes de
+   fila y columnas de RV en `frontend/src/components/`, zona compartida — mismo criterio que el
+   componente de distribución de la duda 6. Y lo que no se negocia: F-052 **no** agrega columna de
+   rendimiento a sus pestañas "porque ahora hay TIR". Una acción no tiene TIR, y la regla 2 sigue
+   valiendo aunque la TIR ahora exista para todo lo demás.
 
 ## Lo que enseñó la Tanda 1 (aplicar en las que siguen)
 

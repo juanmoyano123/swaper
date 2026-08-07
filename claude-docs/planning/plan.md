@@ -667,6 +667,75 @@ THEN la barra muestra la alerta de token vencido con su acción, distinguida de 
 
 ---
 
+#### F-051 — Métricas propias: TIR, duración y paridad calculadas
+
+**Etiqueta:** Stage 1 · **Traza a:** F2 (agregada 08/2026, tras auditar cómo resuelve esto el
+monitor de mesa: calcula en el cliente con precio en vivo + flujos curados a mano; acá los dos
+insumos ya están en la base, de fuentes vivas)
+
+**Descripción.** Hoy `tir`, `duration` y `paridad` se **ingieren** del informe de IAMC, ticker
+exacto: ~234 ONs publicadas sobre ~2.180 en el universo, y las especies D y C siempre vacías porque
+IAMC nombra una sola especie por emisión. El faltante no es de insumos: el precio por especie ya
+llega de BYMA (F-004) y el cronograma contractual completo de Docta (F-006), y la matemática de
+paridad/valor técnico/flujos por peso ya está portada y verificada en `cupones.py`. Esta feature
+cierra la cuenta: **TIR, duración modificada y paridad calculadas por especie** —cada especie
+contra su propio precio, en la moneda de ese precio, vía paridad y sin tipo de cambio— para toda
+emisión con cronograma. Es determinístico (regla 6) y no inventa nada (regla 1): sin precio operado
+o sin cronograma, el campo queda vacío y la especie nombrada en la alerta de cobertura. Cada
+segmento se calcula en su propia unidad (regla 2); si el flujo disponible no permite la unidad del
+segmento, esas especies quedan fuera del cálculo y alertadas — jamás se les reporta una tasa de otra
+naturaleza. **IAMC pasa de fuente a contraste**, el mismo patrón que F-012 aplica al Índice Dólar
+de BYMA: donde ambos existen, una divergencia sobre el umbral emite alerta y el cálculo propio se
+conserva como dato. La tabla de precedencia de `armado.py` cambia: estas tres columnas pasan de
+"IAMC, ticker exacto" a "cálculo propio, especie".
+
+**El cálculo exige que el precio y el flujo estén en la misma moneda** (decisión del 08/08/2026, al
+diseñar la feature). Descontar un flujo en dólares contra un precio en pesos requeriría un tipo de
+cambio, y derivarlo de la propia emisión —el MEP de F-012— equivale a copiar la TIR de la especie
+hermana, que la regla 1 prohíbe. Por eso AL30D y AL30C se calculan y AL30 no; para las especies en
+pesos de emisiones en dólares **IAMC sigue siendo fuente donde publica**, y donde no publica el
+campo queda vacío y la especie nombrada. Es un híbrido declarado por especie, no una excepción
+silenciosa: la fuente de cada fila viaja en la columna `fuente`.
+
+**Input:** precio por especie de F-004; cronograma de F-006; métricas publicadas de F-005 como
+contraste. (No consume el universo saneado de F-010: ese se lee de la vista `resumen`, que es la
+salida de esta misma consolidación — F-051 corre adentro del armado, sobre las filas de BYMA y el
+cronograma de Docta.)
+**Output:** `tir`, `duration` y `paridad` calculadas por especie; cobertura y alertas de faltantes;
+alerta de contraste contra IAMC.
+**Depende de:** F-006, F-010
+**Habilita:** F-040 (le deja escrita la matemática de descuento) y multiplica la cobertura que ya
+consumen F-016, F-021, F-030, F-038 y F-039 sin cambiarles el contrato
+
+**RICE:** R = 400 · I = 2 · C = 80 % · E = 4 → **Score 160,0**
+
+```
+GIVEN una especie cuyo precio del día está en la misma moneda que el flujo de su cronograma
+WHEN corre la consolidación
+THEN tir, duración y paridad salen del cálculo propio sobre el flujo contractual, por especie —
+     AL30D contra su precio en dólares y AL30C contra el suyo, sin pasar por un tipo de cambio
+
+GIVEN una especie cuyo precio está en otra moneda que su flujo (AL30 en pesos, flujo en dólares)
+WHEN corre el cálculo
+THEN no se calcula ni se deriva de la hermana; queda con la métrica de IAMC si IAMC la publica, y
+     vacía y nombrada en la alerta si no
+
+GIVEN una especie que no operó hoy o una emisión sin cronograma
+WHEN corre el cálculo
+THEN el campo queda vacío y la especie aparece nombrada en la alerta de cobertura; no se estima ni
+     se copia de otra especie de la misma emisión
+
+GIVEN un ticker que IAMC también publica
+WHEN la métrica propia difiere de la publicada más allá del umbral configurado
+THEN se emite alerta de contraste y el cálculo propio se conserva como dato
+
+GIVEN un segmento cuya naturaleza de tasa no puede calcularse con el flujo disponible
+WHEN corre el cálculo
+THEN esas especies quedan fuera, alertadas, y nunca se les reporta una tasa de otra naturaleza
+```
+
+---
+
 ### Bloque D — Autenticación (F3)
 
 ---
@@ -1828,6 +1897,68 @@ THEN se declara que no se puede calcular, y no se cae a la aproximación por dur
 
 ---
 
+#### F-052 — Renta variable en el monitor
+
+**Etiqueta:** Stage 1 · **Traza a:** F12 (agregada 08/2026)
+
+**Descripción.** El monitor de F-038 muestra sólo renta fija: sus pestañas se organizan por
+naturaleza de rendimiento, y una acción no tiene TIR. Pero los datos de renta variable **ya están
+en la base** —acciones del panel líder y general, y CEDEARs, de los endpoints de BYMA (F-004)— y
+el propio endpoint de segmentos ya los cuenta como excluidos (`renta_variable: 1417`). Esta
+feature agrega las pestañas de **acciones** y **CEDEARs** al monitor, con columnas propias de
+renta variable: precio, moneda de cotización, variación, volumen y puntas, **sin columna de
+rendimiento** — no existe una TIR de acción y no se muestra otra cosa en su lugar (regla 2).
+Toda comparación u orden por volumen usa el volumen normalizado a dólares de F-012, nunca los
+nominales crudos en monedas mezcladas (regla 3). Lo que BYMA no publica para una especie queda
+vacío y contado en cobertura (regla 1). Reusa la grilla virtualizada, el orden y los filtros de
+F-038. Los `sin_segmento` (renta fija sin tipo de tasa reconocible) **no** entran acá: siguen
+contados y declarados como hasta ahora.
+
+**Lo que la exploración del código corrigió** (08/08/2026): el backend **no** es "un filtro más".
+La renta variable se descarta *antes* de segmentar —`Segmentacion.renta_variable` es un contador,
+no una lista, y `EspecieUniverso` no admite una especie sin naturaleza de tasa—, así que las filas
+nunca llegan al endpoint de universo. La feature necesita **lectura y endpoint propios** sobre el
+universo ya consolidado, con el mismo patrón que usa `posiciones/lectura.py`, que lee directo por
+esta misma razón. Dos consecuencias más: las **puntas** ya se persisten para toda la rueda (RV
+incluida) pero ninguna lectura las expone todavía, así que esta feature estrena ese lector; y la
+**variación** exige guardar el cierre anterior, que BYMA publica (`previousClosingPrice`) y el
+normalizador ya captura, pero la consolidación descarta al persistir. Se agrega la columna
+`cierre_anterior` a `precios` (migración chica) en vez de mostrar una columna vacía: es dato
+publicado, no derivado, y de paso queda disponible para renta fija.
+
+**Input:** universo consolidado con acciones y CEDEARs (F-004 vía F-007); volumen normalizado de
+F-012; monitor de F-038.
+**Output:** pestañas de acciones y CEDEARs en el monitor, con sus columnas propias; lector de
+puntas y cierre anterior persistido.
+**Depende de:** F-011, F-012, F-038 · **corre después de F-051**, que toca la misma consolidación
+**Habilita:** F-026 (le deja los componentes de fila y columnas de renta variable)
+
+**RICE:** R = 400 · I = 1 · C = 80 % · E = 3 → **Score 106,7**
+
+```
+GIVEN el monitor abierto
+WHEN se elige la pestaña de acciones o la de CEDEARs
+THEN las columnas son las de renta variable —precio, variación, volumen, puntas— y no hay columna
+     de rendimiento: ni TIR, ni nada presentado en su lugar
+
+GIVEN un CEDEAR que cotiza en pesos y en dólares
+WHEN se ordena o compara por volumen
+THEN la comparación usa el volumen normalizado a dólares, nunca los nominales crudos de monedas
+     distintas
+
+GIVEN un campo que BYMA no publica para una especie
+WHEN se muestra la fila
+THEN la celda queda vacía y contada en la cobertura; no se completa por analogía ni se calcula
+     desde otra especie
+
+GIVEN las pestañas nuevas junto a las de renta fija
+WHEN se mira el conteo del monitor
+THEN los instrumentos que siguen fuera (sin_segmento) están declarados con su cantidad, igual que
+     antes
+```
+
+---
+
 ### Bloque N — Mis carteras (F13)
 
 ---
@@ -2128,36 +2259,38 @@ THEN declara la demora real de la nueva fuente, no la de 20 minutos de la anteri
 | 18 | F-020 | Límites de concentración en vivo | Stage 1 | 350 | 2 | 100 % | 4 | 175,0 |
 | 19 | F-022 | Rendimientos por naturaleza y plazo | Stage 1 | 350 | 2 | 100 % | 4 | 175,0 |
 | 20 | F-007 | Consolidador multi-fuente | Stage 1 | 400 | 3 | 80 % | 6 | 160,0 |
-| 21 | F-030 | Valuación y diagnóstico de cartera | Stage 1 | 200 | 3 | 100 % | 4 | 150,0 |
-| 22 | F-018 | Cartera editable y ponderación | Stage 1 | 350 | 3 | 80 % | 6 | 140,0 |
-| 23 | F-016 | Grilla-selector de doce meses | Stage 1 | 380 | 3 | 80 % | 8 | 114,0 |
-| 24 | F-017 | Filtros de la grilla | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
-| 25 | F-039 | Ficha de instrumento | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
-| 26 | F-029 | Resolución de tickers | Stage 1 | 200 | 2 | 80 % | 3 | 106,7 |
-| 27 | F-038 | Monitor de mercado | Stage 1 | 400 | 2 | 80 % | 6 | 106,7 |
-| 28 | F-031 | Vector de riesgo de seis ejes | Stage 1 | 250 | 3 | 80 % | 6 | 100,0 |
-| 29 | F-032 | Motor de rotaciones intra-segmento | Stage 1 | 200 | 3 | 100 % | 6 | 100,0 |
-| 30 | F-042 | Exportación a Excel y PDF | Stage 1 | 250 | 2 | 80 % | 4 | 100,0 |
-| 31 | F-028 | Ingreso de cartera por tres vías | Stage 1 | 200 | 3 | 80 % | 5 | 96,0 |
-| 32 | F-034 | Modo subir TIR con contrapartida | Stage 1 | 180 | 3 | 80 % | 5 | 86,4 |
-| 33 | F-019 | Armado asistido | Stage 1 | 250 | 2 | 100 % | 6 | 83,3 |
-| 34 | F-026 | Bloque de renta variable | Stage 1 | 300 | 2 | 80 % | 6 | 80,0 |
-| 35 | F-050 | API Market Data oficial de BYMA | Stage 2 | 400 | 2 | 50 % | 5 | 80,0 |
-| 36 | F-037 | Comparación original contra propuesta | Stage 1 | 180 | 2 | 80 % | 4 | 72,0 |
-| 37 | F-040 | Sensibilidad por repricing completo | Stage 1 | 200 | 1 | 100 % | 3 | 66,7 |
-| 38 | F-033 | Modo bajar riesgo | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
-| 39 | F-036 | Aceptación rotación por rotación | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
-| 40 | F-025 | Carga asistida de lámina | Stage 1 | 200 | 1 | 80 % | 3 | 53,3 |
-| 41 | F-005 | Parser del informe diario de IAMC | Stage 1 | 400 | 2 | 50 % | 8 | 50,0 |
-| 42 | F-023 | Composición y curva TIR/duración | Stage 1 | 300 | 1 | 80 % | 5 | 48,0 |
-| 43 | F-048 | Alertas y notificaciones | Stage 2 | 300 | 1 | 80 % | 6 | 40,0 |
-| 44 | F-049 | Comparación de carteras entre sí | Stage 2 | 200 | 1 | 80 % | 4 | 40,0 |
-| 45 | F-044 | Historial de propuestas | Stage 2 | 250 | 2 | 50 % | 10 | 25,0 |
-| 46 | F-043 | Gestión de clientes y CRM | Stage 2 | 300 | 2 | 50 % | 15 | 20,0 |
-| 47 | F-027 | Calendario de balances | Stage 1 | 200 | 1 | 50 % | 6 | 16,7 |
-| 48 | F-045 | Colocaciones primarias | Stage 2 | 150 | 2 | 50 % | 10 | 15,0 |
-| 49 | F-046 | FCI con fuente | Stage 2 | 200 | 2 | 25 % | 12 | 8,3 |
-| 50 | F-047 | Opciones | Stage 2 | 80 | 1 | 50 % | 10 | 4,0 |
+| 21 | F-051 | Métricas propias: TIR, duración y paridad | Stage 1 | 400 | 2 | 80 % | 4 | 160,0 |
+| 22 | F-030 | Valuación y diagnóstico de cartera | Stage 1 | 200 | 3 | 100 % | 4 | 150,0 |
+| 23 | F-018 | Cartera editable y ponderación | Stage 1 | 350 | 3 | 80 % | 6 | 140,0 |
+| 24 | F-016 | Grilla-selector de doce meses | Stage 1 | 380 | 3 | 80 % | 8 | 114,0 |
+| 25 | F-017 | Filtros de la grilla | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
+| 26 | F-039 | Ficha de instrumento | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
+| 27 | F-029 | Resolución de tickers | Stage 1 | 200 | 2 | 80 % | 3 | 106,7 |
+| 28 | F-038 | Monitor de mercado | Stage 1 | 400 | 2 | 80 % | 6 | 106,7 |
+| 29 | F-052 | Renta variable en el monitor | Stage 1 | 400 | 1 | 80 % | 3 | 106,7 |
+| 30 | F-031 | Vector de riesgo de seis ejes | Stage 1 | 250 | 3 | 80 % | 6 | 100,0 |
+| 31 | F-032 | Motor de rotaciones intra-segmento | Stage 1 | 200 | 3 | 100 % | 6 | 100,0 |
+| 32 | F-042 | Exportación a Excel y PDF | Stage 1 | 250 | 2 | 80 % | 4 | 100,0 |
+| 33 | F-028 | Ingreso de cartera por tres vías | Stage 1 | 200 | 3 | 80 % | 5 | 96,0 |
+| 34 | F-034 | Modo subir TIR con contrapartida | Stage 1 | 180 | 3 | 80 % | 5 | 86,4 |
+| 35 | F-019 | Armado asistido | Stage 1 | 250 | 2 | 100 % | 6 | 83,3 |
+| 36 | F-026 | Bloque de renta variable | Stage 1 | 300 | 2 | 80 % | 6 | 80,0 |
+| 37 | F-050 | API Market Data oficial de BYMA | Stage 2 | 400 | 2 | 50 % | 5 | 80,0 |
+| 38 | F-037 | Comparación original contra propuesta | Stage 1 | 180 | 2 | 80 % | 4 | 72,0 |
+| 39 | F-040 | Sensibilidad por repricing completo | Stage 1 | 200 | 1 | 100 % | 3 | 66,7 |
+| 40 | F-033 | Modo bajar riesgo | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
+| 41 | F-036 | Aceptación rotación por rotación | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
+| 42 | F-025 | Carga asistida de lámina | Stage 1 | 200 | 1 | 80 % | 3 | 53,3 |
+| 43 | F-005 | Parser del informe diario de IAMC | Stage 1 | 400 | 2 | 50 % | 8 | 50,0 |
+| 44 | F-023 | Composición y curva TIR/duración | Stage 1 | 300 | 1 | 80 % | 5 | 48,0 |
+| 45 | F-048 | Alertas y notificaciones | Stage 2 | 300 | 1 | 80 % | 6 | 40,0 |
+| 46 | F-049 | Comparación de carteras entre sí | Stage 2 | 200 | 1 | 80 % | 4 | 40,0 |
+| 47 | F-044 | Historial de propuestas | Stage 2 | 250 | 2 | 50 % | 10 | 25,0 |
+| 48 | F-043 | Gestión de clientes y CRM | Stage 2 | 300 | 2 | 50 % | 15 | 20,0 |
+| 49 | F-027 | Calendario de balances | Stage 1 | 200 | 1 | 50 % | 6 | 16,7 |
+| 50 | F-045 | Colocaciones primarias | Stage 2 | 150 | 2 | 50 % | 10 | 15,0 |
+| 51 | F-046 | FCI con fuente | Stage 2 | 200 | 2 | 25 % | 12 | 8,3 |
+| 52 | F-047 | Opciones | Stage 2 | 80 | 1 | 50 % | 10 | 4,0 |
 
 **Cómo se lee esta tabla.** El RICE ordena por eficiencia, no por secuencia. Las features de más
 score son las Foundation y las de ingesta: mucho alcance sobre poco esfuerzo, porque reusan lógica ya
