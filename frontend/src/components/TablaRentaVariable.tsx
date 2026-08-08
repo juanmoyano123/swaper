@@ -84,11 +84,19 @@ export function TablaRentaVariable({
     const sinCierreAnterior = especies.filter((e) => e.cierre_anterior === null).length
     const sinPuntas = especies.filter((e) => e.px_bid === null && e.px_ask === null).length
     const sinVolumen = especies.filter((e) => e.volumen === null).length
+    // Experimento data912: de dónde salió el precio. `startsWith` porque `fuente` viaja compuesta
+    // ("data912-arrastre+calculo"); acá sólo importa el primer término, quién ganó el overlay.
+    const arrastrados = especies.filter((e) => e.fuente?.startsWith('data912-arrastre')).length
+    const deRespaldo = especies.filter(
+      (e) => e.precio !== null && e.fuente?.startsWith('byma'),
+    ).length
 
     const partes: string[] = []
     if (sinCierreAnterior > 0) partes.push(`${fmtNumero(sinCierreAnterior, 0)} sin cierre anterior (sin variación)`)
     if (sinPuntas > 0) partes.push(`${fmtNumero(sinPuntas, 0)} sin puntas`)
     if (sinVolumen > 0) partes.push(`${fmtNumero(sinVolumen, 0)} sin volumen publicado`)
+    if (arrastrados > 0) partes.push(`${fmtNumero(arrastrados, 0)} precios arrastrados de sesión anterior`)
+    if (deRespaldo > 0) partes.push(`${fmtNumero(deRespaldo, 0)} desde respaldo BYMA`)
     return partes.join(' · ')
   }, [especies])
 

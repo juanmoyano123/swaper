@@ -37,6 +37,7 @@ function accion(extra: Partial<EspecieRentaVariable> = {}): EspecieRentaVariable
     px_bid: 29.9,
     px_ask: 30.1,
     operaciones: 12,
+    fuente: null,
     ...extra,
   }
 }
@@ -54,6 +55,7 @@ function cedear(extra: Partial<EspecieRentaVariable> = {}): EspecieRentaVariable
     px_bid: 49.5,
     px_ask: 50.5,
     operaciones: 3,
+    fuente: null,
     ...extra,
   }
 }
