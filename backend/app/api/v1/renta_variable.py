@@ -22,16 +22,21 @@ la regla 2 prohíbe — y el hecho de que desde F-051 el universo de renta fija 
 cambia nada acá.
 """
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.deps import get_db
 from app.core.pagination import CursorParams, Page, build_page
-from app.renta_variable import armar_renta_variable, leer_renta_variable
+from app.externos import cliente_yahoo
+from app.renta_variable import EspecieRentaVariable, armar_renta_variable, leer_renta_variable
 from app.universo.servicio import sanear_universo
 
 router = APIRouter(prefix="/renta-variable", tags=["renta variable"])
+
+# El bloque propio lleva su fuente escrita al lado del dato, igual que el externo: en una ficha que
+# junta dos orígenes, cuál es cuál no puede quedar librado a que el lector se acuerde.
+FUENTE_PROPIA = "BYMA"
 
 
 @router.get(
@@ -67,3 +72,54 @@ async def especies(
 
     filas_api = [e.como_dict() for e in listado[: params.limit + 1]]
     return build_page(filas_api, params.limit, lambda f: {"ticker": f["ticker"]})
+
+
+async def _especie_de(conn: Any, ticker: str) -> EspecieRentaVariable | None:
+    """La especie de renta variable del universo de hoy, o `None`.
+
+    Se lee el listado entero y se filtra en memoria en vez de agregarle un WHERE a la lectura: es la
+    misma consulta que ya sirve al monitor, y duplicar el SQL para un solo ticker haría que un
+    cambio en una de las dos lecturas dejara la otra desalineada sin que nada avise.
+    """
+    saneado = await sanear_universo(conn)
+    filas = await leer_renta_variable(conn)
+    pedido = ticker.strip().upper()
+    especies = armar_renta_variable(filas, saneado.cambio)
+    return next((e for e in especies if e.ticker.upper() == pedido), None)
+
+
+@router.get(
+    "/{ticker}/ficha",
+    summary="La ficha de una acción o un CEDEAR: lo nuestro de BYMA y el bloque externo de Yahoo",
+    responses={
+        404: {"description": "El ticker no es renta variable del universo de hoy"},
+        503: {"description": "La base de datos no está disponible"},
+    },
+)
+async def ficha(ticker: str, conn: Annotated[object, Depends(get_db)]) -> dict[str, object]:
+    """Dos bloques con su fuente a la vista, y la ficha se muestra aunque el segundo falte.
+
+    **El bloque propio** —precio, cierre anterior, variación, puntas, operaciones— sale del universo
+    consolidado de BYMA y es el que sostiene la pantalla. **El bloque externo** es Yahoo Finance,
+    rotulado con su fuente y la hora en que se lo capturó, y puede venir declarado no disponible sin
+    que eso rompa nada: Yahoo no publica una API y sus endpoints no son contractuales
+    (ver `app/externos/yahoo.py`).
+
+    Lo que el bloque externo **nunca** trae es recomendación de analistas, precio objetivo ni
+    consenso: es opinión de terceros y la regla 6 del dominio mantiene el análisis determinístico.
+    Y los valores propietarios de Yahoo viajan tal como la fuente los declara, sin traducir
+    (regla 11).
+
+    404 y no una ficha vacía cuando el ticker no es renta variable del universo de hoy: es también
+    lo que le permite al frontend distinguir una acción de un bono sin adivinarlo por el ticker.
+    """
+    especie = await _especie_de(conn, ticker)
+    if especie is None:
+        raise HTTPException(404, detail=f"{ticker} no es renta variable del universo de hoy")
+
+    externo = await cliente_yahoo().bloque_externo(especie.ticker)
+    return {
+        "ticker": especie.ticker,
+        "propio": {"fuente": FUENTE_PROPIA, **especie.como_dict()},
+        "externo": externo.como_dict(),
+    }

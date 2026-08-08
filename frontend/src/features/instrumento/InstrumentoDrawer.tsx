@@ -9,7 +9,7 @@
 import { useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
-import { FichaInstrumento } from './FichaInstrumento'
+import { FichaDelActivo } from './FichaDelActivo'
 
 export function InstrumentoDrawer() {
   const { ticker } = useParams<{ ticker: string }>()
@@ -84,7 +84,7 @@ export function InstrumentoDrawer() {
       </header>
 
       <div style={{ padding: 14 }}>
-        <FichaInstrumento ticker={ticker} />
+        <FichaDelActivo ticker={ticker} />
       </div>
     </aside>
   )

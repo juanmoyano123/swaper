@@ -2,7 +2,7 @@ import { useParams } from 'react-router-dom'
 
 import { Pantalla } from '@/components/Pantalla'
 
-import { FichaInstrumento } from './FichaInstrumento'
+import { FichaDelActivo } from './FichaDelActivo'
 
 /**
  * La ficha como pantalla completa.
@@ -17,9 +17,9 @@ export function InstrumentoPage() {
   return (
     <Pantalla
       titulo={<span className="mono">{ticker}</span>}
-      bajada="Condiciones de emisión, el mismo papel en las tres monedas y el cronograma de pagos."
+      bajada="Condiciones de emisión, el mismo papel en las tres monedas y el cronograma de pagos; en una acción o un CEDEAR, el perfil de la empresa."
     >
-      <FichaInstrumento ticker={ticker} />
+      <FichaDelActivo ticker={ticker} />
     </Pantalla>
   )
 }
