@@ -429,14 +429,20 @@ def _en_fraccion(valor: float | None) -> float | None:
     return None if valor is None else valor / 100
 
 
-def _fuente_de(propias: MetricasEspecie | None, fecha_metricas: object) -> str:
+def _fuente_de(
+    propias: MetricasEspecie | None, fecha_metricas: object, *, origen: str = "byma"
+) -> str:
     """De dónde salió lo que esta fila muestra. Se componen los términos que efectivamente hay.
+
+    `origen` es el experimento data912: `_colapsar` conserva `fila["origen_precio"]` cuando el
+    overlay pisó el precio de esta especie (`'data912'` u `'data912-arrastre'`), y ese valor llega
+    acá tal cual. El default `"byma"` es lo que cae cuando el overlay no tocó la fila.
 
     `calculo` sólo aparece si el cálculo **produjo** algún número. Que se haya intentado y no haya
     salido nada no es una fuente: la fila no tiene nada que atribuirle, y decir que sí haría creer
     que las columnas vacías las dejó vacías el cálculo cuando lo que faltó fue el insumo.
     """
-    partes = ["byma"]
+    partes = [origen]
     if propias is not None and (
         propias.tir is not None or propias.duration is not None or propias.paridad is not None
     ):
@@ -518,7 +524,10 @@ def armar_consolidacion(
                 "px_bid": _precio(fila["precio_compra"]),
                 "px_ask": _precio(fila["precio_venta"]),
                 "operaciones": fila["operaciones"],
-                "fuente": "byma",
+                # Experimento data912: si el overlay pisó esta especie, la punta es la que trajo
+                # data912 y se rotula igual — incluido `-arrastre`, porque si no operó, la fecha
+                # del libro es tan desconocida como la del precio (regla 11).
+                "fuente": fila.get("origen_precio", "byma"),
             }
         )
 
@@ -596,7 +605,9 @@ def armar_consolidacion(
                 "last_price": precio,
                 "tna": None,
                 "effective_volume": fila["monto_operado"],
-                "fuente": _fuente_de(propias, metricas["fecha_metricas"]),
+                "fuente": _fuente_de(
+                    propias, metricas["fecha_metricas"], origen=fila.get("origen_precio", "byma")
+                ),
                 "cierre_anterior": _precio(fila["precio_cierre_anterior"]),
                 **metricas,
             }

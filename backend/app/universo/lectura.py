@@ -115,6 +115,9 @@ COLUMNAS: tuple[str, ...] = (
     "effectiveVolume",
     # F-038: el monitor la muestra.
     "paridad",
+    # Experimento data912: de dónde salió el precio de esta fila. La vista la expone desde
+    # `20260808120000_data912_fuente_resumen.sql`; antes de esa migración `resumen` la descartaba.
+    "fuente",
 )
 
 # Lo que la vista no tiene y hay que ir a buscar a la tabla. Ver el porqué en el docstring.

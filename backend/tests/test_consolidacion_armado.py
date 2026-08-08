@@ -652,3 +652,63 @@ def test_un_cierre_anterior_en_cero_no_es_un_precio_y_queda_vacio() -> None:
     )
 
     assert resultado.filas_precios[0]["cierre_anterior"] is None
+
+
+# --- Experimento data912: `origen_precio` viaja hasta `fuente`, en precios y en puntas -----------
+
+
+def test_un_arrastre_de_data912_con_calculo_se_rotula_data912_arrastre_mas_calculo() -> None:
+    """El overlay pisa `precio_ultimo` y setea `origen_precio` antes de que esto corra — acá se
+    simula directamente sobre la `FilaRueda`, que es el contrato entre los dos módulos."""
+    fila_pisada = {
+        **especie("AL30D", moneda="USD", ultimo=56.7),
+        "origen_precio": "data912-arrastre",
+    }
+
+    resultado = armar_consolidacion(
+        hoy=HOY,
+        especies_por_endpoint={"public-bonds": [fila_pisada]},
+        filas_cashflow=[
+            cashflow("AL30", "HARD_DOLLAR", payment_date=date(2027, 1, 9)),
+            cashflow("AL30", "HARD_DOLLAR", payment_date=date(2028, 1, 9)),
+            cashflow("AL30", "HARD_DOLLAR", payment_date=date(2029, 1, 9), capital=100.0),
+        ],
+    )
+
+    (precio,) = resultado.filas_precios
+    assert precio["tir"] is not None, "el arrastre se calcula igual: sábado con cierre del viernes"
+    assert precio["fuente"] == "data912-arrastre+calculo"
+
+
+def test_una_fila_sin_origen_precio_sigue_dando_byma() -> None:
+    """El default de `_fuente_de` no cambió: una fila que el overlay no tocó sigue siendo byma."""
+    resultado = armar_consolidacion(
+        hoy=HOY,
+        especies_por_endpoint={"negociable-obligations": [especie("PLC7O")]},
+        filas_cashflow=[cashflow("PLC7", "ON")],
+    )
+
+    assert resultado.filas_precios[0]["fuente"] == "byma"
+
+
+def test_la_punta_conserva_el_origen_precio_incluido_el_sufijo_arrastre() -> None:
+    fila_pisada = {**especie("AFCHD", moneda="USD"), "origen_precio": "data912-arrastre"}
+
+    resultado = armar_consolidacion(
+        hoy=HOY,
+        especies_por_endpoint={"negociable-obligations": [fila_pisada]},
+    )
+
+    (punta,) = resultado.filas_puntas
+    assert punta["fuente"] == "data912-arrastre", (
+        "si no operó, la fecha del libro es tan desconocida como la del precio"
+    )
+
+
+def test_la_punta_de_un_ticker_no_pisado_sigue_siendo_byma() -> None:
+    resultado = armar_consolidacion(
+        hoy=HOY,
+        especies_por_endpoint={"negociable-obligations": [especie("PLC7O")]},
+    )
+
+    assert resultado.filas_puntas[0]["fuente"] == "byma"

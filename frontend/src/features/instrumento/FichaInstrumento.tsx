@@ -33,6 +33,20 @@ const NO_INFORMADO = 'no informado'
 
 const CLASES_RENTA_VARIABLE = new Set(['accion', 'cedear'])
 
+/**
+ * Experimento data912: el primer término de `fuente` ("data912-arrastre+calculo" → "arrastre") es
+ * de dónde salió el precio. Se traduce a texto humano acá porque el rótulo interno compone origen
+ * y cálculo con `+`, que no es lo que el asesor necesita leer — sólo el origen del precio.
+ */
+function textoFuente(fuente: string | null): string {
+  if (fuente === null) return SIN_DATO
+  const origen = fuente.split('+')[0]
+  if (origen === 'data912-arrastre') return 'precio arrastrado de sesión anterior (data912)'
+  if (origen === 'data912') return 'data912'
+  if (origen === 'byma') return 'BYMA'
+  return origen
+}
+
 export function FichaInstrumento({ ticker }: { ticker: string | undefined }) {
   const fichaQuery = useFichaInstrumento(ticker)
   const condicionesQuery = useCondicionesInstrumento(ticker)
@@ -186,6 +200,7 @@ function GrillaFicha({ especie }: { especie: EspecieFicha }) {
     ['Volumen', fmtCompacto(especie.volumen)],
     ['Ley', especie.ley ?? SIN_DATO],
     ['Vencimiento', fmtFecha(especie.vencimiento)],
+    ['Fuente del precio', textoFuente(especie.fuente)],
   ]
 
   return (

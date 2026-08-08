@@ -47,6 +47,7 @@ function especie(ticker: string, extra: Partial<EspecieFicha> = {}): EspecieFich
     volumen_usd: 650,
     paridad: 0.875,
     dato_sano: true,
+    fuente: null,
     ...extra,
   }
 }

@@ -39,6 +39,7 @@ function especieValida(): Record<string, unknown> {
     paridad: 0.875,
     dato_sano: true,
     hermanas: [],
+    fuente: null,
   }
 }
 

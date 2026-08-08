@@ -30,6 +30,8 @@ export const esquemaEspecieRentaVariable = z.object({
   operaciones: z.number().nullable(),
   // Sin `rendimiento`: si el backend algún día lo mandara, no viaja a la tabla. Una acción no
   // tiene TIR (regla 2) y este contrato no le hace lugar.
+  /** Experimento data912: de dónde salió `precio`. Ver `features/monitor/lib/schema.ts`. */
+  fuente: z.string().nullable(),
 })
 
 export type EspecieRentaVariable = z.infer<typeof esquemaEspecieRentaVariable>

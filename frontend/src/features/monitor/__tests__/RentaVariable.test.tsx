@@ -60,6 +60,7 @@ function especieRentaFija(): Especie {
     paridad: 0.875,
     dato_sano: true,
     hermanas: [],
+    fuente: null,
   }
 }
 
@@ -76,6 +77,7 @@ function especieRV(extra: Partial<EspecieRentaVariable> = {}): EspecieRentaVaria
     px_bid: 995.0,
     px_ask: 1005.0,
     operaciones: 50,
+    fuente: null,
     ...extra,
   }
 }

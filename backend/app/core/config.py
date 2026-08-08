@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     byma_base_url: str = "https://open.bymadata.com.ar/vanoms-be-core/rest/api/bymadata/free"
     byma_demora_minutos: int = 20
 
+    # data912 (experimento): API pública sin auth que arrastra el último cierre conocido aunque
+    # la especie no haya operado. No declara demora — la fuente no la publica y no se le inventa
+    # una (regla 11) —, así que no hay `data912_demora_minutos`.
+    data912_base_url: str = "https://data912.com"
+
     # IAMC: el informe diario llega por subida manual, no por descarga. Esta ruta es dónde se
     # guardan los que se van subiendo.
     iamc_directorio: str = "fuentes"

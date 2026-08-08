@@ -37,6 +37,8 @@ export const esquemaEspecieFicha = z.object({
   /** `false` cuando la sanidad de F-010 la descartó. Sigue en la ficha: no se propone, no se
    * esconde. */
   dato_sano: z.boolean(),
+  /** Experimento data912: de dónde salió `precio`. Ver `features/monitor/lib/schema.ts`. */
+  fuente: z.string().nullable(),
 })
 
 export type EspecieFicha = z.infer<typeof esquemaEspecieFicha>

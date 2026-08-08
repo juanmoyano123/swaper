@@ -28,6 +28,8 @@ COLUMNAS_VISTA: tuple[str, ...] = (
     "lastPrice",
     "effectiveVolume",
     "cierre_anterior",
+    # Experimento data912: de dónde salió el precio de esta fila. Ver `universo/lectura.py`.
+    "fuente",
 )
 COLUMNAS_INSTRUMENTOS: tuple[str, ...] = ("moneda_cotizacion",)
 COLUMNAS_PUNTAS: tuple[str, ...] = ("px_bid", "px_ask", "operaciones")

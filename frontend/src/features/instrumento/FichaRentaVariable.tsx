@@ -1,10 +1,12 @@
 /**
  * La ficha de una acción o un CEDEAR — F-053.
  *
- * Dos orígenes en una pantalla, y cada bloque dice de dónde salió. **El bloque propio es BYMA** y es
- * el que sostiene la ficha: precio, cierre anterior, variación, puntas y operaciones. **El bloque
- * externo es Yahoo Finance**, con la hora en que se lo capturó, y puede faltar entero sin que la
- * pantalla se rompa — cuando falta, se declara y lo nuestro se muestra igual.
+ * Dos orígenes en una pantalla, y cada bloque dice de dónde salió. **El bloque propio** sostiene la
+ * ficha: precio, cierre anterior, variación, puntas y operaciones. Desde el experimento data912
+ * (rama `experimento/data912`) ya no es siempre BYMA — `propio.fuente` declara la procedencia real
+ * de cada corrida, ver `textoFuentePropia()` acá abajo. **El bloque externo es Yahoo Finance**, con
+ * la hora en que se lo capturó, y puede faltar entero sin que la pantalla se rompa — cuando falta,
+ * se declara y lo nuestro se muestra igual.
  *
  * Lo que no está, y no es un olvido:
  *
@@ -44,6 +46,20 @@ import type {
   ValuacionExterna,
 } from './lib/schemaRentaVariable'
 
+/**
+ * Experimento data912: `propio.fuente` compone origen y cálculo con `+`
+ * ("data912-arrastre+calculo"); acá sólo interesa el origen del precio, en texto humano. Mismo
+ * criterio que `textoFuente()` de `FichaInstrumento.tsx`, duplicado a propósito: son fichas de
+ * clases de activo distintas y no comparten módulo.
+ */
+function textoFuentePropia(fuente: string): string {
+  const origen = fuente.split('+')[0]
+  if (origen === 'data912-arrastre') return 'precio arrastrado de sesión anterior (data912)'
+  if (origen === 'data912') return 'data912'
+  if (origen === 'byma') return 'BYMA'
+  return origen
+}
+
 export function FichaRentaVariable({ ticker }: { ticker: string }) {
   const query = useFichaRentaVariable(ticker)
 
@@ -71,7 +87,7 @@ export function FichaRentaVariable({ ticker }: { ticker: string }) {
         <Cabecera propio={propio} externo={externo} />
       </Panel>
 
-      <Panel rotulo="La rueda de hoy · BYMA">
+      <Panel rotulo={`La rueda de hoy · ${textoFuentePropia(propio.fuente)}`}>
         <BloqueDeLaRueda propio={propio} />
       </Panel>
 
@@ -171,7 +187,7 @@ function Cabecera({ propio, externo }: { propio: BloquePropio; externo: BloqueEx
         </span>
       </div>
       <Leyenda>
-        Precio y variación: {propio.fuente}. El nombre de la empresa
+        Precio y variación: {textoFuentePropia(propio.fuente)}. El nombre de la empresa
         {nombre === null ? ' no lo entregó ' : ' lo declara '}
         {externo.fuente}. La moneda es la que declara la fuente, sin convertir.
       </Leyenda>
@@ -195,9 +211,9 @@ function BloqueDeLaRueda({ propio }: { propio: BloquePropio }) {
     <div>
       <Grilla campos={campos} />
       <Leyenda>
-        Todo en esta grilla sale del universo consolidado de {propio.fuente}. El volumen se muestra
-        en dólares sólo cuando la moneda declarada permite convertirlo; con EXT, que BYMA no
-        documenta, queda {SIN_DATO}.
+        Todo en esta grilla sale del universo consolidado de {textoFuentePropia(propio.fuente)}. El
+        volumen se muestra en dólares sólo cuando la moneda declarada permite convertirlo; con EXT,
+        que BYMA no documenta, queda {SIN_DATO}.
       </Leyenda>
     </div>
   )

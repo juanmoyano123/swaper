@@ -179,6 +179,13 @@ class EspecieUniverso:
     clase de activo —"Soberano", "Subsoberano"— cuando el curado no lo tiene. `None` es sector no
     informado, y agrupa aparte: no se le asigna uno por parecido con otro emisor."""
 
+    fuente: str | None = None
+    """Experimento data912 (rama `experimento/data912`): de dónde salió el precio de esta fila —
+    `data912`, `data912-arrastre` (precio de fecha desconocida, regla 11) o `byma`, compuesto con
+    `+calculo`/`+iamc`. `None` en cualquier corrida anterior a la migración que la expone en la
+    vista. No se usa para calcular nada; es sólo lo que la nota de cobertura del monitor y la
+    ficha del instrumento muestran."""
+
     @property
     def naturaleza(self) -> str:
         return NATURALEZA_TASA[self.segmento]
@@ -222,6 +229,7 @@ class EspecieUniverso:
             "paridad": self.paridad,
             "lamina": self.lamina,
             "sector": self.sector,
+            "fuente": self.fuente,
         }
 
 
@@ -303,6 +311,7 @@ def segmentar(filas: Iterable[Mapping[str, object]]) -> Segmentacion:
                 paridad=a_numero(fila.get("paridad")),
                 lamina=a_numero(fila.get("lamina")),
                 sector=_texto(fila.get("sector")),
+                fuente=_texto(fila.get("fuente")),
             )
         )
 

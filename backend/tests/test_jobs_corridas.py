@@ -18,6 +18,7 @@ from app.jobs.corridas import corrida_matinal, refresh_intra_rueda
 from tests.conftest import FakeConexionEscritura
 
 BYMA_URL = "https://byma-test.local/free"
+DATA912_URL = "https://data912-test.local"
 
 ENDPOINTS_BYMA = (
     "negociable-obligations",
@@ -27,6 +28,8 @@ ENDPOINTS_BYMA = (
     "leading-equity",
     "index-price",
 )
+
+TRAMOS_DATA912 = ("arg_bonds", "arg_corp", "arg_notes", "arg_cedears", "arg_stocks")
 
 
 async def _no_dormir(_: float) -> None:
@@ -86,7 +89,11 @@ def settings_de_prueba(tmp_path, monkeypatch):
     objeto que se le pasa a la corrida, así que hay que parchear las dos cosas -mismo patrón que
     `tests/test_consolidar_endpoint.py`."""
     settings = get_settings().model_copy(
-        update={"byma_base_url": BYMA_URL, "iamc_directorio": str(tmp_path)}
+        update={
+            "byma_base_url": BYMA_URL,
+            "iamc_directorio": str(tmp_path),
+            "data912_base_url": DATA912_URL,
+        }
     )
     monkeypatch.setattr(get_settings(), "iamc_directorio", str(tmp_path))
     return settings
@@ -103,6 +110,22 @@ def _montar_byma(mapa: dict[str, list[dict]]) -> None:
 def _montar_byma_caido() -> None:
     for endpoint in ENDPOINTS_BYMA:
         respx.post(f"{BYMA_URL}/{endpoint}").mock(return_value=httpx.Response(500))
+
+
+def _montar_data912(mapa: dict[str, list[dict]] | None = None) -> None:
+    """Experimento data912: relleno con precio 0 por defecto — nunca pisa nada (mismo criterio
+    que `test_consolidar_endpoint.py::_montar_data912`)."""
+    mapa = mapa or {}
+    for tramo in TRAMOS_DATA912:
+        filas = mapa.get(tramo, [])
+        respx.get(f"{DATA912_URL}/live/{tramo}").mock(
+            return_value=httpx.Response(200, json=filas or [{"symbol": f"RELLENO-{tramo}", "c": 0}])
+        )
+
+
+def _montar_data912_caido() -> None:
+    for tramo in TRAMOS_DATA912:
+        respx.get(f"{DATA912_URL}/live/{tramo}").mock(return_value=httpx.Response(500))
 
 
 ESPECIE_ON = {
@@ -137,6 +160,7 @@ async def test_corrida_matinal_registra_parcial_con_solo_byma(settings_de_prueba
     conn = _FakeConexionConRegistro()
     with respx.mock:
         _montar_byma({"negociable-obligations": [ESPECIE_ON]})
+        _montar_data912()
 
         corrida = await corrida_matinal(conn, settings_de_prueba, dormir=_no_dormir)
 
@@ -153,6 +177,11 @@ async def test_corrida_matinal_registra_fallida_cuando_byma_esta_caido(settings_
     conn = _FakeConexionConRegistro()
     with respx.mock:
         _montar_byma_caido()
+        # data912 también caído: la intención del test es "ninguna fuente real está disponible",
+        # y con data912 arriba (aunque sea con relleno) el estado sube a parcial — hallazgo real
+        # del experimento, no un artefacto: una segunda fuente que sí responde cambia el
+        # diagnóstico de la corrida, y eso es exactamente lo que tiene que pasar en producción.
+        _montar_data912_caido()
 
         corrida = await corrida_matinal(conn, settings_de_prueba, dormir=_no_dormir)
 
@@ -166,11 +195,42 @@ async def test_corrida_matinal_persiste_las_alertas_de_las_fuentes(settings_de_p
     conn = _FakeConexionConRegistro()
     with respx.mock:
         _montar_byma_caido()
+        _montar_data912()
 
         corrida = await corrida_matinal(conn, settings_de_prueba, dormir=_no_dormir)
 
     codigos = {a["codigo"] for a in corrida["alertas"]}
     assert "fuente_no_disponible" in codigos
+
+
+async def test_data912_arriba_sube_el_estado_de_fallida_a_parcial_con_byma_caido(
+    settings_de_prueba,
+) -> None:
+    """El reverso del test anterior: si BYMA cae pero data912 responde, la corrida ya no es
+    `fallida` — llegó algo, aunque sea sin metadata de BYMA."""
+    conn = _FakeConexionConRegistro()
+    with respx.mock:
+        _montar_byma_caido()
+        _montar_data912({"arg_corp": [{"symbol": "NUEVO1", "c": 101.0, "q_op": 3}]})
+
+        corrida = await corrida_matinal(conn, settings_de_prueba, dormir=_no_dormir)
+
+    assert corrida["estado"] == "parcial"
+    assert corrida["filas_por_fuente"]["data912"] >= 1
+
+
+async def test_corrida_matinal_registra_data912_en_filas_por_fuente(settings_de_prueba) -> None:
+    """Experimento data912: la matinal (que pasa por `consolidar()`) ve la fuente nueva; el
+    refresh intra-rueda —abajo— no la usa, por diseño (fuera del alcance del experimento)."""
+    conn = _FakeConexionConRegistro()
+    with respx.mock:
+        _montar_byma({"negociable-obligations": [ESPECIE_ON]})
+        _montar_data912({"arg_corp": [{"symbol": "PLC7O", "c": 200.0, "q_op": 5}]})
+
+        corrida = await corrida_matinal(conn, settings_de_prueba, dormir=_no_dormir)
+
+    assert "data912" in corrida["filas_por_fuente"]
+    assert corrida["filas_por_fuente"]["data912"] >= 1
 
 
 # --- refresh_intra_rueda -----------------------------------------------------------------------

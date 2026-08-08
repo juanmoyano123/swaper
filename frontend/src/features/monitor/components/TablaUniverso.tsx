@@ -117,6 +117,21 @@ export function TablaUniverso({
     return [...filtradas].sort((a, b) => comparar(a, b, campo, orden.direccion))
   }, [especies, filtros, orden])
 
+  // Experimento data912: mismo cálculo y mismo criterio que `TablaRentaVariable` — `startsWith`
+  // porque `fuente` viaja compuesta ("data912-arrastre+calculo"), y sólo importa quién ganó el
+  // overlay. Sobre `especies` (antes de filtrar) para que el conteo no cambie con los filtros.
+  const notaCobertura = useMemo(() => {
+    const arrastrados = especies.filter((e) => e.fuente?.startsWith('data912-arrastre')).length
+    const deRespaldo = especies.filter(
+      (e) => e.precio !== null && e.fuente?.startsWith('byma'),
+    ).length
+
+    const partes: string[] = []
+    if (arrastrados > 0) partes.push(`${fmtNumero(arrastrados, 0)} precios arrastrados de sesión anterior`)
+    if (deRespaldo > 0) partes.push(`${fmtNumero(deRespaldo, 0)} desde respaldo BYMA`)
+    return partes.join(' · ')
+  }, [especies])
+
   const virtualizador = useVirtualizer({
     count: filasOrdenadas.length,
     getScrollElement: () => contenedorRef.current,
@@ -134,9 +149,13 @@ export function TablaUniverso({
 
   return (
     <div>
-      <p className="mono" style={{ margin: '2px 0 8px', fontSize: 11.5, color: 'var(--dim)' }}>
+      <p className="mono" style={{ margin: '2px 0 2px', fontSize: 11.5, color: 'var(--dim)' }}>
         {fmtNumero(filasOrdenadas.length, 0)} de {fmtNumero(especies.length, 0)} especies en {moneda}
       </p>
+
+      {notaCobertura && (
+        <p style={{ margin: '0 0 8px', fontSize: 11, color: 'var(--dim)' }}>{notaCobertura}</p>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: PLANTILLA_COLUMNAS, gap: 0 }}>
         <Cabecera campo="ticker" orden={orden} onClick={alternarOrden}>ticker</Cabecera>

@@ -35,6 +35,10 @@ export const esquemaEspecie = z.object({
   dato_sano: z.boolean(),
   /** Las otras especies de liquidación de la misma emisión (F-011). */
   hermanas: z.array(z.string()),
+  /** Experimento data912 (rama `experimento/data912`): de dónde salió `precio`. `'data912'` |
+   * `'data912-arrastre'` (precio de fecha desconocida, regla 11) | `'byma'`, compuesto con
+   * `+calculo`/`+iamc`. `null` en cualquier corrida anterior a la migración que lo expone. */
+  fuente: z.string().nullable(),
 })
 
 export type Especie = z.infer<typeof esquemaEspecie>
