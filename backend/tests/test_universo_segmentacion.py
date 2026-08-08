@@ -146,3 +146,85 @@ def test_un_nan_es_un_faltante_y_no_un_numero() -> None:
     simplemente no se sabe. Sobre el consolidado histórico eran 366 falsos descartes."""
     resultado = segmentar([fila("CCCCO", "hard-dollar", tir=float("nan"))])
     assert resultado.especies[0].rendimiento is None
+
+
+# --- El cruce con la tabla curada: qué se rellena, qué se vacía y qué se deja como está ----------
+#
+# Agregado el 08/08/2026. La vista `resumen` lee la ley y el emisor de `instrumentos`, donde IAMC
+# sólo los cargó para las especies que publica; `condiciones_emision` los tiene para 823 tickers
+# curados. Cruzarlos sube la ley de 592 a 772 y el emisor de 720 a 859 sobre 1.477 de renta fija.
+
+
+def test_la_ley_curada_rellena_el_hueco_que_la_vista_deja() -> None:
+    """El caso de AE38C, que motivó todo esto: la vista no la tiene y la tabla curada sí."""
+    resultado = segmentar([fila("AE38C", "hard-dollar", law=None, ley_curada="Ley Argentina")])
+
+    assert resultado.especies[0].ley == "Ley Argentina"
+    assert resultado.ley_en_conflicto == []
+
+
+def test_dos_leyes_distintas_dejan_la_ley_vacia_en_vez_de_elegir_una() -> None:
+    """Regla 11 sobre el eje de riesgo más caro de equivocar: la ley decide dónde se cobra.
+
+    Sobre la base real son cuatro emisiones —PLC4, PN38, RC1C e YM39— con sus tres especies cada
+    una. Elegir la fuente que quede más cómoda daría un universo filtrable por legislación con doce
+    papeles mal clasificados, y nada lo delataría.
+    """
+    resultado = segmentar(
+        [fila("PN38O", "hard-dollar", law="Ley N.Y.", ley_curada="Ley Argentina")]
+    )
+
+    assert resultado.especies[0].ley is None
+    assert resultado.ley_en_conflicto == ["PN38O"]
+
+
+def test_cuando_las_dos_fuentes_coinciden_no_hay_conflicto_que_declarar() -> None:
+    """La contracara: el detector no puede estar marcando todo lo que tiene las dos fuentes."""
+    resultado = segmentar(
+        [fila("AL30O", "hard-dollar", law="Ley Argentina", ley_curada="Ley Argentina")]
+    )
+
+    assert resultado.especies[0].ley == "Ley Argentina"
+    assert resultado.ley_en_conflicto == []
+
+
+def test_el_emisor_curado_rellena_pero_no_pisa_al_de_la_vista() -> None:
+    """Al revés que la ley, y a propósito: acá las fuentes no se contradicen, escriben distinto.
+
+    `BANCO BBVA ARGENTINA S.A.` contra `Banco Bbva Argentina S.A` es el mismo emisor con otra
+    tipografía. Vaciarlo borraría 261 emisores que hoy se muestran bien, y emparejarlos por regla de
+    strings sería decidir si `S.A.` y `S.A.U.` son la misma sociedad.
+    """
+    resultado = segmentar(
+        [
+            fila("BF37O", "hard-dollar", underlying="BANCO BBVA ARGENTINA S.A.",
+                 emisor_curado="Banco Bbva Argentina S.A"),
+            fila("AEC2O", "hard-dollar", underlying=None,
+                 emisor_curado="Aes Argentina Generación S.A."),
+        ]
+    )
+    por_ticker = {e.ticker: e.emisor for e in resultado.especies}
+
+    assert por_ticker["BF37O"] == "BANCO BBVA ARGENTINA S.A.", "gana la vista, no se vacía"
+    assert por_ticker["AEC2O"] == "Aes Argentina Generación S.A.", "el curado rellena el hueco"
+    assert resultado.emisor_escrito_distinto == ["BF37O"]
+
+
+def test_la_misma_grafia_en_otro_case_no_cuenta_como_divergencia() -> None:
+    """Sólo se reporta lo que de verdad se escribe distinto, no lo que difiere en mayúsculas."""
+    resultado = segmentar(
+        [fila("XXXXO", "hard-dollar", underlying="ACME S.A.", emisor_curado="Acme S.A.")]
+    )
+
+    assert resultado.especies[0].emisor == "ACME S.A."
+    assert resultado.emisor_escrito_distinto == []
+
+
+def test_sin_columnas_curadas_la_segmentacion_sigue_funcionando() -> None:
+    """Las filas de un test viejo no traen `ley_curada` ni `emisor_curado`, y no tienen por qué."""
+    resultado = segmentar([fila("VIEJOO", "hard-dollar", law="Ley N.Y.", underlying="ACME")])
+
+    assert resultado.especies[0].ley == "Ley N.Y."
+    assert resultado.especies[0].emisor == "ACME"
+    assert resultado.ley_en_conflicto == []
+    assert resultado.emisor_escrito_distinto == []

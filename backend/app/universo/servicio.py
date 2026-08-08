@@ -37,7 +37,7 @@ from typing import Any
 
 import structlog
 
-from app.ingesta.alertas import Alerta
+from app.ingesta.alertas import Alerta, Severidad
 from app.ingesta.byma.normalizacion import FilaIndice
 from app.universo.cambio import TipoDeCambio, derivar_tipo_de_cambio, normalizar_volumen
 from app.universo.emisiones import UniversoDeduplicado, deduplicar
@@ -59,6 +59,13 @@ logger = structlog.get_logger()
 # es porque una fuente cambió, y para eso alcanza con el número y una muestra.
 MUESTRA_SIN_SEGMENTO = 10
 
+# Cuántas especies se nombran en el cuerpo de una alerta. Mismo criterio que `cambio.py`: el número
+# entero es lo que se mira y la lista completa va en el detalle.
+MUESTRA_ALERTA = 6
+
+CODIGO_LEY_EN_CONFLICTO = "ley_en_conflicto"
+CODIGO_EMISOR_ESCRITO_DISTINTO = "emisor_escrito_distinto"
+
 
 @dataclass(frozen=True, slots=True)
 class UniversoSaneado:
@@ -74,16 +81,27 @@ class UniversoSaneado:
     volumen de estas especies: separarlos dejaría números en dólares sin el número que los
     produjo."""
 
+    ley_en_conflicto: list[str] = field(default_factory=list)
+    """Especies cuya ley quedó vacía porque las dos fuentes declaran leyes distintas."""
+
+    emisor_escrito_distinto: list[str] = field(default_factory=list)
+    """Especies cuyo emisor las dos fuentes escriben distinto. No vacía nada: gana la vista."""
+
     @property
     def alertas(self) -> list[Alerta]:
-        """Las de la sanidad y las del tipo de cambio, juntas.
+        """Las de la sanidad, las del tipo de cambio y las del cruce de fuentes, juntas.
 
         Van en la misma lista porque quien las lee —la barra de estado del dato de F-013— tiene una
         sola: un universo del que no se puede comparar la liquidez está tan incompleto como uno con
         instrumentos descartados, y presentarlos en dos lugares distintos haría que uno se mire
         menos que el otro.
         """
-        return self.sanidad.alertas + self.cambio.alertas
+        alertas = self.sanidad.alertas + self.cambio.alertas
+        if self.ley_en_conflicto:
+            alertas.append(_alerta_ley_en_conflicto(self.ley_en_conflicto))
+        if self.emisor_escrito_distinto:
+            alertas.append(_alerta_emisor_escrito_distinto(self.emisor_escrito_distinto))
+        return alertas
 
     @property
     def descartes(self) -> list[Descarte]:
@@ -173,6 +191,46 @@ def sanear(
         sin_segmento=segmentacion.sin_segmento,
         leidos=leidos,
         cambio=cambio,
+        ley_en_conflicto=segmentacion.ley_en_conflicto,
+        emisor_escrito_distinto=segmentacion.emisor_escrito_distinto,
+    )
+
+
+def _alerta_ley_en_conflicto(especies: Sequence[str]) -> Alerta:
+    """Dos fuentes oficiales diciendo cosas distintas sobre el eje de riesgo más caro de equivocar.
+
+    No es un aviso cosmético: la ley decide en qué tribunal se cobra, y una cartera armada creyendo
+    que un papel es ley extranjera cuando es local tiene un riesgo que nadie declaró. Por eso la ley
+    queda vacía y esto sale como advertencia: el hueco es visible y el dato falso no existe.
+    """
+    return Alerta(
+        codigo=CODIGO_LEY_EN_CONFLICTO,
+        mensaje=(
+            f"{len(especies)} especies tienen ley distinta según IAMC y según la tabla curada "
+            f"({', '.join(especies[:MUESTRA_ALERTA])}): su ley queda vacía porque elegir una de "
+            "las dos sin ir al prospecto sería inventar el dato."
+        ),
+        severidad=Severidad.ADVERTENCIA,
+        accion_requerida=(
+            "Verificar la ley en el prospecto de esas emisiones y corregir la fuente que esté mal: "
+            "hasta entonces no se pueden filtrar ni proponer por legislación."
+        ),
+        detalle={"cantidad": len(especies), "especies": list(especies)},
+    )
+
+
+def _alerta_emisor_escrito_distinto(especies: Sequence[str]) -> Alerta:
+    """Informativa a propósito: no falta ningún dato, sobra una forma de escribirlo."""
+    return Alerta(
+        codigo=CODIGO_EMISOR_ESCRITO_DISTINTO,
+        mensaje=(
+            f"{len(especies)} especies tienen el nombre del emisor escrito distinto en IAMC y en "
+            f"la tabla curada ({', '.join(especies[:MUESTRA_ALERTA])}): se muestra el de IAMC. No "
+            "se los empareja por regla de strings, que sería decidir si S.A. y S.A.U. son lo mismo."
+        ),
+        severidad=Severidad.INFO,
+        accion_requerida=None,
+        detalle={"cantidad": len(especies), "especies": list(especies)},
     )
 
 

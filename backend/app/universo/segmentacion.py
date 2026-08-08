@@ -22,7 +22,7 @@ taparía el caso que esa alerta existe para mostrar — un bono cuyo tipo de tas
 """
 
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from math import isnan
 
@@ -236,6 +236,18 @@ class Segmentacion:
     sin_segmento: list[str]
     """Renta fija cuyo tipo de tasa no se reconoce. Esto sí es un problema y por eso se lista."""
 
+    ley_en_conflicto: list[str] = field(default_factory=list)
+    """Especies donde IAMC y la tabla curada declaran leyes distintas sobre el mismo papel.
+
+    Su `ley` queda vacía: elegir ganador sin ir al prospecto sería inventar, y la ley es uno de los
+    seis ejes del riesgo. Hoy son doce —cuatro emisiones con sus tres especies cada una—."""
+
+    emisor_escrito_distinto: list[str] = field(default_factory=list)
+    """Especies donde las dos fuentes nombran al mismo emisor con otra tipografía.
+
+    No es conflicto y no vacía nada: gana la vista, que es lo que ya se mostraba. Se cuenta para que
+    la divergencia sea visible sin tener que ir a mirarla."""
+
 
 def segmentar(filas: Iterable[Mapping[str, object]]) -> Segmentacion:
     """Segmenta las filas de la vista `resumen` y separa lo que no entra al universo comparable.
@@ -246,6 +258,8 @@ def segmentar(filas: Iterable[Mapping[str, object]]) -> Segmentacion:
     especies: list[EspecieUniverso] = []
     renta_variable = 0
     sin_segmento: list[str] = []
+    ley_en_conflicto: list[str] = []
+    emisor_escrito_distinto: list[str] = []
 
     for fila in filas:
         clase = str(fila["clase_activo"])
@@ -260,6 +274,15 @@ def segmentar(filas: Iterable[Mapping[str, object]]) -> Segmentacion:
             sin_segmento.append(ticker)
             continue
 
+        ley, hay_conflicto = _resolver_ley(fila.get("law"), fila.get("ley_curada"))
+        if hay_conflicto:
+            ley_en_conflicto.append(ticker)
+        emisor, escrito_distinto = _resolver_emisor(
+            fila.get("underlying"), fila.get("emisor_curado")
+        )
+        if escrito_distinto:
+            emisor_escrito_distinto.append(ticker)
+
         especies.append(
             EspecieUniverso(
                 ticker=ticker,
@@ -271,9 +294,9 @@ def segmentar(filas: Iterable[Mapping[str, object]]) -> Segmentacion:
                 ),
                 duracion=a_numero(fila.get("duration")),
                 vencimiento=_fecha(fila.get("maturity")),
-                ley=_texto(fila.get("law")),
+                ley=ley,
                 moneda_cupon=_texto(fila.get("couponCurrency")),
-                emisor=_texto(fila.get("underlying")),
+                emisor=emisor,
                 precio=a_numero(fila.get("lastPrice")),
                 volumen=a_numero(fila.get("effectiveVolume")),
                 moneda_cotizacion=_texto(fila.get("moneda_cotizacion")),
@@ -283,7 +306,52 @@ def segmentar(filas: Iterable[Mapping[str, object]]) -> Segmentacion:
             )
         )
 
-    return Segmentacion(especies=especies, renta_variable=renta_variable, sin_segmento=sin_segmento)
+    return Segmentacion(
+        especies=especies,
+        renta_variable=renta_variable,
+        sin_segmento=sin_segmento,
+        ley_en_conflicto=ley_en_conflicto,
+        emisor_escrito_distinto=emisor_escrito_distinto,
+    )
+
+
+def _resolver_ley(de_la_vista: object, curada: object) -> tuple[str | None, bool]:
+    """La ley de una especie a partir de las dos fuentes, y si se contradicen.
+
+    Cuando las dos declaran y dicen cosas distintas, el resultado es `None`: no hay forma de saber
+    cuál tiene razón sin ir al prospecto, y la ley es uno de los seis ejes del riesgo —el que decide
+    en qué tribunal se cobra—. Elegir la que quede más cómoda sería inventar el dato más caro del
+    universo. Sobre la base de hoy pasa en cuatro emisiones (doce especies con sus hermanas).
+
+    La comparación es literal y no normalizada: las dos fuentes usan el mismo vocabulario cerrado
+    —"Ley Argentina" y "Ley N.Y."— así que no hay nada que emparejar. Si alguna empezara a
+    escribirlo distinto, esto lo reportaría como conflicto, que es preferible a resolverlo con una
+    regla de strings inventada para la ocasión.
+    """
+    vista = _texto(de_la_vista)
+    del_csv = _texto(curada)
+    if vista is not None and del_csv is not None and vista != del_csv:
+        return None, True
+    return (vista if vista is not None else del_csv), False
+
+
+def _resolver_emisor(de_la_vista: object, curado: object) -> tuple[str | None, bool]:
+    """El emisor, con el curado rellenando huecos y sin pisar nunca lo que la vista ya traía.
+
+    Acá **no** se anula ante la discrepancia, al revés que con la ley, y la diferencia no es un
+    descuido: las fuentes no se contradicen sobre quién emite, escriben su nombre distinto.
+    `BANCO BBVA ARGENTINA S.A.` contra `Banco Bbva Argentina S.A`, `BANCO PATAGONIA S.A.` contra
+    `Banco Patagonia`. Son 261 casos y vaciarlos borraría emisores que hoy se muestran bien.
+
+    Decidir que dos grafías nombran al mismo emisor —sacar puntos, resolver si `S.A.` y `S.A.U.` son
+    la misma sociedad— es la inferencia que la regla 11 prohíbe. Así que no se decide: gana la
+    vista, que es lo que ya estaba en pantalla, y la divergencia se cuenta para que se vea.
+    """
+    vista = _texto(de_la_vista)
+    del_csv = _texto(curado)
+    if vista is None:
+        return del_csv, False
+    return vista, del_csv is not None and vista.upper() != del_csv.upper()
 
 
 def a_numero(valor: object) -> float | None:

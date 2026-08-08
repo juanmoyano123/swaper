@@ -55,6 +55,33 @@ El JOIN es `LEFT` por lo mismo que el de `instrumentos`: una especie sin condici
 que seguir en el universo con los dos campos vacíos. Que falten es un dato —F-024 lo cuenta y lo
 declara en pantalla— y perder la fila sería peor que no saber su lámina.
 
+## La ley y el emisor también estaban en la tabla curada, y no llegaban
+
+Agregado el 08/08/2026, después de ver el monitor mostrando `s/d` en la ley de AE38C mientras
+`condiciones_emision` decía "Ley Argentina" con su origen y su fecha. La vista `resumen` lee esos
+dos campos de `instrumentos`, donde IAMC sólo los cargó para las especies que publica: 592 de 1.477
+con ley y 720 con emisor. Con el curado suben a **772 y 859**.
+
+Las dos columnas viajan crudas y en paralelo a las de la vista porque las fuentes se comportan
+distinto y hay que poder distinguirlo (`segmentacion.py` resuelve y `servicio.py` alerta):
+
+- **La ley se contradice de frente en 4 emisiones** —PLC4, PN38, RC1C e YM39, doce especies contando
+  sus hermanas—: una fuente dice Argentina y la otra N.Y. sobre el mismo papel. No hay forma de
+  saber cuál tiene razón sin ir al prospecto, así que **queda vacía** y se alerta. Es la regla 11:
+  elegir ganador sería inventar el dato más caro del universo, porque la ley es un eje del riesgo.
+- **El emisor no se contradice, se escribe distinto**: 261 casos como `BANCO BBVA ARGENTINA S.A.`
+  contra `Banco Bbva Argentina S.A`, o `BANCO PATAGONIA S.A.` contra `Banco Patagonia`. Son el mismo
+  emisor con otra tipografía, y normalizar para compararlos —sacar puntos, decidir si `S.A.` y
+  `S.A.U.` son lo mismo— sería exactamente la inferencia que la regla prohíbe. Así que el curado
+  **sólo rellena huecos y nunca pisa**: donde la vista tiene emisor, gana la vista y no pasa nada.
+  La divergencia de escritura se cuenta en una alerta informativa para que se vea que existe.
+
+**La moneda de pago quedó afuera a propósito.** El curado dice `MEP` y `CCL` donde la vista dice
+`USD`: no se contradicen, describen la misma cosa con distinto grano. Meter los cuatro valores en un
+campo mezclaría dos vocabularios, y además `moneda_cupon` no se muestra en ninguna pantalla — la
+ficha lee la moneda de pago de `/instrumentos/{ticker}/condiciones`, directo de la tabla curada y
+con su origen. Lo mismo vale para `calificacion`: sumarla acá sería plomería sin pantalla.
+
 **La lámina viaja como `float`.** En la base es `numeric`, y asyncpg devuelve eso como `Decimal`:
 si llega así al contrato de la API, sale serializado como string y el frontend lo recibe como texto
 donde espera un número. Ya pasó una vez con este mismo campo (commit `67ac5af`), y el mismo
@@ -95,9 +122,15 @@ COLUMNAS_INSTRUMENTOS: tuple[str, ...] = ("moneda_cotizacion",)
 
 # Las de la tabla curada de F-009, con su expresión completa: la lámina castea a float y el sector
 # cae al derivado de la clase cuando el curado no lo tiene. El porqué está en el docstring.
+#
+# `ley` y `emisor` viajan **crudas de las dos fuentes** y no resueltas en SQL: quién gana lo decide
+# `segmentacion.py`, que además puede nombrar los casos en conflicto para la alerta. Un `COALESCE`
+# acá dejaría la contradicción invisible.
 COLUMNAS_CURADAS: tuple[tuple[str, str], ...] = (
     ("lamina", "ce.lamina::float8"),
     ("sector", "COALESCE(ce.sector, i.sector)"),
+    ("ley_curada", "ce.ley"),
+    ("emisor_curado", "ce.underlying"),
 )
 
 _SELECT = ", ".join(
