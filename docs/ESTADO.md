@@ -294,7 +294,7 @@ caro de equivocar.
 ## 08/08/2026 — Tanda 9: el armador dice cuánto cobra, qué concentra y qué no es renta fija
 
 Cuatro features en paralelo (F-020 concentración, F-021 panel de renta, F-026 bloque de renta
-variable, F-053 ficha del activo con Yahoo). 900 tests en el backend y 334 en el frontend; van 30
+variable, F-053 ficha del activo con Yahoo). 911 tests en el backend y 337 en el frontend; van 30
 de 45 features de Stage 1.
 
 **Antes de eso hubo que arreglar la rueda.** `en_ventana_de_rueda` sólo miraba la hora, así que un

@@ -247,20 +247,23 @@ universo y la ficha tiene su tabla de sensibilidad.
   `CREATE OR REPLACE VIEW` y no `DROP` + `CREATE`, porque la migración de subida tampoco dropea la
   vista y el guardián estructural de `test_migraciones.py` lo habría leído como tirar abajo algo que
   esa migración nunca creó.
-- **Queda una migración escrita y SIN APLICAR**: `20260807231600_f052_cierre_anterior.sql`. El código
-  ya la asume —`persistencia.py` incluye `cierre_anterior` en el INSERT y el endpoint de renta
-  variable la lee de la vista—, así que **hasta que se aplique, la consolidación falla contra la
-  base**. Verificado: la columna no existe ni en `precios` ni en `resumen`. Es aditiva y tiene
-  rollback verificado; hay que correrla antes de la próxima matinal.
+- **Migración `20260807231600_f052_cierre_anterior.sql`: aplicada.** Verificado el 08/08/2026 contra
+  la base: `cierre_anterior` existe en `precios` y en `resumen`. El código ya la asumía
+  —`persistencia.py` la incluye en el INSERT y el endpoint de renta variable la lee de la vista—,
+  así que sin ella la consolidación habría fallado.
+  **Pero la columna está en cero en los cuatro snapshots existentes**, todos anteriores a la
+  migración: ninguna consolidación corrió desde que se aplicó. La variación diaria del monitor de
+  renta variable queda vacía —correctamente vacía, no en cero— hasta la primera matinal que corra
+  con la columna presente.
 
-Siguiente paso: aplicar esa migración, y después la **tanda 9 — F-020 (concentración) ∥ F-021 (panel
-de renta) ∥ F-026 (renta variable en el armador)**. F-026 hereda de F-052 los componentes
-`TablaRentaVariable`, `FilaRentaVariable` y `PLANTILLA_COLUMNAS_RV`, que quedaron en
-`frontend/src/components/` justamente para eso.
+Siguiente paso: la **tanda 9 — F-020 (concentración) ∥ F-021 (panel de renta) ∥ F-026 (renta
+variable en el armador)**. F-026 hereda de F-052 los componentes `TablaRentaVariable`,
+`FilaRentaVariable` y `PLANTILLA_COLUMNAS_RV`, que quedaron en `frontend/src/components/`
+justamente para eso.
 
 **Tanda 9 cerrada el 08/08/2026** — F-020 (concentración) ∥ F-021 (panel de renta) ∥ F-026 (renta
 variable en el armador) ∥ **F-053** (ficha del activo con Yahoo, agregada al planificar la tanda),
-las cuatro en paralelo con un commit por feature. **900 tests offline en el backend y 334 en el
+las cuatro en paralelo con un commit por feature. **911 tests offline en el backend y 337 en el
 frontend.** Van **30 de 45 features de Stage 1**, y con esto el armador dejó de ser una grilla con
 una tabla: muestra cuánto cobra la cartera, qué riesgo concentra y qué parte no es renta fija.
 
