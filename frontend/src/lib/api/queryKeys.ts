@@ -35,6 +35,12 @@ export const claves = {
     // La misma firma determinística de cartera que usa `resolucion` (F-029): mismas posiciones,
     // misma clave, así el POST-que-es-lectura se cachea como cualquier consulta.
     calendarioCartera: (firma: string) => ['mercado', 'calendario', 'cartera', firma] as const,
+    // F-020: los topes de concentración de una cartera. Cuelga de mercado porque el veredicto se
+    // calcula contra el universo del día —qué emisor, qué sector, qué ley tiene cada ticker—, así
+    // que una corrida de ingesta nueva lo puede cambiar sin que la cartera se haya tocado. El
+    // perfil entra en la clave: la misma cartera contra otro perfil es otra respuesta.
+    concentracion: (firma: string, perfil: string) =>
+      ['mercado', 'concentracion', perfil, firma] as const,
   },
 
   // Condiciones de emisión y demás dato curado: cambia por ingesta, no por paso del tiempo.

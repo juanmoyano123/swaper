@@ -6,42 +6,28 @@
  * componente, y el orquestador no vuelve a tocar el layout. Es el mismo patrón con el que la
  * Tanda 1 dejó los routers montados vacíos antes de repartir trabajo.
  *
- * Cada stub se ve en pantalla y dice qué falta. Un `return null` habría sido más limpio de leer
- * pero deja la página igual a como estaba, y entonces nadie nota si una feature no llegó a
- * conectarse.
+ * **Las tres ya están construidas** y este archivo quedó como lo que terminó siendo: el punto de
+ * montaje que `ArmadorPage` importa, para que la página no tenga que cambiar cada vez que un panel
+ * se conecta. Cada cuerpo vive en su propio archivo, y por eso: son paneles de varios cientos de
+ * líneas y tenerlos acá adentro habría obligado a cada feature a abrir el archivo de las otras dos.
  *
- * - `PanelConcentracion` → **F-020**: topes por emisor / soberano / sector y distribución por
- *   sector, ley y naturaleza de tasa. Usa `DistribucionBarras` de `components/`.
- * - `PanelRenta` → **F-021**: cordillera en dólares (A2), cordillera en pesos aparte (A3) y la
- *   tarjeta de renta anual sobre lo invertido con la cuenta a la vista (A9).
- * - `BloqueRentaVariable` → **F-026**, ya construido: acciones y CEDEARs con subtotal propio,
- *   fuera de todo cálculo de renta fija. Vive en su propio archivo (`BloqueRentaVariable.tsx`).
+ * - `PanelConcentracion` → **F-020** (`PanelConcentracion.tsx`): topes por soberano / emisor /
+ *   sector y distribución por sector, ley y naturaleza de tasa.
+ * - `PanelRenta` → **F-021** (`PanelRenta.tsx`): cordillera en dólares (A2), cordillera en pesos
+ *   aparte (A3) y la tarjeta de renta anual sobre lo invertido con la cuenta a la vista (A9).
+ * - `BloqueRentaVariable` → **F-026** (`BloqueRentaVariable.tsx`): acciones y CEDEARs con subtotal
+ *   propio, fuera de todo cálculo de renta fija.
+ *
+ * El `Pendiente` que dibujaba los stubs se sacó cuando el último de los tres se conectó: dejarlo
+ * habría sido código muerto en un archivo que las tres features leen.
  */
 
-import type { ReactNode } from 'react'
-
 import { BloqueRentaVariable as BloqueRentaVariableF026 } from './BloqueRentaVariable'
+import { PanelConcentracion as PanelConcentracionF020 } from './PanelConcentracion'
 import { PanelRenta as PanelRentaF021 } from './PanelRenta'
 
-function Pendiente({ feature, que }: { feature: string; que: string }) {
-  return (
-    <section
-      style={{
-        marginTop: 16,
-        padding: '10px 12px',
-        border: '1px dashed var(--lin)',
-        borderRadius: 4,
-        fontSize: 11.5,
-        color: 'var(--sd)',
-      }}
-    >
-      <strong style={{ color: 'var(--dim)' }}>{feature}</strong> — {que}
-    </section>
-  ) as ReactNode
-}
-
 export function PanelConcentracion() {
-  return <Pendiente feature="F-020" que="límites de concentración y distribución de la cartera" />
+  return <PanelConcentracionF020 />
 }
 
 export function PanelRenta() {
