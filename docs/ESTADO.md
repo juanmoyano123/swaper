@@ -380,3 +380,41 @@ Contraste empírico del día, que es lo que justificó no forzar la corrida el s
 Medido el 08/08: 4 snapshots pesan 1776 kB, o sea **~444 kB cada uno**. Con refresh cada 15 minutos
 de 11:00 a 17:00 son ~25 snapshots por día hábil, ~11 MB diarios. **Hay que decidir una política de
 retención antes de que la base se llene**; hoy no existe ninguna y nada borra un snapshot viejo.
+
+## 08/08/2026 — data912 pasa a ser la fuente primaria de precios, BYMA de respaldo
+
+El mismo día del punto anterior, mirando la pantalla en vivo, el usuario preguntó por qué el
+monitor mostraba `s/d` masivo con el mercado cerrado en vez del último precio operado. La causa no
+era la frescura de arriba: **BYMA sólo publica lo que operó ese día**, y la vista `resumen` toma la
+fila más nueva por ticker — un papel que no operó ayer queda vacío hoy, aunque haya cotizado el
+viernes. Es un problema de memoria, no de fecha.
+
+`data912.com` —la misma API pública que usa el monitor de mesa (su API, no su base; la regla 10
+sigue intacta)— arrastra el último cierre conocido de cada especie aunque no haya operado. Medido
+en vivo un sábado: devuelve las 827 especies de renta fija con precio, contra las 609 que BYMA
+tenía frescas de la última rueda.
+
+**Se probó en una rama aparte (`experimento/data912`) antes de tocar `develop`**, con la condición
+explícita del usuario: "si me convence lo mergeamos, si no la borramos". Diseño: `data912` primero
+por ticker, **BYMA de respaldo** — nadie desaparece de la pantalla, porque data912 solo cubre datos
+de renta fija y variable en Argentina y no todo lo que BYMA publica (AEC2D, por ejemplo, no existe
+en ninguna de sus cinco tramos). Cada precio queda rotulado con su procedencia real en la columna
+`fuente`, ahora expuesta en la vista `resumen`: `data912` (operó en la sesión), `data912-arrastre`
+(precio de una sesión anterior, de fecha que la fuente no declara — regla 11, se rotula y no se
+oculta) o `byma` (respaldo), compuesto con `+calculo`/`+iamc` como ya hacía la columna. La moneda de
+cotización **nunca sale de data912** —no la declara— sino de la que BYMA ya persistió para ese
+ticker alguna vez; sin eso, un ticker nuevo-para-data912 quedaría sin poder calcular nada.
+
+**Validado con una corrida forzada real contra la base**, no sólo con tests: la renta fija con
+precio subió de 609 a 790 (41 % → 52 %) y con TIR calculada de 240 a 494 — más del doble, y de esas,
+435 son precios arrastrados que antes eran `s/d` puro. De paso la corrida detectó que **el token de
+Docta está vencido**, sin relación con este cambio — quedó registrado en el snapshot de esa corrida.
+
+Revisión visual del usuario en desarrollo, aprobada. Mergeado a `develop` con 954 tests backend /
+337 frontend en verde, `ruff` y `tsc` limpios.
+
+**Pendiente que este cambio no resuelve:** el rollback de la vista `resumen` (por si hiciera falta
+revertir la migración a mano) hereda el límite de `CREATE OR REPLACE VIEW` de no poder quitar una
+columna del medio — está documentado en el propio archivo del rollback. Y la barra de estado ahora
+declara la demora de BYMA como peor caso conocido, porque data912 no publica la suya; sigue sin
+haber una demora **por fila** cuando un precio viene arrastrado de una fecha desconocida.
