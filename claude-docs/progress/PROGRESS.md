@@ -31,14 +31,14 @@ desde `/build-feature` a medida que cada una se implementa.
 | F-014 | Autenticación y aislamiento por asesor | Stage 1 | 200,0 | completada |
 | F-015 | API del calendario de doce meses | Stage 1 | 285,0 | completada |
 | F-016 | Grilla-selector de doce meses | Stage 1 | 114,0 | completada |
-| F-017 | Filtros de la grilla | Stage 1 | 112,0 | pendiente |
+| F-017 | Filtros de la grilla | Stage 1 | 112,0 | **completada** |
 | F-018 | Cartera editable y ponderación | Stage 1 | 140,0 | completada |
 | F-019 | Armado asistido | Stage 1 | 83,3 | pendiente |
 | F-020 | Límites de concentración en vivo | Stage 1 | 175,0 | pendiente |
 | F-021 | Panel de renta y renta anual | Stage 1 | 285,0 | pendiente |
 | F-022 | Rendimientos por naturaleza y plazo | Stage 1 | 175,0 | pendiente |
 | F-023 | Composición y curva TIR/duración | Stage 1 | 48,0 | pendiente |
-| F-024 | Redondeo por lámina y diferencia | Stage 1 | 200,0 | pendiente |
+| F-024 | Redondeo por lámina y diferencia | Stage 1 | 200,0 | **completada** |
 
 > Milestone 2 — "Un asesor arma una cartera desde el calendario y se lleva el número a la
 > reunión." Depende de `claude-docs/planning/design-system.md` (Fase 3, ya bajado).
@@ -69,11 +69,11 @@ desde `/build-feature` a medida que cada una se implementa.
 | F-037 | Comparación original contra propuesta | Stage 1 | 72,0 | pendiente |
 | F-038 | Monitor de mercado | Stage 1 | 106,7 | completada |
 | F-039 | Ficha de instrumento | Stage 1 | 112,0 | completada |
-| F-040 | Sensibilidad por repricing completo | Stage 1 | 66,7 | pendiente |
+| F-040 | Sensibilidad por repricing completo | Stage 1 | 66,7 | **completada** |
 | F-041 | Guardar, listar, reabrir y revaluar | Stage 1 | 180,0 | pendiente |
 | F-042 | Exportación a Excel y PDF | Stage 1 | 100,0 | pendiente |
 | F-051 | Métricas propias: TIR, duración y paridad | Stage 1 | 160,0 | **completada** |
-| F-052 | Renta variable en el monitor | Stage 1 | 106,7 | pendiente |
+| F-052 | Renta variable en el monitor | Stage 1 | 106,7 | **completada** |
 
 > Milestone 4 — "Stage 1 completo: los tres flujos cierran."
 >
@@ -222,9 +222,40 @@ consume, así que ir en paralelo habría significado escribirla dos veces. 748 t
 - **La medición se hizo en sólo lectura**: no se corrió la consolidación contra la base. Las
   métricas aparecen en la vista con la próxima corrida matinal.
 
-Siguiente paso: **base común de la tanda 8b** (el JOIN a `condiciones_emision` con `lamina` y
-`sector`, el router vacío de renta variable y las claves nuevas en `SelectorSegmento`) y después
-**F-017 ∥ F-024 ∥ F-040 ∥ F-052**. Los cuatro planes ya están escritos y dan esa base por hecha.
+**Tanda 8b cerrada el 08/08/2026** — F-017 (filtros) ∥ F-024 (lámina) ∥ F-040 (sensibilidad) ∥
+F-052 (renta variable en el monitor), las cuatro en paralelo con un commit por feature. 793 tests
+offline en el backend y 254 en el frontend. Van **26 de 44 features de Stage 1**, y el Milestone 2
+queda a tiro: el armador filtra la grilla y calcula nominales reales, el monitor muestra todo el
+universo y la ficha tiene su tabla de sensibilidad.
+
+- **La verificación de cierre pasó a la primera**, a diferencia de la tanda 7. `tsc -b` del proyecto
+  entero en cero al primer intento. La diferencia la hizo la base común: esta vez incluyó los campos
+  de datos compartidos (`lamina`, `sector`) y no sólo routers y componentes.
+- **Los tres frenos de los agentes fueron hallazgos reales, no falsos positivos.** F-017 frenó
+  porque `sector` faltaba en el schema zod del armador — un punto de contacto que la base común no
+  había cubierto. F-040 frenó porque su panel nuevo agrega una cuarta query y el test de la ficha de
+  F-039, que tiene prohibido tocar, sólo mockeaba tres rutas. F-052 frenó porque el plan pedía un
+  texto que sus props declaradas no alcanzaban a producir. Los tres los resolvió el orquestador, que
+  es a quien le corresponden los archivos compartidos. **El patrón de "frenar y reportar" se pagó.**
+- **El único error de coordinación fue del orquestador**: editó `lib/schema.ts` mientras F-024 lo
+  tenía abierto y el campo quedó duplicado. Sin consecuencia porque era idéntico y en TypeScript la
+  segunda clave pisa a la primera, pero con un tipo distinto habría sido un bug difícil de ver.
+  **Confirma la regla en vez de desmentirla**: los archivos con dueño activo no se tocan, ni siquiera
+  para un cambio de una línea.
+- **F-052 adaptó su plan dos veces y las dos con razón.** El rollback de su migración usa
+  `CREATE OR REPLACE VIEW` y no `DROP` + `CREATE`, porque la migración de subida tampoco dropea la
+  vista y el guardián estructural de `test_migraciones.py` lo habría leído como tirar abajo algo que
+  esa migración nunca creó.
+- **Queda una migración escrita y SIN APLICAR**: `20260807231600_f052_cierre_anterior.sql`. El código
+  ya la asume —`persistencia.py` incluye `cierre_anterior` en el INSERT y el endpoint de renta
+  variable la lee de la vista—, así que **hasta que se aplique, la consolidación falla contra la
+  base**. Verificado: la columna no existe ni en `precios` ni en `resumen`. Es aditiva y tiene
+  rollback verificado; hay que correrla antes de la próxima matinal.
+
+Siguiente paso: aplicar esa migración, y después la **tanda 9 — F-020 (concentración) ∥ F-021 (panel
+de renta) ∥ F-026 (renta variable en el armador)**. F-026 hereda de F-052 los componentes
+`TablaRentaVariable`, `FilaRentaVariable` y `PLANTILLA_COLUMNAS_RV`, que quedaron en
+`frontend/src/components/` justamente para eso.
 
 ### Lo que F-013 puso a la vista, y la decisión que dejó abierta
 
