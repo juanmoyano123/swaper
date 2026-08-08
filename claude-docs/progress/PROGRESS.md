@@ -34,8 +34,8 @@ desde `/build-feature` a medida que cada una se implementa.
 | F-017 | Filtros de la grilla | Stage 1 | 112,0 | **completada** |
 | F-018 | Cartera editable y ponderación | Stage 1 | 140,0 | completada |
 | F-019 | Armado asistido | Stage 1 | 83,3 | pendiente |
-| F-020 | Límites de concentración en vivo | Stage 1 | 175,0 | pendiente |
-| F-021 | Panel de renta y renta anual | Stage 1 | 285,0 | pendiente |
+| F-020 | Límites de concentración en vivo | Stage 1 | 175,0 | **completada** |
+| F-021 | Panel de renta y renta anual | Stage 1 | 285,0 | **completada** |
 | F-022 | Rendimientos por naturaleza y plazo | Stage 1 | 175,0 | pendiente |
 | F-023 | Composición y curva TIR/duración | Stage 1 | 48,0 | pendiente |
 | F-024 | Redondeo por lámina y diferencia | Stage 1 | 200,0 | **completada** |
@@ -48,7 +48,7 @@ desde `/build-feature` a medida que cada una se implementa.
 | ID | Feature | Etiqueta | RICE | Estado |
 |---|---|---|---|---|
 | F-025 | Carga asistida de lámina | Stage 1 | 53,3 | pendiente |
-| F-026 | Bloque de renta variable | Stage 1 | 80,0 | pendiente |
+| F-026 | Bloque de renta variable | Stage 1 | 80,0 | **completada** |
 | F-027 | Calendario de balances | Stage 1 | 16,7 | pendiente |
 | F-028 | Ingreso de cartera por tres vías | Stage 1 | 96,0 | completada |
 | F-029 | Resolución de tickers | Stage 1 | 106,7 | completada |
@@ -74,7 +74,7 @@ desde `/build-feature` a medida que cada una se implementa.
 | F-042 | Exportación a Excel y PDF | Stage 1 | 100,0 | pendiente |
 | F-051 | Métricas propias: TIR, duración y paridad | Stage 1 | 160,0 | **completada** |
 | F-052 | Renta variable en el monitor | Stage 1 | 106,7 | **completada** |
-| F-053 | Ficha del activo de renta variable | Stage 1 | 140,0 | pendiente |
+| F-053 | Ficha del activo de renta variable | Stage 1 | 140,0 | **completada** |
 
 > Milestone 4 — "Stage 1 completo: los tres flujos cierran."
 >
@@ -257,6 +257,46 @@ Siguiente paso: aplicar esa migración, y después la **tanda 9 — F-020 (conce
 de renta) ∥ F-026 (renta variable en el armador)**. F-026 hereda de F-052 los componentes
 `TablaRentaVariable`, `FilaRentaVariable` y `PLANTILLA_COLUMNAS_RV`, que quedaron en
 `frontend/src/components/` justamente para eso.
+
+**Tanda 9 cerrada el 08/08/2026** — F-020 (concentración) ∥ F-021 (panel de renta) ∥ F-026 (renta
+variable en el armador) ∥ **F-053** (ficha del activo con Yahoo, agregada al planificar la tanda),
+las cuatro en paralelo con un commit por feature. **900 tests offline en el backend y 334 en el
+frontend.** Van **30 de 45 features de Stage 1**, y con esto el armador dejó de ser una grilla con
+una tabla: muestra cuánto cobra la cartera, qué riesgo concentra y qué parte no es renta fija.
+
+- **Paso previo de base, antes de soltar agentes.** Se borró el snapshot degradado del sábado —466
+  filas con **cero precios y cero TIR**, medido antes de tocar nada— y se agregó el guardia de día
+  hábil: `en_ventana_de_rueda` sólo miraba la hora, y `proxima_matinal`/`proximo_refresh` desde el
+  viernes devolvían el sábado. El scheduler habría degradado el snapshot solo, todos los fines de
+  semana, apenas se habilitara. `/consolidar` fuera de rueda ahora exige `forzar=true` explícito.
+  **Los feriados bursátiles no se modelan y está declarado**: no hay fuente programática confiable
+  y hardcodear una lista sería inventar un dato que se desactualiza en silencio.
+- **La lección nueva de esta tanda es de git, no de arquitectura: los agentes comparten el índice.**
+  F-026 lo descubrió cuando F-021 commiteó primero y arrastró sus archivos ya `staged`. No hubo
+  pérdida —se reconciliaron— pero el mecanismo es serio: un `git add -A` de cualquier agente puede
+  tragarse el trabajo a medio terminar de otro. **A partir de acá se commitea con pathspec
+  explícito.** Está escrito en `plan-ejecucion-tandas.md`.
+- **El error de coordinación fue del orquestador, otra vez, y del mismo tipo que en la 8b.** La base
+  común dejó los tres paneles cableados en **un solo archivo** (`PanelesDeLaCartera.tsx`), o sea un
+  archivo con tres dueños — exactamente lo que la regla de "un dueño por archivo" existe para
+  evitar. Costó una colisión de edición y un minuto de `HEAD` importando un archivo todavía sin
+  commitear. **La próxima base común da un archivo por feature, aunque sean tres líneas cada uno.**
+- **F-021 resultó casi sólo frontend y F-020 casi el doble de lo que decía su ficha.** El calendario
+  ya devolvía la renta en plata por moneda y `renta_anual` ya excluía amortización por
+  construcción; en cambio `verificar_concentracion` y `PERFILES` vivían sólo en `tools/`, que el
+  backend no importa. Es el mismo patrón que la 8a con la matemática de TIR: lo que la ficha
+  describe como "ya calibrado" puede no estar donde el backend lo pueda usar.
+- **La divergencia deliberada contra el motor, medida:** el motor propaga sector por moda dentro del
+  grupo de emisor a **487 especies** que la fuente no informa; el backend no lo hace. Medido: de
+  1.509 especies de renta fija, 780 tienen sector y **cero se recuperan por emisor curado** — la
+  única vía sería el prefijo de 3 letras del ticker, que es inferir del ticker, que es lo que la
+  regla 1 prohíbe. El costo es real y **está declarado en pantalla**: el panel dice qué porcentaje
+  de la cartera no informa sector y no cuenta para el mínimo. **El arreglo de verdad no es
+  inferirlo, es curar `condiciones_emision`.**
+- **F-053 excluyó un módulo entero de Yahoo en vez de filtrarle campos**, y el razonamiento mejora
+  lo que se le había pedido: `financialData` mezcla márgenes y ROE —dato duro— con `targetMeanPrice`
+  y `recommendationKey` —opinión—. Pedirlo y descartar campos deja el juicio ajeno adentro del
+  proceso aunque no se muestre; no pedirlo lo mantiene afuera. Sólo viaja `assetProfile`.
 
 ### Lo que F-013 puso a la vista, y la decisión que dejó abierta
 

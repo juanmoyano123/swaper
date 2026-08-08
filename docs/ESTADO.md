@@ -290,3 +290,47 @@ Cruzarlos subió la ley de 592 a 724 y el emisor de 720 a 823 sobre las 942 espe
 Cuatro emisiones (PLC4, PN38, RC1C, YM39) tienen ley contradictoria entre las dos fuentes: **quedan
 vacías y alertadas**, porque elegir ganador sin ir al prospecto sería inventar el eje de riesgo más
 caro de equivocar.
+
+## 08/08/2026 — Tanda 9: el armador dice cuánto cobra, qué concentra y qué no es renta fija
+
+Cuatro features en paralelo (F-020 concentración, F-021 panel de renta, F-026 bloque de renta
+variable, F-053 ficha del activo con Yahoo). 900 tests en el backend y 334 en el frontend; van 30
+de 45 features de Stage 1.
+
+**Antes de eso hubo que arreglar la rueda.** `en_ventana_de_rueda` sólo miraba la hora, así que un
+sábado a las 14:00 pasaba el chequeo igual que un martes — y una corrida disparada a mano ese
+sábado escribió 466 filas **sin un solo precio ni una sola TIR**, dejando el indicador de frescura
+declarando el sábado sobre datos del miércoles. Las filas se borraron por su `capturado_en` exacto.
+El scheduler habría repetido eso solo todos los fines de semana apenas se habilitara: `proxima_matinal`
+y `proximo_refresh` desde el viernes también devolvían el sábado. Las tres funciones saltean ahora
+al próximo día hábil, y `/consolidar` fuera de rueda exige `forzar=true`.
+
+**Los feriados bursátiles no se modelan, y está escrito en el código.** No hay fuente programática
+confiable del calendario de BYMA, y hardcodear una lista sería exactamente lo que la regla 1
+prohíbe: un dato inventado que además se desactualiza en silencio. Un feriado entre semana sigue
+produciendo una respuesta parcial, y ese caso pide un guardia de "la respuesta vino anormalmente
+chica" que **queda anotado y sin construir**.
+
+**La divergencia deliberada de F-020 contra el motor, medida de frente.** El motor propaga el sector
+por moda dentro del grupo de emisor —prefijo de 3 letras del ticker— y así le asigna sector a 487
+especies que la fuente no informa. El backend no lo hace. Medido sobre el universo real: de 1.509
+especies de renta fija, 780 tienen sector, y **cero de las 729 restantes se recuperan por emisor
+curado**; la única vía sería el prefijo, que es inferir del ticker. El prefijo resulta empíricamente
+limpio (159 grupos con sector, **cero con sector contradictorio**), pero "no observamos
+contradicciones entre los que conocemos" es la misma forma de evidencia que ya costó revertir 121
+tickers. El costo es real —el tope sectorial mide sobre poco más de la mitad del universo— y **está
+declarado en pantalla**: el panel dice qué porcentaje de la cartera no informa sector y no cuenta
+para el mínimo. **El arreglo de verdad no es inferirlo: es curar `condiciones_emision`.**
+
+**F-053 trae dato de Yahoo Finance, con dos límites escritos en el código.** No se muestran
+recomendación de analistas, precio objetivo ni consenso: es opinión de terceros y la regla 6 mantiene
+el análisis determinístico. Y la exclusión se hizo **no pidiendo el módulo** `financialData` en vez
+de filtrarle campos, porque Yahoo mezcla ahí los márgenes y el ROE —dato duro— con el precio
+objetivo; pedirlo y descartar después deja el juicio ajeno adentro del proceso aunque no se muestre.
+Verificado en vivo que `MSFT.BA` en Yahoo **es el CEDEAR** y su perfil es el de la empresa
+subyacente, así que la consulta es siempre `TICKER.BA` con el ticker que ya tenemos: no se deriva ni
+se mapea nada. La respuesta se acepta sólo si declara bolsa `BUE` y el símbolo pedido.
+
+Los endpoints de Yahoo **no son contractuales** —el de perfil exige un cookie+crumb no documentado
+que Yahoo ya endureció una vez— y el diseño degrada: si la fuente externa falla, la ficha muestra lo
+de BYMA y lo declara. Ninguna pantalla nuestra depende de que Yahoo esté vivo.
