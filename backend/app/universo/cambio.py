@@ -16,11 +16,13 @@ Se toma la **mediana** sobre todas las emisiones que cotizan en las dos puntas, 
 desactualizado no mueve el resultado, y se exige un **mínimo de 20 pares**: con menos, la mediana la
 puede correr un solo precio raro. Por debajo de ese mínimo no se normaliza nada y se declara.
 
-**La especie D (MEP) es la referencia y la C (Cable) sólo entra si no hay D.** Los separa el canje,
-y eso no es teoría: sobre el universo de hoy la mediana de los cocientes contra la D da 1521,53 y
-contra la C da 1576,21 — un 3,6 % de diferencia. Mezclarlas correría la mediana por un spread
-estructural conocido y no por lo que el mercado hizo. Cuando una emisión entra por la C, el hecho
-queda registrado con nombre y apellido.
+**El par es pesos contra la especie declarada en `USD`, y ninguna otra.** Antes la especie `EXT`
+entraba como suplente cuando no había `USD`; desde la regla 11 (08/08/2026) no entra nunca, porque
+para promediarla con las demás habría que saber que denota dólares y BYMA no lo declara. La medición
+que motivaba la preferencia sigue en pie y ahora es el argumento para excluirla: la mediana de los
+cocientes contra la `USD` da 1521,53 y contra la `EXT` da 1576,21 — un 3,6 % que las delata como
+cosas distintas. No cuesta cobertura: **cero** emisiones tienen sólo par por `EXT` (medido
+08/08/2026), así que los 462 pares del implícito quedan intactos.
 
 ## En qué moneda cotiza cada especie: se lee, no se deduce
 
@@ -36,14 +38,24 @@ declaradas en ARS (BA37D, BB37D, BC37D, SA24D y dos sin precio) y sus precios �
 117.010— son precios en pesos sin ninguna duda. La regla del sufijo las habría tomado por dólares y
 habría multiplicado su liquidez por 1.500.
 
-`EXT` cuenta como dólar: es la denominación con la que BYMA publica la especie C, y el cociente
-contra su hermana en pesos da 1576 —un dólar cable—, no 1.
+**`EXT` no se normaliza, porque no sabemos qué es** (regla 11 del dominio, 08/08/2026). BYMA no
+publica en ningún lado qué denota ese código: no es ISO 4217 como `ARS` y `USD`, es vocabulario
+propio de la fuente. Lo que sí está medido es que su cociente contra la hermana en pesos da ≈1576
+mientras el de la `USD` da ≈1521 — una diferencia del 3,6 % que *coincide* con el canje MEP/cable.
+Coincidir no es estar declarado, así que la observación queda acá escrita y no se convierte en
+etiqueta ni en aritmética: las especies `EXT` no entran a la muestra del implícito y su volumen no
+se convierte, queda vacío y se cuenta.
 
-**Cuando la fuente no declara la moneda se cae a la regla del sufijo**, que es la del motor, y se
-cuenta cuántas especies quedaron con la moneda asumida en vez de leída. Es el único camino por el
-que este módulo supone algo, y por eso el número se reporta en vez de esconderse. Pasa sobre el
-consolidado histórico, que no tiene la columna; sobre la base de hoy la cobertura de
-`moneda_cotizacion` es del 100 %.
+Sale barato: sobre el universo de hoy hay **cero** emisiones cuyo único par sea pesos↔`EXT`, así que
+el implícito conserva sus 462 pares intactos. Si algún día BYMA documentara el código, esto se
+revierte cambiando una constante.
+
+**Cuando la fuente no declara la moneda, tampoco se adivina.** Antes se caía a la regla del sufijo
+—la del motor pre-Fase 4—; hoy no: una especie sin `denominationCcy` no se convierte y se cuenta en
+`moneda_sin_declarar`. Deducirla del ticker es exactamente lo que la regla 11 prohíbe, y ya había
+mordido: seis especies con sufijo D están declaradas en `ARS` con precios de 121.100 y 123.800, que
+son pesos sin ninguna duda. Hoy no cuesta nada porque la cobertura de `moneda_cotizacion` es del
+100 %; la rama existía para el consolidado histórico, que no tiene la columna.
 
 ## El índice de BYMA contrasta, no alimenta
 
@@ -99,22 +111,26 @@ TOLERANCIA_CONTRASTE = 0.05
 INDICE_EN_PESOS = "M"
 INDICE_EN_DOLARES = "SPMERVDT"
 
-# Las especies de liquidación. La D es MEP y la C es Cable; los separa el canje.
-SUFIJO_MEP = "D"
-SUFIJO_CABLE = "C"
-
-# Lo que `denominationCcy` puede decir. `EXT` es la denominación de la especie cable y cotiza en
-# dólares; `ARS` es la única que se divide por el tipo de cambio.
-MONEDAS_EN_DOLARES = frozenset({"USD", "EXT"})
+# Lo que `denominationCcy` puede decir. Sólo se normaliza contra códigos ISO 4217, que significan lo
+# que significan: `USD` ya está en dólares y `ARS` es la única que se divide por el tipo de cambio.
+# `EXT` es vocabulario propio de BYMA sin documentar y queda afuera de las dos — ver el docstring.
+MONEDAS_EN_DOLARES = frozenset({"USD"})
 MONEDA_EN_PESOS = "ARS"
+MONEDA_SIN_DOCUMENTAR = "EXT"
+
+# La clave con la que `_cocientes` agrupa el lado en dólares de una emisión. Es una etiqueta interna
+# del agrupamiento y no una moneda: por eso no se reusa la constante de `MONEDAS_EN_DOLARES`, que
+# algún día podría tener más de un elemento sin que este lado deje de ser uno solo.
+LADO_EN_DOLARES = "USD"
 
 CODIGO_FX_SIN_PARES = "tipo_de_cambio_sin_pares"
 CODIGO_FX_DISPERSO = "tipo_de_cambio_disperso"
-CODIGO_FX_POR_CABLE = "tipo_de_cambio_por_cable"
+CODIGO_FX_PAR_SIN_DOCUMENTAR = "tipo_de_cambio_par_sin_documentar"
 CODIGO_FX_PRECIO_IMPOSIBLE = "tipo_de_cambio_precio_imposible"
 CODIGO_FX_CONTRASTE = "tipo_de_cambio_contraste"
 CODIGO_FX_SIN_CONTRASTE = "tipo_de_cambio_sin_contraste"
-CODIGO_MONEDA_ASUMIDA = "moneda_de_cotizacion_asumida"
+CODIGO_MONEDA_SIN_DECLARAR = "moneda_de_cotizacion_sin_declarar"
+CODIGO_MONEDA_SIN_DOCUMENTAR = "moneda_de_cotizacion_sin_documentar"
 
 # Cuántos tickers se nombran en el cuerpo de una alerta. La lista entera va en el detalle.
 MUESTRA_ALERTA = 6
@@ -172,16 +188,25 @@ class TipoDeCambio:
     dispersion: float | None = None
     """Rango intercuartil sobre la mediana. `None` con menos de dos pares: no hay qué dispersar."""
 
-    por_cable: list[str] = field(default_factory=list)
-    """Emisiones que entraron por la especie C porque no tienen D. Se registran porque MEP y Cable
-    son tipos de cambio distintos y el promedio de la muestra se corre un poco por cada una."""
+    par_sin_documentar: list[str] = field(default_factory=list)
+    """Emisiones que cotizan en pesos y en `EXT` pero no en `USD`: su cociente no se puede derivar
+    sin dar por sentado qué denota `EXT`, y eso no está declarado en ningún lado (regla 11).
+
+    Hoy la lista es vacía —**cero** emisiones están en ese caso, medido el 08/08/2026—, y por eso
+    vale la pena que exista: si BYMA dejara de publicar la especie `USD` de alguna emisión, esto
+    lo dice en vez de que el implícito adelgace en silencio."""
 
     precio_imposible: list[str] = field(default_factory=list)
     """Emisiones cuyo cociente cayó fuera del rango: una de las dos puntas tiene el precio mal
     cargado. Se nombran en vez de descartarse en silencio."""
 
-    moneda_asumida: list[str] = field(default_factory=list)
-    """Especies cuya moneda de cotización se dedujo del sufijo porque la fuente no la declaró."""
+    moneda_sin_declarar: list[str] = field(default_factory=list)
+    """Especies sin `denominationCcy`. No se convierten: deducir la moneda del sufijo del ticker es
+    justamente lo que la regla 11 prohíbe. Se cuentan para que el hueco se vea."""
+
+    moneda_sin_documentar: list[str] = field(default_factory=list)
+    """Especies declaradas en `EXT`. La fuente dice algo, pero no dice qué significa, así que su
+    volumen queda sin normalizar. Ver el docstring del módulo."""
 
     contraste: Contraste | None = None
     """`None` cuando el índice de BYMA no estuvo disponible. No invalida el implícito."""
@@ -213,12 +238,14 @@ class TipoDeCambio:
     def _alertas_de_la_muestra(self) -> list[Alerta]:
         """Lo que se declara sobre cómo se armó la muestra, haya salido implícito o no."""
         alertas: list[Alerta] = []
-        if self.por_cable:
-            alertas.append(_alerta_por_cable(self.por_cable))
+        if self.par_sin_documentar:
+            alertas.append(_alerta_par_sin_documentar(self.par_sin_documentar))
         if self.precio_imposible:
             alertas.append(_alerta_precio_imposible(self.precio_imposible))
-        if self.moneda_asumida:
-            alertas.append(_alerta_moneda_asumida(self.moneda_asumida))
+        if self.moneda_sin_declarar:
+            alertas.append(_alerta_moneda_sin_declarar(self.moneda_sin_declarar))
+        if self.moneda_sin_documentar:
+            alertas.append(_alerta_moneda_sin_documentar(self.moneda_sin_documentar))
         return alertas
 
     def a_dolares(self, monto: float | None, en_dolares: bool) -> float | None:
@@ -243,9 +270,10 @@ class TipoDeCambio:
             "minimo_de_pares": MIN_PARES_FX,
             "dispersion": self.dispersion,
             "dispersion_aceptable": DISPERSION_ACEPTABLE,
-            "por_cable": _conteo_y_muestra(self.por_cable),
+            "par_sin_documentar": _conteo_y_muestra(self.par_sin_documentar),
             "precio_imposible": _conteo_y_muestra(self.precio_imposible),
-            "moneda_asumida": _conteo_y_muestra(self.moneda_asumida),
+            "moneda_sin_declarar": _conteo_y_muestra(self.moneda_sin_declarar),
+            "moneda_sin_documentar": _conteo_y_muestra(self.moneda_sin_documentar),
             "contraste": self.contraste.como_dict() if self.contraste else None,
         }
 
@@ -263,13 +291,29 @@ def _conteo_y_muestra(nombres: Sequence[str]) -> dict[str, object]:
 def cotiza_en_dolares(especie: EspecieUniverso) -> bool:
     """Si el precio y el volumen de esta especie ya están en dólares.
 
-    Manda lo que la fuente declara (`denominationCcy`). Sólo cuando no declara nada decide el sufijo
-    de liquidación, que es la regla del motor: la D y la C son las especies en dólares. Esa segunda
-    rama es una suposición y se cuenta aparte (`TipoDeCambio.moneda_asumida`) justamente por serlo.
+    Sólo lo que la fuente declara, y sólo si lo declara con un código que significa algo fuera de
+    BYMA. `USD` sí; `EXT` no —no está documentado—; ausente tampoco. En los dos casos negativos la
+    respuesta es la misma que para una especie en pesos sin tipo de cambio: no se convierte. Quién
+    quedó afuera y por qué lo dicen `moneda_sin_documentar` y `moneda_sin_declarar`.
+
+    Ojo con leer un `False` como "está en pesos": significa "no consta que esté en dólares".
+    `normalizar_volumen` es el que decide qué hacer con eso, y sólo divide por el tipo de cambio a
+    las que declaran `ARS`.
     """
-    if especie.moneda_cotizacion is not None:
-        return especie.moneda_cotizacion.upper() in MONEDAS_EN_DOLARES
-    return especie.sufijo_liquidacion in (SUFIJO_MEP, SUFIJO_CABLE)
+    if especie.moneda_cotizacion is None:
+        return False
+    return especie.moneda_cotizacion.upper() in MONEDAS_EN_DOLARES
+
+
+def cotiza_en_pesos(especie: EspecieUniverso) -> bool:
+    """Si el monto de esta especie es convertible dividiendo por el implícito.
+
+    La contracara explícita de `cotiza_en_dolares`, y no su negación: entre las dos queda un hueco
+    —`EXT` y las que no declaran nada— que no es ni una cosa ni la otra y no se toca.
+    """
+    if especie.moneda_cotizacion is None:
+        return False
+    return especie.moneda_cotizacion.upper() == MONEDA_EN_PESOS
 
 
 def derivar_tipo_de_cambio(
@@ -282,15 +326,22 @@ def derivar_tipo_de_cambio(
     para calcular. Sin ellas el implícito sale igual, con una alerta que dice que no se lo pudo
     contrastar contra nada.
     """
-    pares, por_cable, imposibles = _cocientes(especies)
-    asumidas = sorted(e.ticker for e in especies if e.moneda_cotizacion is None)
+    pares, sin_documentar, imposibles = _cocientes(especies)
+    sin_declarar = sorted(e.ticker for e in especies if e.moneda_cotizacion is None)
+    con_codigo_opaco = sorted(
+        e.ticker
+        for e in especies
+        if e.moneda_cotizacion is not None
+        and e.moneda_cotizacion.upper() == MONEDA_SIN_DOCUMENTAR
+    )
 
     if len(pares) < MIN_PARES_FX:
         return TipoDeCambio(
             pares=len(pares),
-            por_cable=por_cable,
+            par_sin_documentar=sin_documentar,
             precio_imposible=imposibles,
-            moneda_asumida=asumidas,
+            moneda_sin_declarar=sin_declarar,
+            moneda_sin_documentar=con_codigo_opaco,
         )
 
     cocientes = sorted(pares.values())
@@ -300,9 +351,10 @@ def derivar_tipo_de_cambio(
         valor=valor,
         pares=len(cocientes),
         dispersion=dispersion,
-        por_cable=por_cable,
+        par_sin_documentar=sin_documentar,
         precio_imposible=imposibles,
-        moneda_asumida=asumidas,
+        moneda_sin_declarar=sin_declarar,
+        moneda_sin_documentar=con_codigo_opaco,
         contraste=contrastar(valor, indices or []),
     )
 
@@ -314,28 +366,51 @@ def _cocientes(
 
     Se exige **exactamente una** especie de cada lado, igual que el motor: si una emisión tuviera
     dos tickers en pesos habría que elegir cuál usar, y elegir sería inventar. Se saltea entera.
+
+    **El lado lo decide la moneda declarada, no el sufijo del ticker** (regla 11, 08/08/2026).
+
+    El cambio no arregla ningún número de hoy y conviene decirlo: las seis especies con sufijo D
+    declaradas en `ARS` están **solas en su emisión** —no tienen hermana en pesos—, así que con el
+    agrupamiento por letra tampoco formaban par. Verificado el 08/08/2026: `precio_imposible` da
+    cero con las dos reglas.
+
+    Lo que se saca es la inferencia dormida. Bastaba con que BYMA empezara a publicar la hermana en
+    pesos de cualquiera de esas seis para que la letra la mandara al lado de los dólares y el
+    cociente saliera de dividir pesos por pesos; el guardia de rango lo habría atrapado, pero
+    contándolo como emisión con el precio mal cargado, que es culpar a la fuente de un error
+    nuestro. Además `cotiza_en_dolares` ya decidía por la moneda declarada: las dos funciones del
+    mismo módulo usaban criterios distintos para la misma pregunta.
     """
     por_raiz: dict[str, dict[str, list[EspecieUniverso]]] = {}
     for especie in especies:
         if especie.precio is None or especie.precio <= 0:
             continue
-        sufijo = especie.sufijo_liquidacion
-        lado = sufijo if sufijo in (SUFIJO_MEP, SUFIJO_CABLE) else MONEDA_EN_PESOS
+        if cotiza_en_pesos(especie):
+            lado = MONEDA_EN_PESOS
+        elif cotiza_en_dolares(especie):
+            lado = LADO_EN_DOLARES
+        elif (
+            especie.moneda_cotizacion is not None
+            and especie.moneda_cotizacion.upper() == MONEDA_SIN_DOCUMENTAR
+        ):
+            lado = MONEDA_SIN_DOCUMENTAR
+        else:
+            continue  # sin moneda declarada: no entra a ningún lado ni se cuenta como par
         por_raiz.setdefault(especie.raiz, {}).setdefault(lado, []).append(especie)
 
     cocientes: dict[str, float] = {}
-    por_cable: list[str] = []
+    sin_documentar: list[str] = []
     imposibles: list[str] = []
 
     for raiz in sorted(por_raiz):
         lados = por_raiz[raiz]
         en_pesos = lados.get(MONEDA_EN_PESOS, [])
-        # La D primero y la C sólo si no hay D: los separa el canje y mezclarlas correría la mediana
-        # por un spread estructural en vez de por lo que hizo el mercado.
-        en_dolares = lados.get(SUFIJO_MEP, [])
-        entro_por_cable = not en_dolares
-        if entro_por_cable:
-            en_dolares = lados.get(SUFIJO_CABLE, [])
+        en_dolares = lados.get(LADO_EN_DOLARES, [])
+        if len(en_pesos) == 1 and not en_dolares and lados.get(MONEDA_SIN_DOCUMENTAR):
+            # Cotiza en pesos y en `EXT`, y en nada más: el cociente existiría, pero sólo vale si
+            # `EXT` denota dólares, y eso no está declarado. Se nombra en vez de asumirlo.
+            sin_documentar.append(raiz)
+            continue
         if len(en_pesos) != 1 or len(en_dolares) != 1:
             continue
 
@@ -345,10 +420,8 @@ def _cocientes(
             continue
 
         cocientes[raiz] = cociente
-        if entro_por_cable:
-            por_cable.append(raiz)
 
-    return cocientes, por_cable, imposibles
+    return cocientes, sin_documentar, imposibles
 
 
 def _dispersion(cocientes: Sequence[float], mediana: float) -> float | None:
@@ -399,14 +472,24 @@ def normalizar_volumen(
     Sin tipo de cambio, las especies en pesos quedan con `volumen_usd` en `None` y no con su volumen
     crudo: mezclar pesos y dólares en la misma columna es el error que esta feature existe para
     evitar, y hacerlo cuando falta el dato lo haría igual de mal, sólo que en silencio.
+
+    La decisión es de **tres** ramas y no de dos, y por eso no se escribe como
+    `a_dolares(vol, cotiza_en_dolares(especie))`: eso trata "no consta que esté en dólares" como
+    "está en pesos" y dividiría por el implícito los montos en `EXT` —que la regla 11 dice que no
+    sabemos leer— y los de las especies sin moneda declarada. La tercera rama devuelve `None`, que
+    es lo que el monitor y el filtro de liquidez tienen que ver para contarlas como faltante.
     """
     return [
-        replace(
-            especie,
-            volumen_usd=cambio.a_dolares(especie.volumen, cotiza_en_dolares(especie)),
-        )
-        for especie in especies
+        replace(especie, volumen_usd=_volumen_en_dolares(especie, cambio)) for especie in especies
     ]
+
+
+def _volumen_en_dolares(especie: EspecieUniverso, cambio: TipoDeCambio) -> float | None:
+    if cotiza_en_dolares(especie):
+        return cambio.a_dolares(especie.volumen, en_dolares=True)
+    if cotiza_en_pesos(especie):
+        return cambio.a_dolares(especie.volumen, en_dolares=False)
+    return None
 
 
 def _alerta_sin_pares(pares: int) -> Alerta:
@@ -449,17 +532,25 @@ def _alerta_disperso(dispersion: float, pares: int) -> Alerta:
     )
 
 
-def _alerta_por_cable(emisiones: Sequence[str]) -> Alerta:
-    """Emisiones que entraron a la muestra por la C. Es información, no un problema."""
+def _alerta_par_sin_documentar(emisiones: Sequence[str]) -> Alerta:
+    """Emisiones que quedaron fuera de la muestra por no tener contraparte en `USD`.
+
+    Hoy no dispara nunca —son cero— y esa es la gracia: el día que dispare, algo cambió en lo que
+    publica BYMA y el implícito se estaría calculando sobre menos emisiones de las que parece.
+    """
     return Alerta(
-        codigo=CODIGO_FX_POR_CABLE,
+        codigo=CODIGO_FX_PAR_SIN_DOCUMENTAR,
         mensaje=(
-            f"{len(emisiones)} emisiones entraron al tipo de cambio por su especie cable porque no "
-            f"tienen MEP ({', '.join(emisiones[:MUESTRA_ALERTA])}): MEP y cable son tipos de "
-            "cambio distintos y los separa el canje."
+            f"{len(emisiones)} emisiones cotizan en pesos y en {MONEDA_SIN_DOCUMENTAR} pero no en "
+            f"USD ({', '.join(emisiones[:MUESTRA_ALERTA])}): quedan fuera del tipo de cambio "
+            f"porque BYMA no documenta qué denota {MONEDA_SIN_DOCUMENTAR} y suponerlo sería "
+            "inventar el dato que este módulo existe para derivar."
         ),
-        severidad=Severidad.INFO,
-        accion_requerida=None,
+        severidad=Severidad.ADVERTENCIA,
+        accion_requerida=(
+            "Verificar en la ingesta si esas emisiones dejaron de publicar su especie en USD: el "
+            "implícito se estaría derivando de menos pares de los que corresponde."
+        ),
         detalle={"cantidad": len(emisiones), "emisiones": list(emisiones)},
     )
 
@@ -486,21 +577,37 @@ def _alerta_precio_imposible(emisiones: Sequence[str]) -> Alerta:
     )
 
 
-def _alerta_moneda_asumida(especies: Sequence[str]) -> Alerta:
-    """Lo único que este módulo supone, dicho en voz alta y con el número exacto."""
+def _alerta_moneda_sin_declarar(especies: Sequence[str]) -> Alerta:
+    """El hueco que antes se tapaba deduciendo del sufijo, ahora dicho con el número exacto."""
     return Alerta(
-        codigo=CODIGO_MONEDA_ASUMIDA,
+        codigo=CODIGO_MONEDA_SIN_DECLARAR,
         mensaje=(
             f"{len(especies)} especies no traen declarada su moneda de cotización "
-            f"({', '.join(especies[:MUESTRA_ALERTA])}): se la dedujo del sufijo de liquidación "
-            "para poder normalizar su volumen. Es la regla del motor y es una suposición, no un "
-            "dato."
+            f"({', '.join(especies[:MUESTRA_ALERTA])}): su volumen queda sin normalizar. Antes se "
+            "la deducía del sufijo del ticker; deducirla es lo que la regla 11 prohíbe, y hay seis "
+            "especies con sufijo D declaradas en pesos que muestran por qué."
         ),
         severidad=Severidad.ADVERTENCIA,
         accion_requerida=(
             "Verificar que la ingesta de BYMA haya cargado `denominationCcy` para esas especies: "
-            "declarada, la moneda no hace falta suponerla."
+            "es el único camino por el que la moneda entra."
         ),
+        detalle={"cantidad": len(especies), "especies": list(especies)},
+    )
+
+
+def _alerta_moneda_sin_documentar(especies: Sequence[str]) -> Alerta:
+    """`EXT` es un código que la fuente usa y no explica. Se cuenta cuánto universo deja afuera."""
+    return Alerta(
+        codigo=CODIGO_MONEDA_SIN_DOCUMENTAR,
+        mensaje=(
+            f"{len(especies)} especies cotizan en {MONEDA_SIN_DOCUMENTAR} "
+            f"({', '.join(especies[:MUESTRA_ALERTA])}): su volumen queda sin normalizar porque "
+            f"BYMA no publica qué denota ese código. Su cociente contra la hermana en pesos da "
+            "≈1576 contra ≈1521 de la USD, lo que sugiere otro dólar, pero sugerir no es declarar."
+        ),
+        severidad=Severidad.INFO,
+        accion_requerida=None,
         detalle={"cantidad": len(especies), "especies": list(especies)},
     )
 

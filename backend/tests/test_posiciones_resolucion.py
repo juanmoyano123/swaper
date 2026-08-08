@@ -387,7 +387,7 @@ def test_el_ticker_declarado_y_el_resuelto_viajan_los_dos_lado_a_lado() -> None:
     assert fila["ticker_declarado"] == "  mr46d "
     assert fila["ticker"] == "MR46D"
     assert fila["emision"] == "MR46"
-    assert fila["moneda_liquidacion"] == "D"
+    assert fila["sufijo_liquidacion"] == "D"
     assert fila["plazo_liquidacion"] == "2"
     assert fila["resuelta"] is True
     assert fila["motivo"] is None

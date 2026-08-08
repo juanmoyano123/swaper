@@ -56,11 +56,14 @@ async def test_el_resumen_declara_los_descartes_y_sus_alertas(app_con_universo) 
     assert cuerpo["resumen"]["descartados"] == 2
     assert cuerpo["resumen"]["por_capa"]["especie_incoherente"] == 1
     codigos = {a["codigo"] for a in cuerpo["alertas"]}
+    # `moneda_de_cotizacion_asumida` se renombró a `..._sin_declarar` el 08/08/2026: el hecho que
+    # reporta se invirtió. Antes decía "no la declaró, la dedujimos del sufijo"; ahora dice "no la
+    # declaró y por eso no se convierte" — la regla 11 sacó la deducción.
     assert codigos == {
         "especie_incoherente",
         "rendimiento_fuera_de_rango",
         "tipo_de_cambio_sin_pares",
-        "moneda_de_cotizacion_asumida",
+        "moneda_de_cotizacion_sin_declarar",
     }
 
 

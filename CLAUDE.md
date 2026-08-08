@@ -71,6 +71,24 @@ una está en `docs/ESTADO.md` y en `docs/historial/`.
     datos, en ninguna forma. Se usa como referencia visual y para contrastar números
     publicados contra los nuestros, nada más.
 
+11. **No se supone ni se infiere nada en la representación de datos.** Todo lo que se muestra
+    sale de una fuente oficial, tal como la fuente lo declara. Si un dato existe pero no
+    estamos seguros de cómo interpretarlo, **el espacio va en blanco** y el faltante se
+    declara. Nunca se muestra la interpretación en lugar del dato. Aplica a toda
+    representación de datos —monitor, armador, ficha, exportes, informes—, no sólo al monitor.
+
+    La línea práctica: un código estándar se lee (`USD` y `ARS` son ISO 4217 y significan lo
+    que significan); un **código propietario de la fuente no se traduce**. `denominationCcy`
+    de BYMA vale `ARS`, `USD` y `EXT`, y BYMA no publica en ningún lado qué es `EXT`. Que su
+    cociente contra la especie en pesos dé ~1576 contra ~1521 de la `USD` *sugiere* cable
+    contra MEP, pero medir una coincidencia no es tener una fuente. `EXT` se muestra como
+    `EXT`, y todo número que dependa de interpretarlo va vacío.
+
+    Un cálculo determinístico sobre datos duros **no es una inferencia**: la TIR que sale de
+    resolver el cronograma contractual contra el precio publicado es aritmética, y se muestra.
+    Lo que la regla prohíbe es rellenar el hueco entre lo que la fuente dice y lo que
+    necesitamos que diga.
+
 ## Sobre datos y archivos
 
 - **Los secretos van en `.env`**, nunca en otro lado.

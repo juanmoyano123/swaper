@@ -8,16 +8,18 @@ ausencia acá es el contrato, no un TODO.
 anterior de BYMA (`previousClosingPrice`)— y sólo se calcula cuando los dos están. Faltando
 cualquiera de los dos, o con un cierre anterior que no es un precio válido, queda `None`.
 
-**El volumen en dólares nunca cae a la regla del sufijo D/C.** Esa regla es de especies de
-liquidación de renta fija (`cotiza_en_dolares` en `app.universo.cambio`): aplicarla acá sería
-completar por analogía la moneda de una acción, que es justo lo que la regla 1 prohíbe. Sin
-`moneda_cotizacion` declarada, `volumen_usd` queda `None` y se cuenta como faltante.
+**El volumen en dólares sólo se calcula sobre monedas que significan algo.** `USD` y `ARS` son ISO
+4217; `EXT` es vocabulario propio de BYMA que la fuente no documenta, y desde la regla 11
+(08/08/2026) no se convierte ni acá ni en `app.universo.cambio`. Tampoco se deduce del sufijo del
+ticker: esa regla es de especies de liquidación de renta fija y aplicarla a una acción sería
+completar por analogía. Sin moneda utilizable, `volumen_usd` queda `None` y se cuenta como
+faltante — sobre el universo de hoy son 341 CEDEARs y acciones en `EXT`, más las que no declaran.
 """
 
 from dataclasses import dataclass
 from typing import Any
 
-from app.universo.cambio import MONEDAS_EN_DOLARES, TipoDeCambio
+from app.universo.cambio import MONEDA_EN_PESOS, MONEDAS_EN_DOLARES, TipoDeCambio
 from app.universo.segmentacion import a_numero
 
 
@@ -68,14 +70,21 @@ def variacion_diaria(precio: float | None, cierre_anterior: float | None) -> flo
 def volumen_en_dolares(
     cambio: TipoDeCambio, volumen: float | None, moneda_cotizacion: str | None
 ) -> float | None:
-    """El volumen llevado a dólares, sin caer nunca a la regla del sufijo de ticker."""
-    if volumen is None:
+    """El volumen llevado a dólares, sin caer nunca a la regla del sufijo de ticker.
+
+    Sólo dos monedas producen un número: `USD` ya lo está y `ARS` se divide por el implícito. Todo
+    lo demás —`EXT`, que BYMA no documenta, y la ausencia de declaración— devuelve `None`. La lista
+    de monedas convertibles es cerrada a propósito: escribirla como "si no es dólar, es peso" hacía
+    que un código nuevo de la fuente entrara por la rama de pesos sin que nada avisara.
+    """
+    if volumen is None or moneda_cotizacion is None:
         return None
-    if moneda_cotizacion is None:
-        return None
-    if moneda_cotizacion.upper() in MONEDAS_EN_DOLARES:
+    declarada = moneda_cotizacion.upper()
+    if declarada in MONEDAS_EN_DOLARES:
         return volumen
-    return cambio.a_dolares(volumen, en_dolares=False)
+    if declarada == MONEDA_EN_PESOS:
+        return cambio.a_dolares(volumen, en_dolares=False)
+    return None
 
 
 def _texto(valor: object) -> str | None:

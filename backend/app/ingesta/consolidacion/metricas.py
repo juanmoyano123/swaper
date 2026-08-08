@@ -57,11 +57,15 @@ from app.ingesta.alertas import Alerta, Severidad
 # entera; el mensaje tiene que poder leerse. Mismo criterio que `universo/cambio.py`.
 MUESTRA_ALERTA = 6
 
-# Qué moneda de cotización hace comparable el precio con el flujo, por tipo de tasa. `EXT` es la
-# denominación de la especie cable y cotiza en dólares igual que `USD` (ver `universo/cambio.py`).
+# Qué moneda de cotización hace comparable el precio con el flujo, por tipo de tasa. Sólo códigos
+# ISO 4217: para dividir un precio por un flujo hay que saber que están en la misma unidad, y `EXT`
+# —vocabulario propio de BYMA, sin documentar— no permite afirmarlo (regla 11, 08/08/2026). Cuesta
+# 63 de las 276 especies hard-dollar que hoy tienen precio y cronograma; las 213 restantes se
+# calculan igual. Balanz llega por su cuenta al mismo lugar: en su panel ninguna especie C publica
+# TIR (verificado el 08/08/2026 sobre AE38C, AL30C, AL29C y S2G6C).
 MONEDAS_DEL_FLUJO: dict[str, frozenset[str]] = {
-    "hard-dollar": frozenset({"USD", "EXT"}),
-    "bopreal": frozenset({"USD", "EXT"}),
+    "hard-dollar": frozenset({"USD"}),
+    "bopreal": frozenset({"USD"}),
     "tasa-fija": frozenset({"ARS"}),
 }
 

@@ -107,9 +107,13 @@ class TestQuienSeCalcula:
         ("tipo_tasa", "moneda", "esperado"),
         [
             ("hard-dollar", "USD", FUENTE_CALCULO),
-            ("hard-dollar", "EXT", FUENTE_CALCULO),
+            # `EXT` pasó de `calculo` a `fuera` el 08/08/2026 con la regla 11: para dividir el
+            # precio por el flujo hay que saber que están en la misma moneda, y BYMA no documenta
+            # qué denota ese código. Cuesta 63 de las 276 hard-dollar calculables del universo real.
+            ("hard-dollar", "EXT", FUENTE_FUERA),
             ("hard-dollar", "ARS", FUENTE_FUERA),
             ("bopreal", "USD", FUENTE_CALCULO),
+            ("bopreal", "EXT", FUENTE_FUERA),
             ("tasa-fija", "ARS", FUENTE_CALCULO),
             ("tasa-fija", "USD", FUENTE_FUERA),
             ("cer", "ARS", FUENTE_FUERA),

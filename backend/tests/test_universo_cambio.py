@@ -21,6 +21,7 @@ from app.universo.cambio import (
     TOLERANCIA_CONTRASTE,
     contrastar,
     cotiza_en_dolares,
+    cotiza_en_pesos,
     derivar_tipo_de_cambio,
     normalizar_volumen,
 )
@@ -156,27 +157,33 @@ def test_sin_tipo_de_cambio_la_especie_en_pesos_queda_sin_volumen_comparable() -
     assert por_ticker["E000D"].volumen_usd == 10.0
 
 
-# --- GWT 3: la especie C entra sólo si no hay D, y queda registrado ------------------------------
+# --- GWT 3: `EXT` no entra a la muestra, y quién quedó afuera se dice -----------------------------
+#
+# Reescrito el 08/08/2026 con la regla 11. Antes esta sección probaba lo contrario: que la especie C
+# entrara como suplente cuando la emisión no tenía D. La medición que justificaba preferir la D
+# —1521 contra 1576, un 3,6 % que las delata como cosas distintas— es hoy el argumento para
+# excluirla del todo: para promediarla habría que saber que `EXT` denota dólares y BYMA no lo
+# publica. No costó cobertura: cero emisiones del universo real tienen sólo par por `EXT`.
 
 
-def test_la_emision_sin_mep_entra_por_el_cable_y_el_hecho_queda_registrado() -> None:
-    """GIVEN una emisión sin especie D pero con especie C
+def test_la_emision_sin_usd_no_entra_a_la_muestra_y_se_dice_cuales_son() -> None:
+    """GIVEN una emisión que cotiza en pesos y en `EXT` pero no en `USD`
     WHEN se arma la muestra de pares
-    THEN se usa la C sólo para esa emisión, y el hecho queda registrado, porque MEP y Cable son
-    tipos de cambio distintos."""
+    THEN no aporta cociente, y se la nombra: su precio existe, lo que falta es saber en qué unidad
+    está el otro lado."""
     especies = (
         universo(MIN_PARES_FX) + segmentar(par("CABLE", sufijo_usd="C", moneda_usd="EXT")).especies
     )
     cambio = derivar_tipo_de_cambio(especies)
 
-    assert cambio.por_cable == ["CABLE"]
-    assert cambio.pares == MIN_PARES_FX + 1
-    alerta = next(a for a in cambio.alertas if a.codigo == "tipo_de_cambio_por_cable")
+    assert cambio.par_sin_documentar == ["CABLE"]
+    assert cambio.pares == MIN_PARES_FX, "la emisión sin USD no puede sumar un par"
+    alerta = next(a for a in cambio.alertas if a.codigo == "tipo_de_cambio_par_sin_documentar")
     assert "CABLE" in alerta.mensaje
 
 
-def test_cuando_la_emision_tiene_las_dos_manda_la_d_y_la_c_no_entra() -> None:
-    """El canje separa MEP de Cable: mezclarlos correría la mediana por un spread estructural."""
+def test_la_especie_ext_no_entra_ni_siquiera_cuando_la_emision_tiene_usd() -> None:
+    """El cociente contra la `EXT` daría otro número, y no sabemos cuál de los dos es el cambio."""
     con_las_tres = [
         *par("TRES"),
         {
@@ -192,7 +199,35 @@ def test_cuando_la_emision_tiene_las_dos_manda_la_d_y_la_c_no_entra() -> None:
     cambio = derivar_tipo_de_cambio(segmentar([*[f for f in con_las_tres]]).especies)
 
     assert cambio.pares == 1
-    assert cambio.por_cable == []
+    assert cambio.par_sin_documentar == [], "teniendo USD, la emisión no quedó sin par"
+    assert cambio.moneda_sin_documentar == ["TRESC"], "pero la especie sí se cuenta"
+
+
+def test_el_lado_del_par_lo_decide_la_moneda_declarada_y_no_el_sufijo() -> None:
+    """El caso construido a mano, porque el universo real todavía no lo tiene.
+
+    Las seis especies con sufijo D declaradas en `ARS` están hoy solas en su emisión, así que ni la
+    regla vieja ni la nueva producen un par con ellas (verificado el 08/08/2026: `precio_imposible`
+    da cero con las dos). Este test las pone con una hermana en pesos —el día que BYMA la publique—
+    y fija qué tiene que pasar: la letra no manda, manda lo declarado. Sin esto, la regresión no se
+    notaría hasta que la fuente cambiara.
+    """
+    disfrazada = [
+        *par("MENTIRA"),  # el par legítimo: MENTIRAO en pesos y MENTIRAD en USD
+        {
+            "ticker": "TRAMPAD",  # sufijo D, pero la fuente la declara en pesos
+            "clase_activo": "on_corporativo",
+            "tipo_tasa": "hard-dollar",
+            "tir": 0.10,
+            "lastPrice": 121_100.0,
+            "effectiveVolume": 0.0,
+            "moneda_cotizacion": "ARS",
+        },
+    ]
+    cambio = derivar_tipo_de_cambio(segmentar(disfrazada).especies)
+
+    assert cambio.pares == 1, "sólo el par legítimo"
+    assert cambio.precio_imposible == [], "la especie disfrazada no se acusa de tener el precio mal"
 
 
 # --- GWT 4: el índice de BYMA contrasta, y el implícito se conserva como fuente ------------------
@@ -305,8 +340,14 @@ def test_la_moneda_declarada_manda_sobre_el_sufijo_del_ticker() -> None:
     assert not cotiza_en_dolares(en_pesos)
 
 
-def test_ext_es_dolar_porque_es_la_denominacion_del_cable() -> None:
-    (cable,) = segmentar(
+def test_ext_no_se_toma_por_dolar_porque_la_fuente_no_dice_que_lo_sea() -> None:
+    """Invertido el 08/08/2026 por la regla 11. Antes este test afirmaba que `EXT` era el cable.
+
+    Nadie en BYMA publica qué denota `EXT`: no es ISO 4217 como `ARS` y `USD`, es vocabulario propio
+    de la fuente. Lo medido —cociente ≈1576 contra ≈1521 de la `USD`— *sugiere* otro dólar, y
+    sugerir no es declarar. Ni se convierte su volumen ni entra al par del implícito.
+    """
+    (opaca,) = segmentar(
         [
             {
                 "ticker": "MR46C",
@@ -320,23 +361,57 @@ def test_ext_es_dolar_porque_es_la_denominacion_del_cable() -> None:
         ]
     ).especies
 
-    assert cotiza_en_dolares(cable)
+    assert not cotiza_en_dolares(opaca)
+    assert not cotiza_en_pesos(opaca), "tampoco es peso: el hueco es de tres ramas, no de dos"
 
 
-def test_sin_moneda_declarada_se_cae_al_sufijo_y_se_dice_cuantas_veces() -> None:
-    """Es lo único que este módulo supone, y por eso se cuenta en vez de esconderse.
+def test_el_volumen_en_ext_queda_vacio_en_vez_de_dividirse_por_el_implicito() -> None:
+    """El error que la tercera rama evita: `not cotiza_en_dolares` no significa "está en pesos".
 
-    Pasa sobre el consolidado histórico, que no tiene la columna. Sobre la base de hoy la cobertura
-    de `moneda_cotizacion` es del 100 % y esta rama no se toca.
+    Con dos ramas, un monto en `EXT` caía del lado de los pesos y se dividía por ~1521, publicando
+    un número mil quinientas veces más chico que el operado bajo un rótulo que decía dólares.
+    """
+    especies = universo(MIN_PARES_FX) + segmentar(
+        [
+            {
+                "ticker": "OPACOC",
+                "clase_activo": "on_corporativo",
+                "tipo_tasa": "hard-dollar",
+                "tir": 0.10,
+                "lastPrice": 78.52,
+                "effectiveVolume": 1_177_007.58,
+                "moneda_cotizacion": "EXT",
+            }
+        ]
+    ).especies
+    cambio = derivar_tipo_de_cambio(especies)
+    por_ticker = {e.ticker: e for e in normalizar_volumen(especies, cambio)}
+
+    assert cambio.disponible, "el implícito existe: lo que falta es en qué unidad está este monto"
+    assert por_ticker["OPACOC"].volumen_usd is None
+    assert por_ticker["OPACOC"].volumen == 1_177_007.58, "el crudo se conserva para poder auditarlo"
+    assert cambio.moneda_sin_documentar == ["OPACOC"]
+    assert "moneda_de_cotizacion_sin_documentar" in {a.codigo for a in cambio.alertas}
+
+
+def test_sin_moneda_declarada_no_se_deduce_del_sufijo_y_se_dice_cuantas_veces() -> None:
+    """Invertido el 08/08/2026: antes se caía al sufijo y se contaba; ahora no se cae y se cuenta.
+
+    La rama existía para el consolidado histórico, que no tiene la columna. Sobre la base de hoy la
+    cobertura de `moneda_cotizacion` es del 100 %, así que sacarla no costó una sola conversión —y
+    el día que la cobertura baje, el hueco se ve en vez de taparse con la letra del ticker.
     """
     especies = universo(moneda_ars=None, moneda_usd=None)
     cambio = derivar_tipo_de_cambio(especies)
     por_ticker = {e.ticker: e for e in normalizar_volumen(especies, cambio)}
 
-    assert len(cambio.moneda_asumida) == MIN_PARES_FX * 2
-    assert cotiza_en_dolares(por_ticker["E000D"])
+    assert len(cambio.moneda_sin_declarar) == MIN_PARES_FX * 2
+    assert not cotiza_en_dolares(por_ticker["E000D"]), "el sufijo D ya no alcanza"
     assert not cotiza_en_dolares(por_ticker["E000O"])
-    assert "moneda_de_cotizacion_asumida" in {a.codigo for a in cambio.alertas}
+    assert por_ticker["E000D"].volumen_usd is None
+    assert por_ticker["E000O"].volumen_usd is None
+    assert not cambio.disponible, "sin monedas declaradas no hay de dónde sacar un par"
+    assert "moneda_de_cotizacion_sin_declarar" in {a.codigo for a in cambio.alertas}
 
 
 # --- Los bordes que el motor resolvió y el port tiene que seguir resolviendo ----------------------

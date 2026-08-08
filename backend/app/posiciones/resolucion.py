@@ -175,7 +175,10 @@ class PosicionResuelta:
             "resuelta": self.resuelta,
             "ticker": especie.ticker if especie else None,
             "emision": especie.raiz if especie else None,
-            "moneda_liquidacion": especie.sufijo_liquidacion if especie else None,
+            # No se llama `moneda_liquidacion`: lo que viaja es la letra del ticker ("D", "C", "O"),
+            # y decirle moneda a una letra es el paso previo a que alguien la muestre como si lo
+            # fuera. La moneda declarada va en el campo de al lado (regla 11, 08/08/2026).
+            "sufijo_liquidacion": especie.sufijo_liquidacion if especie else None,
             "moneda_cotizacion": especie.moneda_cotizacion if especie else None,
             "plazo_liquidacion": self.plazo_liquidacion,
             "clase_activo": self.clase_activo,

@@ -26,7 +26,7 @@ export const esquemaPosicionResuelta = z.object({
   ticker: z.string().nullable(),
   emision: z.string().nullable(),
   /** El sufijo O / D / C: la moneda de liquidación, no el plazo. */
-  moneda_liquidacion: z.string().nullable(),
+  sufijo_liquidacion: z.string().nullable(),
   moneda_cotizacion: z.string().nullable(),
   /** `settlementType` de BYMA, `"1"` o `"2"`, sin traducir. `null` cuando la base no lo tiene. */
   plazo_liquidacion: z.string().nullable(),

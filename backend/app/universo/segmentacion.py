@@ -187,9 +187,11 @@ class EspecieUniverso:
     def sufijo_liquidacion(self) -> str | None:
         """Lo que separa a esta especie de sus hermanas: la letra que `raiz_emision` le cortó.
 
-        `None` cuando el ticker ya es la raíz. Es un hecho del ticker, no una interpretación: acá
-        no se dice qué moneda significa cada letra, porque establecer que la D es MEP y la C es
-        Cable —y que los separa el canje— es de F-012, que es donde vive el tipo de cambio.
+        `None` cuando el ticker ya es la raíz. Es un hecho del ticker y **nada más que eso**: acá no
+        se dice qué moneda significa cada letra, y desde la regla 11 (08/08/2026) tampoco lo dice
+        ningún otro lado. La moneda de una especie sale de `moneda_cotizacion` —el `denominationCcy`
+        declarado— o no sale: `cambio.py` dejó de caer al sufijo cuando la fuente no declara nada.
+        Hay seis especies con sufijo D declaradas en `ARS` que muestran por qué la letra no alcanza.
         """
         return self.ticker[len(self.raiz) :] or None
 
