@@ -260,3 +260,33 @@ El monitor de mesa del usuario (`mesaifa.netlify.app`) sirvió como banco de pru
 - El refactor de segmentación se verificó en dos pasos: primero mover el código sin cambiar comportamiento (**15/15 carteras idénticas hoja por hoja**, incluida la hoja de Alertas), y recién después aplicar los cambios de fondo.
 - Los cambios en las carteras tras arreglar el volumen están acotados y son explicables: la cantidad de posiciones no cambia en ningún caso, se sustituyen 1-2 por cartera, y las posiciones que liquidan en dólares pasan de 9 a 27 sobre los 15 casos — exactamente el sesgo que el bug producía.
 - El swaper: TLCWO→TLCMO sigue saliendo con los mismos flags; aparecen 47 propuestas Tamar y 1 Badlar donde antes había cero; dos corridas consecutivas dan resultados idénticos.
+
+### Qué declara BYMA y qué inferimos nosotros (08/08/2026)
+
+Revisar el monitor en pantalla destapó que estábamos presentando una inferencia como si fuera dato:
+`denominationCcy` toma tres valores y BYMA sólo documenta dos. `EXT` no es ISO 4217 y la fuente no
+publica qué denota; lo que nosotros habíamos medido —su cociente contra la hermana en pesos da
+≈1576 contra ≈1521 de la `USD`— sugiere el cable, pero estaba escrito en el código en modo
+indicativo, como si lo hubiera dicho la fuente.
+
+De ahí salió la **regla 11** de `CLAUDE.md`: no se supone ni se infiere nada en la representación de
+datos; un código propietario de la fuente no se traduce; si no sabemos interpretarlo, el espacio va
+en blanco y el faltante se declara.
+
+El detalle completo —incluido el trío X/Y/Z, que son 419 de los 535 "sin segmento", y la pregunta
+abierta sobre si estamos mezclando plazos de liquidación— está en
+`docs/historial/2026-08-08-lo-que-byma-declara-y-lo-que-inferimos.md`.
+
+Sacar la inferencia **no costó cobertura**: el tipo de cambio implícito conserva sus 462 pares y
+sigue dando 1.521,53, porque cero emisiones tienen su único par por `EXT`. Lo que sí cambió es que
+el volumen de 214 especies de renta fija y 341 de renta variable dejó de convertirse a dólares, y
+que 63 de las 276 especies hard-dollar calculables dejaron de tener TIR propia. En pantalla el hueco
+se resolvió **repartiendo en vez de rellenando**: el monitor elige una moneda por vez, y con una
+sola moneda a la vista el volumen se muestra crudo sin convertir nada.
+
+En la misma revisión se encontró que la ley y el emisor de la tabla curada no llegaban a ninguna
+pantalla: la vista `resumen` los lee de `instrumentos`, donde IAMC sólo cargó lo que publica.
+Cruzarlos subió la ley de 592 a 724 y el emisor de 720 a 823 sobre las 942 especies segmentadas.
+Cuatro emisiones (PLC4, PN38, RC1C, YM39) tienen ley contradictoria entre las dos fuentes: **quedan
+vacías y alertadas**, porque elegir ganador sin ir al prospecto sería inventar el eje de riesgo más
+caro de equivocar.

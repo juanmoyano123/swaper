@@ -2811,4 +2811,38 @@ primer uso real, no proyecciones.**
 
 ---
 
+## 11. Candidatas del relevamiento de monitores (08/08/2026)
+
+Salieron de recorrer el panel de Balanz y el Monitor Mesa IFA como **referencia visual** (regla 10:
+de `mesaifa.netlify.app` no se toma dato, sólo se mira cómo presenta). Ninguna se construyó en esa
+sesión — lo que se hizo fue mejorar lo ya entregado, sin adelantar features de tandas futuras.
+
+**Lo que ya tiene dueño y espera su turno.** Estas ideas no son features nuevas: son detalles de
+presentación para features que ya están planificadas, y se anotan en su ficha para que quien las
+construya no tenga que redescubrirlos.
+
+| Idea observada | Feature | Tanda |
+|---|---|---|
+| Curva TIR vs duration como scatter, con la familia (Bonares / Globales / Bopreal) por color y los tickers rotulados sobre los puntos | F-023 | 11 |
+| Panel de distribución con barras por sector, ley y naturaleza de tasa | F-020 | 9 |
+| Frecuencia de pago y días al próximo cupón como columnas de grilla, no sólo de ficha (regla 5 hecha columna) | F-021 | 9 |
+| Renta variable en el armador reusando `TablaRentaVariable` y `SelectorMoneda` de `components/` | F-026 | 9 |
+
+**Candidatas sin feature asignada.** Valen la pena y no están en el roadmap; entran por RICE cuando
+se decida, no antes.
+
+| Candidata | Por qué vale | Qué haría falta |
+|---|---|---|
+| **Matriz de sensibilidad multi-instrumento**: una fila por bono, una columna por TIR objetivo (−5 % a +5 %), con heatmap | F-040 ya calcula el repricing de un instrumento contra escenarios; esto es la misma cuenta sobre una familia entera, que es como se mira en la mesa | Extender el endpoint de sensibilidad a varios tickers; agrupar por familia y **nunca mezclar familias en una misma tabla** (regla 2) |
+| **Spread por legislación**: Bonar contra Global del mismo año, las dos TIR, las dos durations y el spread en bps | Es la **regla 8 hecha tabla** —no propone una mejora de TIR sin nombrar el riesgo que se asume— y el emparejamiento por año y duration comparable ya es derivable de lo que tenemos | Definir el criterio de emparejamiento con precisión; la nota al pie que explica el signo es parte de la feature, no decoración |
+| **Tarjetas de tipo de cambio implícito** (MEP, cable, canje) **nombrando el par que las produjo** | El cálculo existe desde F-012 y hoy no se muestra en ninguna pantalla. El patrón de mostrar el número junto a sus insumos (`AL30 ÷ AL30D`) es lo que lo hace auditable en vez de mágico | Rotular por el par y no por "MEP"/"cable": nombrarlos sería traducir `EXT`, que la regla 11 prohíbe |
+| **Badge de familia** (Bonares / Globales / Bopreal) en la grilla | Agrupa sin gastar una pestaña | **Salvedad de la regla 11**: derivarla del prefijo del ticker es manipulación de strings. Sólo entra si `subtipo` la declara — `subtipo_de()` ya distingue global de bonar por ley, así que hay de dónde |
+
+**Lo que no se copia, y por qué.** El panel de Balanz abre la solapa de Corporativos en una landing
+comercial con ONs destacadas y botón "Invertir". Es su selección de producto: exactamente la
+whitelist de disponibilidad que la **regla 9** prohíbe reintroducir. Nosotros mostramos todo lo
+negociable. Tampoco se copian los botones de comprar y vender: acá no se opera.
+
+---
+
 *Fin del plan. Próxima fase: 3 — Claude Design → `claude-docs/planning/design-system.md`.*
