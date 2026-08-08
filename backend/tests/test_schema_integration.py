@@ -211,8 +211,17 @@ async def test_todo_campo_curado_lleva_su_triplete(conn, campo: str) -> None:
 # --- Criterio 3: el contrato del motor sigue en pie -------------------------------------------
 
 
-async def test_la_vista_resumen_devuelve_las_21_columnas_del_contrato(conn) -> None:
-    assert await _columnas(conn, "resumen") == COLUMNAS_RESUMEN
+async def test_la_vista_resumen_conserva_las_21_columnas_del_contrato(conn) -> None:
+    """El contrato del motor son estas 21, en este orden y al principio de la vista.
+
+    No es igualdad exacta: una feature puede **agregar** una columna al final —F-052 agregó
+    `cierre_anterior`— y eso no rompe a nadie, porque `CREATE OR REPLACE VIEW` sólo admite columnas
+    nuevas al final y todos los lectores, motor incluido, leen por nombre. Lo que sí rompería el
+    contrato es que una de estas 21 desaparezca, cambie de nombre o se corra de lugar, y eso es
+    exactamente lo que este test sigue atrapando.
+    """
+    columnas = await _columnas(conn, "resumen")
+    assert columnas[: len(COLUMNAS_RESUMEN)] == COLUMNAS_RESUMEN
 
 
 async def test_cashflow_replica_las_columnas_del_csv(conn) -> None:

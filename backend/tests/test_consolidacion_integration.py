@@ -167,7 +167,13 @@ async def test_el_motor_carga_el_universo_de_la_base_sin_tocarle_una_linea(
         "duplicado",
         "archivo_origen",
     ]
-    assert list(filas[0].keys()) == columnas_del_contrato, "la vista cambió de forma"
+    # Las 21 del contrato, en orden y al principio. Una columna agregada al final por una feature
+    # posterior (F-052 sumó `cierre_anterior`) no le llega al motor: el DataFrame de abajo las
+    # selecciona por nombre. Lo que rompería al motor es que falte una, y eso sigue fallando acá.
+    presentes = list(filas[0].keys())
+    assert presentes[: len(columnas_del_contrato)] == columnas_del_contrato, (
+        "la vista cambió de forma"
+    )
 
     universo = pd.DataFrame([dict(f) for f in filas], columns=columnas_del_contrato)
     for numerica in (
