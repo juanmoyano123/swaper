@@ -16,13 +16,19 @@ Devuelve `chart.result[0].meta` (moneda, bolsa, nombre de la empresa, precio, m�
 día y de 52 semanas, volumen, cierre previo) más la serie diaria en `timestamp` +
 `indicators.quote[0].close`.
 
-**Nivel 2 — perfil de la empresa, con cookie y crumb.**
+**Nivel 2 — perfil y valuación de la empresa, con cookie y crumb.**
     1. GET https://fc.yahoo.com con User-Agent de browser → deja las cookies (su status **no
        importa**: contesta 404 y las cookies vienen igual; por eso este paso no pasa por `pedir`).
     2. GET /v1/test/getcrumb con esas cookies → devuelve el crumb en texto plano.
-    3. GET /v10/finance/quoteSummary/{SIMBOLO}?modules=assetProfile&crumb={CRUMB}
+    3. GET /v10/finance/quoteSummary/{SIMBOLO}?modules=assetProfile,defaultKeyStatistics&crumb=…
 Sin cookie+crumb el paso 3 responde 401. Si cualquiera de los tres falla, el nivel 2 queda vacío y
-declarado, y el nivel 1 sigue en pie.
+declarado, y el nivel 1 sigue en pie. Los dos módulos llegan juntos y caen juntos: son la misma
+llamada.
+
+**Los números de `quoteSummary` no vienen siempre igual.** El mismo campo puede llegar como
+`{"raw": 53.4, "fmt": "53.40"}` o como el número pelado, así que se aceptan las dos formas y nunca
+el `fmt` — ese string ya está formateado en la convención de la fuente (separadores anglosajones,
+sufijos tipo `4.66T`) y reconstruir un número desde su presentación es pedir un error de magnitud.
 
 **Y hay un tercer modo de fallo, medido acá mismo el 08/08/2026: HTTP 429.** Después de un rato de
 consultas, Yahoo empezó a limitar **toda esta conexión** —`curl` sin nuestro código recibe el mismo
@@ -52,9 +58,32 @@ mantiene el análisis determinístico. No se traen: los módulos `financialData`
 `recommendationTrend` ni siquiera se piden, y los objetos de este módulo se arman campo por campo
 desde una lista explícita, así que un campo nuevo de la fuente no puede colarse a la respuesta.
 
+**Por qué `financialData` queda afuera entero y `defaultKeyStatistics` entra entero.** En
+`financialData` Yahoo mezcla dato duro —márgenes, ROE— con opinión, en el mismo objeto: pedirlo y
+después descartar campos deja el juicio ajeno adentro del proceso aunque no se muestre, y no pedirlo
+lo mantiene afuera del todo. `defaultKeyStatistics` no publica un solo campo de opinión: son PER,
+price-to-book, beta, EPS y valor de empresa, todos calculados sobre datos publicados. Por eso se
+pide y por eso se muestra.
+
 Los valores propietarios de Yahoo —"Financial Services", "Banks - Regional", "United States"— se
 guardan y se muestran **tal como la fuente los declara**, sin traducir (regla 11). Traducirlos sería
 poner nuestra interpretación en el lugar del dato.
+
+LA TRAMPA DE LA MONEDA EN LA VALUACIÓN
+--------------------------------------
+Para un CEDEAR, Yahoo devuelve la valuación **en la moneda de la especie local, no en la del
+subyacente**: el `trailingEps` de `MSFT.BA` es 134.603,95 y su `enterpriseValue` 4,66e15 — eso son
+pesos argentinos, no dólares. Un número de esa magnitud sin unidad al lado se lee mal en la primera
+mirada, y leerlo en dólares es un error de tres órdenes de magnitud (regla 3).
+
+Por eso la valuación separa dos naturalezas. **Los ratios son adimensionales** —PER, price-to-book y
+beta son cocientes— y se muestran solos. **Los montos son plata** y sólo existen como
+`MontoExterno`, que no se construye sin moneda; la moneda sale de la que la fuente declare para el
+campo o
+para el módulo, **nunca de la del `chart`**: que la cotización esté en pesos no prueba que la fuente
+exprese el EPS en pesos, y suponerlo es el hueco que la regla 11 no deja rellenar. Un monto sin
+moneda declarada no se muestra y su nombre viaja en `montos_sin_moneda`, para que el faltante se
+declare en vez de desaparecer.
 """
 
 import asyncio
@@ -79,8 +108,9 @@ URL_COOKIE = "https://fc.yahoo.com"
 URL_CRUMB = "https://query1.finance.yahoo.com/v1/test/getcrumb"
 URL_PERFIL = "https://query1.finance.yahoo.com/v10/finance/quoteSummary/{simbolo}"
 
-# El único módulo que se pide. Todo lo que no está acá no viaja: ver "LO QUE NO SE TRAE".
-MODULOS_PERFIL = "assetProfile"
+# Los dos módulos que se piden, y nada más. `financialData` queda afuera a propósito: ver "LO QUE
+# NO SE TRAE". `defaultKeyStatistics` entra entero porque no publica un solo campo de opinión.
+MODULOS_PERFIL = "assetProfile,defaultKeyStatistics"
 
 SUFIJO_BUENOS_AIRES = ".BA"
 BOLSA_ESPERADA = "BUE"
@@ -204,11 +234,75 @@ class PerfilExterno:
 
 
 @dataclass(frozen=True, slots=True)
+class MontoExterno:
+    """Un número que es plata, con la moneda que la fuente declaró para *ese* número.
+
+    Es una clase y no dos campos sueltos para que sea imposible construir el monto sin su moneda:
+    la valuación de un CEDEAR viene en la moneda de la especie local, no la del subyacente —el
+    `trailingEps` de `MSFT.BA` son pesos, no dólares— y un número de esa magnitud sin unidad al lado
+    es exactamente lo que la regla 3 prohíbe. Sin moneda declarada no hay `MontoExterno`: el campo
+    queda fuera y su nombre se declara en `montos_sin_moneda`.
+    """
+
+    valor: float
+    moneda: str
+
+    def como_dict(self) -> dict[str, object]:
+        return {"valor": self.valor, "moneda": self.moneda}
+
+
+@dataclass(frozen=True, slots=True)
+class ValuacionExterna:
+    """Lo que `defaultKeyStatistics` publica del papel. Dato duro, sin una gota de opinión.
+
+    Dos naturalezas que no se mezclan. **Los ratios son adimensionales** —PER, price-to-book y beta
+    son cocientes— y se muestran solos sin ambigüedad posible. **Los montos son plata** y sólo
+    existen con la moneda que la fuente declaró para ellos.
+
+    `montos_sin_moneda` lleva el nombre de los campos que trajeron número pero ninguna moneda: no se
+    muestran, y que falten se dice. Un faltante declarado es dato; un monto sin unidad es una
+    invitación a leerlo en la moneda equivocada.
+    """
+
+    per_trailing: float | None
+    per_forward: float | None
+    precio_sobre_libros: float | None
+    beta: float | None
+    ganancia_por_accion: MontoExterno | None
+    valor_empresa: MontoExterno | None
+    capitalizacion: MontoExterno | None
+    montos_sin_moneda: tuple[str, ...]
+    capturado_en: str
+
+    def como_dict(self) -> dict[str, object]:
+        return {
+            "per_trailing": self.per_trailing,
+            "per_forward": self.per_forward,
+            "precio_sobre_libros": self.precio_sobre_libros,
+            "beta": self.beta,
+            "ganancia_por_accion": (
+                self.ganancia_por_accion.como_dict()
+                if self.ganancia_por_accion is not None
+                else None
+            ),
+            "valor_empresa": (
+                self.valor_empresa.como_dict() if self.valor_empresa is not None else None
+            ),
+            "capitalizacion": (
+                self.capitalizacion.como_dict() if self.capitalizacion is not None else None
+            ),
+            "montos_sin_moneda": list(self.montos_sin_moneda),
+            "capturado_en": self.capturado_en,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class BloqueExterno:
     """El bloque de terceros de la ficha, disponible o declarado ausente — nunca a medias.
 
-    `disponible` es del bloque entero (nivel 1). `perfil_motivo` es el matiz del nivel 2: hay
-    cotización pero no perfil, que es exactamente lo que pasa cuando el crumb se rompe.
+    `disponible` es del bloque entero (nivel 1). `perfil_motivo` es el matiz del nivel 2 —perfil y
+    valuación llegan en el mismo pedido y caen juntos— que es exactamente lo que pasa cuando el
+    crumb se rompe: hay cotización y no hay nada de la empresa.
     """
 
     fuente: str
@@ -217,6 +311,7 @@ class BloqueExterno:
     motivo: str | None
     cotizacion: CotizacionExterna | None
     perfil: PerfilExterno | None
+    valuacion: ValuacionExterna | None
     perfil_motivo: str | None
 
     def como_dict(self) -> dict[str, object]:
@@ -227,8 +322,13 @@ class BloqueExterno:
             "motivo": self.motivo,
             "cotizacion": self.cotizacion.como_dict() if self.cotizacion is not None else None,
             "perfil": self.perfil.como_dict() if self.perfil is not None else None,
+            "valuacion": self.valuacion.como_dict() if self.valuacion is not None else None,
             "perfil_motivo": self.perfil_motivo,
         }
+
+
+# Lo que el nivel 2 entrega: los dos módulos de la misma llamada, cada uno pudiendo faltar solo.
+type DatosDeEmpresa = tuple[PerfilExterno | None, ValuacionExterna | None]
 
 
 def _no_disponible(simbolo: str, motivo: str) -> BloqueExterno:
@@ -239,6 +339,7 @@ def _no_disponible(simbolo: str, motivo: str) -> BloqueExterno:
         motivo=motivo,
         cotizacion=None,
         perfil=None,
+        valuacion=None,
         perfil_motivo=None,
     )
 
@@ -265,6 +366,47 @@ def _numero(valor: object) -> float | None:
 def _entero(valor: object) -> int | None:
     numero = _numero(valor)
     return None if numero is None else int(numero)
+
+
+def _crudo(campo: object) -> float | None:
+    """El número de un campo de `quoteSummary`, venga pelado o envuelto.
+
+    `quoteSummary` no devuelve siempre la misma forma: los campos numéricos suelen venir como
+    `{"raw": 53.4, "fmt": "53.40"}` y a veces como el número solo. Se aceptan las dos y **nunca el
+    `fmt`**: ese string ya viene formateado en la convención de la fuente —separadores anglosajones,
+    sufijos como `4.66T`— y parsearlo sería reconstruir un número a partir de su presentación.
+    """
+    if isinstance(campo, dict):
+        return _numero(campo.get("raw"))
+    return _numero(campo)
+
+
+def _moneda_de(campo: object, modulo: dict[str, Any]) -> str | None:
+    """La moneda declarada para *este* número, o `None`. Nunca se toma prestada de otro lado.
+
+    Se mira primero el propio campo y después el módulo (`currency` / `financialCurrency`). Lo que
+    no se hace es completarla con la del `chart`: que la cotización esté en pesos no prueba que la
+    fuente exprese el EPS o el valor de empresa en pesos, y suponerlo es justamente el hueco que la
+    regla 11 no deja rellenar. Sin declaración, el monto no se muestra.
+    """
+    if isinstance(campo, dict):
+        propia = _texto(campo.get("currency"))
+        if propia is not None:
+            return propia
+    return _texto(modulo.get("currency")) or _texto(modulo.get("financialCurrency"))
+
+
+def _monto(nombre: str, modulo: dict[str, Any], sin_moneda: list[str]) -> MontoExterno | None:
+    """Un campo de plata: sale sólo con moneda declarada, y si no, se anota como faltante."""
+    campo = modulo.get(nombre)
+    valor = _crudo(campo)
+    if valor is None:
+        return None
+    moneda = _moneda_de(campo, modulo)
+    if moneda is None:
+        sin_moneda.append(nombre)
+        return None
+    return MontoExterno(valor=valor, moneda=moneda)
 
 
 def _serie(resultado: dict[str, Any], desfase_horario: int) -> tuple[PuntoHistorico, ...]:
@@ -347,13 +489,8 @@ def leer_cotizacion(cuerpo: object, *, simbolo: str, capturado_en: str) -> Cotiz
     )
 
 
-def leer_perfil(cuerpo: object, *, capturado_en: str) -> PerfilExterno | None:
-    """El perfil de `assetProfile`, campo por campo desde una lista explícita.
-
-    Que los campos se nombren uno por uno y no se copie el objeto entero es lo que hace
-    estructuralmente imposible que un campo de opinión —que Yahoo podría empezar a devolver acá
-    mañana— llegue a la respuesta de nuestra API.
-    """
+def _modulo(cuerpo: object, nombre: str) -> dict[str, Any] | None:
+    """Un módulo de la respuesta de `quoteSummary`, o `None` si no vino."""
     if not isinstance(cuerpo, dict):
         return None
     resumen = cuerpo.get("quoteSummary")
@@ -361,8 +498,19 @@ def leer_perfil(cuerpo: object, *, capturado_en: str) -> PerfilExterno | None:
     if not isinstance(resultados, list) or not resultados:
         return None
     primero = resultados[0]
-    perfil = primero.get("assetProfile") if isinstance(primero, dict) else None
-    if not isinstance(perfil, dict):
+    modulo = primero.get(nombre) if isinstance(primero, dict) else None
+    return modulo if isinstance(modulo, dict) else None
+
+
+def leer_perfil(cuerpo: object, *, capturado_en: str) -> PerfilExterno | None:
+    """El perfil de `assetProfile`, campo por campo desde una lista explícita.
+
+    Que los campos se nombren uno por uno y no se copie el objeto entero es lo que hace
+    estructuralmente imposible que un campo de opinión —que Yahoo podría empezar a devolver acá
+    mañana— llegue a la respuesta de nuestra API.
+    """
+    perfil = _modulo(cuerpo, "assetProfile")
+    if perfil is None:
         return None
 
     return PerfilExterno(
@@ -372,6 +520,54 @@ def leer_perfil(cuerpo: object, *, capturado_en: str) -> PerfilExterno | None:
         sitio=_texto(perfil.get("website")),
         empleados=_entero(perfil.get("fullTimeEmployees")),
         capturado_en=capturado_en,
+    )
+
+
+def leer_valuacion(cuerpo: object, *, capturado_en: str) -> ValuacionExterna | None:
+    """La valuación de `defaultKeyStatistics`, con la misma lista explícita campo por campo.
+
+    En este módulo Yahoo **no publica opinión** —no hay recomendación, ni precio objetivo, ni
+    cantidad de analistas— y por eso entra entero al alcance de la regla 6 sin filtrar nada. Lo que
+    sí hay que cuidar es la unidad: el PER, el price-to-book y la beta son cocientes y se muestran
+    solos, mientras que el EPS, el valor de empresa y la capitalización son plata y sólo salen con
+    la moneda que la fuente declare para cada uno.
+    """
+    estadisticas = _modulo(cuerpo, "defaultKeyStatistics")
+    if estadisticas is None:
+        return None
+
+    sin_moneda: list[str] = []
+    valuacion = ValuacionExterna(
+        per_trailing=_crudo(estadisticas.get("trailingPE")),
+        per_forward=_crudo(estadisticas.get("forwardPE")),
+        precio_sobre_libros=_crudo(estadisticas.get("priceToBook")),
+        beta=_crudo(estadisticas.get("beta")),
+        ganancia_por_accion=_monto("trailingEps", estadisticas, sin_moneda),
+        valor_empresa=_monto("enterpriseValue", estadisticas, sin_moneda),
+        capitalizacion=_monto("marketCap", estadisticas, sin_moneda),
+        montos_sin_moneda=tuple(sin_moneda),
+        capturado_en=capturado_en,
+    )
+
+    # Un módulo que vino sin un solo campo utilizable es lo mismo que no haber venido: se declara
+    # ausente en vez de dibujar una grilla entera de `s/d`.
+    if _valuacion_vacia(valuacion):
+        return None
+    return valuacion
+
+
+def _valuacion_vacia(valuacion: ValuacionExterna) -> bool:
+    return not any(
+        (
+            valuacion.per_trailing is not None,
+            valuacion.per_forward is not None,
+            valuacion.precio_sobre_libros is not None,
+            valuacion.beta is not None,
+            valuacion.ganancia_por_accion is not None,
+            valuacion.valor_empresa is not None,
+            valuacion.capitalizacion is not None,
+            valuacion.montos_sin_moneda,
+        )
     )
 
 
@@ -431,7 +627,10 @@ class ClienteYahoo:
         self._dormir = dormir
         self._ahora = ahora
         self._cotizaciones: CacheConTTL[CotizacionExterna] = CacheConTTL(ttl_cotizacion, reloj)
-        self._perfiles: CacheConTTL[PerfilExterno] = CacheConTTL(ttl_perfil, reloj)
+        # Perfil y valuación viajan en el mismo pedido y se guardan juntos: separarlos en dos
+        # cachés haría que un acierto y una falla convivieran para el mismo símbolo y terminaría
+        # pidiendo dos veces lo que la fuente entrega de una.
+        self._empresas: CacheConTTL[DatosDeEmpresa] = CacheConTTL(ttl_perfil, reloj)
         # El crumb vence junto con el perfil: es la credencial con la que se lo pide, y renovarla
         # más seguido que el dato que habilita sería pagar dos requests para nada.
         self._credenciales: CacheConTTL[tuple[str, httpx.Cookies]] = CacheConTTL(ttl_perfil, reloj)
@@ -465,9 +664,12 @@ class ClienteYahoo:
         clave = simbolo.upper()
 
         cotizacion = self._cotizaciones.obtener(clave)
-        perfil = self._perfiles.obtener(clave)
-        if cotizacion is not None and perfil is not None:
-            return BloqueExterno(FUENTE, simbolo, True, None, cotizacion, perfil, None)
+        empresa = self._empresas.obtener(clave)
+        if cotizacion is not None and empresa is not None:
+            perfil, valuacion = empresa
+            return BloqueExterno(
+                FUENTE, simbolo, True, None, cotizacion, perfil, valuacion, None
+            )
 
         if cotizacion is None:
             fallo = self._fallos.obtener(clave)
@@ -493,20 +695,26 @@ class ClienteYahoo:
                 self._cotizaciones.guardar(clave, cotizacion)
 
             perfil_motivo: str | None = None
-            if perfil is None:
+            if empresa is None:
                 try:
-                    perfil = await self._perfil(cliente, simbolo)
+                    empresa = await self._empresa(cliente, simbolo)
                 except ErrorDeFuente as exc:
                     logger.info("yahoo_sin_perfil", simbolo=simbolo, motivo=exc.motivo)
-                    perfil = None
-                    perfil_motivo = f"{FUENTE} no entregó el perfil de la empresa: {exc.motivo}"
+                    empresa = None
+                    perfil_motivo = (
+                        f"{FUENTE} no entregó los datos de la empresa: {exc.motivo}"
+                    )
                 else:
-                    if perfil is None:
-                        perfil_motivo = f"{FUENTE} no publica perfil para este símbolo"
+                    if empresa == (None, None):
+                        empresa = None
+                        perfil_motivo = f"{FUENTE} no publica datos de empresa para este símbolo"
                     else:
-                        self._perfiles.guardar(clave, perfil)
+                        self._empresas.guardar(clave, empresa)
 
-        return BloqueExterno(FUENTE, simbolo, True, None, cotizacion, perfil, perfil_motivo)
+        perfil, valuacion = empresa if empresa is not None else (None, None)
+        return BloqueExterno(
+            FUENTE, simbolo, True, None, cotizacion, perfil, valuacion, perfil_motivo
+        )
 
     def _abrir(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(
@@ -531,7 +739,8 @@ class ClienteYahoo:
             _json(respuesta), simbolo=simbolo, capturado_en=self._ahora().isoformat()
         )
 
-    async def _perfil(self, cliente: httpx.AsyncClient, simbolo: str) -> PerfilExterno | None:
+    async def _empresa(self, cliente: httpx.AsyncClient, simbolo: str) -> DatosDeEmpresa:
+        """Perfil y valuación en un solo pedido: son dos módulos de la misma llamada."""
         crumb, cookies = await self._credencial(cliente)
         cliente.cookies.update(cookies)
         url = URL_PERFIL.format(simbolo=simbolo)
@@ -546,7 +755,12 @@ class ClienteYahoo:
             politica=self._politica,
             dormir=self._dormir,
         )
-        return leer_perfil(_json(respuesta), capturado_en=self._ahora().isoformat())
+        cuerpo = _json(respuesta)
+        capturado_en = self._ahora().isoformat()
+        return (
+            leer_perfil(cuerpo, capturado_en=capturado_en),
+            leer_valuacion(cuerpo, capturado_en=capturado_en),
+        )
 
     async def _credencial(self, cliente: httpx.AsyncClient) -> tuple[str, httpx.Cookies]:
         """La cookie y el crumb del nivel 2, cacheados. Lanza `ErrorDeFuente` si no se consiguen."""

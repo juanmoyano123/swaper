@@ -10,8 +10,10 @@ from app.externos.yahoo import (
     BloqueExterno,
     ClienteYahoo,
     CotizacionExterna,
+    MontoExterno,
     PerfilExterno,
     PuntoHistorico,
+    ValuacionExterna,
     cliente_yahoo,
 )
 
@@ -19,7 +21,9 @@ __all__ = [
     "BloqueExterno",
     "ClienteYahoo",
     "CotizacionExterna",
+    "MontoExterno",
     "PerfilExterno",
     "PuntoHistorico",
+    "ValuacionExterna",
     "cliente_yahoo",
 ]

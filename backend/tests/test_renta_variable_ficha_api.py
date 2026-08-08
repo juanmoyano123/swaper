@@ -25,7 +25,7 @@ from app.externos.yahoo import (
 )
 from tests.conftest import cliente
 from tests.test_renta_variable_api import AAPL, GGAL, FakeConexionRentaVariable
-from tests.test_yahoo_cliente import chart, perfil
+from tests.test_yahoo_cliente import chart, empresa, estadisticas, perfil
 
 RUTA = "/api/v1/renta-variable/{ticker}/ficha"
 CHART_GGAL = URL_CHART.format(simbolo="GGAL.BA")
@@ -52,11 +52,13 @@ def app_con_ficha(crear_app, monkeypatch):
     return _crear
 
 
-def _montar_yahoo_entero() -> None:
+def _montar_yahoo_entero(nivel_2: dict[str, Any] | None = None) -> None:
     respx.get(url__startswith=CHART_GGAL).mock(return_value=httpx.Response(200, json=chart()))
     respx.get(URL_COOKIE).mock(return_value=httpx.Response(404))
     respx.get(URL_CRUMB).mock(return_value=httpx.Response(200, text="abc123"))
-    respx.get(url__startswith=PERFIL_GGAL).mock(return_value=httpx.Response(200, json=perfil()))
+    respx.get(url__startswith=PERFIL_GGAL).mock(
+        return_value=httpx.Response(200, json=nivel_2 if nivel_2 is not None else perfil())
+    )
 
 
 async def test_camino_feliz_trae_los_dos_bloques_con_su_fuente(app_con_ficha) -> None:
@@ -147,6 +149,35 @@ async def test_ningun_campo_de_opinion_viaja_en_la_respuesta(app_con_ficha) -> N
     assert "STRONG_BUY" not in texto
     assert "recommendation" not in texto
     assert "targetMeanPrice" not in texto and "9000" not in texto
+
+
+async def test_la_valuacion_viaja_con_sus_ratios_y_sus_montos_con_moneda(app_con_ficha) -> None:
+    """PER, price-to-book y beta van solos; el EPS va con la moneda que declaró la fuente."""
+    with respx.mock:
+        _montar_yahoo_entero(empresa(estadisticas()))
+        async with cliente(app_con_ficha(renta_variable=[GGAL])) as http:
+            respuesta = await http.get(RUTA.format(ticker="GGAL"))
+
+    valuacion = respuesta.json()["externo"]["valuacion"]
+    assert valuacion["per_forward"] == 7.70
+    assert valuacion["beta"] == 0.315
+    assert valuacion["ganancia_por_accion"] == {"valor": 53.4, "moneda": "ARS"}
+    assert valuacion["montos_sin_moneda"] == []
+
+
+async def test_un_monto_sin_moneda_no_viaja_y_el_faltante_se_declara(app_con_ficha) -> None:
+    """Regla 11 sobre el CEDEAR: sin moneda declarada, el número no sale — y se dice que faltó."""
+    sin_moneda = estadisticas(trailingEps={"raw": 134_603.95}, enterpriseValue={"raw": 4.66e15})
+    with respx.mock:
+        _montar_yahoo_entero(empresa(sin_moneda))
+        async with cliente(app_con_ficha(renta_variable=[GGAL])) as http:
+            respuesta = await http.get(RUTA.format(ticker="GGAL"))
+
+    valuacion = respuesta.json()["externo"]["valuacion"]
+    assert valuacion["ganancia_por_accion"] is None
+    assert set(valuacion["montos_sin_moneda"]) == {"trailingEps", "enterpriseValue"}
+    assert "134603.95" not in respuesta.text and "134,603.95" not in respuesta.text
+    assert valuacion["precio_sobre_libros"] == 1.37
 
 
 async def test_ticker_que_no_es_renta_variable_da_404(app_con_ficha) -> None:

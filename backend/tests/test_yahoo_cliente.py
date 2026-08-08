@@ -81,6 +81,34 @@ def perfil(**campos: Any) -> dict[str, Any]:
     return {"quoteSummary": {"error": None, "result": [{"assetProfile": base}]}}
 
 
+def estadisticas(**campos: Any) -> dict[str, Any]:
+    """`defaultKeyStatistics` con la forma envuelta `{raw, fmt}`, que es como suele venir.
+
+    El `fmt` está puesto a propósito y con un valor que **no coincide** con el `raw` formateado: si
+    alguna vez el cliente leyera la presentación en vez del número, estos tests lo acusan.
+    """
+    base = {
+        "trailingPE": {"raw": 8.4, "fmt": "8.40"},
+        "forwardPE": {"raw": 7.70, "fmt": "7.70"},
+        "priceToBook": {"raw": 1.37, "fmt": "1.37"},
+        "beta": {"raw": 0.315, "fmt": "0.32"},
+        "trailingEps": {"raw": 53.4, "fmt": "99.99", "currency": "ARS"},
+        "enterpriseValue": {"raw": 4.66e15, "fmt": "4.66T", "currency": "ARS"},
+    }
+    base.update(campos)
+    return base
+
+
+def empresa(estadisticas_modulo: dict[str, Any] | None = None, **perfil_campos: Any):
+    """La respuesta del nivel 2 con sus dos módulos, tal como llega en una sola llamada."""
+    resultado: dict[str, Any] = {"assetProfile": perfil(**perfil_campos)["quoteSummary"]["result"][
+        0
+    ]["assetProfile"]}
+    if estadisticas_modulo is not None:
+        resultado["defaultKeyStatistics"] = estadisticas_modulo
+    return {"quoteSummary": {"error": None, "result": [resultado]}}
+
+
 async def _no_dormir(_: float) -> None:
     return None
 
@@ -93,10 +121,20 @@ def cliente(**kwargs: Any) -> ClienteYahoo:
     return ClienteYahoo(**kwargs)
 
 
-def _montar_nivel_2() -> None:
+def _montar_nivel_2(cuerpo: dict[str, Any] | None = None) -> None:
     respx.get(URL_COOKIE).mock(return_value=httpx.Response(404))
     respx.get(URL_CRUMB).mock(return_value=httpx.Response(200, text="abc123"))
-    respx.get(url__startswith=PERFIL).mock(return_value=httpx.Response(200, json=perfil()))
+    respx.get(url__startswith=PERFIL).mock(
+        return_value=httpx.Response(200, json=cuerpo if cuerpo is not None else perfil())
+    )
+
+
+async def _valuacion_de(estadisticas_modulo: dict[str, Any] | None):
+    """El bloque externo con el módulo de valuación que pida el test."""
+    with respx.mock:
+        respx.get(url__startswith=CHART).mock(return_value=httpx.Response(200, json=chart()))
+        _montar_nivel_2(empresa(estadisticas_modulo))
+        return await cliente().bloque_externo("GGAL")
 
 
 # --- Camino feliz ---------------------------------------------------------------------------------
@@ -286,22 +324,6 @@ async def test_un_500_se_reintenta_y_la_segunda_vuelta_sirve() -> None:
 # --- Lo que no se pide ni se muestra --------------------------------------------------------------
 
 
-async def test_solo_se_pide_el_modulo_de_perfil() -> None:
-    """GWT-5: los módulos de opinión no se piden. El que no se pide no se puede filtrar mal."""
-    with respx.mock:
-        respx.get(url__startswith=CHART).mock(return_value=httpx.Response(200, json=chart()))
-        respx.get(URL_COOKIE).mock(return_value=httpx.Response(404))
-        respx.get(URL_CRUMB).mock(return_value=httpx.Response(200, text="abc123"))
-        ruta = respx.get(url__startswith=PERFIL).mock(
-            return_value=httpx.Response(200, json=perfil())
-        )
-        await cliente().bloque_externo("GGAL")
-
-    pedida = str(ruta.calls.last.request.url)
-    assert "modules=assetProfile" in pedida
-    assert "financialData" not in pedida and "recommendationTrend" not in pedida
-
-
 async def test_los_campos_de_opinion_no_entran_aunque_la_fuente_los_mande() -> None:
     """GWT-5: el perfil se arma campo por campo, así que un campo nuevo de la fuente no se cuela."""
     con_opinion = perfil(
@@ -318,6 +340,124 @@ async def test_los_campos_de_opinion_no_entran_aunque_la_fuente_los_mande() -> N
     assert "STRONG_BUY" not in serializado
     assert "9000" not in serializado
     assert "17" not in serializado
+
+
+async def test_se_piden_los_dos_modulos_y_ninguno_de_opinion() -> None:
+    """GWT-5: los módulos de opinión no se piden. El que no se pide no se puede filtrar mal."""
+    with respx.mock:
+        respx.get(url__startswith=CHART).mock(return_value=httpx.Response(200, json=chart()))
+        respx.get(URL_COOKIE).mock(return_value=httpx.Response(404))
+        respx.get(URL_CRUMB).mock(return_value=httpx.Response(200, text="abc123"))
+        ruta = respx.get(url__startswith=PERFIL).mock(
+            return_value=httpx.Response(200, json=empresa(estadisticas()))
+        )
+        await cliente().bloque_externo("GGAL")
+
+    pedida = str(ruta.calls.last.request.url)
+    assert "modules=assetProfile,defaultKeyStatistics" in pedida
+    assert "financialData" not in pedida and "recommendationTrend" not in pedida
+
+
+# --- Valuación: los ratios ------------------------------------------------------------------------
+
+
+async def test_los_ratios_se_leen_del_raw_y_nunca_del_fmt() -> None:
+    """PER, price-to-book y beta son cocientes: adimensionales, se muestran sin moneda."""
+    bloque = await _valuacion_de(estadisticas())
+
+    assert bloque.valuacion is not None
+    assert bloque.valuacion.per_trailing == 8.4
+    assert bloque.valuacion.per_forward == 7.70
+    assert bloque.valuacion.precio_sobre_libros == 1.37
+    assert bloque.valuacion.beta == 0.315
+
+
+async def test_un_numero_pelado_se_lee_igual_que_uno_envuelto() -> None:
+    """`quoteSummary` alterna las dos formas para el mismo campo: las dos tienen que servir."""
+    bloque = await _valuacion_de(estadisticas(forwardPE=7.70, beta=0.315))
+
+    assert bloque.valuacion is not None
+    assert bloque.valuacion.per_forward == 7.70
+    assert bloque.valuacion.beta == 0.315
+
+
+# --- Valuación: los montos y su moneda ------------------------------------------------------------
+
+
+async def test_un_monto_con_moneda_declarada_por_campo_viaja_con_ella() -> None:
+    bloque = await _valuacion_de(estadisticas())
+
+    assert bloque.valuacion is not None
+    assert bloque.valuacion.ganancia_por_accion is not None
+    assert bloque.valuacion.ganancia_por_accion.valor == 53.4
+    assert bloque.valuacion.ganancia_por_accion.moneda == "ARS"
+    assert bloque.valuacion.montos_sin_moneda == ()
+
+
+async def test_la_moneda_del_modulo_alcanza_cuando_el_campo_no_la_trae() -> None:
+    modulo = estadisticas(trailingEps={"raw": 53.4}, enterpriseValue={"raw": 4.66e15})
+    modulo["financialCurrency"] = "ARS"
+    bloque = await _valuacion_de(modulo)
+
+    assert bloque.valuacion is not None
+    assert bloque.valuacion.ganancia_por_accion is not None
+    assert bloque.valuacion.ganancia_por_accion.moneda == "ARS"
+    assert bloque.valuacion.valor_empresa is not None
+
+
+async def test_un_monto_sin_moneda_declarada_no_se_muestra_y_se_declara_faltante() -> None:
+    """Regla 11: el `trailingEps` de un CEDEAR son pesos, no dólares. Sin declaración, va vacío."""
+    bloque = await _valuacion_de(
+        estadisticas(trailingEps={"raw": 134_603.95}, enterpriseValue={"raw": 4.66e15})
+    )
+
+    assert bloque.valuacion is not None
+    assert bloque.valuacion.ganancia_por_accion is None
+    assert bloque.valuacion.valor_empresa is None
+    assert set(bloque.valuacion.montos_sin_moneda) == {"trailingEps", "enterpriseValue"}
+    # Los ratios, que no dependen de ninguna moneda, siguen enteros.
+    assert bloque.valuacion.beta == 0.315
+
+
+async def test_la_moneda_del_chart_no_completa_la_del_monto() -> None:
+    """El `chart` dice ARS y la valuación no declara nada: el monto sigue vacío.
+
+    Es el caso del CEDEAR y es el que separa "medir una coincidencia" de "tener una fuente": que la
+    especie cotice en pesos no prueba que Yahoo exprese el EPS en pesos.
+    """
+    bloque = await _valuacion_de(estadisticas(trailingEps={"raw": 134_603.95}))
+
+    assert bloque.cotizacion is not None and bloque.cotizacion.moneda == "ARS"
+    assert bloque.valuacion is not None
+    assert bloque.valuacion.ganancia_por_accion is None
+    assert "trailingEps" in bloque.valuacion.montos_sin_moneda
+
+
+async def test_sin_modulo_de_valuacion_el_perfil_sigue_entero() -> None:
+    """Los dos módulos llegan juntos pero faltan por separado."""
+    bloque = await _valuacion_de(None)
+
+    assert bloque.valuacion is None
+    assert bloque.perfil is not None and bloque.perfil.sector == "Financial Services"
+    assert bloque.perfil_motivo is None
+
+
+async def test_un_modulo_de_valuacion_sin_un_solo_campo_util_se_declara_ausente() -> None:
+    bloque = await _valuacion_de({"maxAge": 1})
+
+    assert bloque.valuacion is None
+    assert bloque.perfil is not None
+
+
+async def test_la_valuacion_no_trae_ningun_campo_de_opinion() -> None:
+    """Regla 6, ahora también sobre el módulo nuevo: lo que no está en la lista no entra."""
+    bloque = await _valuacion_de(
+        estadisticas(recommendationKey="STRONG_BUY", targetMeanPrice={"raw": 9000.0})
+    )
+
+    serializado = str(bloque.como_dict())
+    assert "STRONG_BUY" not in serializado
+    assert "targetMeanPrice" not in serializado and "9000" not in serializado
 
 
 async def test_el_vocabulario_de_la_fuente_no_se_traduce() -> None:

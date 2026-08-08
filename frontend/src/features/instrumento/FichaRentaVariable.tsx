@@ -18,6 +18,11 @@
  *   lugar del dato.
  * - **El precio no lleva símbolo de moneda.** La moneda de cotización se muestra al lado, tal como
  *   la declara la fuente — incluido `EXT`, que BYMA no documenta y que no se toma por dólares.
+ * - **Ningún monto de la valuación se muestra sin su moneda.** En un CEDEAR, Yahoo expresa el EPS y
+ *   el valor de empresa en la moneda de la especie local, no en la del subyacente: el EPS de
+ *   `MSFT.BA` son pesos. Un monto que llegó sin moneda declarada queda vacío y se dice cuál fue
+ *   (regla 11); los ratios —PER, precio sobre valor libro, beta— son adimensionales y se muestran
+ *   siempre.
  */
 
 import type { ReactNode } from 'react'
@@ -33,8 +38,10 @@ import type {
   BloqueExterno,
   BloquePropio,
   CotizacionExterna,
+  MontoExterno,
   PerfilExterno,
   PuntoHistorico,
+  ValuacionExterna,
 } from './lib/schemaRentaVariable'
 
 export function FichaRentaVariable({ ticker }: { ticker: string }) {
@@ -70,6 +77,10 @@ export function FichaRentaVariable({ ticker }: { ticker: string }) {
 
       <Panel rotulo={`Resumen · ${externo.fuente}`}>
         <BloqueResumen externo={externo} />
+      </Panel>
+
+      <Panel rotulo={`Valuación · ${externo.fuente}`}>
+        <BloqueValuacion externo={externo} />
       </Panel>
 
       <Panel rotulo={`Perfil de la empresa · ${externo.fuente}`}>
@@ -214,6 +225,68 @@ function BloqueResumen({ externo }: { externo: BloqueExterno }) {
         {externo.fuente} · símbolo {c.simbolo} · bolsa {c.bolsa_nombre ?? c.bolsa} · capturado el{' '}
         {fmtFechaHora(c.capturado_en)}. Son los números de otra fuente para el mismo papel: no
         reemplazan los de BYMA ni se promedian con ellos.
+      </Leyenda>
+    </div>
+  )
+}
+
+// --- Yahoo: valuación ---------------------------------------------------------------------------
+
+/**
+ * Un monto de la fuente con su moneda al lado, siempre. Nunca lleva símbolo: la moneda se escribe
+ * como la fuente la declara, igual que el precio de BYMA — un CEDEAR puede traer la valuación en
+ * pesos y ponerle "US$" sería equivocar la magnitud por mil.
+ */
+function Monto({ monto }: { monto: MontoExterno | null }) {
+  if (monto === null) return <>{SIN_DATO}</>
+  return (
+    <>
+      {fmtCompacto(monto.valor)}{' '}
+      <span style={{ fontSize: 10.5, color: 'var(--dim)' }}>{monto.moneda}</span>
+    </>
+  )
+}
+
+function BloqueValuacion({ externo }: { externo: BloqueExterno }) {
+  if (externo.cotizacion === null) return <ExternoAusente externo={externo} />
+
+  if (externo.valuacion === null) {
+    return (
+      <EstadoVacio
+        titulo="La valuación no está disponible."
+        detalle={
+          externo.perfil_motivo ?? `${externo.fuente} no publica valuación para este símbolo.`
+        }
+      />
+    )
+  }
+
+  const v: ValuacionExterna = externo.valuacion
+  const campos: [string, ReactNode][] = [
+    ['PER (trailing)', fmtNumero(v.per_trailing, 2)],
+    ['PER (forward)', fmtNumero(v.per_forward, 2)],
+    ['Precio / valor libro', fmtNumero(v.precio_sobre_libros, 2)],
+    ['Beta', fmtNumero(v.beta, 3)],
+    ['Ganancia por acción', <Monto key="eps" monto={v.ganancia_por_accion} />],
+    ['Capitalización', <Monto key="cap" monto={v.capitalizacion} />],
+    ['Valor de empresa', <Monto key="ev" monto={v.valor_empresa} />],
+  ]
+
+  return (
+    <div>
+      <Grilla campos={campos} />
+      {v.montos_sin_moneda.length > 0 && (
+        <p style={{ fontSize: 10.5, color: 'var(--neg)', marginTop: 10, textWrap: 'pretty' }}>
+          {v.montos_sin_moneda.length} campo(s) llegaron con número pero sin moneda declarada
+          ({v.montos_sin_moneda.join(', ')}) y por eso quedan vacíos. No se los expresa en la moneda
+          de cotización: la fuente no dice que sea la misma.
+        </p>
+      )}
+      <Leyenda>
+        Cocientes y montos de {externo.fuente}, capturados el {fmtFechaHora(v.capturado_en)}. El PER,
+        el precio sobre valor libro y la beta son adimensionales; los montos llevan siempre la moneda
+        que la fuente declara para ellos, que en un CEDEAR es la de la especie local y no la del
+        subyacente.
       </Leyenda>
     </div>
   )

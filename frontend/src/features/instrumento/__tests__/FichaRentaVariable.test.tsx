@@ -24,6 +24,7 @@ import type {
   CotizacionExterna,
   FichaRentaVariable as Ficha,
   PerfilExterno,
+  ValuacionExterna,
 } from '../lib/schemaRentaVariable'
 
 afterEach(() => {
@@ -95,6 +96,21 @@ function perfil(extra: Partial<PerfilExterno> = {}): PerfilExterno {
   }
 }
 
+function valuacion(extra: Partial<ValuacionExterna> = {}): ValuacionExterna {
+  return {
+    per_trailing: 8.4,
+    per_forward: 7.7,
+    precio_sobre_libros: 1.37,
+    beta: 0.315,
+    ganancia_por_accion: { valor: 53.4, moneda: 'ARS' },
+    valor_empresa: { valor: 4.66e15, moneda: 'ARS' },
+    capitalizacion: null,
+    montos_sin_moneda: [],
+    capturado_en: '2026-08-08T14:30:00+00:00',
+    ...extra,
+  }
+}
+
 function externo(extra: Partial<BloqueExterno> = {}): BloqueExterno {
   return {
     fuente: 'Yahoo Finance',
@@ -103,6 +119,7 @@ function externo(extra: Partial<BloqueExterno> = {}): BloqueExterno {
     motivo: null,
     cotizacion: cotizacion(),
     perfil: perfil(),
+    valuacion: valuacion(),
     perfil_motivo: null,
     ...extra,
   }
@@ -231,10 +248,11 @@ it('con Yahoo caído muestra igual lo de BYMA y declara el bloque externo ausent
 
   // Lo nuestro sigue: el precio de BYMA está en pantalla.
   expect(await screen.findByText('5.000,00')).toBeInTheDocument()
-  // Y el bloque externo se declara, con el motivo de la fuente, en cada uno de sus tres paneles.
+  // Y el bloque externo se declara, con el motivo de la fuente, en cada uno de sus cuatro paneles:
+  // resumen, valuación, perfil e histórico. Ninguno se queda mudo.
   expect(
     screen.getAllByText('Yahoo Finance no está disponible para GGAL.BA.'),
-  ).toHaveLength(3)
+  ).toHaveLength(4)
   expect(screen.getAllByText(/no respondió la cotización/)).not.toHaveLength(0)
 })
 
@@ -263,6 +281,49 @@ it('con el perfil roto conserva la cotización y declara ausente sólo el perfil
   expect(await screen.findByText('Rango 52 semanas')).toBeInTheDocument()
   expect(screen.getByText('El perfil de la empresa no está disponible.')).toBeInTheDocument()
   expect(screen.getByText(/HTTP 401/)).toBeInTheDocument()
+})
+
+// --- La valuación -------------------------------------------------------------------------------
+
+it('muestra los ratios de valuación y los montos con su moneda al lado', async () => {
+  mockearRutas({ [RUTA_RV(TICKER)]: { body: fichaRV() } })
+  renderizar()
+
+  expect(await screen.findByText('PER (forward)')).toBeInTheDocument()
+  expect(screen.getByText('7,70')).toBeInTheDocument()
+  expect(screen.getByText('0,315')).toBeInTheDocument()
+  // El monto y su moneda salen juntos, en el mismo campo.
+  expect(screen.getByText('Ganancia por acción').parentElement?.textContent).toContain('ARS')
+})
+
+it('un monto sin moneda declarada no se muestra y el faltante se dice', async () => {
+  const sinMoneda = fichaRV({
+    externo: externo({
+      valuacion: valuacion({
+        ganancia_por_accion: null,
+        valor_empresa: null,
+        montos_sin_moneda: ['trailingEps', 'enterpriseValue'],
+      }),
+    }),
+  })
+  mockearRutas({ [RUTA_RV(TICKER)]: { body: sinMoneda } })
+  const { container } = renderizar()
+
+  expect(await screen.findByText(/sin moneda declarada/)).toBeInTheDocument()
+  expect(screen.getByText(/trailingEps, enterpriseValue/)).toBeInTheDocument()
+  // Los ratios, que no dependen de ninguna moneda, siguen a la vista.
+  expect(screen.getByText('1,37')).toBeInTheDocument()
+  // Y el número sin unidad no aparece por ningún lado.
+  expect(container.textContent ?? '').not.toContain('134.603')
+})
+
+it('sin módulo de valuación lo declara y el resto de la ficha sigue', async () => {
+  const sinValuacion = fichaRV({ externo: externo({ valuacion: null }) })
+  mockearRutas({ [RUTA_RV(TICKER)]: { body: sinValuacion } })
+  renderizar()
+
+  expect(await screen.findByText('La valuación no está disponible.')).toBeInTheDocument()
+  expect(screen.getByText('Financial Services')).toBeInTheDocument()
 })
 
 // --- El histórico -------------------------------------------------------------------------------
