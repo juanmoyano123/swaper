@@ -14,11 +14,14 @@
  *   sector, ley y naturaleza de tasa. Usa `DistribucionBarras` de `components/`.
  * - `PanelRenta` → **F-021**: cordillera en dólares (A2), cordillera en pesos aparte (A3) y la
  *   tarjeta de renta anual sobre lo invertido con la cuenta a la vista (A9).
- * - `BloqueRentaVariable` → **F-026**: acciones y CEDEARs con subtotal propio, fuera de todo
- *   cálculo de renta fija.
+ * - `BloqueRentaVariable` → **F-026**, ya construido: acciones y CEDEARs con subtotal propio,
+ *   fuera de todo cálculo de renta fija. Vive en su propio archivo (`BloqueRentaVariable.tsx`).
  */
 
 import type { ReactNode } from 'react'
+
+import { BloqueRentaVariable as BloqueRentaVariableF026 } from './BloqueRentaVariable'
+import { PanelRenta as PanelRentaF021 } from './PanelRenta'
 
 function Pendiente({ feature, que }: { feature: string; que: string }) {
   return (
@@ -42,9 +45,9 @@ export function PanelConcentracion() {
 }
 
 export function PanelRenta() {
-  return <Pendiente feature="F-021" que="renta mensual, renta anual y ratio sobre lo invertido" />
+  return <PanelRentaF021 />
 }
 
 export function BloqueRentaVariable() {
-  return <Pendiente feature="F-026" que="bloque de acciones y CEDEARs con su subtotal propio" />
+  return <BloqueRentaVariableF026 />
 }
