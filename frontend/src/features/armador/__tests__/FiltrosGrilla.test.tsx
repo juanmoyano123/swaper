@@ -12,6 +12,7 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/lib/supabase', () => ({
@@ -219,7 +220,12 @@ function renderizar() {
   cliente.setDefaultOptions({ queries: { retry: false } })
   return render(
     <QueryClientProvider client={cliente}>
-      <ArmadorPage />
+      {/* F-026 monta `BloqueRentaVariable` dentro de `ArmadorPage`, y ese componente abre la
+          ficha del instrumento con `useAbrirInstrumento` (`useNavigate`): sin Router acá, montar
+          la página entera revienta aunque este archivo no toque nada de renta variable. */}
+      <MemoryRouter>
+        <ArmadorPage />
+      </MemoryRouter>
     </QueryClientProvider>,
   )
 }
