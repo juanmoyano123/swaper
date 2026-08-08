@@ -18,6 +18,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.logging import REQUEST_ID_HEADER, current_request_id
 from app.core.pagination import InvalidCursorError
+from app.jobs.horarios import FueraDeLaRueda
 
 logger = structlog.get_logger()
 
@@ -95,6 +96,13 @@ async def invalid_cursor_handler(request: Request, exc: InvalidCursorError) -> J
     return error_response(request, 400, "invalid_cursor", str(exc))
 
 
+async def fuera_de_la_rueda_handler(request: Request, exc: FueraDeLaRueda) -> JSONResponse:
+    """409 y no 422: el pedido está bien formado y el servicio está sano; lo que no está es el
+    mercado. El código propio —en vez del `conflict` genérico— es para que el cliente pueda
+    distinguir "probá más tarde" de cualquier otro conflicto que aparezca después."""
+    return error_response(request, 409, "fuera_de_la_rueda", str(exc))
+
+
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     logger.error(
         "unhandled_exception",
@@ -109,4 +117,5 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
     app.add_exception_handler(InvalidCursorError, invalid_cursor_handler)
+    app.add_exception_handler(FueraDeLaRueda, fuera_de_la_rueda_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)

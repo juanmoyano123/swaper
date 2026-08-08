@@ -17,6 +17,7 @@ import httpx
 import pytest
 import respx
 
+from app.api.v1 import consolidar as modulo_endpoint
 from app.core.config import get_settings
 from app.ingesta.consolidacion import corrida as modulo_corrida
 from app.ingesta.consolidacion.corrida import consolidar
@@ -69,6 +70,19 @@ def informe_guardado(settings_de_prueba, monkeypatch):
 
     monkeypatch.setattr(modulo_corrida, "parsear_informe", lambda _: _Resultado())
     return _Resultado
+
+
+@pytest.fixture
+def en_rueda(monkeypatch):
+    """El endpoint mira el reloj real para decidir si el mercado está abierto. Sin fijarlo, estos
+    tests pasarían un martes al mediodía y darían 409 un sábado — que es exactamente el guardia que
+    se agregó el 08/08/2026. Los tests del guardia en sí lo fijan al revés, abajo."""
+    monkeypatch.setattr(modulo_endpoint, "en_ventana_de_rueda", lambda *_: True)
+
+
+@pytest.fixture
+def fuera_de_rueda(monkeypatch):
+    monkeypatch.setattr(modulo_endpoint, "en_ventana_de_rueda", lambda *_: False)
 
 
 def _excel_de_cashflow(filas: list[dict]) -> bytes:
@@ -246,7 +260,7 @@ async def test_toda_la_corrida_comparte_el_instante_de_captura(
 
 
 async def test_el_endpoint_devuelve_conteos_cobertura_y_alertas(
-    crear_app, settings_de_prueba, informe_guardado, monkeypatch
+    crear_app, settings_de_prueba, informe_guardado, en_rueda
 ) -> None:
     app = crear_app(FakeConexionEscritura())
     app.dependency_overrides[get_settings] = lambda: settings_de_prueba
@@ -267,7 +281,7 @@ async def test_el_endpoint_devuelve_conteos_cobertura_y_alertas(
     assert "filas" not in json.dumps(cuerpo)[:200]
 
 
-async def test_sin_base_el_endpoint_responde_503(crear_app) -> None:
+async def test_sin_base_el_endpoint_responde_503(crear_app, en_rueda) -> None:
     app = crear_app(None)
 
     async with cliente(app) as http:
@@ -277,7 +291,7 @@ async def test_sin_base_el_endpoint_responde_503(crear_app) -> None:
 
 
 async def test_el_endpoint_no_publica_la_url_de_docta(
-    crear_app, settings_de_prueba, informe_guardado, monkeypatch
+    crear_app, settings_de_prueba, informe_guardado, en_rueda
 ) -> None:
     """La URL del feed lleva el token adentro: no puede salir en una respuesta ni en una alerta."""
     app = crear_app(FakeConexionEscritura())
@@ -295,3 +309,83 @@ async def test_el_endpoint_no_publica_la_url_de_docta(
             respuesta = await http.post("/api/v1/consolidar")
 
     assert "token-de-prueba" not in respuesta.text
+
+
+# --- El guardia de rueda cerrada (08/08/2026) ---------------------------------------------------
+#
+# Correr esto con el mercado cerrado no falla, y ese es el problema: BYMA responde un universo
+# parcial, se escribe igual, y el indicador de frescura pasa a declarar hoy sobre datos de la última
+# rueda de verdad. Pasó un sábado —466 filas, cero precios, cero TIR— y hubo que borrarlas a mano.
+
+
+async def test_fuera_de_la_rueda_responde_409_y_no_toca_las_fuentes(
+    crear_app, settings_de_prueba, fuera_de_rueda
+) -> None:
+    """Sin `respx.mock` montado: si el endpoint saliera a la red, el test reventaría. Que pase es
+    la prueba de que ni siquiera se molesta a BYMA."""
+    conn = FakeConexionEscritura()
+    app = crear_app(conn)
+    app.dependency_overrides[get_settings] = lambda: settings_de_prueba
+
+    async with cliente(app) as http:
+        respuesta = await http.post("/api/v1/consolidar")
+
+    assert respuesta.status_code == 409
+    error = respuesta.json()["error"]
+    assert error["code"] == "fuera_de_la_rueda", "código propio, no el `conflict` genérico"
+    assert "lunes a viernes" in error["message"]
+    assert "forzar" in error["message"]
+    assert not conn.escribio_en("precios"), "no se escribió nada"
+
+
+async def test_el_mensaje_del_409_nombra_la_ventana_configurada(
+    crear_app, settings_de_prueba, fuera_de_rueda
+) -> None:
+    """La ventana no está hardcodeada en el mensaje: sale de Settings, así que si cambia el horario
+    el texto lo acompaña."""
+    settings = settings_de_prueba.model_copy(
+        update={"ingesta_rueda_desde": "11:00", "ingesta_rueda_hasta": "17:00"}
+    )
+    app = crear_app(FakeConexionEscritura())
+    app.dependency_overrides[get_settings] = lambda: settings
+
+    async with cliente(app) as http:
+        respuesta = await http.post("/api/v1/consolidar")
+
+    mensaje = respuesta.json()["error"]["message"]
+    assert "11:00" in mensaje and "17:00" in mensaje
+
+
+async def test_con_forzar_corre_igual_fuera_de_la_rueda(
+    crear_app, settings_de_prueba, informe_guardado, fuera_de_rueda
+) -> None:
+    """Probar la ingesta un domingo es legítimo mientras sea una decisión y no un accidente."""
+    app = crear_app(FakeConexionEscritura())
+    app.dependency_overrides[get_settings] = lambda: settings_de_prueba
+
+    with respx.mock:
+        _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
+        _montar_docta(CASHFLOW_MINIMO)
+
+        async with cliente(app) as http:
+            respuesta = await http.post("/api/v1/consolidar?forzar=true")
+
+    assert respuesta.status_code == 200
+    assert respuesta.json()["escrito"]["instrumentos"] >= 1
+
+
+async def test_en_rueda_no_hace_falta_forzar(
+    crear_app, settings_de_prueba, informe_guardado, en_rueda
+) -> None:
+    """El guardia no estorba en el caso normal: con el mercado abierto, el default corre."""
+    app = crear_app(FakeConexionEscritura())
+    app.dependency_overrides[get_settings] = lambda: settings_de_prueba
+
+    with respx.mock:
+        _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
+        _montar_docta(CASHFLOW_MINIMO)
+
+        async with cliente(app) as http:
+            respuesta = await http.post("/api/v1/consolidar")
+
+    assert respuesta.status_code == 200
