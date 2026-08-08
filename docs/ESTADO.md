@@ -334,3 +334,49 @@ se mapea nada. La respuesta se acepta sólo si declara bolsa `BUE` y el símbolo
 Los endpoints de Yahoo **no son contractuales** —el de perfil exige un cookie+crumb no documentado
 que Yahoo ya endureció una vez— y el diseño degrada: si la fuente externa falla, la ficha muestra lo
 de BYMA y lo declara. Ninguna pantalla nuestra depende de que Yahoo esté vivo.
+
+## 08/08/2026 — El scheduler queda prendido, y por qué recién ahora
+
+Una pregunta del usuario destapó el agujero: la curva soberana entera mostraba `s/d` en TIR,
+duración y paridad, incluidos AL30D y GD30D, que operan todos los días.
+
+**No fallaba el cálculo: fallaba la frescura.** El último snapshot era del miércoles 06/08 19:24 y
+F-051 —la feature que calcula las métricas propias— se mergeó el jueves 07/08 17:37. Ninguna
+consolidación corrió entre medio, así que en la base había **cero métricas propias**: las 240 TIR
+visibles venían todas de IAMC (`fuente = byma+iamc`), que sólo publica ONs. De ahí que los 112
+soberanos tuvieran 107 precios y ni una sola TIR.
+
+Verificado contra el motor real, con el cronograma que la base ya tenía: **AL30D a 56,53 da TIR
+7,5181 %, duración 1,93 y paridad 88,28 %**. El cálculo andaba; el dato no estaba escrito.
+
+Medido cuánto se llena en la próxima corrida, aplicando en SQL las mismas tres condiciones que
+`fuente_de_metricas` evalúa: **221 especies calculables con la celda hoy vacía**. El resto queda
+vacío por razones que ya están decididas — 498 por moneda cruzada (regla 3), 169 por naturaleza
+fuera del cálculo (CER, dollar-linked, badlar, tamar), 54 porque no operaron ese día, y 535 sin
+tipo de tasa, de las cuales **sólo 18 tienen precio**: el hueco real es mucho más chico de lo que
+el número grande sugiere.
+
+**La lección no es el snapshot viejo, es que no se veía.** Una feature de métricas estuvo mergeada
+24 horas, con 911 tests en verde, y la pantalla siguió mostrando lo de antes sin nada que dijera
+"estás viendo una corrida anterior a este cálculo". La barra de estado declara la fecha del
+snapshot, pero no que el motor cambió después. **Una corrida vieja no se distingue en pantalla de
+una corrida sin resultado.** Queda anotado como pendiente de diseño.
+
+**Por qué se prende ahora y no antes.** `ingesta_habilitada` estaba en `False` desde F-008. Encender
+el scheduler antes del guardia de día hábil habría reproducido el snapshot degradado del sábado
+—466 filas sin un solo precio— **todos los fines de semana, solo**. Con el guardia puesto el 08/08,
+encenderlo es seguro: verificado que un sábado a las 17:00 `en_ventana_de_rueda` da `False` y tanto
+`proxima_matinal` como `proximo_refresh` saltan al lunes 10/08.
+
+**Se prende por `.env` (`INGESTA_HABILITADA=true`) y no cambiando el default de `Settings`**, que
+sigue en `False` a propósito: si el default fuera `True`, cada corrida de pytest y cada `uvicorn
+--reload` local arrancaría un job de fondo escribiendo en la base.
+
+Contraste empírico del día, que es lo que justificó no forzar la corrida el sábado: BYMA devolvió
+**4 filas, todas con precio 0** contra las ~2.900 de un día hábil.
+
+### Pendiente que abre esto: retención de snapshots
+
+Medido el 08/08: 4 snapshots pesan 1776 kB, o sea **~444 kB cada uno**. Con refresh cada 15 minutos
+de 11:00 a 17:00 son ~25 snapshots por día hábil, ~11 MB diarios. **Hay que decidir una política de
+retención antes de que la base se llene**; hoy no existe ninguna y nada borra un snapshot viejo.
