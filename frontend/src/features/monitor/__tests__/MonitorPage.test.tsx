@@ -215,7 +215,7 @@ describe('rendimiento y paridad: fracción en el dato, puntos porcentuales en la
     // misma función (`especie.rendimiento * 100`) que ya prueba el test anterior.
     mockearApiConUnaEspecie(especie({ rendimiento: 0.0792, duracion: 4.0, paridad: 0.9234 }))
     renderizar()
-    await screen.findByText('1 de 1 especies')
+    await screen.findByText('1 de 1 especies en USD')
 
     expect(screen.queryByText(/no están en la curva/)).not.toBeInTheDocument()
     expect(screen.queryByText(/no hay curva que dibujar/)).not.toBeInTheDocument()
@@ -255,14 +255,14 @@ describe('orden y filtros del universo cargado', () => {
     mockearApi()
     renderizar()
 
-    expect(await screen.findByText('3 de 3 especies')).toBeInTheDocument()
+    expect(await screen.findByText('3 de 3 especies en USD')).toBeInTheDocument()
   })
 
   it('ordenar por rendimiento y aplicar dos filtros numéricos deja las filas correctas y actualiza el conteo', async () => {
     mockearApi()
     const { container } = renderizar()
 
-    await screen.findByText('3 de 3 especies')
+    await screen.findByText('3 de 3 especies en USD')
 
     const cabeceraRendimiento = screen.getByRole('button', { name: /rendimiento \(TIR USD\)/ })
     await userEvent.click(cabeceraRendimiento) // asc
@@ -277,7 +277,7 @@ describe('orden y filtros del universo cargado', () => {
     await userEvent.type(screen.getByLabelText(/Rendimiento mín\. \(TIR USD\)/), '12')
     await userEvent.type(screen.getByLabelText(/Rendimiento máx\. \(TIR USD\)/), '20')
 
-    expect(await screen.findByText('1 de 3 especies')).toBeInTheDocument()
+    expect(await screen.findByText('1 de 3 especies en USD')).toBeInTheDocument()
     expect(screen.getByText('GD30')).toBeInTheDocument()
     expect(screen.queryByText('AL30')).not.toBeInTheDocument()
     expect(screen.queryByText('AE38')).not.toBeInTheDocument()
@@ -286,15 +286,15 @@ describe('orden y filtros del universo cargado', () => {
   it('limpiar filtros vuelve a mostrar el segmento entero', async () => {
     mockearApi()
     renderizar()
-    await screen.findByText('3 de 3 especies')
+    await screen.findByText('3 de 3 especies en USD')
 
     // "1" (1%) no excluye a AL30 (10%) ni a GD30 (15%): sólo deja afuera a AE38, sin rendimiento.
     await userEvent.type(screen.getByLabelText(/Rendimiento mín\. \(TIR USD\)/), '1')
-    await screen.findByText('2 de 3 especies') // afuera queda AE38: s/d no pasa un filtro activo
+    await screen.findByText('2 de 3 especies en USD') // afuera queda AE38: s/d no pasa un filtro activo
 
     await userEvent.click(screen.getByRole('button', { name: 'limpiar filtros' }))
 
-    expect(await screen.findByText('3 de 3 especies')).toBeInTheDocument()
+    expect(await screen.findByText('3 de 3 especies en USD')).toBeInTheDocument()
   })
 })
 
@@ -304,7 +304,7 @@ describe('una fila sin rendimiento publicado', () => {
   it('muestra s/d en la celda de rendimiento', async () => {
     mockearApi()
     renderizar()
-    await screen.findByText('3 de 3 especies')
+    await screen.findByText('3 de 3 especies en USD')
 
     const filaAE38 = screen.getByText('AE38').closest('div[role="button"]')
     expect(filaAE38).not.toBeNull()
@@ -314,11 +314,11 @@ describe('una fila sin rendimiento publicado', () => {
   it('no pasa un filtro de rendimiento activo aunque el filtro esté abierto de más', async () => {
     mockearApi()
     renderizar()
-    await screen.findByText('3 de 3 especies')
+    await screen.findByText('3 de 3 especies en USD')
 
     await userEvent.type(screen.getByLabelText(/Rendimiento mín\. \(TIR USD\)/), '0')
 
-    await screen.findByText('2 de 3 especies')
+    await screen.findByText('2 de 3 especies en USD')
     expect(screen.queryByText('AE38')).not.toBeInTheDocument()
   })
 
@@ -337,6 +337,9 @@ describe('las columnas de tipo y ley', () => {
     mockearApiConUnaEspecie(especie({ clase_activo: 'on_corporativo', ley: 'Ley Argentina' }))
     renderizar()
 
+    // Una ON del dólar hard vive en la pestaña de ONs, no en la de Soberanos, que es la que abre.
+    await userEvent.click(await screen.findByRole('button', { name: 'ONs' }))
+
     const fila = await screen.findByText('AL30').then((el) => el.closest('div[role="button"]'))
     expect(fila).not.toBeNull()
     expect(fila).toHaveTextContent('ON corporativa')
@@ -346,13 +349,38 @@ describe('las columnas de tipo y ley', () => {
   })
 
   it('una clase no reconocida y una ley ausente se declaran s/d, nunca celda muda', async () => {
-    mockearApiConUnaEspecie(especie({ clase_activo: 'clase_inventada', ley: null }))
+    // En un segmento sin partición por crédito, como CER: ahí una clase desconocida sí se muestra,
+    // y lo que se prueba es que `etiquetaClase` la declara en vez de dejar la celda muda.
+    mockearApiConUnaEspecie(
+      especie({
+        ticker: 'TX26',
+        segmento: 'cer',
+        naturaleza: 'tasa_real_cer',
+        naturaleza_nombre: 'Tasa real sobre CER (por encima de inflación)',
+        moneda_cotizacion: 'ARS',
+        clase_activo: 'clase_inventada',
+        ley: null,
+      }),
+    )
     renderizar()
 
-    const fila = await screen.findByText('AL30').then((el) => el.closest('div[role="button"]'))
+    const fila = await screen.findByText('TX26').then((el) => el.closest('div[role="button"]'))
     expect(fila).not.toBeNull()
     // Dos s/d: el de tipo y el de ley. El resto de la fila tiene todos sus datos.
     expect(within(fila as HTMLElement).getAllByText('s/d')).toHaveLength(2)
+  })
+
+  it('una clase que ninguna pestaña de crédito cubre se declara en vez de desaparecer', async () => {
+    // El riesgo que introduce partir un segmento en pestañas: una clase de activo nueva no entra en
+    // ninguna y se pierde sin que nada avise. Hoy no pasa —las tres pestañas cubren las tres clases
+    // de renta fija de `SUBMARKET_MAP`—, y el conteo existe para el día que la fuente cambie.
+    mockearApiConUnaEspecie(especie({ clase_activo: 'clase_inventada' }))
+    renderizar()
+
+    expect(
+      await screen.findByText(/1 de este segmento no entran en ninguna de estas pestañas/),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('AL30')).not.toBeInTheDocument()
   })
 })
 
@@ -362,7 +390,7 @@ describe('clic en una fila', () => {
   it('navega a la ficha del instrumento', async () => {
     mockearApi()
     renderizar()
-    await screen.findByText('3 de 3 especies')
+    await screen.findByText('3 de 3 especies en USD')
 
     await userEvent.click(screen.getByText('GD30'))
 
@@ -377,7 +405,7 @@ describe('la carga del segmento entero', () => {
     const fetchMock = mockearApi()
     renderizar()
 
-    expect(await screen.findByText('3 de 3 especies')).toBeInTheDocument()
+    expect(await screen.findByText('3 de 3 especies en USD')).toBeInTheDocument()
     expect(screen.getByText('AL30')).toBeInTheDocument()
     expect(screen.getByText('GD30')).toBeInTheDocument()
     expect(screen.getByText('AE38')).toBeInTheDocument()

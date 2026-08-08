@@ -26,10 +26,71 @@ export const NOMBRE_SEGMENTO: Record<string, string> = {
   // no debe ponerle una columna de rendimiento ni nada en su lugar. Van al final del orden.
   accion: 'Acciones',
   cedear: 'CEDEARs',
+  // Las tres pestañas en que se abre el dólar hard (08/08/2026). Ver `SEGMENTO_POR_CREDITO`.
+  'usd_hard/bono_soberano': 'Soberanos',
+  'usd_hard/bono_subsoberano': 'Subsoberanos',
+  'usd_hard/on_corporativo': 'ONs',
 }
 
 /** Las pestañas que no son de renta fija: quien las active muestra columnas propias, sin TIR. */
 export const CLAVES_RENTA_VARIABLE = ['accion', 'cedear'] as const
+
+/**
+ * Los segmentos que se muestran abiertos por crédito, con las clases de activo que los componen.
+ *
+ * El dólar hard es el 81 % de la renta fija segmentada (764 de 942) y mete al Tesoro, a las
+ * provincias y a las ONs en una sola lista de 764 filas. Todas comparten naturaleza de tasa, así
+ * que la regla 2 no obliga a separarlas; lo que las separa es el crédito, que es el eje que importa
+ * cuando la unidad ya es la misma — y es la regla 4 del dominio, que exige que el riesgo soberano
+ * se agrupe aparte. Es también cómo lo presentan el monitor de mesa y Balanz, cada uno a su manera.
+ *
+ * **La partición es de presentación y no toca el backend.** `/segmentos` sigue devolviendo
+ * `usd_hard` y la grilla sigue pidiendo `?segmento=usd_hard`: las tres pestañas leen la misma query
+ * ya cacheada y filtran por `clase_activo`, que es un dato declarado. Cambiar de pestaña no dispara
+ * un pedido.
+ *
+ * Los valores de `clase_activo` son los cinco de `SUBMARKET_MAP` (backend
+ * `ingesta/consolidacion/clasificacion.py`); dos son renta variable y los otros tres están acá. **No
+ * existe una clase "letra"**: una LECAP llega como `bono_soberano`, así que no hay pestaña que
+ * inventarle. Si apareciera una clase nueva, sus especies no entrarían en ninguna de las tres y el
+ * conteo de la pestaña lo delataría — por eso el monitor cuenta lo que reparte.
+ */
+export const SEGMENTO_POR_CREDITO: Record<string, readonly string[]> = {
+  usd_hard: ['bono_soberano', 'bono_subsoberano', 'on_corporativo'],
+}
+
+const SEPARADOR_CREDITO = '/'
+
+/** La clave visible de una pestaña de crédito. `usd_hard` + `bono_soberano` → `usd_hard/bono_soberano`. */
+export function claveDeCredito(segmento: string, clase: string): string {
+  return `${segmento}${SEPARADOR_CREDITO}${clase}`
+}
+
+/**
+ * El segmento real de una clave visible, para pedirle el dato al backend y para buscar su
+ * naturaleza en `/segmentos`. Una clave sin partir se devuelve tal cual.
+ */
+export function segmentoDeClave(clave: string): string {
+  const corte = clave.indexOf(SEPARADOR_CREDITO)
+  return corte === -1 ? clave : clave.slice(0, corte)
+}
+
+/** La clase de activo por la que filtra una pestaña de crédito, o `null` si la pestaña no filtra. */
+export function claseDeClave(clave: string): string | null {
+  const corte = clave.indexOf(SEPARADOR_CREDITO)
+  return corte === -1 ? null : clave.slice(corte + SEPARADOR_CREDITO.length)
+}
+
+/**
+ * Las claves visibles de la barra: los segmentos del dato, con los que se abren por crédito
+ * reemplazados por sus pestañas. Un segmento sin partición pasa entero.
+ */
+export function expandirSegmentos(claves: readonly string[]): string[] {
+  return claves.flatMap((clave) => {
+    const clases = SEGMENTO_POR_CREDITO[clave]
+    return clases ? clases.map((clase) => claveDeCredito(clave, clase)) : [clave]
+  })
+}
 
 /**
  * Rótulo corto de la unidad de rendimiento, por naturaleza (`NATURALEZA_TASA` del backend).
@@ -51,9 +112,18 @@ export function unidadDeNaturaleza(naturaleza: string): string {
   return UNIDAD_NATURALEZA[naturaleza] ?? naturaleza
 }
 
-/** Orden de pestañas del design system; los segmentos que no figuren van al final, en su orden. */
+/**
+ * Orden de pestañas del design system; los segmentos que no figuren van al final, en su orden.
+ *
+ * `usd_hard` sigue en la lista aunque el monitor lo muestre abierto: el armador (F-017) pasa la
+ * clave sin partir y tiene que seguir ordenándose donde siempre estuvo. Las tres pestañas de
+ * crédito ocupan su lugar, delante del resto.
+ */
 const ORDEN = [
   'usd_hard',
+  'usd_hard/bono_soberano',
+  'usd_hard/bono_subsoberano',
+  'usd_hard/on_corporativo',
   'cer',
   'tasa_fija',
   'dollar_linked',

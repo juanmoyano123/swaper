@@ -35,7 +35,7 @@ type Campo =
   | 'rendimiento'
   | 'duracion'
   | 'paridad'
-  | 'volumen_usd'
+  | 'volumen'
   | 'vencimiento'
 
 type Direccion = 'asc' | 'desc'
@@ -51,12 +51,28 @@ interface Orden {
  * de blanco en el medio de la fila: el espacio sobrante se junta en la columna final vacía. TIPO
  * son 108px porque "ON corporativa" —la etiqueta más larga— mide ~101px con padding; LEY son 96px
  * porque "Ley Argentina" —el valor más largo de la fuente— entra completo sin truncar; PRECIO son
- * 120px porque "156.560,00 ARS" —un precio en pesos con su moneda— mide ~117px y con menos se
- * parte en dos líneas.
+ * 104px, dieciséis menos que antes: dejó de llevar la moneda pegada al número (ver abajo).
  */
-const PLANTILLA_COLUMNAS = '64px 108px 96px minmax(120px,240px) 120px 108px 68px 72px 92px 96px 1fr'
+const PLANTILLA_COLUMNAS = '64px 108px 96px minmax(120px,240px) 104px 108px 68px 72px 92px 96px 1fr'
 const ALTO_FILA = 32
 const ALTO_CONTENEDOR = 520
+
+/**
+ * Umbrales de color de la paridad, en fracción del valor técnico. No son un juicio sobre el papel:
+ * la paridad es un dato duro —precio sucio sobre valor técnico— y esto sólo la hace legible de un
+ * vistazo sobre setecientas filas. Los cortes están en los dos lugares obvios, la par (1,00) y el
+ * descuento fuerte, y no en percentiles del universo: un corte relativo movería el color de un bono
+ * sin que el bono se moviera.
+ */
+const PARIDAD_SOBRE_LA_PAR = 1
+const PARIDAD_DESCUENTO_FUERTE = 0.8
+
+function colorDeParidad(paridad: number | null): string {
+  if (paridad === null) return 'var(--tx)'
+  if (paridad >= PARIDAD_SOBRE_LA_PAR) return 'var(--pos)'
+  if (paridad < PARIDAD_DESCUENTO_FUERTE) return 'var(--neg)'
+  return 'var(--tx)'
+}
 
 /**
  * Compara dos especies por un campo, con `null` **siempre al final** sin importar la dirección:
@@ -77,7 +93,19 @@ function comparar(a: Especie, b: Especie, campo: Campo, direccion: Direccion): n
   return signo * String(va).localeCompare(String(vb), 'es')
 }
 
-export function TablaUniverso({ especies, naturaleza, filtros }: { especies: Especie[]; naturaleza: string; filtros: FiltrosUniverso }) {
+export function TablaUniverso({
+  especies,
+  naturaleza,
+  filtros,
+  moneda,
+}: {
+  /** Ya filtradas por moneda: la tabla no elige qué mostrar, sólo ordena y aplica los filtros. */
+  especies: Especie[]
+  naturaleza: string
+  filtros: FiltrosUniverso
+  /** La moneda del selector, para el conteo. La tabla no la usa para decidir nada más. */
+  moneda: string
+}) {
   const [orden, setOrden] = useState<Orden>({ campo: null, direccion: 'asc' })
   const abrirInstrumento = useAbrirInstrumento()
   const contenedorRef = useRef<HTMLDivElement>(null)
@@ -107,7 +135,7 @@ export function TablaUniverso({ especies, naturaleza, filtros }: { especies: Esp
   return (
     <div>
       <p className="mono" style={{ margin: '2px 0 8px', fontSize: 11.5, color: 'var(--dim)' }}>
-        {fmtNumero(filasOrdenadas.length, 0)} de {fmtNumero(especies.length, 0)} especies
+        {fmtNumero(filasOrdenadas.length, 0)} de {fmtNumero(especies.length, 0)} especies en {moneda}
       </p>
 
       <div style={{ display: 'grid', gridTemplateColumns: PLANTILLA_COLUMNAS, gap: 0 }}>
@@ -121,7 +149,7 @@ export function TablaUniverso({ especies, naturaleza, filtros }: { especies: Esp
         </Cabecera>
         <Cabecera campo="duracion" orden={orden} onClick={alternarOrden} alinear="right">duración</Cabecera>
         <Cabecera campo="paridad" orden={orden} onClick={alternarOrden} alinear="right">paridad</Cabecera>
-        <Cabecera campo="volumen_usd" orden={orden} onClick={alternarOrden} alinear="right">volumen USD</Cabecera>
+        <Cabecera campo="volumen" orden={orden} onClick={alternarOrden} alinear="right">volumen</Cabecera>
         <Cabecera campo="vencimiento" orden={orden} onClick={alternarOrden} alinear="right">vencimiento</Cabecera>
         {/* Relleno: la cabecera son botones con fondo y borde propios, así que la columna vacía
             necesita su celda para que la línea del header llegue pareja hasta el final. */}
@@ -130,7 +158,7 @@ export function TablaUniverso({ especies, naturaleza, filtros }: { especies: Esp
 
       {filasOrdenadas.length === 0 ? (
         <p style={{ margin: '18px 0', fontSize: 12.5, color: 'var(--dim)' }}>
-          Ninguna especie de este segmento pasa los filtros activos.
+          Ninguna especie en {moneda} pasa los filtros activos.
         </p>
       ) : (
         <div ref={contenedorRef} style={{ height: ALTO_CONTENEDOR, overflow: 'auto', position: 'relative', borderTop: '1px solid var(--lin)' }}>
@@ -232,9 +260,12 @@ function FilaEspecie({ especie, top, alto, onClick }: { especie: Especie; top: n
       <span style={{ padding: '0 8px', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={especie.emisor ?? undefined}>
         {especie.emisor ?? SIN_DATO}
       </span>
+      {/* Sin la moneda pegada al número: la declara el selector de arriba, una vez para toda la
+          tabla. Repetirla en cada fila era necesario mientras convivían las tres especies de una
+          emisión; con una moneda por vez es ruido, y además invitaba a comparar hacia abajo una
+          columna que mezclaba pesos con dólares. */}
       <span className="mono" style={{ padding: '0 8px', fontSize: 12, textAlign: 'right' }}>
         {fmtNumero(especie.precio)}
-        {especie.moneda_cotizacion && <span style={{ color: 'var(--dim)' }}> {especie.moneda_cotizacion}</span>}
       </span>
       <span className="mono" style={{ padding: '0 8px', fontSize: 12, textAlign: 'right' }}>
         {fmtPct(especie.rendimiento === null ? null : especie.rendimiento * 100)}
@@ -242,11 +273,18 @@ function FilaEspecie({ especie, top, alto, onClick }: { especie: Especie; top: n
       <span className="mono" style={{ padding: '0 8px', fontSize: 12, textAlign: 'right' }}>
         {fmtNumero(especie.duracion)}
       </span>
-      <span className="mono" style={{ padding: '0 8px', fontSize: 12, textAlign: 'right' }}>
+      <span
+        className="mono"
+        style={{ padding: '0 8px', fontSize: 12, textAlign: 'right', color: colorDeParidad(especie.paridad) }}
+      >
         {fmtPct(especie.paridad === null ? null : especie.paridad * 100)}
       </span>
+      {/* El volumen crudo, en la moneda del selector. No es `volumen_usd`: convertirlo exigía saber
+          en qué moneda está, y para las especies `EXT` eso no consta (regla 11). Con una sola
+          moneda en pantalla la columna es comparable sin convertir nada. `volumen_usd` sigue
+          existiendo en el contrato para el filtro de liquidez del armador, que sí cruza monedas. */}
       <span className="mono" style={{ padding: '0 8px', fontSize: 12, textAlign: 'right' }}>
-        {fmtCompacto(especie.volumen_usd)}
+        {fmtCompacto(especie.volumen)}
       </span>
       <span className="mono" style={{ padding: '0 8px', fontSize: 12, textAlign: 'right' }}>
         {fmtFecha(especie.vencimiento)}

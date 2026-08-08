@@ -80,10 +80,11 @@ function especieRV(extra: Partial<EspecieRentaVariable> = {}): EspecieRentaVaria
   }
 }
 
-// GGAL en ARS: volumen crudo enorme pero volumen_usd de 1,0 MM. LOMA en USD: crudo y volumen_usd
-// coinciden (2,0 MM), y son ~750 veces menores que el crudo de GGAL — es lo que prueba que el
-// orden usa `volumen_usd` y no el nominal. PAMP no tiene cierre anterior ni puntas ni volumen USD:
-// es el caso "cero" declarado en la nota de cobertura.
+// GGAL y PAMP en ARS, LOMA en USD. El crudo de GGAL (1.500 MM de pesos) es ~750 veces el de LOMA
+// (2,0 MM de dólares) y los dos son el mismo orden de magnitud en plata: es el caso que hacía
+// incomparable la columna de volumen mientras las tres monedas convivían en la tabla. Desde el
+// 08/08/2026 no conviven —el selector de moneda deja una sola a la vista— y por eso el volumen se
+// puede mostrar crudo. PAMP no tiene cierre anterior ni puntas: es el caso "cero" de la cobertura.
 const GGAL = especieRV()
 const LOMA = especieRV({
   ticker: 'LOMA',
@@ -107,6 +108,21 @@ const PAMP = especieRV({
   px_bid: null,
   px_ask: null,
   operaciones: 5,
+})
+// Una acción en `EXT`: la fuente declara la moneda pero no documenta qué denota, así que su volumen
+// llega sin convertir (regla 11). Existe acá para fijar que igual se muestra, en su propia pestaña
+// de moneda y con su volumen crudo — no se esconde ni se mezcla con las otras dos.
+const TXAR = especieRV({
+  ticker: 'TXAR',
+  precio: 44.5,
+  moneda_cotizacion: 'EXT',
+  cierre_anterior: 44.0,
+  variacion: (44.5 - 44.0) / 44.0,
+  volumen: 900_000,
+  volumen_usd: null,
+  px_bid: 44.4,
+  px_ask: 44.6,
+  operaciones: 12,
 })
 
 function respuestaJson(cuerpo: unknown) {
@@ -145,7 +161,7 @@ function mockearApi() {
 
     if (url.pathname === '/api/v1/renta-variable/especies') {
       const clase = url.searchParams.get('clase')
-      if (clase === 'accion') return respuestaJson(pagina([GGAL, LOMA, PAMP]))
+      if (clase === 'accion') return respuestaJson(pagina([GGAL, LOMA, PAMP, TXAR]))
       if (clase === 'cedear') return respuestaJson(pagina([]))
     }
 
@@ -175,23 +191,29 @@ function renderizar() {
   )
 }
 
+/** Abre Acciones, que arranca en ARS: GGAL y PAMP. LOMA está en USD y TXAR en EXT. */
 async function irALaPestanaDeAcciones() {
   const resultado = renderizar()
   await userEvent.click(await screen.findByRole('button', { name: 'Acciones' }))
-  await screen.findByText('3 de 3 especies')
+  await screen.findByText('2 de 2 especies en ARS')
   return resultado
+}
+
+/** El chip de una moneda del selector, que lleva su conteo al lado del código. */
+function chipDeMoneda(codigo: string) {
+  return screen.getByRole('radio', { name: new RegExp(`^${codigo}`) })
 }
 
 // --- GWT-1: columnas de renta variable, sin rendimiento ni nada en su lugar ----------------------
 
 describe('GWT-1: las pestañas de renta variable no tienen columna de rendimiento', () => {
-  it('las columnas son precio, variación, volumen USD, compra y venta — sin rendimiento ni TIR', async () => {
+  it('las columnas son precio, variación, volumen, compra y venta — sin rendimiento ni TIR', async () => {
     mockearApi()
     await irALaPestanaDeAcciones()
 
     expect(screen.getByRole('button', { name: /precio/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /variación/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /volumen usd/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^volumen/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /compra/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /venta/i })).toBeInTheDocument()
     expect(screen.queryByText(/rendimiento/i)).not.toBeInTheDocument()
@@ -199,20 +221,62 @@ describe('GWT-1: las pestañas de renta variable no tienen columna de rendimient
   })
 })
 
-// --- GWT-2: el orden usa volumen_usd, nunca el crudo ---------------------------------------------
+// --- GWT-2: el volumen se ordena dentro de una moneda, nunca entre monedas ------------------------
+//
+// Reescrito el 08/08/2026. El GWT original exigía ordenar por `volumen_usd` y no por el nominal, y
+// la razón era que la columna mezclaba monedas: el crudo de GGAL (1.500 MM de pesos) aplastaba al de
+// LOMA (2,0 MM de dólares) sin que ninguno de los dos operara más. El problema es el mismo y la
+// solución cambió: con el selector de moneda no hay dos monedas en la tabla a la vez, así que el
+// crudo es comparable por construcción y no hace falta convertir nada — que es lo que la regla 11
+// exige para las especies `EXT`, cuya conversión no se puede calcular.
 
-describe('GWT-2: orden por volumen usa el normalizado a dólares, no el nominal', () => {
-  it('orden desc por "volumen USD" deja a LOMA antes que GGAL, y el s/d de PAMP al final', async () => {
+describe('GWT-2: la columna de volumen nunca compara dos monedas', () => {
+  it('en ARS sólo están las especies en ARS, y ordenan entre ellas por el volumen publicado', async () => {
     mockearApi()
     const { container } = await irALaPestanaDeAcciones()
 
-    const cabeceraVolumen = screen.getByRole('button', { name: /volumen usd/i })
+    const cabeceraVolumen = screen.getByRole('button', { name: /^volumen/i })
     await userEvent.click(cabeceraVolumen) // asc
     await userEvent.click(cabeceraVolumen) // desc
 
     const tickerDeCadaFila = () =>
       Array.from(container.querySelectorAll('div[role="button"]')).map((fila) => fila.textContent?.slice(0, 4))
-    expect(tickerDeCadaFila()).toEqual(['LOMA', 'GGAL', 'PAMP'])
+    expect(tickerDeCadaFila()).toEqual(['GGAL', 'PAMP'])
+    expect(screen.queryByText('LOMA')).not.toBeInTheDocument()
+  })
+
+  it('cambiar de moneda cambia la lista entera, y el conteo dice en cuál se está', async () => {
+    mockearApi()
+    await irALaPestanaDeAcciones()
+
+    await userEvent.click(chipDeMoneda('USD'))
+
+    expect(await screen.findByText('1 de 1 especies en USD')).toBeInTheDocument()
+    expect(screen.getByText('LOMA')).toBeInTheDocument()
+    expect(screen.queryByText('GGAL')).not.toBeInTheDocument()
+  })
+
+  it('las especies en EXT se muestran igual, en su propia moneda y con su volumen crudo', async () => {
+    mockearApi()
+    await irALaPestanaDeAcciones()
+
+    await userEvent.click(chipDeMoneda('EXT'))
+
+    expect(await screen.findByText('1 de 1 especies en EXT')).toBeInTheDocument()
+    expect(screen.getByText('TXAR')).toBeInTheDocument()
+    // 900.000 con `fmtCompacto`, que abrevia a la argentina: M son miles y MM son millones. Que
+    // `volumen_usd` sea null no la deja sin columna: lo que no se puede calcular es la conversión,
+    // no el dato que BYMA publicó.
+    expect(screen.getByText('900,0 M')).toBeInTheDocument()
+  })
+
+  it('el selector declara que los códigos son de BYMA y no los traduce', async () => {
+    mockearApi()
+    await irALaPestanaDeAcciones()
+
+    expect(screen.getByText(/Denominación declarada por BYMA, sin traducir/)).toBeInTheDocument()
+    expect(screen.queryByText(/cable/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/\bMEP\b/)).not.toBeInTheDocument()
   })
 })
 
@@ -267,5 +331,7 @@ describe('una clase sin filas hoy', () => {
 
     expect(await screen.findByText('0 de 0 especies')).toBeInTheDocument()
     expect(screen.getByText('No hay CEDEARs en el universo de hoy.')).toBeInTheDocument()
+    // Sin especies no hay monedas que ofrecer: el selector no se dibuja vacío.
+    expect(screen.queryByRole('radiogroup', { name: 'Moneda de cotización' })).not.toBeInTheDocument()
   })
 })

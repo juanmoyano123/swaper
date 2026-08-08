@@ -24,7 +24,7 @@ import { useMemo, useRef, useState } from 'react'
 import { fmtCompacto, fmtNumero, fmtPct, SIN_DATO } from '@/lib/fmt'
 import type { EspecieRentaVariable } from '@/lib/rentaVariable'
 
-type Campo = 'ticker' | 'precio' | 'variacion' | 'volumen_usd' | 'px_bid' | 'px_ask' | 'operaciones'
+type Campo = 'ticker' | 'precio' | 'variacion' | 'volumen' | 'px_bid' | 'px_ask' | 'operaciones'
 type Direccion = 'asc' | 'desc'
 
 interface Orden {
@@ -54,12 +54,16 @@ function comparar(a: EspecieRentaVariable, b: EspecieRentaVariable, campo: Campo
 export function TablaRentaVariable({
   especies,
   etiqueta,
+  moneda,
   onAbrirTicker,
 }: {
+  /** Ya filtradas por moneda por quien la monta: acá no se decide qué mostrar, sólo cómo. */
   especies: EspecieRentaVariable[]
   /** El nombre de la pestaña activa, para el estado "sin filas hoy" ("No hay {etiqueta} en el
    * universo de hoy."). El monitor pasa `nombreSegmento(clase)`. */
   etiqueta: string
+  /** La moneda del selector, para el conteo. `null` cuando no hay ninguna especie que contar. */
+  moneda?: string | null
   /** Qué hacer al clickear una fila. El monitor pasa `useAbrirInstrumento()`; F-026 pasará lo suyo. */
   onAbrirTicker: (ticker: string) => void
 }) {
@@ -73,15 +77,18 @@ export function TablaRentaVariable({
   }, [especies, orden])
 
   // GWT-3: lo vacío se cuenta, no se disimula. Sólo los términos con conteo mayor a cero aparecen.
+  // Se cuenta `volumen` y no `volumen_usd` desde el 08/08/2026: la columna muestra el crudo, así que
+  // el faltante que le importa al que mira es el del dato publicado, no el de la conversión —que
+  // para las especies `EXT` es `null` por diseño y no por falta de dato.
   const notaCobertura = useMemo(() => {
     const sinCierreAnterior = especies.filter((e) => e.cierre_anterior === null).length
     const sinPuntas = especies.filter((e) => e.px_bid === null && e.px_ask === null).length
-    const sinVolumenUsd = especies.filter((e) => e.volumen_usd === null).length
+    const sinVolumen = especies.filter((e) => e.volumen === null).length
 
     const partes: string[] = []
     if (sinCierreAnterior > 0) partes.push(`${fmtNumero(sinCierreAnterior, 0)} sin cierre anterior (sin variación)`)
     if (sinPuntas > 0) partes.push(`${fmtNumero(sinPuntas, 0)} sin puntas`)
-    if (sinVolumenUsd > 0) partes.push(`${fmtNumero(sinVolumenUsd, 0)} sin volumen en dólares`)
+    if (sinVolumen > 0) partes.push(`${fmtNumero(sinVolumen, 0)} sin volumen publicado`)
     return partes.join(' · ')
   }, [especies])
 
@@ -104,6 +111,7 @@ export function TablaRentaVariable({
     <div>
       <p className="mono" style={{ margin: '2px 0 2px', fontSize: 11.5, color: 'var(--dim)' }}>
         {fmtNumero(filasOrdenadas.length, 0)} de {fmtNumero(especies.length, 0)} especies
+        {moneda ? ` en ${moneda}` : ''}
       </p>
 
       {notaCobertura && (
@@ -120,7 +128,7 @@ export function TablaRentaVariable({
             <Cabecera campo="ticker" orden={orden} onClick={alternarOrden}>ticker</Cabecera>
             <Cabecera campo="precio" orden={orden} onClick={alternarOrden} alinear="right">precio</Cabecera>
             <Cabecera campo="variacion" orden={orden} onClick={alternarOrden} alinear="right">variación</Cabecera>
-            <Cabecera campo="volumen_usd" orden={orden} onClick={alternarOrden} alinear="right">volumen USD</Cabecera>
+            <Cabecera campo="volumen" orden={orden} onClick={alternarOrden} alinear="right">volumen</Cabecera>
             <Cabecera campo="px_bid" orden={orden} onClick={alternarOrden} alinear="right">compra</Cabecera>
             <Cabecera campo="px_ask" orden={orden} onClick={alternarOrden} alinear="right">venta</Cabecera>
             <Cabecera campo="operaciones" orden={orden} onClick={alternarOrden} alinear="right">operaciones</Cabecera>
@@ -234,15 +242,18 @@ export function FilaRentaVariable({
       <span className="mono" style={{ padding: '0 8px', fontSize: 12, whiteSpace: 'nowrap' }}>
         {especie.ticker}
       </span>
+      {/* Sin la moneda pegada al número: la declara el selector de moneda, una vez para toda la
+          tabla. Mismo criterio que `TablaUniverso`. */}
       <span className="mono" style={{ padding: '0 8px', fontSize: 12, textAlign: 'right' }}>
         {fmtNumero(especie.precio)}
-        {especie.moneda_cotizacion && <span style={{ color: 'var(--dim)' }}> {especie.moneda_cotizacion}</span>}
       </span>
       <span className="mono" style={{ padding: '0 8px', fontSize: 12, textAlign: 'right', color: colorVariacion }}>
         {textoVariacion}
       </span>
+      {/* El volumen crudo, en la moneda del selector. `volumen_usd` viaja en el dato pero no tiene
+          columna: convertirlo exige saber la moneda, y para las `EXT` eso no consta (regla 11). */}
       <span className="mono" style={{ padding: '0 8px', fontSize: 12, textAlign: 'right' }}>
-        {fmtCompacto(especie.volumen_usd)}
+        {fmtCompacto(especie.volumen)}
       </span>
       <span className="mono" style={{ padding: '0 8px', fontSize: 12, textAlign: 'right' }}>
         {fmtNumero(especie.px_bid)}
