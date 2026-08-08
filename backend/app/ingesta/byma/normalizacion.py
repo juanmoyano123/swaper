@@ -12,7 +12,7 @@ justo el instrumento que hay que poder ver-, así que los campos numéricos pres
 """
 
 from collections.abc import Mapping
-from typing import Any, TypedDict
+from typing import Any, NotRequired, TypedDict
 
 
 class FilaRueda(TypedDict):
@@ -40,6 +40,11 @@ class FilaRueda(TypedDict):
     operaciones: int | None
     vencimiento: str | None
     dias_al_vencimiento: int | None
+
+    origen_precio: NotRequired[str]
+    """Experimento data912: 'data912' | 'data912-arrastre' cuando `consolidacion/overlay.py` pisó
+    el precio de esta fila; ausente cuando el precio sigue siendo el de BYMA.
+    `normalizar_fila_rueda` nunca lo setea — es el overlay, río abajo, el único que lo escribe."""
 
 
 class FilaIndice(TypedDict):

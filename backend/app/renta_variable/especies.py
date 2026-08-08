@@ -38,6 +38,9 @@ class EspecieRentaVariable:
     px_bid: float | None
     px_ask: float | None
     operaciones: int | None
+    fuente: str | None = None
+    """Experimento data912: de dónde salió `precio`. Ver `universo/segmentacion.py:EspecieUniverso.
+    fuente` para el vocabulario completo."""
 
     def como_dict(self) -> dict[str, object]:
         return {
@@ -52,6 +55,7 @@ class EspecieRentaVariable:
             "px_bid": self.px_bid,
             "px_ask": self.px_ask,
             "operaciones": self.operaciones,
+            "fuente": self.fuente,
         }
 
 
@@ -125,6 +129,7 @@ def armar_renta_variable(
                 px_bid=a_numero(fila.get("px_bid")),
                 px_ask=a_numero(fila.get("px_ask")),
                 operaciones=_entero(fila.get("operaciones")),
+                fuente=_texto(fila.get("fuente")),
             )
         )
     return especies

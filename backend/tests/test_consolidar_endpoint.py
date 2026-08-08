@@ -28,6 +28,7 @@ from tests.test_consolidacion_armado import informe
 
 BYMA_URL = "https://byma-test.local/free"
 DOCTA_URL = "https://docta-test.local/cashflow?token=${DOCTA_API_TOKEN}&fromDate=2026-01-01"
+DATA912_URL = "https://data912-test.local"
 
 ENDPOINTS_BYMA = (
     "negociable-obligations",
@@ -37,6 +38,9 @@ ENDPOINTS_BYMA = (
     "leading-equity",
     "index-price",
 )
+
+# Experimento data912: los cinco tramos `live/`. Ver `app/ingesta/data912/cliente.py:TRAMOS_LIVE`.
+TRAMOS_DATA912 = ("arg_bonds", "arg_corp", "arg_notes", "arg_cedears", "arg_stocks")
 
 
 async def _no_dormir(_: float) -> None:
@@ -51,6 +55,7 @@ def settings_de_prueba(tmp_path, monkeypatch):
             "docta_cashflow_url": DOCTA_URL,
             "docta_api_token": "token-de-prueba",
             "iamc_directorio": str(tmp_path),
+            "data912_base_url": DATA912_URL,
         }
     )
     # El almacén lee del caché de settings, no del objeto que se le pasa a `consolidar`.
@@ -111,6 +116,27 @@ def _montar_docta(filas: list[dict]) -> None:
     )
 
 
+def _montar_data912(mapa: dict[str, list[dict]] | None = None) -> None:
+    """Sin `mapa`, cada tramo responde una fila de relleno con precio 0 — nunca un precio válido
+    para el overlay (`c=0` no pasa `tiene_precio_valido`), así que data912 "está" (aparece en los
+    snapshots de la corrida) pero no pisa ni agrega nada: el comportamiento de estos tests es el
+    mismo que antes de que data912 existiera. Relleno y no lista vacía por la misma razón que
+    `_montar_byma_con_filas`: una lista vacía es fallo reintentable, y los tests que pegan al
+    endpoint HTTP real no pueden inyectar `dormir` — reintentar de verdad los cinco tramos tardaría
+    minutos. Pasar `mapa` para que un tramo sí traiga filas con precio."""
+    mapa = mapa or {}
+    for tramo in TRAMOS_DATA912:
+        filas = mapa.get(tramo, [])
+        respx.get(f"{DATA912_URL}/live/{tramo}").mock(
+            return_value=httpx.Response(200, json=filas or [{"symbol": f"RELLENO-{tramo}", "c": 0}])
+        )
+
+
+def _montar_data912_caido() -> None:
+    for tramo in TRAMOS_DATA912:
+        respx.get(f"{DATA912_URL}/live/{tramo}").mock(return_value=httpx.Response(500))
+
+
 CASHFLOW_MINIMO = [
     {
         "ticker": "PLC7O",
@@ -150,6 +176,7 @@ async def test_una_corrida_con_las_tres_fuentes_escribe_las_cuatro_tablas(
     with respx.mock:
         _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
         _montar_docta(CASHFLOW_MINIMO)
+        _montar_data912()
 
         resultado = await consolidar(conn, settings_de_prueba, dormir=_no_dormir)
 
@@ -157,7 +184,7 @@ async def test_una_corrida_con_las_tres_fuentes_escribe_las_cuatro_tablas(
     assert escrito["instrumentos"] >= 1
     assert escrito["precios"] == escrito["instrumentos"]
     assert escrito["cashflow"] == 1
-    assert set(resultado.snapshots) == {"byma", "iamc", "docta"}
+    assert set(resultado.snapshots) == {"byma", "iamc", "docta", "data912"}
 
     instrumentos = {f["ticker"]: f for f in resultado.consolidacion.filas_instrumentos}
     assert instrumentos["PLC7O"]["law"] == "Ley Argentina", "heredó de IAMC"
@@ -170,11 +197,54 @@ async def test_una_corrida_con_las_tres_fuentes_escribe_las_cuatro_tablas(
     assert precios["PLC7O"]["fuente"] == "byma+iamc"
 
 
+# --- Experimento data912: la corrida completa con el overlay puesto -----------------------------
+
+
+async def test_data912_pisa_el_precio_de_byma_y_queda_rotulado(
+    settings_de_prueba, informe_guardado
+) -> None:
+    """Corrida de punta a punta: PLC7O llega de BYMA a 156460 y de data912 (operado) a 200 — gana
+    data912, la TIR se recalcula sobre ese precio, y la fila queda rotulada `data912+iamc`."""
+    conn = FakeConexionEscritura()
+    with respx.mock:
+        _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
+        _montar_docta(CASHFLOW_MINIMO)
+        _montar_data912({"arg_corp": [{"symbol": "PLC7O", "c": 200.0, "q_op": 5, "v": 500.0}]})
+
+        resultado = await consolidar(conn, settings_de_prueba, dormir=_no_dormir)
+
+    assert "data912" in resultado.snapshots
+    precios = {f["ticker"]: f for f in resultado.consolidacion.filas_precios}
+    assert precios["PLC7O"]["last_price"] == 200.0
+    assert precios["PLC7O"]["fuente"] == "data912+iamc"
+    assert precios["PLC7O"]["effective_volume"] == 500.0
+
+
+async def test_data912_caido_deja_el_precio_de_respaldo_byma(
+    settings_de_prueba, informe_guardado
+) -> None:
+    """Con los cinco tramos de data912 caídos, la corrida sigue exactamente como si data912 no
+    existiera: el precio y la fuente son los de BYMA."""
+    conn = FakeConexionEscritura()
+    with respx.mock:
+        _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
+        _montar_docta(CASHFLOW_MINIMO)
+        _montar_data912_caido()
+
+        resultado = await consolidar(conn, settings_de_prueba, dormir=_no_dormir)
+
+    assert resultado.snapshots["data912"].hubo_errores
+    precios = {f["ticker"]: f for f in resultado.consolidacion.filas_precios}
+    assert precios["PLC7O"]["last_price"] == 156460.0
+    assert precios["PLC7O"]["fuente"] == "byma+iamc"
+
+
 async def test_sin_informe_la_corrida_sigue_y_pide_que_lo_suban(settings_de_prueba) -> None:
     conn = FakeConexionEscritura()
     with respx.mock:
         _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
         _montar_docta(CASHFLOW_MINIMO)
+        _montar_data912()
 
         resultado = await consolidar(conn, settings_de_prueba, dormir=_no_dormir)
 
@@ -201,6 +271,7 @@ async def test_un_informe_que_dejo_de_parsearse_no_tumba_la_corrida(
     with respx.mock:
         _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
         _montar_docta(CASHFLOW_MINIMO)
+        _montar_data912()
 
         resultado = await consolidar(conn, settings_de_prueba, dormir=_no_dormir)
 
@@ -217,6 +288,7 @@ async def test_docta_caido_deja_la_renta_fija_sin_clasificar_y_no_toca_el_cronog
         respx.get(url__startswith="https://docta-test.local/cashflow").mock(
             return_value=httpx.Response(500)
         )
+        _montar_data912()
 
         resultado = await consolidar(conn, settings_de_prueba, dormir=_no_dormir)
 
@@ -234,6 +306,7 @@ async def test_byma_caido_no_deja_universo_pero_la_corrida_reporta(
         for endpoint in ENDPOINTS_BYMA:
             respx.post(f"{BYMA_URL}/{endpoint}").mock(return_value=httpx.Response(500))
         _montar_docta(CASHFLOW_MINIMO)
+        _montar_data912()
 
         resultado = await consolidar(conn, settings_de_prueba, dormir=_no_dormir)
 
@@ -249,6 +322,7 @@ async def test_toda_la_corrida_comparte_el_instante_de_captura(
     with respx.mock:
         _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
         _montar_docta(CASHFLOW_MINIMO)
+        _montar_data912()
 
         resultado = await consolidar(conn, settings_de_prueba, dormir=_no_dormir)
 
@@ -268,6 +342,7 @@ async def test_el_endpoint_devuelve_conteos_cobertura_y_alertas(
     with respx.mock:
         _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
         _montar_docta(CASHFLOW_MINIMO)
+        _montar_data912()
 
         async with cliente(app) as http:
             respuesta = await http.post("/api/v1/consolidar")
@@ -304,6 +379,7 @@ async def test_el_endpoint_no_publica_la_url_de_docta(
         respx.get(url__startswith="https://docta-test.local/cashflow").mock(
             return_value=httpx.Response(404)
         )
+        _montar_data912()
 
         async with cliente(app) as http:
             respuesta = await http.post("/api/v1/consolidar")
@@ -366,6 +442,7 @@ async def test_con_forzar_corre_igual_fuera_de_la_rueda(
     with respx.mock:
         _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
         _montar_docta(CASHFLOW_MINIMO)
+        _montar_data912()
 
         async with cliente(app) as http:
             respuesta = await http.post("/api/v1/consolidar?forzar=true")
@@ -384,6 +461,7 @@ async def test_en_rueda_no_hace_falta_forzar(
     with respx.mock:
         _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
         _montar_docta(CASHFLOW_MINIMO)
+        _montar_data912()
 
         async with cliente(app) as http:
             respuesta = await http.post("/api/v1/consolidar")

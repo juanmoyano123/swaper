@@ -24,12 +24,15 @@ from app.core.config import Settings
 from app.ingesta.alertas import CODIGO_FUENTE_CAIDA, Alerta, Severidad, fuente_caida
 from app.ingesta.byma import ingerir_rueda
 from app.ingesta.consolidacion.armado import Consolidacion, armar_consolidacion
+from app.ingesta.consolidacion.overlay import aplicar_overlay
 from app.ingesta.consolidacion.persistencia import (
     Escritura,
     leer_cronograma,
     leer_metricas_previas,
+    leer_monedas,
     persistir,
 )
+from app.ingesta.data912 import ingerir_live
 from app.ingesta.docta import ConfiguracionFaltante, ingerir_cashflow
 from app.ingesta.iamc import InformeInvalido, parsear_informe
 from app.ingesta.iamc.almacen import ultimo_informe
@@ -82,6 +85,16 @@ async def _cashflow_de_docta(settings, dormir):
     except ConfiguracionFaltante as exc:
         logger.warning("docta_sin_configurar", error=str(exc))
         return exc
+
+
+async def _live_de_data912(settings, dormir):
+    """Experimento de fuente primaria: si data912 falla, la corrida sigue sólo con BYMA — es
+    exactamente el estado de hoy, sin overlay. `aplicar_overlay` recibe `{}` y no cambia nada."""
+    try:
+        return await ingerir_live(settings=settings, dormir=dormir)
+    except Exception as exc:  # la fuente no debería lanzar, pero una corrida no se pierde por eso
+        logger.warning("data912_lanzo", error=str(exc))
+        return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,17 +150,34 @@ async def consolidar(
     `conn` llega por parámetro y no de `app.state` para que F-008 pueda invocar esto desde un job,
     fuera del ciclo HTTP.
     """
-    rueda, cashflow = await asyncio.gather(
-        _rueda_de_byma(settings, dormir), _cashflow_de_docta(settings, dormir)
+    rueda, cashflow, live = await asyncio.gather(
+        _rueda_de_byma(settings, dormir),
+        _cashflow_de_docta(settings, dormir),
+        _live_de_data912(settings, dormir),
     )
     # El parseo del PDF es CPU-bound y síncrono: en el event loop bloquearía al resto del servicio.
     informe = await run_in_threadpool(_leer_informe)
     # Lo que ya se sabía de IAMC, para que una corrida sin informe no publique un universo sin TIR.
     metricas_previas = await leer_metricas_previas(conn)
+    # La moneda que BYMA ya declaró para cada ticker, para los que en esta corrida sólo trae
+    # data912 (que no la declara). Ver `overlay.py` — no es un dato nuevo, es atributo estable.
+    monedas_previas = await leer_monedas(conn)
 
     snapshots: dict[str, Snapshot] = {}
     if rueda is not None:
         snapshots["byma"] = rueda.snapshot
+    if live is not None:
+        snapshots["data912"] = live.snapshot
+
+    overlay = aplicar_overlay(
+        rueda.especies_por_endpoint if rueda else {},
+        live.filas_por_tramo if live else {},
+        monedas_previas=monedas_previas,
+    )
+    if live is not None:
+        for alerta in overlay.alertas:
+            snapshots["data912"].alertar(alerta)
+    logger.info("overlay_data912", **overlay.conteos)
 
     snapshot_iamc = Snapshot(fuente="IAMC")
     snapshot_iamc.registrar_tramo("informe", len(informe.filas or []))
@@ -176,7 +206,7 @@ async def consolidar(
     # contra la que se devengan los corridos y se miden los plazos al descuento.
     capturado_en = datetime.now(UTC)
     consolidacion = armar_consolidacion(
-        especies_por_endpoint=rueda.especies_por_endpoint if rueda else {},
+        especies_por_endpoint=overlay.especies_por_endpoint,
         filas_iamc=informe.filas,
         filas_cashflow=filas_cashflow,
         cronograma_persistido=cronograma_persistido,

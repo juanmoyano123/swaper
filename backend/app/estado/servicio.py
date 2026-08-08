@@ -45,13 +45,20 @@ from app.estado.fuentes import diagnosticar
 from app.ingesta.alertas import Alerta, Severidad
 from app.jobs.registro import ultima_corrida
 
-# La fuente cuya demora se declara. Es la única del proyecto que publica con retraso conocido: IAMC
-# es un informe del día y Docta responde en tiempo real, así que declarar una demora para las tres
-# sería atribuirles un atraso que no tienen.
-FUENTE_DE_LA_DEMORA = "BYMA (API abierta)"
+# La fuente cuya demora se declara. Experimento data912 (rama `experimento/data912`): el precio de
+# cada especie puede salir de data912 (que no declara demora — regla 11, no se le inventa una) o
+# de BYMA de respaldo (que sí la declara, 20 minutos). El número que se muestra sigue siendo el
+# peor caso conocido: la demora de BYMA, porque es la única que la fuente publica y porque un
+# precio de respaldo puede ser tan viejo como eso. Antes de este experimento la única fuente era
+# BYMA y el texto lo daba por sentado; ahora tiene que decir por qué sigue siendo ese número.
+FUENTE_DE_LA_DEMORA = "BYMA (respaldo, la fuente con demora declarada)"
 POR_QUE_LA_DEMORA = (
-    "La API abierta de BYMA publica con retraso declarado respecto del mercado. El precio que se "
-    "ve es el de ese momento anterior, no el de ahora."
+    "Los precios salen de data912 cuando la especie está ahí, con BYMA de respaldo para lo que "
+    "falte. data912 no declara demora respecto del mercado, así que se muestra la de BYMA: es el "
+    "peor caso conocido, y un precio de respaldo puede ser de hasta ese momento anterior. Un "
+    "precio rotulado 'arrastre' es el último cierre conocido de una especie que no operó en la "
+    "sesión: refleja una fecha anterior que la fuente no declara, no necesariamente la de la "
+    "demora de BYMA."
 )
 
 # `Severidad` es un `StrEnum`: comparar dos valores con `<` compara los strings, y alfabéticamente

@@ -112,6 +112,23 @@ async def leer_cronograma(conn: Any) -> list[dict[str, object]]:
     return [dict(fila) for fila in filas]
 
 
+# Experimento data912: la moneda de cotización que BYMA ya declaró alguna vez, para los tickers
+# que en esta corrida sólo trae data912 (que no declara moneda). No es un dato nuevo — es el mismo
+# atributo estable de la especie que `leer_metricas_previas` arrastra para las métricas — así que
+# leerlo de acá no inventa nada (regla 1).
+SQL_MONEDAS = """
+SELECT ticker, moneda_cotizacion
+  FROM public.instrumentos
+ WHERE moneda_cotizacion IS NOT NULL
+"""
+
+
+async def leer_monedas(conn: Any) -> dict[str, str]:
+    """Última moneda de cotización conocida, por ticker. Vacío si `instrumentos` está vacía."""
+    filas = await conn.fetch(SQL_MONEDAS)
+    return {fila["ticker"]: fila["moneda_cotizacion"] for fila in filas}
+
+
 COLUMNAS_PUNTAS: tuple[str, ...] = (
     "ticker",
     "capturado_en",

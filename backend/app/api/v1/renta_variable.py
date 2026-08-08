@@ -36,6 +36,10 @@ router = APIRouter(prefix="/renta-variable", tags=["renta variable"])
 
 # El bloque propio lleva su fuente escrita al lado del dato, igual que el externo: en una ficha que
 # junta dos orígenes, cuál es cuál no puede quedar librado a que el lector se acuerde.
+#
+# Experimento data912: hoy `especie.fuente` (de la vista `resumen`) es la fuente real, más precisa
+# que esta constante — distingue BYMA de data912 y de data912-arrastre. `FUENTE_PROPIA` queda como
+# el fallback de una corrida anterior a la migración que la expone (`especie.fuente is None`).
 FUENTE_PROPIA = "BYMA"
 
 
@@ -120,6 +124,8 @@ async def ficha(ticker: str, conn: Annotated[object, Depends(get_db)]) -> dict[s
     externo = await cliente_yahoo().bloque_externo(especie.ticker)
     return {
         "ticker": especie.ticker,
-        "propio": {"fuente": FUENTE_PROPIA, **especie.como_dict()},
+        # `**especie.como_dict()` va primero: si trae `fuente` (experimento data912), gana sobre
+        # la constante. Si no (corrida anterior a la migración, `fuente is None`), el `or` la pisa.
+        "propio": {**especie.como_dict(), "fuente": especie.fuente or FUENTE_PROPIA},
         "externo": externo.como_dict(),
     }
