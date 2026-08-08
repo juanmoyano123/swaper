@@ -49,7 +49,7 @@ de ejecución**. Si contradice a `plan.md` en una dependencia, gana `plan.md` y 
 | 7 | **F-018** (cartera editable) ∥ **F-039** (ficha) | F-018 no puede ir con F-016/F-017 (mismo store del armador, mandato del plan); F-039 no puede ir con F-038 (misma pantalla y navegación). Cruzadas entre sí, cero contacto | **completada 07/08/2026** — segunda tanda Fable-planifica/Sonnet-ejecuta; verificación de cierre encontró un error de tipos real sólo visible con el proyecto completo compilando junto |
 | 8a | **F-051** (métricas propias) — **sola** | La salvedad de la duda 7 se activó: F-051 **modifica** `cupones.py` (import circular), la firma de `armar_consolidacion` y `corrida.py`. Además deja escrita la matemática de descuento que F-040 consume; en paralelo las dos la escribirían por duplicado. Evidencia y diseño completo en `claude-docs/plans/F-051-plan.md` | **completada 08/08/2026** — 240 especies con TIR pasaron a 284 calculadas, y las D y C tienen métricas por primera vez. El arreglo del ciclo de imports fue más grande que el previsto: `raiz_emision` se movió a `app/ingesta/raiz.py` porque importar un submódulo igual ejecuta el `__init__` del paquete |
 | 8b | **F-017** (filtros) ∥ **F-024** (redondeo lámina) ∥ **F-040** (sensibilidad) ∥ **F-052** (renta variable en el monitor) | Barra de filtros de la grilla / cablear la lámina real en la cartera / repricing en la ficha / pestañas de acciones y CEDEARs en el monitor. Después de la base común no comparten un archivo: F-017 y F-024 tocan `features/armador/` pero archivos distintos (store y barra nueva vs `CarteraEditable`+`resolver`); F-040 vive en la ficha y en `calendario/`; F-052 en el monitor y en un paquete backend nuevo. **Base común a mano antes de soltar agentes**: JOIN a `condiciones_emision` en `universo/lectura.py` + campos `lamina` y `sector` en `EspecieUniverso`; router vacío `api/v1/renta_variable.py`; claves `accion`/`cedear` en `SelectorSegmento` | **completada 08/08/2026** — las cuatro en paralelo, un commit por feature. La verificación de cierre pasó a la primera, a diferencia de la tanda 7. Queda una migración escrita y sin aplicar (`cierre_anterior`): hasta que corra, la consolidación falla contra la base |
-| 9 | **F-020** (concentración) ∥ **F-021** (panel de renta) ∥ **F-026** (renta variable) | Tres paneles distintos del armador, tres servicios backend distintos (`verificar_concentracion`, `cupones.py`, equity de BYMA). Alcance ampliado (08/2026): F-020 suma el panel de distribución por sector/ley/naturaleza de tasa, define `min_sectores` en `PERFILES` y advierte cuando no se cumple; F-026 suma el dato recopilado país/índice y la distribución por país del bloque. Ver duda de solape 6 | pendiente |
+| 9 | **F-020** (concentración) ∥ **F-021** (panel de renta) ∥ **F-026** (renta variable) ∥ **F-053** (ficha de RV con Yahoo) | Tres paneles distintos del armador más una ficha en el monitor. Alcance ajustado al planificar (08/08/2026): **F-026 pierde la distribución por país y rubro** —el dato no existe en BYMA ni en ningún curado, y la ficha exige "recopilado con origen y fecha declarados"; queda esperando a F-053, que lo habilita—. Con eso **se disuelve la duda de solape 6**: sin panel de distribución en F-026, las dos features dejan de compartir componente. **F-021 resultó casi sólo frontend**: `POST /calendario/cartera` ya devuelve la renta en plata por moneda y `renta_anual` ya excluye amortización por construcción. **F-020 resultó más grande**: `verificar_concentracion` y `PERFILES` viven sólo en `tools/`, que el backend no importa — hay que portarlos, como pasó con la matemática de TIR en la 8a. **F-053 entra como cuarto agente** (ver duda de solape 9) | pendiente |
 | 10 | **F-019** (armado asistido) ∥ **F-022** (rendimientos) ∥ **F-025** (carga de lámina) | F-022 recién acá porque comparte el servicio de métricas con F-021 (tanda 9); F-025 recién acá porque escribe lo que F-024 (tanda 8) lee. Alcance ampliado (08/2026): F-019 suma el criterio de reparto sectorial — reusa el `min_sectores` que F-020 (tanda 9) definió en `PERFILES` y agrega el desempate por sector no representado en `elegir_siguiente`; por eso F-019 ahora también depende de F-020, lo que esta secuencia ya respetaba | pendiente |
 
 ### Fase C — Diagnóstico y optimizador (Milestones 3 y 4)
@@ -87,6 +87,18 @@ confidence 50 % porque la disponibilidad programática de las fechas de CNV no e
    por país/rubro en renta variable). Se resuelve con la regla 2: el componente de distribución
    compartido se crea a mano antes de soltar la tanda. Si al planificar aparece más contacto que
    ese componente, F-026 sale de la tanda y va después, sola (regla 3).
+
+   **Resuelta al planificar la tanda, y por un camino que no estaba previsto (08/08/2026): la
+   duda se disolvió en vez de resolverse.** Medido contra el universo real, el dato que el panel
+   de F-026 necesita —país de la empresa o índice de referencia— **no existe**:
+   `EspecieRentaVariable` tiene ticker, precio, moneda, cierre anterior, variación, volumen,
+   puntas y operaciones, y nada más; BYMA no publica país ni rubro ni siquiera el nombre de la
+   empresa. La ficha exige el dato "recopilado con origen y fecha declarados, y si falta queda
+   vacío y se alerta", así que construir el panel hoy sería una pantalla con "país no informado"
+   en el 100 % de las 752 especies. **F-026 entra sin el panel**, que pasa a depender de F-053.
+   Sin panel no hay componente compartido, y las dos features quedan sin ningún archivo en
+   común. El `DistribucionBarras.tsx` de la base común se crea igual —lo usa F-020 para sus tres
+   cortes— y queda listo para cuando F-026 recupere el suyo.
 7. **F-051 va primera y sola: la salvedad se activó** (planteada y resuelta el 08/08/2026). La
    duda era si podía consumir `cupones.py` desde un módulo nuevo sin modificarlo. No puede, por
    tres razones verificadas contra el código: (a) `cupones.py:55` y `universo/segmentacion.py:29`
@@ -112,6 +124,19 @@ confidence 50 % porque la disponibilidad programática de las fechas de CNV no e
    componente de distribución de la duda 6. Y lo que no se negocia: F-052 **no** agrega columna de
    rendimiento a sus pestañas "porque ahora hay TIR". Una acción no tiene TIR, y la regla 2 sigue
    valiendo aunque la TIR ahora exista para todo lo demás.
+9. **F-053 entra a la tanda 9 como cuarto agente** (planteada y resuelta el 08/08/2026). Es una
+   feature nueva, nacida de una pregunta del usuario sobre el monitor de referencia, y la duda
+   era si podía correr con las otras tres. **Puede, y con margen**: vive en `features/instrumento/`
+   y en un paquete backend nuevo (`app/externos/`), zonas que ninguna de las otras tres toca.
+   El único roce aparente —la fila de la tabla de renta variable que abre la ficha— no es tal:
+   `TablaRentaVariable` ya llama `useAbrirInstrumento` desde F-052, así que F-053 **no modifica
+   la tabla ni el monitor**. Con F-026 la relación es de dependencia futura, no de contacto:
+   F-053 habilita el dato país/rubro que F-026 va a necesitar cuando recupere su panel (duda 6),
+   pero en esta tanda las dos son independientes.
+
+   La salvedad que no se activó: F-053 toca `api/v1/renta_variable.py`, que F-052 creó. Como
+   F-026 quedó sin backend en esta tanda, ese archivo tiene un solo dueño y no hace falta
+   serializar.
 
 ## Lo que enseñó la Tanda 1 (aplicar en las que siguen)
 

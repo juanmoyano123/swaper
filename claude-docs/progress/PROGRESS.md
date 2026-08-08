@@ -74,6 +74,7 @@ desde `/build-feature` a medida que cada una se implementa.
 | F-042 | Exportación a Excel y PDF | Stage 1 | 100,0 | pendiente |
 | F-051 | Métricas propias: TIR, duración y paridad | Stage 1 | 160,0 | **completada** |
 | F-052 | Renta variable en el monitor | Stage 1 | 106,7 | **completada** |
+| F-053 | Ficha del activo de renta variable | Stage 1 | 140,0 | pendiente |
 
 > Milestone 4 — "Stage 1 completo: los tres flujos cierran."
 >

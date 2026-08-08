@@ -1959,6 +1959,77 @@ THEN los instrumentos que siguen fuera (sin_segmento) están declarados con su c
 
 ---
 
+#### F-053 — Ficha del activo de renta variable
+
+**Etiqueta:** Stage 1 · **Traza a:** F8 · **Agregada el 08/08/2026**
+
+**Descripción.** Una acción o un CEDEAR en nuestro monitor son hoy cuatro números: ticker, precio,
+variación y volumen. No hay forma de saber **qué empresa es**, en qué sector opera ni de qué país,
+y esos son los datos con los que un asesor decide en renta variable — donde no hay TIR ni cronograma
+que mirar. La ficha se abre desde la fila (el gesto ya existe: `useAbrirInstrumento`) como drawer
+sobre la tabla, el mismo mecanismo de `state.fondo` que ya usa la renta fija.
+
+**El dato viene de Yahoo Finance**, que es la única fuente verificada que lo publica para el
+mercado local. Verificado el 08/08/2026: `MSFT.BA` en Yahoo **es el CEDEAR** —precio en ARS, bolsa
+BUE— y su perfil es el de la empresa subyacente, así que la consulta es siempre `TICKER.BA` con el
+ticker que ya tenemos de BYMA: **no se deriva ni se mapea nada** (regla 11). La respuesta se acepta
+sólo si declara la bolsa BUE y el símbolo pedido; si no, la ficha dice que no hay dato, nunca
+muestra el de otro instrumento.
+
+**Lo que NO entra, y no es negociable.** Yahoo publica recomendación de analistas (`STRONG_BUY`),
+precio objetivo y consenso. Eso es opinión de terceros, no dato duro, y la **regla 6** del dominio
+mantiene el análisis determinístico y sin juicio ajeno presentado como información. Tampoco se
+traducen los valores propietarios de Yahoo: "Financial Services" y "Banks - Regional" se muestran
+como Yahoo los declara, con la fuente y la fecha de captura a la vista (**regla 11**).
+
+**Dos niveles de disponibilidad, medidos.** El endpoint de cotización e histórico responde sin
+autenticación; el de perfil y valuación exige un mecanismo de cookie+crumb no documentado que Yahoo
+ya endureció una vez. El diseño degrada: si el segundo nivel falla, el primero sigue; si Yahoo
+entero no responde, la ficha muestra lo nuestro —precio, cierre anterior, puntas, operaciones de
+BYMA— y **declara que el bloque externo no está disponible**. Ninguna pantalla nuestra depende de
+que Yahoo esté vivo.
+
+**Input:** ticker de renta variable del monitor (F-052); precio y puntas de BYMA ya persistidos;
+Yahoo Finance como fuente externa.
+**Output:** ficha con bloque propio (BYMA) y bloque externo rotulado (Yahoo), con caché por TTL.
+**Depende de:** F-039 (el drawer y su navegación), F-052 (las pestañas y la tabla)
+**Habilita:** la distribución por país y rubro de F-026, hoy sin fuente
+
+**RICE:** R = 300 · I = 2 · C = 70 % · E = 3 → **Score 140**
+*Confidence 70 % por la fragilidad de la fuente: los endpoints funcionan hoy pero no son
+contractuales.*
+
+```
+GIVEN una acción local en el monitor
+WHEN se hace clic en su fila
+THEN se abre la ficha con el nombre de la empresa, el precio de BYMA y el bloque de Yahoo rotulado
+     con su fuente y la fecha de captura
+
+GIVEN un CEDEAR
+WHEN se pide su ficha
+THEN se consulta el mismo ticker con sufijo .BA, sin derivar el símbolo del subyacente, y el perfil
+     que se muestra es el de la empresa emisora
+
+GIVEN una respuesta de Yahoo que declara una bolsa distinta de BUE o un símbolo que no es el pedido
+WHEN se arma la ficha
+THEN el bloque externo queda vacío y declarado; en ningún caso se muestran los datos recibidos
+
+GIVEN Yahoo caído o el mecanismo de autenticación roto
+WHEN se pide una ficha
+THEN la ficha responde igual con los datos de BYMA y declara que el bloque externo no está
+     disponible; ninguna pantalla del producto se rompe
+
+GIVEN los datos de recomendación y precio objetivo que Yahoo publica
+WHEN se muestra la ficha
+THEN no aparecen: son opinión de terceros y el producto no presenta juicio ajeno como dato
+
+GIVEN un campo del perfil que Yahoo declara en su propio vocabulario
+WHEN se muestra en la ficha
+THEN se muestra tal como la fuente lo declara, sin traducir, con la fuente identificada
+```
+
+---
+
 ### Bloque N — Mis carteras (F13)
 
 ---
@@ -2262,35 +2333,36 @@ THEN declara la demora real de la nueva fuente, no la de 20 minutos de la anteri
 | 21 | F-051 | Métricas propias: TIR, duración y paridad | Stage 1 | 400 | 2 | 80 % | 4 | 160,0 |
 | 22 | F-030 | Valuación y diagnóstico de cartera | Stage 1 | 200 | 3 | 100 % | 4 | 150,0 |
 | 23 | F-018 | Cartera editable y ponderación | Stage 1 | 350 | 3 | 80 % | 6 | 140,0 |
-| 24 | F-016 | Grilla-selector de doce meses | Stage 1 | 380 | 3 | 80 % | 8 | 114,0 |
-| 25 | F-017 | Filtros de la grilla | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
-| 26 | F-039 | Ficha de instrumento | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
-| 27 | F-029 | Resolución de tickers | Stage 1 | 200 | 2 | 80 % | 3 | 106,7 |
-| 28 | F-038 | Monitor de mercado | Stage 1 | 400 | 2 | 80 % | 6 | 106,7 |
-| 29 | F-052 | Renta variable en el monitor | Stage 1 | 400 | 1 | 80 % | 3 | 106,7 |
-| 30 | F-031 | Vector de riesgo de seis ejes | Stage 1 | 250 | 3 | 80 % | 6 | 100,0 |
-| 31 | F-032 | Motor de rotaciones intra-segmento | Stage 1 | 200 | 3 | 100 % | 6 | 100,0 |
-| 32 | F-042 | Exportación a Excel y PDF | Stage 1 | 250 | 2 | 80 % | 4 | 100,0 |
-| 33 | F-028 | Ingreso de cartera por tres vías | Stage 1 | 200 | 3 | 80 % | 5 | 96,0 |
-| 34 | F-034 | Modo subir TIR con contrapartida | Stage 1 | 180 | 3 | 80 % | 5 | 86,4 |
-| 35 | F-019 | Armado asistido | Stage 1 | 250 | 2 | 100 % | 6 | 83,3 |
-| 36 | F-026 | Bloque de renta variable | Stage 1 | 300 | 2 | 80 % | 6 | 80,0 |
-| 37 | F-050 | API Market Data oficial de BYMA | Stage 2 | 400 | 2 | 50 % | 5 | 80,0 |
-| 38 | F-037 | Comparación original contra propuesta | Stage 1 | 180 | 2 | 80 % | 4 | 72,0 |
-| 39 | F-040 | Sensibilidad por repricing completo | Stage 1 | 200 | 1 | 100 % | 3 | 66,7 |
-| 40 | F-033 | Modo bajar riesgo | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
-| 41 | F-036 | Aceptación rotación por rotación | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
-| 42 | F-025 | Carga asistida de lámina | Stage 1 | 200 | 1 | 80 % | 3 | 53,3 |
-| 43 | F-005 | Parser del informe diario de IAMC | Stage 1 | 400 | 2 | 50 % | 8 | 50,0 |
-| 44 | F-023 | Composición y curva TIR/duración | Stage 1 | 300 | 1 | 80 % | 5 | 48,0 |
-| 45 | F-048 | Alertas y notificaciones | Stage 2 | 300 | 1 | 80 % | 6 | 40,0 |
-| 46 | F-049 | Comparación de carteras entre sí | Stage 2 | 200 | 1 | 80 % | 4 | 40,0 |
-| 47 | F-044 | Historial de propuestas | Stage 2 | 250 | 2 | 50 % | 10 | 25,0 |
-| 48 | F-043 | Gestión de clientes y CRM | Stage 2 | 300 | 2 | 50 % | 15 | 20,0 |
-| 49 | F-027 | Calendario de balances | Stage 1 | 200 | 1 | 50 % | 6 | 16,7 |
-| 50 | F-045 | Colocaciones primarias | Stage 2 | 150 | 2 | 50 % | 10 | 15,0 |
-| 51 | F-046 | FCI con fuente | Stage 2 | 200 | 2 | 25 % | 12 | 8,3 |
-| 52 | F-047 | Opciones | Stage 2 | 80 | 1 | 50 % | 10 | 4,0 |
+| 24 | F-053 | Ficha del activo de renta variable | Stage 1 | 300 | 2 | 70 % | 3 | 140,0 |
+| 25 | F-016 | Grilla-selector de doce meses | Stage 1 | 380 | 3 | 80 % | 8 | 114,0 |
+| 26 | F-017 | Filtros de la grilla | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
+| 27 | F-039 | Ficha de instrumento | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
+| 28 | F-029 | Resolución de tickers | Stage 1 | 200 | 2 | 80 % | 3 | 106,7 |
+| 29 | F-038 | Monitor de mercado | Stage 1 | 400 | 2 | 80 % | 6 | 106,7 |
+| 30 | F-052 | Renta variable en el monitor | Stage 1 | 400 | 1 | 80 % | 3 | 106,7 |
+| 31 | F-031 | Vector de riesgo de seis ejes | Stage 1 | 250 | 3 | 80 % | 6 | 100,0 |
+| 32 | F-032 | Motor de rotaciones intra-segmento | Stage 1 | 200 | 3 | 100 % | 6 | 100,0 |
+| 33 | F-042 | Exportación a Excel y PDF | Stage 1 | 250 | 2 | 80 % | 4 | 100,0 |
+| 34 | F-028 | Ingreso de cartera por tres vías | Stage 1 | 200 | 3 | 80 % | 5 | 96,0 |
+| 35 | F-034 | Modo subir TIR con contrapartida | Stage 1 | 180 | 3 | 80 % | 5 | 86,4 |
+| 36 | F-019 | Armado asistido | Stage 1 | 250 | 2 | 100 % | 6 | 83,3 |
+| 37 | F-026 | Bloque de renta variable | Stage 1 | 300 | 2 | 80 % | 6 | 80,0 |
+| 38 | F-050 | API Market Data oficial de BYMA | Stage 2 | 400 | 2 | 50 % | 5 | 80,0 |
+| 39 | F-037 | Comparación original contra propuesta | Stage 1 | 180 | 2 | 80 % | 4 | 72,0 |
+| 40 | F-040 | Sensibilidad por repricing completo | Stage 1 | 200 | 1 | 100 % | 3 | 66,7 |
+| 41 | F-033 | Modo bajar riesgo | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
+| 42 | F-036 | Aceptación rotación por rotación | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
+| 43 | F-025 | Carga asistida de lámina | Stage 1 | 200 | 1 | 80 % | 3 | 53,3 |
+| 44 | F-005 | Parser del informe diario de IAMC | Stage 1 | 400 | 2 | 50 % | 8 | 50,0 |
+| 45 | F-023 | Composición y curva TIR/duración | Stage 1 | 300 | 1 | 80 % | 5 | 48,0 |
+| 46 | F-048 | Alertas y notificaciones | Stage 2 | 300 | 1 | 80 % | 6 | 40,0 |
+| 47 | F-049 | Comparación de carteras entre sí | Stage 2 | 200 | 1 | 80 % | 4 | 40,0 |
+| 48 | F-044 | Historial de propuestas | Stage 2 | 250 | 2 | 50 % | 10 | 25,0 |
+| 49 | F-043 | Gestión de clientes y CRM | Stage 2 | 300 | 2 | 50 % | 15 | 20,0 |
+| 50 | F-027 | Calendario de balances | Stage 1 | 200 | 1 | 50 % | 6 | 16,7 |
+| 51 | F-045 | Colocaciones primarias | Stage 2 | 150 | 2 | 50 % | 10 | 15,0 |
+| 52 | F-046 | FCI con fuente | Stage 2 | 200 | 2 | 25 % | 12 | 8,3 |
+| 53 | F-047 | Opciones | Stage 2 | 80 | 1 | 50 % | 10 | 4,0 |
 
 **Cómo se lee esta tabla.** El RICE ordena por eficiencia, no por secuencia. Las features de más
 score son las Foundation y las de ingesta: mucho alcance sobre poco esfuerzo, porque reusan lógica ya
