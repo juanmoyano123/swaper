@@ -7,6 +7,11 @@ import { AlertasCalendario } from './components/AlertasCalendario'
 import { CarteraEditable } from './components/CarteraEditable'
 import { CoberturaSeleccion } from './components/CoberturaSeleccion'
 import { GrillaFiltrada } from './components/GrillaFiltrada'
+import {
+  BloqueRentaVariable,
+  PanelConcentracion,
+  PanelRenta,
+} from './components/PanelesDeLaCartera'
 import { useCalendarioUniverso } from './hooks/useCalendarioUniverso'
 import { ArmadorProvider } from './store/carteraStore'
 
@@ -19,6 +24,11 @@ import { ArmadorProvider } from './store/carteraStore'
  * adentro del mismo provider. La maqueta final de dos columnas (A7 izquierda / A8+A9 derecha) es
  * de una tanda de refinamiento visual posterior — acá lo que importa es que el dato y las
  * acciones existan y sean correctos.
+ *
+ * **Los tres paneles de la Tanda 9 ya están montados** (ver `PanelesDeLaCartera`): cada feature
+ * reemplaza el cuerpo del suyo y nadie edita este archivo, que queda congelado durante la
+ * ejecución en paralelo. El orden es deliberado: primero qué cobra la cartera (F-021), después
+ * qué riesgo tiene (F-020), y al final el bloque que no participa de ninguno de los dos (F-026).
  */
 export function ArmadorPage() {
   const consulta = useCalendarioUniverso()
@@ -39,6 +49,9 @@ export function ArmadorPage() {
             <GrillaFiltrada meses={consulta.data.meses} />
             <AlertasCalendario alertas={consulta.data.alertas} />
             <CarteraEditable />
+            <PanelRenta />
+            <PanelConcentracion />
+            <BloqueRentaVariable />
           </ArmadorProvider>
         )}
       </Panel>

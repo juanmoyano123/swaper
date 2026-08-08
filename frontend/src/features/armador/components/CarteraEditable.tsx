@@ -11,33 +11,28 @@
  * la tanda 8b): `null` es no informada, y la fila y la cabecera lo declaran en vez de asumir un
  * valor.
  *
- * **Desvío contra el plan**: `moneda_cotizacion` llega del backend en mayúsculas ("ARS"/"USD",
- * `BYMA` sin traducir — ver `backend/app/ingesta/byma/normalizacion.py`), mientras que
- * `EntradaResolver.monedaCotizacion` compara contra los literales en minúscula `'usd'/'ars'`
- * (así lo especifica el plan y así lo cubren los tests de `resolver.ts`, con fixtures en
- * minúscula). Comparar sin normalizar dejaría toda posición en ARS/USD reales sin resolver. Se
- * normaliza acá, en el borde donde `Especie` se convierte a `EntradaResolver` — es un ajuste de
- * casing, no una regla de negocio nueva.
+ * **El pipeline de resolución ya no vive acá**: se extrajo a `hooks/useCarteraResuelta` en la base
+ * común de la Tanda 9, porque F-020 y F-021 necesitan los mismos números. Ahí también quedó
+ * documentado el ajuste de casing de `moneda_cotizacion` y el filtro por clase que deja la renta
+ * variable afuera del resolver de bonos.
  */
 
-import { useMemo, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 
 import { MiniCalendario, type CeldaMes } from '@/components/MiniCalendario'
 import { fmtMonto, fmtNumero, fmtPct, SIN_DATO } from '@/lib/fmt'
 
 import { AlertasCalendario } from './AlertasCalendario'
 import { useCalendarioCartera } from '../hooks/useCalendarioCartera'
-import { useEspeciesUniverso } from '../hooks/useEspeciesUniverso'
-import { useTipoDeCambio } from '../hooks/useTipoDeCambio'
+import { useCarteraResuelta } from '../hooks/useCarteraResuelta'
 import type { Especie } from '../lib/schema'
+import { type PosicionResuelta, type ResumenAjuste } from '../lib/resolver'
 import {
-  resolver,
-  resumenAjuste,
-  type EntradaResolver,
-  type PosicionResuelta,
-  type ResumenAjuste,
-} from '../lib/resolver'
-import { useArmador, useArmadorAcciones, type PosicionArmador } from '../store/carteraStore'
+  posicionesRentaFija,
+  useArmador,
+  useArmadorAcciones,
+  type PosicionArmador,
+} from '../store/carteraStore'
 
 /** Tolerancia de la cabecera: por debajo no vale la pena teñir el total en `--ac2`. */
 const TOLERANCIA_SUMA_PESOS = 0.05
@@ -48,55 +43,21 @@ export function CarteraEditable() {
   const { pos, montoTotal } = useArmador()
   const { fijarPeso, fijarMontoTotal, equiponderar, vaciar } = useArmadorAcciones()
 
-  const especies = useEspeciesUniverso()
-  const tipoDeCambio = useTipoDeCambio()
+  const {
+    resueltas,
+    ajuste,
+    posicionesParaCalendario,
+    porTicker,
+    totalInvertidoUsd: sumaInvertidoUsd,
+    hayAlgunaResuelta,
+  } = useCarteraResuelta()
 
-  const porTicker = useMemo(() => {
-    const mapa = new Map<string, Especie>()
-    for (const especie of especies.data ?? []) mapa.set(especie.ticker, especie)
-    return mapa
-  }, [especies.data])
-
-  const tcValor = tipoDeCambio.data?.tipo_de_cambio.valor ?? null
-
-  const resueltas = useMemo(() => {
-    const entradas: EntradaResolver[] = pos.map((p) => {
-      const especie = porTicker.get(p.ticker)
-      // Normalizado a minúscula acá — ver nota del módulo sobre el casing real de BYMA.
-      const monedaCotizacion = especie?.moneda_cotizacion?.toLowerCase() ?? null
-      // Sin moneda declarada no hay con qué decidir si conviene TC: se declara sin precio en vez
-      // de asumir una moneda (regla 1 del proyecto), aunque la especie sí traiga un precio.
-      const sinBase = p.esFci || monedaCotizacion === null
-      return {
-        ticker: p.ticker,
-        peso: p.peso,
-        precio: sinBase ? null : (especie?.precio ?? null),
-        monedaCotizacion: monedaCotizacion ?? 'usd', // irrelevante: `resolver` no la usa con precio null
-        // F-024: la lámina real, de condiciones_emision vía /especies. `null` = no informada: el
-        // resolver no redondea y la fila lo declara. Jamás un default (regla 1 del proyecto).
-        lamina: p.esFci ? null : (especie?.lamina ?? null),
-        esFci: p.esFci,
-      }
-    })
-    return resolver(entradas, montoTotal, tcValor)
-  }, [pos, porTicker, montoTotal, tcValor])
-
-  const ajuste = useMemo(() => resumenAjuste(resueltas), [resueltas])
-
-  const posicionesParaCalendario = useMemo(
-    () =>
-      resueltas
-        .filter(
-          (r): r is PosicionResuelta & { invertido: number } => r.invertido !== null && r.invertido > 0,
-        )
-        .map((r) => ({ ticker: r.ticker, monto: r.invertido })),
-    [resueltas],
-  )
   const calendario = useCalendarioCartera(posicionesParaCalendario)
 
-  const sumaPesoPedido = pos.reduce((acumulado, p) => acumulado + p.peso, 0)
-  const sumaInvertidoUsd = resueltas.reduce((acumulado, r) => acumulado + (r.invertidoUsd ?? 0), 0)
-  const hayAlgunaResuelta = resueltas.some((r) => r.invertidoUsd !== null)
+  // La tabla lista renta fija y FCI: la renta variable tiene su propio bloque con subtotal aparte
+  // (F-026), y mezclarlas acá haría que una acción apareciera con columnas de VN y lámina.
+  const posiciones = posicionesRentaFija(pos)
+  const sumaPesoPedido = posiciones.reduce((acumulado, p) => acumulado + p.peso, 0)
 
   function onVaciar() {
     if (pos.length > 0 && !window.confirm('¿Vaciar la cartera en construcción?')) return
@@ -164,20 +125,20 @@ export function CarteraEditable() {
             Vaciar
           </BotonAccion>
         </div>
-        {pos.length > 0 && (
+        {posiciones.length > 0 && (
           <span style={{ flexBasis: '100%', fontSize: 11, color: 'var(--dim)' }}>
             {leyendaAjuste(ajuste)}
           </span>
         )}
       </header>
 
-      {pos.length === 0 ? (
+      {posiciones.length === 0 ? (
         <p style={{ margin: 0, fontSize: 12, color: 'var(--sd)' }}>
           Sin posiciones. Elegí papeles en la grilla de arriba para empezar a armar la cartera.
         </p>
       ) : (
         <div role="table" aria-label="Cartera en construcción" style={{ display: 'grid', gap: 4 }}>
-          {pos.map((posicion) => (
+          {posiciones.map((posicion) => (
             <FilaCartera
               key={posicion.ticker}
               posicion={posicion}
@@ -299,13 +260,13 @@ function FilaCartera({
           {posicion.ticker}
         </span>
         <span style={{ display: 'block', fontSize: 9.5, color: 'var(--dim)' }}>
-          {posicion.esFci ? 'FCI' : (especie?.moneda_cotizacion ?? SIN_DATO)}
+          {posicion.clase === 'fci' ? 'FCI' : (especie?.moneda_cotizacion ?? SIN_DATO)}
         </span>
       </div>
 
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 11.5, color: 'var(--tx)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {posicion.esFci ? posicion.ticker : (especie?.emisor ?? especie?.ticker ?? posicion.ticker)}
+          {posicion.clase === 'fci' ? posicion.ticker : (especie?.emisor ?? especie?.ticker ?? posicion.ticker)}
         </div>
         <div className="mono" style={{ fontSize: 10, color: 'var(--sd)' }}>
           VN {resuelta?.vn !== null && resuelta?.vn !== undefined ? fmtNumero(resuelta.vn, 0) : SIN_DATO}
@@ -316,7 +277,7 @@ function FilaCartera({
           {resuelta?.laminaConocida === true && especie?.lamina != null && (
             <> · lám. {fmtNumero(especie.lamina, 0)}</>
           )}
-          {resuelta?.laminaConocida === false && !posicion.esFci && (
+          {resuelta?.laminaConocida === false && posicion.clase !== 'fci' && (
             <span style={{ color: 'var(--ac2)' }}> · lámina no informada</span>
           )}
         </div>

@@ -9,6 +9,9 @@
  * `vaciar` al mismo arnés, y expone el peso de cada posición para poder verificarlo. F-017 agrega
  * `fijarFiltros`/`limpiarFiltros` y expone `filtros` serializado para verificar la mecánica sin
  * depender del universo (eso lo cubre `FiltrosGrilla.test.tsx`, que sí monta `ArmadorPage`).
+ *
+ * La base común de la Tanda 9 agrega `alternarRentaVariable`, la clase de posición y los dos
+ * selectores. El arnés expone `clases` para poder verificar con qué clase entró cada ticker.
  */
 
 import { render, screen } from '@testing-library/react'
@@ -16,19 +19,46 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
 import { FILTROS_ARMADOR_VACIOS } from '../lib/filtros'
-import { ArmadorProvider, useArmador, useArmadorAcciones } from '../store/carteraStore'
+import {
+  ArmadorProvider,
+  posicionesRentaFija,
+  posicionesRentaVariable,
+  useArmador,
+  useArmadorAcciones,
+  type PosicionArmador,
+} from '../store/carteraStore'
 
 function Arnes() {
   const { pos, selMes, filtros } = useArmador()
-  const { alternarPapel, alternarMes, fijarPeso, equiponderar, vaciar, fijarFiltros, limpiarFiltros } =
-    useArmadorAcciones()
+  const {
+    alternarPapel,
+    alternarRentaVariable,
+    alternarMes,
+    fijarPeso,
+    equiponderar,
+    vaciar,
+    agregarFci,
+    fijarFiltros,
+    limpiarFiltros,
+  } = useArmadorAcciones()
 
   return (
     <div>
       <p data-testid="pos">{pos.map((p) => p.ticker).join(',')}</p>
       <p data-testid="pesos">{pos.map((p) => `${p.ticker}:${p.peso}`).join(',')}</p>
+      <p data-testid="clases">{pos.map((p) => `${p.ticker}:${p.clase}`).join(',')}</p>
+      <p data-testid="renta-fija">{posicionesRentaFija(pos).map((p) => p.ticker).join(',')}</p>
+      <p data-testid="renta-variable">
+        {posicionesRentaVariable(pos).map((p) => p.ticker).join(',')}
+      </p>
       <p data-testid="selMes">{selMes === null ? 'ninguno' : String(selMes)}</p>
       <p data-testid="filtros">{JSON.stringify(filtros)}</p>
+      <button type="button" onClick={() => alternarRentaVariable('GGAL')}>
+        alternar GGAL
+      </button>
+      <button type="button" onClick={() => agregarFci('FCI Pesos', 10)}>
+        agregar FCI
+      </button>
       <button type="button" onClick={() => alternarPapel('AL30')}>
         alternar AL30
       </button>
@@ -240,5 +270,95 @@ describe('filtros (F-017)', () => {
     expect(screen.getByTestId('pos')).toHaveTextContent('AL30')
     expect(screen.getByTestId('pesos')).toHaveTextContent('AL30:100')
     expect(screen.getByTestId('selMes')).toHaveTextContent('3')
+  })
+})
+
+// --- Clase de posición y selectores (base común de la Tanda 9) --------------------------------
+//
+// La clase reemplazó al booleano `esFci` para que entre la renta variable (F-026). Lo que estos
+// tests fijan es de qué cálculos participa cada clase, que es lo único que la distinción decide.
+
+describe('clase de posición', () => {
+  it('alternarPapel entra como renta fija y alternarRentaVariable como renta variable', async () => {
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'alternar AL30' }))
+    await userEvent.click(screen.getByRole('button', { name: 'alternar GGAL' }))
+
+    expect(screen.getByTestId('clases')).toHaveTextContent('AL30:renta_fija,GGAL:renta_variable')
+  })
+
+  it('agregarFci entra como fci', async () => {
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar FCI' }))
+
+    expect(screen.getByTestId('clases')).toHaveTextContent('FCI Pesos:fci')
+  })
+
+  it('la renta variable reparte peso con la renta fija: el 100% es de la cartera entera', async () => {
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'alternar AL30' }))
+    await userEvent.click(screen.getByRole('button', { name: 'alternar GGAL' }))
+
+    // La cartera estándar del cliente es 60-70 / 30-40: si cada bloque tuviera su propio 100%,
+    // el mix dejaría de ser visible en la ponderación.
+    expect(screen.getByTestId('pesos')).toHaveTextContent('AL30:100,GGAL:50')
+  })
+
+  it('equiponderar y vaciar operan sobre la cartera entera, sin distinguir clase', async () => {
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'alternar AL30' }))
+    await userEvent.click(screen.getByRole('button', { name: 'alternar GGAL' }))
+    await userEvent.click(screen.getByRole('button', { name: 'equiponderar' }))
+
+    expect(screen.getByTestId('pesos')).toHaveTextContent('AL30:50,GGAL:50')
+
+    await userEvent.click(screen.getByRole('button', { name: 'vaciar' }))
+    expect(screen.getByTestId('pos')).toHaveTextContent('')
+  })
+
+  it('alternarRentaVariable saca el ticker si ya estaba', async () => {
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'alternar GGAL' }))
+    await userEvent.click(screen.getByRole('button', { name: 'alternar GGAL' }))
+
+    expect(screen.getByTestId('pos')).toHaveTextContent('')
+  })
+})
+
+describe('selectores por clase', () => {
+  it('el FCI viaja con la renta fija, no aparte', async () => {
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'alternar AL30' }))
+    await userEvent.click(screen.getByRole('button', { name: 'agregar FCI' }))
+    await userEvent.click(screen.getByRole('button', { name: 'alternar GGAL' }))
+
+    // `resolver` ya contempla el FCI —peso sin precio, nominales en null—, mientras que una acción
+    // rompería su matemática de precio cada 100 VN. Por eso el corte es renta variable / el resto.
+    expect(screen.getByTestId('renta-fija')).toHaveTextContent('AL30,FCI Pesos')
+    expect(screen.getByTestId('renta-variable')).toHaveTextContent('GGAL')
+  })
+
+  it('los selectores son funciones puras sobre el array, sin React de por medio', () => {
+    const pos: PosicionArmador[] = [
+      { ticker: 'AL30', peso: 40, clase: 'renta_fija' },
+      { ticker: 'GGAL', peso: 30, clase: 'renta_variable' },
+      { ticker: 'FCI Pesos', peso: 30, clase: 'fci' },
+    ]
+
+    expect(posicionesRentaFija(pos).map((p) => p.ticker)).toEqual(['AL30', 'FCI Pesos'])
+    expect(posicionesRentaVariable(pos).map((p) => p.ticker)).toEqual(['GGAL'])
+  })
+
+  it('una cartera sin renta variable devuelve todo por renta fija y nada por la otra', () => {
+    const pos: PosicionArmador[] = [{ ticker: 'AL30', peso: 100, clase: 'renta_fija' }]
+
+    expect(posicionesRentaFija(pos)).toHaveLength(1)
+    expect(posicionesRentaVariable(pos)).toEqual([])
   })
 })
