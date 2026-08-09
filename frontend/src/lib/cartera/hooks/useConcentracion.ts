@@ -18,6 +18,10 @@
  *
  * El perfil entra en la clave y no en la firma: es el parámetro contra el que se mide, no parte de
  * la cartera, y las tres respuestas de la misma cartera conviven en caché sin pisarse.
+ *
+ * `firmaDePesos` se exporta desde la Tanda 13: F-033 arma carteras simuladas (una por candidata
+ * de rotación sobreviviente) y necesita la misma firma para que sus concentraciones simuladas
+ * compartan caché con las de este hook.
  */
 
 import { useQuery } from '@tanstack/react-query'
@@ -34,7 +38,7 @@ export interface PosicionConPeso {
   peso: number
 }
 
-function firmaDePesos(posiciones: PosicionConPeso[]): string {
+export function firmaDePesos(posiciones: PosicionConPeso[]): string {
   return posiciones.map((p) => `${p.ticker}:${p.peso}`).join('|')
 }
 

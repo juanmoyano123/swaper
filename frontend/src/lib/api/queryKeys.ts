@@ -41,6 +41,12 @@ export const claves = {
     // perfil entra en la clave: la misma cartera contra otro perfil es otra respuesta.
     concentracion: (firma: string, perfil: string) =>
       ['mercado', 'concentracion', perfil, firma] as const,
+    // F-032/F-033: candidatas de rotación para una cartera. Cuelga de mercado por la misma razón
+    // que `concentracion` — el motor razona contra el universo del día, así que una corrida de
+    // ingesta nueva puede cambiar las candidatas sin que la cartera se haya tocado. El perfil
+    // entra en la clave, no en la firma: mismo criterio que `concentracion`.
+    rotaciones: (firma: string, perfil: string) =>
+      ['mercado', 'rotaciones', perfil, firma] as const,
   },
 
   // Condiciones de emisión y demás dato curado: cambia por ingesta, no por paso del tiempo.
