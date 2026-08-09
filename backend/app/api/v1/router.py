@@ -9,12 +9,14 @@ este archivo a la vez. `calendario` (F-015) y `posiciones` (F-029) están montad
 `instrumentos` (F-039) también: la Tanda 7 la construye junto a F-018, que es frontend puro.
 `renta_variable` (F-052) es de la Tanda 8b y sigue el mismo criterio: se monta vacío antes de
 soltar los agentes para que ninguno de los cuatro tenga que tocar este archivo. `concentracion`
-(F-020) es de la Tanda 9, por lo mismo.
+(F-020) es de la Tanda 9, por lo mismo. `armado` (F-019) es de la Tanda 10: se monta vacío para
+que F-022 y F-025 no tengan que tocar este archivo para agregarlo.
 """
 
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    armado,
     auth,
     byma,
     calendario,
@@ -48,3 +50,4 @@ router.include_router(estado.router)
 router.include_router(instrumentos.router)
 router.include_router(renta_variable.router)
 router.include_router(concentracion.router)
+router.include_router(armado.router)

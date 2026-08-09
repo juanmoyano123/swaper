@@ -7,11 +7,13 @@ import { AlertasCalendario } from './components/AlertasCalendario'
 import { CarteraEditable } from './components/CarteraEditable'
 import { CoberturaSeleccion } from './components/CoberturaSeleccion'
 import { GrillaFiltrada } from './components/GrillaFiltrada'
+import { PanelArmadoAsistido } from './components/PanelArmadoAsistido'
 import {
   BloqueRentaVariable,
   PanelConcentracion,
   PanelRenta,
 } from './components/PanelesDeLaCartera'
+import { PanelRendimientos } from './components/PanelRendimientos'
 import { useCalendarioUniverso } from './hooks/useCalendarioUniverso'
 import { ArmadorProvider } from './store/carteraStore'
 
@@ -29,6 +31,12 @@ import { ArmadorProvider } from './store/carteraStore'
  * reemplaza el cuerpo del suyo y nadie edita este archivo, que queda congelado durante la
  * ejecución en paralelo. El orden es deliberado: primero qué cobra la cartera (F-021), después
  * qué riesgo tiene (F-020), y al final el bloque que no participa de ninguno de los dos (F-026).
+ *
+ * **Tanda 10:** `PanelArmadoAsistido` (F-019) va arriba de `CarteraEditable` — precarga la
+ * cartera que esa tabla después edita a mano. `PanelRendimientos` (F-022) va junto a `PanelRenta`
+ * y `PanelConcentracion`: los tres leen `useCarteraResuelta` y responden "cuánto cobra", "qué
+ * riesgo tiene" y "qué rinde", en ese orden. Mismo criterio de congelamiento: cada feature
+ * reemplaza el cuerpo de su propio stub, nadie más edita este archivo.
  */
 export function ArmadorPage() {
   const consulta = useCalendarioUniverso()
@@ -48,8 +56,10 @@ export function ArmadorPage() {
             <CoberturaSeleccion meses={consulta.data.meses} />
             <GrillaFiltrada meses={consulta.data.meses} />
             <AlertasCalendario alertas={consulta.data.alertas} />
+            <PanelArmadoAsistido />
             <CarteraEditable />
             <PanelRenta />
+            <PanelRendimientos />
             <PanelConcentracion />
             <BloqueRentaVariable />
           </ArmadorProvider>
