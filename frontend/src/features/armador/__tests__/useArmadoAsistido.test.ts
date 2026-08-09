@@ -5,7 +5,7 @@
  */
 
 import { QueryClientProvider } from '@tanstack/react-query'
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { createElement, type ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -133,7 +133,10 @@ describe('useArmadoAsistido', () => {
         .catch(() => undefined)
     })
 
-    expect(result.current.mutacion.isError).toBe(true)
+    // `mutateAsync().catch()` resuelve antes de que React confirme el estado de la mutación
+    // (mismo patrón que `useCargarLamina.test.ts`): se espera el estado, no se lo asume resuelto
+    // apenas la promesa se asienta.
+    await waitFor(() => expect(result.current.mutacion.isError).toBe(true))
     expect(result.current.armador.pos).toEqual([])
   })
 })
