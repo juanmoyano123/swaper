@@ -186,6 +186,20 @@ class EspecieUniverso:
     vista. No se usa para calcular nada; es sólo lo que la nota de cobertura del monitor y la
     ficha del instrumento muestran."""
 
+    tipo_tasa: str | None = None
+    """El tipo de tasa crudo de la vista, antes de agruparlo en segmento (`asignar_segmento`).
+
+    Se retiene —`segmentar()` ya lo usaba y lo descartaba— porque F-032 (tanda 12) lo necesita para
+    `clave_emisor_swap`: el Bopreal tiene `clase_activo="bono_soberano"` pero lo emite el BCRA, no
+    el Tesoro, y separar "mismo emisor" en un swap depende de saberlo. Derivarlo del ticker sería
+    la inferencia que la regla 1 prohíbe."""
+
+    calificacion: str | None = None
+    """Calificación crediticia, del dato curado de F-009. Texto libre tal cual la declara la fuente
+    —`'AA(arg)'`, `'AAA (FIX)'`—, sin escala canónica entre calificadoras: **nunca se ordena ni se
+    usa como filtro**. Son 359 de 823 tickers curados (39 %); el faltante se declara donde se
+    muestre (F-031, eje de crédito) y ahí también se declaran los proxies que lo reemplazan."""
+
     @property
     def naturaleza(self) -> str:
         return NATURALEZA_TASA[self.segmento]
@@ -230,6 +244,8 @@ class EspecieUniverso:
             "lamina": self.lamina,
             "sector": self.sector,
             "fuente": self.fuente,
+            "tipo_tasa": self.tipo_tasa,
+            "calificacion": self.calificacion,
         }
 
 
@@ -312,6 +328,8 @@ def segmentar(filas: Iterable[Mapping[str, object]]) -> Segmentacion:
                 lamina=a_numero(fila.get("lamina")),
                 sector=_texto(fila.get("sector")),
                 fuente=_texto(fila.get("fuente")),
+                tipo_tasa=_texto(tipo_tasa) if tipo_tasa else None,
+                calificacion=_texto(fila.get("calificacion")),
             )
         )
 

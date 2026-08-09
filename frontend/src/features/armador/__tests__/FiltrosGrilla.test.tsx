@@ -147,6 +147,7 @@ function especieAl30(): Especie {
     paridad: 0.98,
     lamina: null,
     sector: 'Soberano',
+    calificacion: null,
     dato_sano: true,
     hermanas: [],
   }
@@ -174,6 +175,7 @@ function especieTzx26(): Especie {
     paridad: null,
     lamina: null,
     sector: 'Financiera',
+    calificacion: null,
     dato_sano: true,
     hermanas: [],
   }

@@ -38,6 +38,11 @@ export const esquemaEspecie = z.object({
   /** Sector del emisor, del dato curado de F-009 vía la base común de la tanda 8b. `null` = no
    *  informado y agrupa aparte: no se le asigna uno por parecido con otro emisor (F-017). */
   sector: z.string().nullable(),
+  /** Calificación crediticia, del dato curado de F-009 vía la base común de la tanda 12. Texto
+   *  libre tal cual la declara la fuente (`'AA(arg)'`, `'AAA (FIX)'`): no hay escala canónica
+   *  entre calificadoras, así que nunca se ordena ni se usa como filtro (F-031, eje de crédito).
+   *  359 de 823 tickers curados (39 %); el faltante se declara donde se muestre. */
+  calificacion: z.string().nullable(),
   dato_sano: z.boolean(),
   hermanas: z.array(z.string()),
 })

@@ -43,6 +43,7 @@ function especie(overrides: Partial<Especie>): Especie {
     paridad: null,
     lamina: null,
     sector: null,
+    calificacion: null,
     dato_sano: true,
     hermanas: [],
     ...overrides,

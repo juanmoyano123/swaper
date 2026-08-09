@@ -80,7 +80,15 @@ distinto y hay que poder distinguirlo (`segmentacion.py` resuelve y `servicio.py
 `USD`: no se contradicen, describen la misma cosa con distinto grano. Meter los cuatro valores en un
 campo mezclaría dos vocabularios, y además `moneda_cupon` no se muestra en ninguna pantalla — la
 ficha lee la moneda de pago de `/instrumentos/{ticker}/condiciones`, directo de la tabla curada y
-con su origen. Lo mismo vale para `calificacion`: sumarla acá sería plomería sin pantalla.
+con su origen.
+
+**`calificacion` sí se suma acá, para F-031 (tanda 12).** `instrumentos.calificacion` está en
+`NULL` para todo el universo —mismo caso que la lámina—: `armado.py` la escribe así porque ninguna
+fuente de F-007 la publica. La única fuente viva es `condiciones_emision`, el CSV curado de F-009:
+823 tickers, 359 con calificación (39 %). Viaja como texto libre, tal cual la declara la fuente
+—`'AA(arg)'`, `'AAA (FIX)'`—: no hay escala canónica entre calificadoras y ordenarlas sería la
+inferencia que la regla 11 prohíbe. El eje de crédito del vector de riesgo (F-031) es la pantalla
+que faltaba.
 
 **La lámina viaja como `float`.** En la base es `numeric`, y asyncpg devuelve eso como `Decimal`:
 si llega así al contrato de la API, sale serializado como string y el frontend lo recibe como texto
@@ -134,6 +142,7 @@ COLUMNAS_CURADAS: tuple[tuple[str, str], ...] = (
     ("sector", "COALESCE(ce.sector, i.sector)"),
     ("ley_curada", "ce.ley"),
     ("emisor_curado", "ce.underlying"),
+    ("calificacion", "ce.calificacion"),
 )
 
 _SELECT = ", ".join(

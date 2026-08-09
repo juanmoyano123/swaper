@@ -15,6 +15,7 @@ import {
   PanelRenta,
 } from './components/PanelesDeLaCartera'
 import { PanelRendimientos } from './components/PanelRendimientos'
+import { PanelRiesgo } from './components/PanelRiesgo'
 import { useCalendarioUniverso } from './hooks/useCalendarioUniverso'
 import { ArmadorProvider } from './store/carteraStore'
 
@@ -42,6 +43,10 @@ import { ArmadorProvider } from './store/carteraStore'
  * **Tanda 11:** `PanelComposicion` (F-023) va entre `PanelRendimientos` y `PanelConcentracion` —
  * la curva TIR/duración es rendimiento y duración por posición, así que pega junto a "qué rinde"
  * antes de "qué riesgo tiene". Mismo stub-propio-por-feature.
+ *
+ * **Tanda 12:** `PanelRiesgo` (F-031) va después de `PanelConcentracion` — el vector de seis ejes
+ * lee el resultado de concentración ya cacheado (uno de los seis ejes es ese mismo dato), así que
+ * pega justo detrás de él. Mismo stub-propio-por-feature.
  */
 export function ArmadorPage() {
   const consulta = useCalendarioUniverso()
@@ -67,6 +72,7 @@ export function ArmadorPage() {
             <PanelRendimientos />
             <PanelComposicion />
             <PanelConcentracion />
+            <PanelRiesgo />
             <BloqueRentaVariable />
           </ArmadorProvider>
         )}

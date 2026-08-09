@@ -14,6 +14,10 @@
  * Lo que no resolvió F-029, y lo que F-029 resolvió pero no se pudo valuar (sin nominal, sin
  * precio, sin tipo de cambio) queda fuera de renta/rendimientos/concentración y se declara en la
  * sección de excluidas — nunca se esconde ni se completa con un valor inventado (reglas 1 y 11).
+ *
+ * **Tanda 12:** `SeccionRiesgo` (F-031) va después de `SeccionConcentracion` — el vector de seis
+ * ejes reusa el resultado de concentración ya pedido acá (uno de los seis ejes es ese mismo
+ * dato), así que pega justo detrás. Mismo stub-propio-por-feature que el resto del panel.
  */
 
 import { useMemo, useState } from 'react'
@@ -48,6 +52,8 @@ import {
 
 import { useCarteraCargadaValuada } from '../hooks/useCarteraCargadaValuada'
 import type { MotivoExclusionValuacion, PosicionExcluidaValuacion, PosicionValuada } from '../lib/valuacion'
+
+import { SeccionRiesgo } from './SeccionRiesgo'
 
 const MOTIVO_LABEL: Record<MotivoExclusionValuacion, string> = {
   no_resuelta: 'no resueltas contra el universo — detalle arriba, en la resolución de la cartera',
@@ -127,6 +133,8 @@ export function DiagnosticoCartera({ posiciones }: { posiciones: PosicionCruda[]
       <SeccionRenta calendario={calendario} valuadas={valuadas} />
 
       <SeccionConcentracion perfil={perfil} onPerfil={setPerfil} posiciones={posicionesConPeso} consulta={concentracion} />
+
+      <SeccionRiesgo posiciones={posicionesConPeso} perfil={perfil} />
 
       <ExcluidasDetalle excluidas={excluidas} />
     </section>

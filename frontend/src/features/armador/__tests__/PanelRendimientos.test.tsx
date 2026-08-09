@@ -47,6 +47,7 @@ function especie(extra: Partial<Especie> = {}): Especie {
     paridad: 0.98,
     lamina: null,
     sector: null,
+    calificacion: null,
     dato_sano: true,
     hermanas: [],
     ...extra,
