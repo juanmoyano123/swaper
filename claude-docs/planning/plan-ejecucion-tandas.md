@@ -57,7 +57,7 @@ de ejecución**. Si contradice a `plan.md` en una dependencia, gana `plan.md` y 
 | Tanda | Features | Por qué | Estado |
 |---|---|---|---|
 | 11 | **F-023** (curva TIR/duración) ∥ **F-030** (diagnóstico) | F-023 cierra el trío de métricas (serializado tras F-022); F-030 reusa servicios ya hechos sin modificarlos | completada (09/08/2026) |
-| 12 | **F-031** (vector de riesgo) ∥ **F-032** (motor de rotaciones) | F-031 después de F-030 porque extiende su salida (mandato del plan); F-032 envuelve `detectar_swaps.py`, módulo aparte | pendiente |
+| 12 | **F-031** (vector de riesgo) ∥ **F-032** (motor de rotaciones) | F-031 después de F-030 porque extiende su salida (mandato del plan); F-032 envuelve `detectar_swaps.py`, módulo aparte | completada (09/08/2026) |
 | 13 | **F-033** (bajar riesgo) ∥ **F-035** (costo real) | Módulos distintos. **Salvedad**: si al planificar F-035 resulta que también toca el contrato de la fila de propuesta, F-035 va primero y sola | pendiente |
 | 14 | **F-034** (subir TIR) — sola | Comparte el contrato de la fila de propuesta con F-033 (mandato del plan) | pendiente |
 | 15 | **F-036** (aceptación por rotación) — sola | Consume F-033 + F-034 + F-035 | pendiente |

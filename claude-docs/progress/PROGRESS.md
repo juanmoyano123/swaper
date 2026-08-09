@@ -37,7 +37,7 @@ desde `/build-feature` a medida que cada una se implementa.
 | F-020 | Límites de concentración en vivo | Stage 1 | 175,0 | completada |
 | F-021 | Panel de renta y renta anual | Stage 1 | 285,0 | completada |
 | F-022 | Rendimientos por naturaleza y plazo | Stage 1 | 175,0 | completada |
-| F-023 | Composición y curva TIR/duración | Stage 1 | 48,0 | **completada** |
+| F-023 | Composición y curva TIR/duración | Stage 1 | 48,0 | completada |
 | F-024 | Redondeo por lámina y diferencia | Stage 1 | 200,0 | completada |
 
 > Milestone 2 — "Un asesor arma una cartera desde el calendario y se lleva el número a la
@@ -52,9 +52,9 @@ desde `/build-feature` a medida que cada una se implementa.
 | F-027 | Calendario de balances | Stage 1 | 16,7 | pendiente |
 | F-028 | Ingreso de cartera por tres vías | Stage 1 | 96,0 | completada |
 | F-029 | Resolución de tickers | Stage 1 | 106,7 | completada |
-| F-030 | Valuación y diagnóstico de cartera | Stage 1 | 150,0 | **completada** |
-| F-031 | Vector de riesgo de seis ejes | Stage 1 | 100,0 | pendiente |
-| F-032 | Motor de rotaciones intra-segmento | Stage 1 | 100,0 | pendiente |
+| F-030 | Valuación y diagnóstico de cartera | Stage 1 | 150,0 | completada |
+| F-031 | Vector de riesgo de seis ejes | Stage 1 | 100,0 | **completada** |
+| F-032 | Motor de rotaciones intra-segmento | Stage 1 | 100,0 | **completada** |
 | F-035 | Costo real de rotar y cupón próximo | Stage 1 | 180,0 | pendiente |
 
 > Milestone 3 — "El diagnóstico de una cartera ajena tarda minutos y no horas."
@@ -381,8 +381,53 @@ el frontend (46 archivos) y 1060 en el backend.** Van **35 de 42 features de Sta
   cubre con `waitFor`, patrón que este test no había seguido. Se corrigió como commit aparte, fuera
   de F-023 y F-030.
 
-Siguiente paso: la **tanda 12 — F-031 (vector de riesgo) ∥ F-032 (motor de rotaciones)**. F-031 va
-después de F-030 porque extiende su salida; F-032 envuelve `detectar_swaps.py` en un módulo aparte.
+**Tanda 12 cerrada el 09/08/2026** — F-031 (vector de riesgo de seis ejes) ∥ F-032 (motor de
+rotaciones intra-segmento), en paralelo con un commit por feature. **470 tests offline en el
+frontend (50 archivos) y 1087 en el backend.** Van **37 de 42 features de Stage 1**.
+
+- **F-031 es un servicio compartido, no un panel por pantalla**: `src/lib/cartera/riesgo.ts` (lib
+  pura) + `src/components/VectorDeRiesgo.tsx` (seis barras paralelas, nunca radar — el área de un
+  radar se lee como puntaje) se montan tal cual en `PanelRiesgo` (armador) y `SeccionRiesgo`
+  (diagnóstico), sin una segunda implementación. El riesgo R12 ("los tres perfiles se calculan
+  distinto") se verifica con un test que arma la misma composición por las tres formas posibles
+  —armador, diagnóstico y una "propuesta" cruda que todavía no existe como feature— y afirma
+  igualdad exacta de los seis ejes entre las tres.
+- **El eje de concentración no recalcula nada**: lee el `Concentracion` que ya llegó por
+  `useConcentracion` (cache-hit con el panel de F-020/F-030 por la misma firma), así que
+  `SOBERANO_AR` llega hecho del backend y el eje sólo lo muestra.
+- **El eje de calificación agrupa por string exacto y nunca ordena** (39 % de cobertura, regla 11
+  y riesgo R5): cuando falta, declara en pantalla los tres proxies que la reemplazan (tope de
+  rendimiento del segmento, percentil de liquidez, topes de concentración) — la calificación no
+  filtra en ningún lado del sistema, ni acá ni en F-032.
+- **F-032 envuelve `detectar_swaps.py` en `backend/app/rotaciones/`**, sobre la vista viva del
+  universo (sin deduplicar, porque los swaps de perfil rotan entre especies de la misma emisión —
+  MEP → Cable). Los parámetros del motor (percentil de liquidez, tope anti-distress) salen de
+  `PERFILES`: con `perfil=moderado` reproduce los defaults del CLI, así que la paridad contra el
+  motor sale sin ajustar nada a mano.
+- **El test de paridad dio exacto sobre el consolidado versionado**: 1806 candidatas idénticas en
+  las dos implementaciones, y el swap que la mesa efectivamente ejecutó (TLCWO → TLCMO) aparece en
+  las dos — riesgo R9 cerrado con evidencia, no por inspección. Contra la base **viva** (no el
+  snapshot versionado) TLCWO ya no propone TLCMO porque el mercado se movió desde que se armó el
+  consolidado; no es una regresión, es exactamente el caso que el plan previó, y la fixture
+  sintética del motor puro sigue afirmando el caso como aceptación de respaldo.
+- **F-032 no incluye costo real de rotar** (arancel, spread bid/ask, payback): toda respuesta trae
+  la alerta `costo_rotacion_no_calculado` para que la ausencia se declare en vez de leerse como
+  costo cero — llega con F-035 (tanda 13). Tampoco hay UI todavía: la pantalla de rotaciones es
+  F-036 (tanda 15); esta tanda es sólo el servicio y su contrato.
+- **El Bopreal se separa del resto del Tesoro sólo para "mismo emisor" en un swap** (`BCRA` en vez
+  de `SOBERANO_AR`, porque lo emite el Central y no el Tesoro), sin tocar cómo lo agrupa
+  concentración (F-020) — es una clave de riesgo distinta para una pregunta distinta, documentado
+  como divergencia deliberada del mismo dato.
+- **Base común de la tanda**: `EspecieUniverso` ganó `calificacion` (de `condiciones_emision`, como
+  la lámina — `instrumentos.calificacion` está en NULL para todo el universo) y `tipo_tasa`
+  (se leía para segmentar y se descartaba). Los dos campos los necesitaban las dos features, así
+  que fueron al punto de contacto único antes de soltar los agentes. Trece fixtures de test de
+  features previas que armaban un `Especie` completo necesitaron un campo más
+  (`calificacion: null`) para seguir tipando — ajuste mecánico, sin tocar ningún test funcional.
+
+Siguiente paso: la **tanda 13 — F-033 (bajar riesgo) ∥ F-035 (costo real)**. Módulos distintos;
+si al planificar F-035 resulta que también toca el contrato de la fila de propuesta, F-035 va
+primero y sola (salvedad ya declarada en `plan-ejecucion-tandas.md`).
 
 ### Lo que F-013 puso a la vista, y la decisión que dejó abierta
 
