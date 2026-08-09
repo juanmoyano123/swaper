@@ -33,10 +33,10 @@ desde `/build-feature` a medida que cada una se implementa.
 | F-016 | Grilla-selector de doce meses | Stage 1 | 114,0 | completada |
 | F-017 | Filtros de la grilla | Stage 1 | 112,0 | **completada** |
 | F-018 | Cartera editable y ponderación | Stage 1 | 140,0 | completada |
-| F-019 | Armado asistido | Stage 1 | 83,3 | pendiente |
-| F-020 | Límites de concentración en vivo | Stage 1 | 175,0 | **completada** |
-| F-021 | Panel de renta y renta anual | Stage 1 | 285,0 | **completada** |
-| F-022 | Rendimientos por naturaleza y plazo | Stage 1 | 175,0 | pendiente |
+| F-019 | Armado asistido | Stage 1 | 83,3 | **completada** |
+| F-020 | Límites de concentración en vivo | Stage 1 | 175,0 | completada |
+| F-021 | Panel de renta y renta anual | Stage 1 | 285,0 | completada |
+| F-022 | Rendimientos por naturaleza y plazo | Stage 1 | 175,0 | **completada** |
 | F-023 | Composición y curva TIR/duración | Stage 1 | 48,0 | pendiente |
 | F-024 | Redondeo por lámina y diferencia | Stage 1 | 200,0 | **completada** |
 
@@ -47,8 +47,8 @@ desde `/build-feature` a medida que cada una se implementa.
 
 | ID | Feature | Etiqueta | RICE | Estado |
 |---|---|---|---|---|
-| F-025 | Carga asistida de lámina | Stage 1 | 53,3 | pendiente |
-| F-026 | Bloque de renta variable | Stage 1 | 80,0 | **completada** |
+| F-025 | Carga asistida de lámina | Stage 1 | 53,3 | **completada** |
+| F-026 | Bloque de renta variable | Stage 1 | 80,0 | completada |
 | F-027 | Calendario de balances | Stage 1 | 16,7 | pendiente |
 | F-028 | Ingreso de cartera por tres vías | Stage 1 | 96,0 | completada |
 | F-029 | Resolución de tickers | Stage 1 | 106,7 | completada |
@@ -300,6 +300,50 @@ una tabla: muestra cuánto cobra la cartera, qué riesgo concentra y qué parte 
   lo que se le había pedido: `financialData` mezcla márgenes y ROE —dato duro— con `targetMeanPrice`
   y `recommendationKey` —opinión—. Pedirlo y descartar campos deja el juicio ajeno adentro del
   proceso aunque no se muestre; no pedirlo lo mantiene afuera. Sólo viaja `assetProfile`.
+
+**Tanda 10 cerrada el 09/08/2026** — F-019 (armado asistido) ∥ F-022 (rendimientos) ∥ F-025 (carga
+de lámina), las tres en paralelo con un commit por feature. **1060 tests offline en el backend y
+378 en el frontend.** Van **33 de 42 features de Stage 1**. Antes de abrir la tanda se commiteó
+aparte el rediseño pendiente de F-017 (filtro de fábrica TIR≥6%/cupones + grilla en tarjetas por
+mes, que venía del cierre de la Tanda 6): la regla "una tanda no arranca hasta que la anterior
+tiene tests en verde y commit" se aplicó también a trabajo suelto, no sólo a tandas formales.
+
+- **F-019 es el port más grande de la serie hasta ahora**, y encontró dos correcciones reales
+  contra su propio plan, no contra el motor: (1) el endpoint no puede pasarle `saneado.especies`
+  (la vista viva, una fila por especie de liquidación) a `armar()` — el propio motor exige
+  `dedup=True` porque comprar AL30 y AL30D es comprar el mismo bono dos veces creyendo que se
+  diversifica; la corrección usa `saneado.emisiones().colapsado()`, que su propio docstring ya
+  llama "la vista del armador". (2) El fixture versionado (`universo_consolidado.xlsx`) es
+  anterior a F-012 y no tiene `moneda_cotizacion`, así que el test de paridad tuvo que aislar el
+  universo de entrada para comparar específicamente el algoritmo de selección y no arrastrar un
+  problema del snapshot. La paridad contra `tools/armar_cartera.py` dio 13 de 15 escenarios
+  idénticos ticker por ticker; los otros 2 difieren en como máximo 2 tickers cada uno, y es la
+  firma esperada del reparto sectorial nuevo (GWT-4/5), que por diseño a veces elige distinto de
+  la selección pura por rendimiento del motor original.
+- **La divergencia de `min_sectores` entre fichas, declarada y no resuelta por decisión.** El GWT
+  de F-019 dice que Soberano y Subsoberano no cuentan para el mínimo sectorial; el docstring de
+  `app/concentracion/perfiles.py` (F-020) dice que sí cuentan como "sector presente" aunque estén
+  exentos del tope. F-019 siguió el GWT literal de su propia ficha y no tocó `concentracion/`: la
+  divergencia entre las dos pantallas queda declarada, no unificada por esta feature.
+- **F-025 encontró y corrigió una landmine de persistencia que el propio plan alertaba pero no
+  resolvía del todo**: escribir sólo la lámina con el upsert existente de `condiciones/` pisaría
+  con NULL las otras cinco columnas curadas de la fila (ley, sector, calificación, emisor, moneda
+  de pago). La escritura quedó en un UPDATE nuevo, acotado a las tres columnas de lámina. También
+  encontró que FastAPI no levanta con una función que a veces devuelve `dict` y a veces
+  `JSONResponse` (para el 409 de conflicto) sin `response_model=None` — mismo patrón que ya usaba
+  `health.py` para su propio caso de respuesta mixta.
+- **F-022 es la única de las tres 100 % frontend**, confirmando la lectura del plan de tandas: el
+  dato ya estaba completo en `useCarteraResuelta` desde la Tanda 9 y no hizo falta abrir la deuda
+  de "un solo servicio de métricas de cartera" (`plan.md:2581`) antes de tiempo — esa deuda sigue
+  para cuando F-023 la fuerce, en la Tanda 11.
+- **Primer uso de `useMutation` en el repo**, introducido por F-025 y reusado por F-019 al llegar
+  segundo a esa parte del código: hasta esta tanda todo el frontend usaba `useQuery`, incluso para
+  los POST-que-son-lectura (`/concentracion`, `/calendario/cartera`). Es el primer POST que
+  realmente muta estado del servidor desde el armador.
+
+Siguiente paso: la **tanda 11 — F-023 (curva TIR/duración) ∥ F-030 (diagnóstico)**. F-023 cierra el
+trío de métricas de cartera (serializada tras F-022); F-030 reusa servicios ya hechos sin
+modificarlos.
 
 ### Lo que F-013 puso a la vista, y la decisión que dejó abierta
 
