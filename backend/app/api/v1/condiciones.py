@@ -11,12 +11,16 @@ los valores en pugna. Como la semilla se relee del artefacto en cada corrida, vo
 vuelve a reportar los mismos conflictos mientras sigan en el CSV.
 """
 
+from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from app.api.deps import get_db
 from app.condiciones import medir_cobertura_curada, sembrar
+from app.condiciones.carga_manual import cargar_lamina_manual
 from app.condiciones.persistencia import COLUMNAS, TABLA, fila_para_api
 from app.core.config import Settings, get_settings
 from app.core.pagination import CursorParams, Page, build_page
@@ -89,3 +93,46 @@ async def listado(
     return build_page(
         [fila_para_api(f) for f in filas], params.limit, lambda f: {"ticker": f["ticker"]}
     )
+
+
+class CargaManualLamina(BaseModel):
+    valor: Annotated[float, Field(gt=0)]
+
+
+@router.post(
+    "/{ticker}/lamina",
+    summary="Carga manual de la lámina de una especie, con trazabilidad y propagación",
+    response_model=None,
+    responses={
+        409: {"description": "La lámina cargada contradice un valor de otro origen"},
+        503: {"description": "La base de datos no está disponible"},
+    },
+)
+async def cargar_lamina(
+    ticker: str,
+    cuerpo: CargaManualLamina,
+    conn: Annotated[object, Depends(get_db)],
+) -> dict[str, object] | JSONResponse:
+    """Carga la lámina de `ticker` a mano y la propaga a las demás especies de la misma emisión.
+
+    200 cuando `resolver()` resuelve sin conflicto: el triplete final guardado. 409 —no 500— cuando
+    la lámina cargada contradice un valor ya declarado de otro origen: es un resultado válido del
+    dominio (F-009), no un error de servidor, y el cuerpo trae los dos valores en pugna con sus
+    orígenes para que el frontend los muestre tal cual.
+    """
+    resultado = await cargar_lamina_manual(conn, ticker, cuerpo.valor, date.today())
+
+    if not resultado.guardado:
+        conflicto = resultado.conflicto.como_dict() if resultado.conflicto is not None else None
+        return JSONResponse(
+            status_code=409,
+            content={"guardado": False, "ticker": resultado.ticker, "conflicto": conflicto},
+        )
+
+    return {
+        "guardado": True,
+        "ticker": resultado.ticker,
+        "lamina": resultado.lamina,
+        "lamina_origen": resultado.origen,
+        "lamina_fecha": resultado.fecha.isoformat() if resultado.fecha is not None else None,
+    }

@@ -17,13 +17,14 @@
  * variable afuera del resolver de bonos.
  */
 
-import { type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
 import { MiniCalendario, type CeldaMes } from '@/components/MiniCalendario'
 import { fmtMonto, fmtNumero, fmtPct, SIN_DATO } from '@/lib/fmt'
 
 import { AlertasCalendario } from './AlertasCalendario'
 import { useCalendarioCartera } from '../hooks/useCalendarioCartera'
+import { useCargarLamina } from '../hooks/useCargarLamina'
 import { useCarteraResuelta } from '../hooks/useCarteraResuelta'
 import type { Especie } from '../lib/schema'
 import { type PosicionResuelta, type ResumenAjuste } from '../lib/resolver'
@@ -278,7 +279,10 @@ function FilaCartera({
             <> · lám. {fmtNumero(especie.lamina, 0)}</>
           )}
           {resuelta?.laminaConocida === false && posicion.clase !== 'fci' && (
-            <span style={{ color: 'var(--ac2)' }}> · lámina no informada</span>
+            <>
+              {' · '}
+              <InputLamina ticker={posicion.ticker} />
+            </>
           )}
         </div>
       </div>
@@ -333,5 +337,82 @@ function FilaCartera({
         ×
       </button>
     </div>
+  )
+}
+
+/** Carga asistida de lámina, in situ — F-025. Reemplaza el "lámina no informada" de la fila con un
+ *  input chico: sin salir del armador, el asesor tipea el valor y la propagación por emisión la
+ *  resuelve el backend. En éxito no hay estado que limpiar acá — `useCargarLamina` invalida el
+ *  universo y la fila deja de pedir este componente sola, porque `laminaConocida` pasa a `true`. */
+function InputLamina({ ticker }: { ticker: string }) {
+  const [texto, setTexto] = useState('')
+  const cargarLamina = useCargarLamina()
+  const conflicto =
+    cargarLamina.data && !cargarLamina.data.guardado ? cargarLamina.data.conflicto : null
+
+  function confirmar() {
+    const valor = Number(texto)
+    if (!texto || !Number.isFinite(valor) || valor <= 0) return
+    cargarLamina.mutate(
+      { ticker, valor },
+      { onSuccess: (resultado) => resultado.guardado && setTexto('') },
+    )
+  }
+
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      <input
+        type="number"
+        className="mono num-sin-flechas"
+        value={texto}
+        disabled={cargarLamina.isPending}
+        placeholder="lámina"
+        min={0}
+        onChange={(evento) => setTexto(evento.target.value)}
+        onKeyDown={(evento) => {
+          if (evento.key === 'Enter') confirmar()
+        }}
+        aria-label={`cargar lámina de ${ticker}`}
+        style={{
+          width: 54,
+          font: 'inherit',
+          fontSize: 10,
+          color: 'var(--tx)',
+          background: 'var(--pan2)',
+          border: '1px solid var(--lin)',
+          borderRadius: 3,
+          padding: '1px 3px',
+        }}
+      />
+      <button
+        type="button"
+        onClick={confirmar}
+        disabled={cargarLamina.isPending}
+        aria-label={`confirmar lámina de ${ticker}`}
+        style={{
+          font: 'inherit',
+          fontSize: 10,
+          border: 'none',
+          background: 'transparent',
+          color: cargarLamina.isPending ? 'var(--sd)' : 'var(--dim)',
+          cursor: cargarLamina.isPending ? 'default' : 'pointer',
+          padding: 0,
+        }}
+      >
+        ✓
+      </button>
+      {conflicto && (
+        <span
+          role="alert"
+          style={{ color: 'var(--ac2)' }}
+          title="el sistema no elige entre valores de distinto origen: reintentá con el valor correcto"
+        >
+          conflicto:{' '}
+          {Object.entries(conflicto.valores)
+            .map(([tkr, val]) => `${tkr}=${val}`)
+            .join(' vs ')}
+        </span>
+      )}
+    </span>
   )
 }

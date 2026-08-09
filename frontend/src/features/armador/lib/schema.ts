@@ -157,3 +157,28 @@ export const esquemaTipoDeCambio = z.object({
 })
 
 export type RespuestaTipoDeCambio = z.infer<typeof esquemaTipoDeCambio>
+
+/**
+ * `POST /api/v1/condiciones/{ticker}/lamina` — F-025. Sólo el camino 200: el 409 de conflicto no
+ * pasa por acá, `apiFetch` lanza antes de validar el cuerpo contra ningún esquema en ese caso (ver
+ * `useCargarLamina.ts`, que lee el conflicto de `ApiError.details`).
+ */
+export const esquemaResultadoCargaLamina = z.object({
+  guardado: z.literal(true),
+  ticker: z.string(),
+  lamina: z.number(),
+  lamina_origen: z.string(),
+  lamina_fecha: z.string(),
+})
+
+export type ResultadoCargaLamina = z.infer<typeof esquemaResultadoCargaLamina>
+
+/** El shape de `Conflicto.como_dict()` (`app/condiciones/resolucion.py`), tal cual viaja en el
+ *  cuerpo del 409: los dos valores en pugna, por ticker, sin que el sistema elija ninguno. */
+export const esquemaConflictoLamina = z.object({
+  campo: z.string(),
+  emision: z.string(),
+  valores: z.record(z.string(), z.number()),
+})
+
+export type ConflictoLamina = z.infer<typeof esquemaConflictoLamina>

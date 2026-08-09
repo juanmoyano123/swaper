@@ -101,25 +101,34 @@ function responderCon({
   especies = [],
   tipoDeCambio = { valor: 1500, disponible: true },
   calendario = calendarioVacio(),
+  lamina,
 }: {
   especies?: Especie[]
   tipoDeCambio?: { valor: number | null; disponible: boolean }
   calendario?: unknown
+  /** F-025: respuesta de `POST .../lamina`. Sin esto, ese endpoint no está mockeado — como los
+   *  demás, tirar si un test lo golpea sin haberlo declarado. */
+  lamina?: { status: number; cuerpo: unknown }
 } = {}) {
-  const fetchMock = vi.fn((entrada: RequestInfo | URL) => {
+  const fetchMock = vi.fn((entrada: RequestInfo | URL, _init?: RequestInit) => {
     const url = typeof entrada === 'string' ? entrada : entrada.toString()
     let cuerpo: unknown
+    let status = 200
     if (url.includes('/emisiones/especies')) {
       cuerpo = { items: especies, next_cursor: null }
     } else if (url.includes('/tipo-de-cambio')) {
       cuerpo = { tipo_de_cambio: tipoDeCambio, alertas: [] }
     } else if (url.includes('/calendario/cartera')) {
       cuerpo = calendario
+    } else if (url.includes('/lamina')) {
+      if (!lamina) throw new Error(`fetch no mockeado en este test: ${url}`)
+      status = lamina.status
+      cuerpo = lamina.cuerpo
     } else {
       throw new Error(`fetch no mockeado en este test: ${url}`)
     }
     return Promise.resolve(
-      new Response(JSON.stringify(cuerpo), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      new Response(JSON.stringify(cuerpo), { status, headers: { 'Content-Type': 'application/json' } }),
     )
   })
   vi.stubGlobal('fetch', fetchMock)
@@ -273,7 +282,8 @@ describe('F-024: redondeo por lámina', () => {
     await userEvent.click(screen.getByRole('button', { name: 'monto 10.000' }))
 
     const fila = await screen.findByRole('row', { name: 'AL30' })
-    expect(within(fila).getByText(/lámina no informada/)).toBeInTheDocument()
+    // F-025: en vez del texto fijo "lámina no informada", la fila ofrece un input para cargarla.
+    expect(within(fila).getByLabelText('cargar lámina de AL30')).toBeInTheDocument()
     // Sin lámina, el VN de F-018 no cae en ningún múltiplo inventado: 4.761,90... redondeado a
     // enteros para mostrar (4.762), no floreado a 100 como en GWT-1 (4.700).
     expect(within(fila).getByText(/VN 4\.762/)).toBeInTheDocument()
@@ -339,5 +349,76 @@ describe('vaciar', () => {
     expect(screen.getByRole('row', { name: 'AL30' })).toBeInTheDocument()
 
     confirmMock.mockRestore()
+  })
+})
+
+// --- F-025: carga asistida de lámina --------------------------------------------------------------
+
+describe('F-025: carga asistida de lámina', () => {
+  function llamadaALamina(fetchMock: ReturnType<typeof responderCon>) {
+    return fetchMock.mock.calls.find(([entrada]) =>
+      (typeof entrada === 'string' ? entrada : entrada.toString()).includes('/lamina'),
+    )
+  }
+
+  it('tipear y confirmar dispara la carga con el ticker y el valor correctos', async () => {
+    const fetchMock = responderCon({
+      especies: [especie({ lamina: null })],
+      lamina: {
+        status: 200,
+        cuerpo: {
+          guardado: true,
+          ticker: 'AL30',
+          lamina: 100,
+          lamina_origen: 'carga manual',
+          lamina_fecha: '2026-08-08',
+        },
+      },
+    })
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar AL30' }))
+    const fila = await screen.findByRole('row', { name: 'AL30' })
+
+    await userEvent.type(within(fila).getByLabelText('cargar lámina de AL30'), '100')
+    await userEvent.click(within(fila).getByLabelText('confirmar lámina de AL30'))
+
+    await vi.waitFor(() => expect(llamadaALamina(fetchMock)).toBeDefined())
+    const [entrada, init] = llamadaALamina(fetchMock)!
+    expect((typeof entrada === 'string' ? entrada : entrada.toString())).toContain(
+      '/api/v1/condiciones/AL30/lamina',
+    )
+    expect(init?.method).toBe('POST')
+    expect(JSON.parse(init?.body as string)).toEqual({ valor: 100 })
+  })
+
+  it('en conflicto, muestra los dos valores en pugna y no dispara un alert nativo', async () => {
+    const alertaNativa = vi.fn()
+    vi.stubGlobal('alert', alertaNativa)
+    responderCon({
+      especies: [especie({ lamina: null })],
+      lamina: {
+        status: 409,
+        cuerpo: {
+          guardado: false,
+          ticker: 'AL30',
+          conflicto: { campo: 'lamina', emision: 'AL30', valores: { AL30: 1000, AL30D: 500 } },
+        },
+      },
+    })
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar AL30' }))
+    const fila = await screen.findByRole('row', { name: 'AL30' })
+
+    await userEvent.type(within(fila).getByLabelText('cargar lámina de AL30'), '1000')
+    await userEvent.click(within(fila).getByLabelText('confirmar lámina de AL30'))
+
+    const conflicto = await within(fila).findByRole('alert')
+    expect(conflicto).toHaveTextContent('AL30=1000')
+    expect(conflicto).toHaveTextContent('AL30D=500')
+    expect(alertaNativa).not.toHaveBeenCalled()
+    // El input sigue disponible para reintentar con otro valor, no se reemplaza por el mensaje.
+    expect(within(fila).getByLabelText('cargar lámina de AL30')).toBeInTheDocument()
   })
 })
