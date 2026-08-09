@@ -8,6 +8,7 @@ import { CarteraEditable } from './components/CarteraEditable'
 import { CoberturaSeleccion } from './components/CoberturaSeleccion'
 import { GrillaFiltrada } from './components/GrillaFiltrada'
 import { PanelArmadoAsistido } from './components/PanelArmadoAsistido'
+import { PanelComposicion } from './components/PanelComposicion'
 import {
   BloqueRentaVariable,
   PanelConcentracion,
@@ -37,6 +38,10 @@ import { ArmadorProvider } from './store/carteraStore'
  * y `PanelConcentracion`: los tres leen `useCarteraResuelta` y responden "cuánto cobra", "qué
  * riesgo tiene" y "qué rinde", en ese orden. Mismo criterio de congelamiento: cada feature
  * reemplaza el cuerpo de su propio stub, nadie más edita este archivo.
+ *
+ * **Tanda 11:** `PanelComposicion` (F-023) va entre `PanelRendimientos` y `PanelConcentracion` —
+ * la curva TIR/duración es rendimiento y duración por posición, así que pega junto a "qué rinde"
+ * antes de "qué riesgo tiene". Mismo stub-propio-por-feature.
  */
 export function ArmadorPage() {
   const consulta = useCalendarioUniverso()
@@ -60,6 +65,7 @@ export function ArmadorPage() {
             <CarteraEditable />
             <PanelRenta />
             <PanelRendimientos />
+            <PanelComposicion />
             <PanelConcentracion />
             <BloqueRentaVariable />
           </ArmadorProvider>

@@ -1,36 +1,6 @@
 /**
- * El calendario de doce meses de la cartera en construcción — F-018, sobre F-015/F-029.
- *
- * Mismo endpoint que alimenta el panel de renta de F-021; acá sólo se usa para el mini-calendario
- * de cada fila y para las alertas (`fuera_del_universo` incluida). `esquemaCalendarioUniverso` se
- * importa de F-016: es el mismo contrato de respuesta que ya usa `/calendario/universo`.
+ * Se movió a `@/lib/cartera/hooks/useCalendarioCartera` en la Tanda 11 (deuda de `plan.md:2581`).
+ * Re-exportado acá para no editar los importadores existentes del armador.
  */
 
-import { useQuery } from '@tanstack/react-query'
-
-import { TIEMPOS } from '@/app/queryClient'
-import { apiFetch } from '@/lib/api/client'
-import { claves } from '@/lib/api/queryKeys'
-
-import { firmaDeCartera } from '../lib/firmaDeCartera'
-import { esquemaCalendarioUniverso } from '../lib/schema'
-
-export function useCalendarioCartera(posiciones: { ticker: string; monto: number }[]) {
-  const firma = firmaDeCartera(posiciones)
-  return useQuery({
-    queryKey: claves.mercado.calendarioCartera(firma),
-    queryFn: () =>
-      apiFetch('/api/v1/calendario/cartera?detalle=true', esquemaCalendarioUniverso, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          posiciones: posiciones.map((p) => ({ ticker: p.ticker, monto: p.monto })),
-        }),
-      }),
-    // El endpoint exige al menos una posición (`min_length=1`): con la lista vacía daría 422, así
-    // que nunca se llama vacía.
-    enabled: posiciones.length > 0,
-    ...TIEMPOS.mercado,
-    retry: false,
-  })
-}
+export { useCalendarioCartera } from '@/lib/cartera/hooks/useCalendarioCartera'

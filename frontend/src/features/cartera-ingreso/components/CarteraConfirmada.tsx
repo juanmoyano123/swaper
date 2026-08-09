@@ -5,8 +5,13 @@
  * ticker lo contesta `ResolucionCartera`, que es F-029 y vive en su propia feature — este
  * componente sólo le pasa las posiciones. La división importa: si la resolución viviera acá, el
  * ingreso de cartera dependería del backend para poder terminar, y hoy no depende de nada.
+ *
+ * **Tanda 11:** `DiagnosticoCartera` (F-030) se monta debajo de `ResolucionCartera`, con el mismo
+ * criterio — recibe las posiciones crudas y resuelve por su cuenta lo que necesita valuar la
+ * cartera. Base común de la tanda; el cuerpo lo reemplaza F-030.
  */
 
+import { DiagnosticoCartera } from '@/features/cartera-diagnostico/components/DiagnosticoCartera'
 import { ResolucionCartera } from '@/features/cartera-resolucion/components/ResolucionCartera'
 
 import type { PosicionCruda } from '../types'
@@ -35,6 +40,8 @@ export function CarteraConfirmada({
       {/* Se mandan también las inválidas: una fila que no se pudo leer sigue siendo plata del
           cliente, y sacarla del pedido la sacaría del diagnóstico de cobertura. */}
       <ResolucionCartera posiciones={posiciones} />
+
+      <DiagnosticoCartera posiciones={posiciones} />
 
       <div style={{ marginTop: 14 }}>
         <BotonAccion onClick={onCargarOtra}>Cargar otra cartera</BotonAccion>
