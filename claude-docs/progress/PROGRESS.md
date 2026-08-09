@@ -31,14 +31,14 @@ desde `/build-feature` a medida que cada una se implementa.
 | F-014 | Autenticación y aislamiento por asesor | Stage 1 | 200,0 | completada |
 | F-015 | API del calendario de doce meses | Stage 1 | 285,0 | completada |
 | F-016 | Grilla-selector de doce meses | Stage 1 | 114,0 | completada |
-| F-017 | Filtros de la grilla | Stage 1 | 112,0 | **completada** |
+| F-017 | Filtros de la grilla | Stage 1 | 112,0 | completada |
 | F-018 | Cartera editable y ponderación | Stage 1 | 140,0 | completada |
-| F-019 | Armado asistido | Stage 1 | 83,3 | **completada** |
+| F-019 | Armado asistido | Stage 1 | 83,3 | completada |
 | F-020 | Límites de concentración en vivo | Stage 1 | 175,0 | completada |
 | F-021 | Panel de renta y renta anual | Stage 1 | 285,0 | completada |
-| F-022 | Rendimientos por naturaleza y plazo | Stage 1 | 175,0 | **completada** |
-| F-023 | Composición y curva TIR/duración | Stage 1 | 48,0 | pendiente |
-| F-024 | Redondeo por lámina y diferencia | Stage 1 | 200,0 | **completada** |
+| F-022 | Rendimientos por naturaleza y plazo | Stage 1 | 175,0 | completada |
+| F-023 | Composición y curva TIR/duración | Stage 1 | 48,0 | **completada** |
+| F-024 | Redondeo por lámina y diferencia | Stage 1 | 200,0 | completada |
 
 > Milestone 2 — "Un asesor arma una cartera desde el calendario y se lleva el número a la
 > reunión." Depende de `claude-docs/planning/design-system.md` (Fase 3, ya bajado).
@@ -47,12 +47,12 @@ desde `/build-feature` a medida que cada una se implementa.
 
 | ID | Feature | Etiqueta | RICE | Estado |
 |---|---|---|---|---|
-| F-025 | Carga asistida de lámina | Stage 1 | 53,3 | **completada** |
+| F-025 | Carga asistida de lámina | Stage 1 | 53,3 | completada |
 | F-026 | Bloque de renta variable | Stage 1 | 80,0 | completada |
 | F-027 | Calendario de balances | Stage 1 | 16,7 | pendiente |
 | F-028 | Ingreso de cartera por tres vías | Stage 1 | 96,0 | completada |
 | F-029 | Resolución de tickers | Stage 1 | 106,7 | completada |
-| F-030 | Valuación y diagnóstico de cartera | Stage 1 | 150,0 | pendiente |
+| F-030 | Valuación y diagnóstico de cartera | Stage 1 | 150,0 | **completada** |
 | F-031 | Vector de riesgo de seis ejes | Stage 1 | 100,0 | pendiente |
 | F-032 | Motor de rotaciones intra-segmento | Stage 1 | 100,0 | pendiente |
 | F-035 | Costo real de rotar y cupón próximo | Stage 1 | 180,0 | pendiente |
@@ -341,9 +341,48 @@ tiene tests en verde y commit" se aplicó también a trabajo suelto, no sólo a 
   los POST-que-son-lectura (`/concentracion`, `/calendario/cartera`). Es el primer POST que
   realmente muta estado del servidor desde el armador.
 
-Siguiente paso: la **tanda 11 — F-023 (curva TIR/duración) ∥ F-030 (diagnóstico)**. F-023 cierra el
-trío de métricas de cartera (serializada tras F-022); F-030 reusa servicios ya hechos sin
-modificarlos.
+**Tanda 11 cerrada el 09/08/2026** — F-023 (composición y curva TIR/duración) ∥ F-030 (valuación y
+diagnóstico de la cartera cargada), en paralelo con un commit por feature. **430 tests offline en
+el frontend (46 archivos) y 1060 en el backend.** Van **35 de 42 features de Stage 1**.
+
+- **La deuda de `plan.md:2581` ("servicio de métricas de cartera, una sola vez y bien") se saldó
+  en la base común**, antes de soltar los agentes: `rendimientos.ts`, `renta.ts`, los esquemas de
+  calendario/especie/concentración y sus cuatro hooks de TanStack Query se movieron de
+  `features/armador/lib` y `features/armador/hooks` a `frontend/src/lib/cartera/`, compartido
+  entre el armador y el diagnóstico. No hizo falta un endpoint de resumen backend — la deuda era
+  de duplicación frontend, no de cálculo faltante. Los ~25 importadores del armador no se tocaron:
+  cada archivo original quedó como shim de re-export de una línea, y la suite existente lo
+  verificó sin editar un test.
+- **F-030 depende de esa base común para su propio criterio de aceptación.** El riesgo R12
+  (`plan.md:2774`, "la misma composición cargada y armada produce los mismos números") se verifica
+  con un test de paridad (`cartera-diagnostico/__tests__/paridad.test.ts`) que arma la misma
+  tenencia física por `resolver()` del armador y por `valuarCartera()` del diagnóstico, y compara
+  los resultados de `rendimientosPorNaturaleza`/`plazoPromedio`/`sensibilidadPorSegmento` — las
+  mismas funciones de `@/lib/cartera/metricas` — sobre las dos salidas. Dio exacto, sin
+  divergencia de floats.
+- **F-030 tuvo que resolver un adaptador que el plan dejó como diseño, no como código**: el
+  contrato de F-029 (`PosicionResuelta`) no trae precio, rendimiento ni duración — sólo lo que el
+  asesor declaró y lo que el backend pudo vincular. `lib/valuacion.ts::valuarCartera()` cruza esas
+  posiciones contra el universo y aplica cuatro motivos de exclusión en orden
+  (`no_resuelta` → `sin_nominal` → `sin_precio` → `sin_tipo_de_cambio`); un monto sin nominal
+  nunca se convierte a dólares, porque el resumen cargado no declara en qué moneda vino ese monto
+  (regla 1).
+- **F-023 tuvo que resolver dos cosas que el plan marcó explícitamente como "decisión de
+  implementación"**: (1) qué segmento abre la curva por defecto — no puede leerse `[0]` de la
+  composición por segmento, porque ese corte no abre `usd_hard` en sus tres pestañas de crédito
+  (soberano/subsoberano/ON); se calculó aparte, con la clave de crédito expandida y el peso de
+  cartera por pestaña. (2) qué moneda de cotización muestra la nube cuando una emisión tiene
+  hermanas — se eligió la moneda con más especies del segmento/clase activo, mismo mecanismo que
+  ya usa el monitor, sin agregar un segundo selector visible.
+- **Un test de F-019 (`useArmadoAsistido.test.ts`) estaba roto desde el cierre de la Tanda 10**,
+  sin relación con esta tanda: fallaba de forma determinística ya en el commit `2312f26`,
+  verificado reproduciéndolo en un worktree de ese commit. `await mutateAsync().catch()` resuelve
+  antes de que React confirme `isError` — el mismo caso que `useCargarLamina.test.ts` (F-025) ya
+  cubre con `waitFor`, patrón que este test no había seguido. Se corrigió como commit aparte, fuera
+  de F-023 y F-030.
+
+Siguiente paso: la **tanda 12 — F-031 (vector de riesgo) ∥ F-032 (motor de rotaciones)**. F-031 va
+después de F-030 porque extiende su salida; F-032 envuelve `detectar_swaps.py` en un módulo aparte.
 
 ### Lo que F-013 puso a la vista, y la decisión que dejó abierta
 
