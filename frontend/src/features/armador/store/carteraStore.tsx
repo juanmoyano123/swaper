@@ -66,6 +66,7 @@ type AccionArmador =
   | { tipo: 'agregarFci'; nombre: string; peso: number }
   | { tipo: 'fijarFiltros'; filtros: FiltrosArmador }
   | { tipo: 'limpiarFiltros' }
+  | { tipo: 'cargarCartera'; posiciones: PosicionArmador[] }
 
 const ESTADO_INICIAL: EstadoArmador = {
   pos: [],
@@ -130,6 +131,12 @@ function reducer(estado: EstadoArmador, accion: AccionArmador): EstadoArmador {
       return { ...estado, filtros: accion.filtros }
     case 'limpiarFiltros':
       return { ...estado, filtros: FILTROS_ARMADOR_VACIOS }
+    // F-019: el armado asistido es un punto de partida, no un agregado -- reemplaza `pos` entero
+    // en vez de ir posición por posición como haría un `alternarPapel` en loop, que pisaría el
+    // peso de lo que ya estuviera cargado en vez de reemplazarlo. `montoTotal`, `selMes` y
+    // `filtros` no cambian: el asesor sigue pudiendo editar después.
+    case 'cargarCartera':
+      return { ...estado, pos: accion.posiciones }
   }
 }
 
@@ -154,6 +161,10 @@ interface AccionesArmador {
   fijarFiltros: (filtros: FiltrosArmador) => void
   /** Vuelve todos los filtros a `FILTROS_ARMADOR_VACIOS` de una sola vez (GWT-3). */
   limpiarFiltros: () => void
+  /** Reemplaza `pos` entero con lo que devolvió el armado asistido (F-019). Es un punto de
+   *  partida: si ya había posiciones cargadas, se pisan sin pedir confirmación -- el asesor sigue
+   *  pudiendo editar cada una después, igual que con cualquier otra. */
+  cargarCartera: (posiciones: PosicionArmador[]) => void
 }
 
 const EstadoContext = createContext<EstadoArmador | null>(null)
@@ -178,6 +189,8 @@ export function ArmadorProvider({ children }: { children: ReactNode }) {
       agregarFci: (nombre: string, peso: number) => dispatch({ tipo: 'agregarFci', nombre, peso }),
       fijarFiltros: (filtros: FiltrosArmador) => dispatch({ tipo: 'fijarFiltros', filtros }),
       limpiarFiltros: () => dispatch({ tipo: 'limpiarFiltros' }),
+      cargarCartera: (posiciones: PosicionArmador[]) =>
+        dispatch({ tipo: 'cargarCartera', posiciones }),
     }),
     [],
   )

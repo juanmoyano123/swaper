@@ -40,6 +40,7 @@ function Arnes() {
     agregarFci,
     fijarFiltros,
     limpiarFiltros,
+    cargarCartera,
   } = useArmadorAcciones()
 
   return (
@@ -93,6 +94,17 @@ function Arnes() {
       </button>
       <button type="button" onClick={() => limpiarFiltros()}>
         limpiar filtros
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          cargarCartera([
+            { ticker: 'GD35', peso: 60, clase: 'renta_fija' },
+            { ticker: 'AL30', peso: 40, clase: 'renta_fija' },
+          ])
+        }
+      >
+        cargar cartera asistida
       </button>
     </div>
   )
@@ -362,5 +374,44 @@ describe('selectores por clase', () => {
 
     expect(posicionesRentaFija(pos)).toHaveLength(1)
     expect(posicionesRentaVariable(pos)).toEqual([])
+  })
+})
+
+// --- cargarCartera (F-019: armado asistido) ------------------------------------------------
+
+describe('cargarCartera', () => {
+  it('reemplaza pos entero con las posiciones del armado asistido', async () => {
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'cargar cartera asistida' }))
+
+    expect(screen.getByTestId('pos')).toHaveTextContent('GD35,AL30')
+    expect(screen.getByTestId('pesos')).toHaveTextContent('GD35:60,AL30:40')
+  })
+
+  it('pisa lo que ya estuviera cargado sin fusionar: es un punto de partida, no un agregado', async () => {
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'alternar GD30' }))
+    await userEvent.click(screen.getByRole('button', { name: 'alternar AE38' }))
+    expect(screen.getByTestId('pos')).toHaveTextContent('GD30,AE38')
+
+    await userEvent.click(screen.getByRole('button', { name: 'cargar cartera asistida' }))
+
+    expect(screen.getByTestId('pos')).toHaveTextContent('GD35,AL30')
+  })
+
+  it('no toca montoTotal, selMes ni filtros', async () => {
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'alternar mes 3' }))
+    await userEvent.click(screen.getByRole('button', { name: 'fijar filtros de prueba' }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'cargar cartera asistida' }))
+
+    expect(screen.getByTestId('selMes')).toHaveTextContent('3')
+    expect(screen.getByTestId('filtros')).toHaveTextContent(
+      JSON.stringify({ ...FILTROS_ARMADOR_VACIOS, segmento: 'cer', duracionMax: '3', ley: 'ARG' }),
+    )
   })
 })
