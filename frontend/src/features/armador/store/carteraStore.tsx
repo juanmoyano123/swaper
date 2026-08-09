@@ -16,7 +16,7 @@
 
 import { createContext, type ReactNode, useContext, useMemo, useReducer } from 'react'
 
-import { FILTROS_ARMADOR_VACIOS, type FiltrosArmador } from '../lib/filtros'
+import { FILTROS_ARMADOR_INICIALES, FILTROS_ARMADOR_VACIOS, type FiltrosArmador } from '../lib/filtros'
 
 /**
  * Qué clase de instrumento es una posición. Determina de qué cálculos participa:
@@ -71,7 +71,8 @@ const ESTADO_INICIAL: EstadoArmador = {
   pos: [],
   selMes: null,
   montoTotal: 0,
-  filtros: FILTROS_ARMADOR_VACIOS,
+  // Default de fábrica: sólo TIR ≥ 6% con cupones, no "sin filtros" — ver FILTROS_ARMADOR_INICIALES.
+  filtros: FILTROS_ARMADOR_INICIALES,
 }
 
 /** 100/n a un decimal — el mismo redondeo que usan `alternarPapel` y `equiponderar`. */

@@ -240,13 +240,22 @@ async function grillaCargada() {
   })
 }
 
+/** Grilla cargada y con el default de fábrica (TIR ≥ 6% + cupones) ya sacado — el punto de
+ *  partida de los GWT de F-017, que se enfocan en segmento/duración/liquidez/sector/ley, no en el
+ *  default nuevo (probado aparte, ver "default de fábrica"). */
+async function grillaSinFiltroDeFabrica() {
+  await grillaCargada()
+  await userEvent.click(screen.getByRole('button', { name: 'limpiar filtros' }))
+  await screen.findByText('2 de 2 papeles pasan los filtros')
+}
+
 // --- GWT-1: sin segmento, unidad declarada por renglón -----------------------------------------------
 
 describe('GWT-1: sin filtro de segmento', () => {
   it('la barra dice "unidad declarada por renglón" y cada renglón muestra su propia unidad', async () => {
     responderCon()
     renderizar()
-    await grillaCargada()
+    await grillaSinFiltroDeFabrica()
 
     expect(screen.getByText('unidad declarada por renglón')).toBeInTheDocument()
 
@@ -265,7 +274,7 @@ describe('GWT-2: filtro de segmento en CER', () => {
   it('deja sólo papeles CER y declara la unidad en el encabezado de la barra', async () => {
     responderCon()
     renderizar()
-    await grillaCargada()
+    await grillaSinFiltroDeFabrica()
 
     await userEvent.click(screen.getByRole('button', { name: 'CER' }))
 
@@ -281,7 +290,7 @@ describe('GWT-3: duración, liquidez y sector aplicados simultáneamente', () =>
   it('muestra el conteo correcto con los tres activos y vuelve a "M de M" al limpiar', async () => {
     responderCon()
     renderizar()
-    await grillaCargada()
+    await grillaSinFiltroDeFabrica()
 
     expect(screen.getByText('2 de 2 papeles pasan los filtros')).toBeInTheDocument()
 
@@ -307,7 +316,7 @@ describe('GWT-4: filtro por ley', () => {
   it('agrupa el instrumento sin ley como "ley no informada", nunca bajo una ley concreta', async () => {
     responderCon()
     renderizar()
-    await grillaCargada()
+    await grillaSinFiltroDeFabrica()
 
     await userEvent.selectOptions(screen.getByLabelText('Ley'), 'ARG')
     expect(screen.queryByRole('button', { name: /^TZX26/ })).not.toBeInTheDocument()
@@ -315,6 +324,31 @@ describe('GWT-4: filtro por ley', () => {
     await userEvent.selectOptions(screen.getByLabelText('Ley'), 'ley no informada')
     expect(screen.getByRole('button', { name: /^TZX26/ })).toBeInTheDocument()
     expect(screen.queryAllByRole('button', { name: /^AL30/ })).toHaveLength(0)
+  })
+})
+
+// --- Default de fábrica: TIR ≥ 6% y "sólo con cupones" activos al montar -------------------------------
+
+describe('default de fábrica', () => {
+  it('arranca con TIR mín. en 6 y "sólo con cupones" marcado, dejando sólo AL30 (TIR USD 11,23%)', async () => {
+    responderCon()
+    renderizar()
+    await grillaCargada()
+
+    expect(screen.getByLabelText(/TIR mín/)).toHaveValue(6)
+    expect(screen.getByLabelText('Sólo con cupones')).toBeChecked()
+
+    // TZX26 es tasa real CER, sin TIR: el default la deja afuera.
+    expect(screen.getByText('1 de 2 papeles pasan los filtros')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /^AL30/ }).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: /^TZX26/ })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'limpiar filtros' }))
+
+    expect(await screen.findByText('2 de 2 papeles pasan los filtros')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^TZX26/ })).toBeInTheDocument()
+    expect(screen.getByLabelText(/TIR mín/)).toHaveValue(null)
+    expect(screen.getByLabelText('Sólo con cupones')).not.toBeChecked()
   })
 })
 

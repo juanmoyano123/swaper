@@ -30,9 +30,21 @@ export interface FiltrosArmador {
   ley: string | null
   /** Cantidad exacta de meses con pago de renta en la ventana; '' = sin filtro. */
   pagos: string
+  /** TIR mínima, en puntos porcentuales ('6' = 6%); '' = sin filtro. Sólo se evalúa contra
+   *  naturalezas de TIR (`NATURALEZAS_CON_TIR`) — el resto queda afuera mientras esté activo:
+   *  no hay eje común para comparar una TIR contra una TNA o una tasa real (regla 2). */
+  tirMin: string
+  /** true = sólo instrumentos que pagan al menos un cupón en la ventana de 12 meses
+   *  (`pct_renta > 0`); un bullet al descuento queda afuera. */
+  soloConCupones: boolean
 }
 
 export const LEY_NO_INFORMADA = 'ley_no_informada'
+
+/** Las únicas naturalezas donde "TIR" es la unidad — ver `UNIDAD_NATURALEZA` en
+ *  `@/components/SelectorSegmento`. `tasa_real_cer` y `tna_nominal_ars` no tienen TIR: con
+ *  `tirMin` activo quedan afuera, no se comparan contra un umbral que no es su unidad. */
+export const NATURALEZAS_CON_TIR = ['tir_usd', 'tir_dolar_linked'] as const
 
 export const FILTROS_ARMADOR_VACIOS: FiltrosArmador = {
   segmento: null,
@@ -42,6 +54,18 @@ export const FILTROS_ARMADOR_VACIOS: FiltrosArmador = {
   emisor: null,
   ley: null,
   pagos: '',
+  tirMin: '',
+  soloConCupones: false,
+}
+
+/** El estado con el que arranca la pantalla (08/08/2026): sólo renta fija con TIR ≥ 6% y que
+ *  pague cupones — la grilla sin filtro apila ~1.700 papeles uno abajo del otro en cada mes, la
+ *  mayoría con TIR negativa o irrelevante. Separado de `FILTROS_ARMADOR_VACIOS` a propósito:
+ *  "limpiar filtros" sigue significando ver todo, no volver a este default. */
+export const FILTROS_ARMADOR_INICIALES: FiltrosArmador = {
+  ...FILTROS_ARMADOR_VACIOS,
+  tirMin: '6',
+  soloConCupones: true,
 }
 
 export function hayFiltrosActivos(filtros: FiltrosArmador): boolean {
@@ -52,7 +76,9 @@ export function hayFiltrosActivos(filtros: FiltrosArmador): boolean {
     filtros.sector !== null ||
     filtros.emisor !== null ||
     filtros.ley !== null ||
-    filtros.pagos !== ''
+    filtros.pagos !== '' ||
+    filtros.tirMin !== '' ||
+    filtros.soloConCupones
   )
 }
 
@@ -73,6 +99,22 @@ export function contarPagosPorTicker(meses: MesDelCalendario[]): Map<string, num
     }
   }
   return conteo
+}
+
+/**
+ * Tickers que pagan al menos un cupón en la ventana de doce meses (`pct_renta > 0` en algún mes).
+ * Mismo criterio que `contarPagosPorTicker`, como conjunto en vez de conteo: para `soloConCupones`
+ * alcanza con saber si paga, no cuántas veces. Un bullet al descuento (sin `pct_renta` en ningún
+ * mes) no entra al conjunto.
+ */
+export function tickersConCupon(meses: MesDelCalendario[]): Set<string> {
+  const tickers = new Set<string>()
+  for (const mes of meses) {
+    for (const instrumento of mes.instrumentos) {
+      if (instrumento.pct_renta > 0) tickers.add(instrumento.ticker)
+    }
+  }
+  return tickers
 }
 
 /**
@@ -109,6 +151,10 @@ function pasaFiltroPagos(pagos: number, filtroPagos: string): boolean {
 /**
  * Si un instrumento pasa los filtros activos.
  *
+ * `tirMin` y `soloConCupones` se evalúan primero y contra el instrumento del calendario
+ * (`rendimiento`, `naturaleza`, `tieneCupon`), no contra el universo: valen igual para un ticker
+ * sin cruce (misma razón que `pagos`).
+ *
  * Ticker sin cruce (`especie: undefined`, está en la grilla pero no en el universo): no pasa
  * ningún filtro que dependa del universo (segmento, duración, liquidez, sector, emisor, ley); el
  * de pagos sí lo pasa, porque se deriva del calendario, no del universo.
@@ -117,10 +163,25 @@ function pasaFiltroPagos(pagos: number, filtroPagos: string): boolean {
  * porqué que `pasaFiltros` del monitor — ver docstring del módulo).
  */
 export function pasaFiltros(
-  dato: { especie: Especie | undefined; pagos: number; percentil: number | undefined },
+  dato: {
+    especie: Especie | undefined
+    pagos: number
+    percentil: number | undefined
+    rendimiento: number | null
+    naturaleza: string
+    tieneCupon: boolean
+  },
   filtros: FiltrosArmador,
 ): boolean {
   const { especie } = dato
+
+  if (filtros.tirMin !== '') {
+    if (!(NATURALEZAS_CON_TIR as readonly string[]).includes(dato.naturaleza)) return false
+    if (dato.rendimiento === null) return false
+    if (dato.rendimiento < Number(filtros.tirMin) / 100) return false
+  }
+
+  if (filtros.soloConCupones && !dato.tieneCupon) return false
 
   const dependeDelUniverso =
     filtros.segmento !== null ||
@@ -181,6 +242,7 @@ export function filtrarMeses(
 ): { meses: MesDelCalendario[]; total: number; visibles: number; sinCruce: number } {
   const pagosPorTicker = contarPagosPorTicker(meses)
   const percentiles = percentilesDeLiquidez([...cruce.values()])
+  const cuponPorTicker = tickersConCupon(meses)
 
   const tickersVentana = new Set<string>()
   const tickersSinCruce = new Set<string>()
@@ -197,6 +259,9 @@ export function filtrarMeses(
           especie,
           pagos: pagosPorTicker.get(instrumento.ticker) ?? 0,
           percentil: percentiles.get(instrumento.ticker),
+          rendimiento: instrumento.rendimiento,
+          naturaleza: instrumento.naturaleza,
+          tieneCupon: cuponPorTicker.has(instrumento.ticker),
         },
         filtros,
       )

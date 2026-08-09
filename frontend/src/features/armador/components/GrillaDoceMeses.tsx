@@ -1,16 +1,24 @@
 /**
- * Las doce columnas de la grilla-selector — diseño A2 sobre la vista colapsada del universo.
+ * Los paneles de mes de la grilla-selector — diseño A2 sobre la vista colapsada del universo.
  *
- * `/api/v1/calendario/universo` no trae montos: cada columna es un mes con la lista de papeles que
+ * `/api/v1/calendario/universo` no trae montos: cada panel es un mes con la lista de papeles que
  * pagan ahí, no una barra de plata (esa vista existe recién con una cartera concreta, F-021). Clic
- * en un mes lo abre en `DetalleMes`; clic en un papel lo entra o saca de la cartera — ver
- * `RenglonPapel` para la iluminación multi-mes.
+ * en el encabezado de un mes lo sincroniza con la cordillera (F-021, `PanelRentaCordillera`
+ * comparte el mismo `selMes`); clic en una tarjeta la entra o saca de la cartera — ver
+ * `TarjetaPapel` para la iluminación multi-mes.
+ *
+ * **08/08/2026: reemplaza la grilla de doce columnas angostas de una línea + el panel de detalle
+ * aparte (`DetalleMes`, retirado).** El contenido de un papel (ticker, cupón, TIR rotulada,
+ * vencimiento) no entraba legible en un doceavo del ancho de la pantalla: desbordaba una columna
+ * encima de la vecina. Ahora los paneles se acomodan en una grilla responsive (`auto-fill`, sin
+ * cantidad fija de columnas) y las tarjetas — ya con el detalle que antes sólo se veía al abrir el
+ * mes — quedan siempre visibles, apiladas dentro de cada panel.
  */
 
 import type { MesDelCalendario } from '../lib/schema'
 import { useArmador, useArmadorAcciones } from '../store/carteraStore'
 
-import { RenglonPapel } from './RenglonPapel'
+import { TarjetaPapel } from './TarjetaPapel'
 
 export function GrillaDoceMeses({ meses }: { meses: MesDelCalendario[] }) {
   const { selMes } = useArmador()
@@ -20,16 +28,16 @@ export function GrillaDoceMeses({ meses }: { meses: MesDelCalendario[] }) {
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: `repeat(${meses.length}, minmax(0, 1fr))`,
-        gap: 8,
+        gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+        gap: 10,
         alignItems: 'start',
       }}
     >
       {meses.map((mes, indice) => (
-        <ColumnaMes
+        <PanelMes
           key={mes.etiqueta}
           mes={mes}
-          seleccionada={selMes === indice}
+          seleccionado={selMes === indice}
           onSeleccionar={() => alternarMes(indice)}
         />
       ))}
@@ -37,36 +45,36 @@ export function GrillaDoceMeses({ meses }: { meses: MesDelCalendario[] }) {
   )
 }
 
-function ColumnaMes({
+function PanelMes({
   mes,
-  seleccionada,
+  seleccionado,
   onSeleccionar,
 }: {
   mes: MesDelCalendario
-  seleccionada: boolean
+  seleccionado: boolean
   onSeleccionar: () => void
 }) {
   return (
     <div
       style={{
-        background: seleccionada ? 'var(--sel)' : 'transparent',
+        background: seleccionado ? 'var(--sel)' : 'transparent',
         borderRadius: 4,
         padding: '5px 3px',
         display: 'flex',
         flexDirection: 'column',
-        gap: 4,
+        gap: 6,
         minWidth: 0,
       }}
     >
       <button
         type="button"
         onClick={onSeleccionar}
-        aria-pressed={seleccionada}
+        aria-pressed={seleccionado}
         style={{
-          font: `${seleccionada ? 700 : 600} 11px/1.25 inherit`,
+          font: `${seleccionado ? 700 : 600} 11px/1.25 inherit`,
           // El mes seleccionado va en --ac; el mes sin ningún pago en el universo se distingue en
           // --dim aunque no esté seleccionado — son dos estados distintos y no se pisan (GWT-3).
-          color: seleccionada ? 'var(--ac)' : mes.sin_renta ? 'var(--dim)' : 'var(--tx)',
+          color: seleccionado ? 'var(--ac)' : mes.sin_renta ? 'var(--dim)' : 'var(--tx)',
           background: 'none',
           border: 'none',
           padding: '2px 3px 4px',
@@ -83,9 +91,9 @@ function ColumnaMes({
           {mes.sin_renta ? 'sin pagos en el universo' : `${mes.con_renta} pagan`}
         </span>
       </button>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {mes.instrumentos.map((instrumento) => (
-          <RenglonPapel key={instrumento.ticker} instrumento={instrumento} />
+          <TarjetaPapel key={instrumento.ticker} instrumento={instrumento} />
         ))}
       </div>
     </div>

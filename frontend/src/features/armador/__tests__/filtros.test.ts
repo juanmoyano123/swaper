@@ -1,10 +1,11 @@
 /**
- * Lógica pura de `../lib/filtros.ts` — F-017.
+ * Lógica pura de `../lib/filtros.ts` — F-017, extendido con TIR mínima y "sólo con cupones".
  */
 
 import { describe, expect, it } from 'vitest'
 
 import {
+  FILTROS_ARMADOR_INICIALES,
   FILTROS_ARMADOR_VACIOS,
   LEY_NO_INFORMADA,
   contarPagosPorTicker,
@@ -12,6 +13,7 @@ import {
   hayFiltrosActivos,
   pasaFiltros,
   percentilesDeLiquidez,
+  tickersConCupon,
 } from '../lib/filtros'
 import type { Especie, InstrumentoDelMes, MesDelCalendario } from '../lib/schema'
 
@@ -76,6 +78,21 @@ function mesVacio(indice: number): MesDelCalendario {
   }
 }
 
+/** Datos de renglón por defecto para `pasaFiltros`: TIR USD con dato, paga cupón — mismos
+ *  valores por defecto que `instrumento()`, para que las pruebas de los otros filtros no se vean
+ *  afectadas por `tirMin`/`soloConCupones` cuando esos filtros están inactivos. */
+function datoBase(extra: Partial<Parameters<typeof pasaFiltros>[0]> = {}) {
+  return {
+    especie: especie(),
+    pagos: 1,
+    percentil: 50,
+    rendimiento: 0.1123,
+    naturaleza: 'tir_usd',
+    tieneCupon: true,
+    ...extra,
+  }
+}
+
 // --- hayFiltrosActivos -------------------------------------------------------------------------------
 
 describe('hayFiltrosActivos', () => {
@@ -86,6 +103,12 @@ describe('hayFiltrosActivos', () => {
   it('es verdadero si cualquier campo se aparta del vacío', () => {
     expect(hayFiltrosActivos({ ...FILTROS_ARMADOR_VACIOS, pagos: '2' })).toBe(true)
     expect(hayFiltrosActivos({ ...FILTROS_ARMADOR_VACIOS, ley: 'ARG' })).toBe(true)
+    expect(hayFiltrosActivos({ ...FILTROS_ARMADOR_VACIOS, tirMin: '6' })).toBe(true)
+    expect(hayFiltrosActivos({ ...FILTROS_ARMADOR_VACIOS, soloConCupones: true })).toBe(true)
+  })
+
+  it('es verdadero con el default de fábrica (TIR ≥ 6% y cupones)', () => {
+    expect(hayFiltrosActivos(FILTROS_ARMADOR_INICIALES)).toBe(true)
   })
 })
 
@@ -108,6 +131,28 @@ describe('contarPagosPorTicker', () => {
 
     expect(conteo.get('AL30')).toBe(2) // meses 0 y 2, no el 1 (pct_renta: 0)
     expect(conteo.get('GD30')).toBe(1)
+  })
+})
+
+// --- tickersConCupon: conjunto, no conteo ---------------------------------------------------------------
+
+describe('tickersConCupon', () => {
+  it('incluye un ticker que paga renta en al menos un mes de la ventana', () => {
+    const meses = [mesVacio(0), mesVacio(1)]
+    meses[0] = { ...meses[0], instrumentos: [instrumento({ ticker: 'AL30', pct_renta: 0.0075 })] }
+    meses[1] = { ...meses[1], instrumentos: [instrumento({ ticker: 'AL30', pct_renta: 0 })] }
+
+    expect(tickersConCupon(meses).has('AL30')).toBe(true)
+  })
+
+  it('deja afuera un bullet que sólo amortiza, sin pagar cupón en ningún mes', () => {
+    const meses = [mesVacio(0)]
+    meses[0] = {
+      ...meses[0],
+      instrumentos: [instrumento({ ticker: 'BULLET', pct_renta: 0, pct_amortizacion: 1 })],
+    }
+
+    expect(tickersConCupon(meses).has('BULLET')).toBe(false)
   })
 })
 
@@ -148,10 +193,7 @@ describe('percentilesDeLiquidez', () => {
 
 describe('pasaFiltros', () => {
   it('sin filtros activos, cualquier dato con cruce pasa', () => {
-    const pasa = pasaFiltros(
-      { especie: especie(), pagos: 3, percentil: 50 },
-      FILTROS_ARMADOR_VACIOS,
-    )
+    const pasa = pasaFiltros(datoBase(), FILTROS_ARMADOR_VACIOS)
     expect(pasa).toBe(true)
   })
 
@@ -159,93 +201,130 @@ describe('pasaFiltros', () => {
     const sinDuracion = especie({ duracion: null })
     const filtros = { ...FILTROS_ARMADOR_VACIOS, duracionMax: '5' }
 
-    expect(pasaFiltros({ especie: sinDuracion, pagos: 1, percentil: 50 }, filtros)).toBe(false)
-    expect(pasaFiltros({ especie: sinDuracion, pagos: 1, percentil: 50 }, FILTROS_ARMADOR_VACIOS)).toBe(
-      true,
-    )
+    expect(pasaFiltros(datoBase({ especie: sinDuracion }), filtros)).toBe(false)
+    expect(pasaFiltros(datoBase({ especie: sinDuracion }), FILTROS_ARMADOR_VACIOS)).toBe(true)
   })
 
   it('duración: pasa si la especie está en el máximo o por debajo', () => {
     const filtros = { ...FILTROS_ARMADOR_VACIOS, duracionMax: '3.2' }
-    expect(pasaFiltros({ especie: especie({ duracion: 3.2 }), pagos: 1, percentil: 50 }, filtros)).toBe(
-      true,
-    )
-    expect(pasaFiltros({ especie: especie({ duracion: 3.3 }), pagos: 1, percentil: 50 }, filtros)).toBe(
-      false,
-    )
+    expect(pasaFiltros(datoBase({ especie: especie({ duracion: 3.2 }) }), filtros)).toBe(true)
+    expect(pasaFiltros(datoBase({ especie: especie({ duracion: 3.3 }) }), filtros)).toBe(false)
   })
 
   it('liquidez: percentil undefined (volumen_usd null) no pasa un filtro activo', () => {
     const filtros = { ...FILTROS_ARMADOR_VACIOS, liquidezMin: '50' as const }
-    expect(pasaFiltros({ especie: especie(), pagos: 1, percentil: undefined }, filtros)).toBe(false)
-    expect(pasaFiltros({ especie: especie(), pagos: 1, percentil: 50 }, filtros)).toBe(true)
-    expect(pasaFiltros({ especie: especie(), pagos: 1, percentil: 49 }, filtros)).toBe(false)
+    expect(pasaFiltros(datoBase({ percentil: undefined }), filtros)).toBe(false)
+    expect(pasaFiltros(datoBase({ percentil: 50 }), filtros)).toBe(true)
+    expect(pasaFiltros(datoBase({ percentil: 49 }), filtros)).toBe(false)
   })
 
   it('sector: null no pasa un filtro de sector activo, pero sin filtro se muestra igual', () => {
     const sinSector = especie({ sector: null })
     const filtros = { ...FILTROS_ARMADOR_VACIOS, sector: 'O&G' }
 
-    expect(pasaFiltros({ especie: sinSector, pagos: 1, percentil: 50 }, filtros)).toBe(false)
-    expect(pasaFiltros({ especie: sinSector, pagos: 1, percentil: 50 }, FILTROS_ARMADOR_VACIOS)).toBe(
-      true,
-    )
+    expect(pasaFiltros(datoBase({ especie: sinSector }), filtros)).toBe(false)
+    expect(pasaFiltros(datoBase({ especie: sinSector }), FILTROS_ARMADOR_VACIOS)).toBe(true)
   })
 
   it('sector: exige coincidencia exacta con el sector de la especie', () => {
     const filtros = { ...FILTROS_ARMADOR_VACIOS, sector: 'Financiera' }
-    expect(
-      pasaFiltros({ especie: especie({ sector: 'Financiera' }), pagos: 1, percentil: 50 }, filtros),
-    ).toBe(true)
-    expect(
-      pasaFiltros({ especie: especie({ sector: 'O&G' }), pagos: 1, percentil: 50 }, filtros),
-    ).toBe(false)
+    expect(pasaFiltros(datoBase({ especie: especie({ sector: 'Financiera' }) }), filtros)).toBe(true)
+    expect(pasaFiltros(datoBase({ especie: especie({ sector: 'O&G' }) }), filtros)).toBe(false)
   })
 
   it('ley: null matchea sólo LEY_NO_INFORMADA, nunca una ley concreta', () => {
     const sinLey = especie({ ley: null })
 
+    expect(pasaFiltros(datoBase({ especie: sinLey }), { ...FILTROS_ARMADOR_VACIOS, ley: 'ARG' })).toBe(
+      false,
+    )
     expect(
-      pasaFiltros({ especie: sinLey, pagos: 1, percentil: 50 }, { ...FILTROS_ARMADOR_VACIOS, ley: 'ARG' }),
-    ).toBe(false)
-    expect(
-      pasaFiltros(
-        { especie: sinLey, pagos: 1, percentil: 50 },
-        { ...FILTROS_ARMADOR_VACIOS, ley: LEY_NO_INFORMADA },
-      ),
+      pasaFiltros(datoBase({ especie: sinLey }), { ...FILTROS_ARMADOR_VACIOS, ley: LEY_NO_INFORMADA }),
     ).toBe(true)
     expect(
-      pasaFiltros(
-        { especie: especie({ ley: 'ARG' }), pagos: 1, percentil: 50 },
-        { ...FILTROS_ARMADOR_VACIOS, ley: LEY_NO_INFORMADA },
-      ),
+      pasaFiltros(datoBase({ especie: especie({ ley: 'ARG' }) }), {
+        ...FILTROS_ARMADOR_VACIOS,
+        ley: LEY_NO_INFORMADA,
+      }),
     ).toBe(false)
   })
 
   it('pagos: exige coincidencia exacta con la cantidad observada', () => {
     const filtros = { ...FILTROS_ARMADOR_VACIOS, pagos: '3' }
-    expect(pasaFiltros({ especie: especie(), pagos: 3, percentil: 50 }, filtros)).toBe(true)
-    expect(pasaFiltros({ especie: especie(), pagos: 2, percentil: 50 }, filtros)).toBe(false)
+    expect(pasaFiltros(datoBase({ pagos: 3 }), filtros)).toBe(true)
+    expect(pasaFiltros(datoBase({ pagos: 2 }), filtros)).toBe(false)
   })
 
   it('ticker sin cruce: no pasa ningún filtro que dependa del universo, pero sí el de pagos', () => {
     const conFiltroDeUniverso = { ...FILTROS_ARMADOR_VACIOS, ley: 'ARG' }
     expect(
-      pasaFiltros({ especie: undefined, pagos: 3, percentil: undefined }, conFiltroDeUniverso),
+      pasaFiltros(datoBase({ especie: undefined, pagos: 3, percentil: undefined }), conFiltroDeUniverso),
     ).toBe(false)
 
     const conFiltroDePagos = { ...FILTROS_ARMADOR_VACIOS, pagos: '3' }
-    expect(pasaFiltros({ especie: undefined, pagos: 3, percentil: undefined }, conFiltroDePagos)).toBe(
-      true,
-    )
-    expect(pasaFiltros({ especie: undefined, pagos: 2, percentil: undefined }, conFiltroDePagos)).toBe(
-      false,
-    )
+    expect(
+      pasaFiltros(datoBase({ especie: undefined, pagos: 3, percentil: undefined }), conFiltroDePagos),
+    ).toBe(true)
+    expect(
+      pasaFiltros(datoBase({ especie: undefined, pagos: 2, percentil: undefined }), conFiltroDePagos),
+    ).toBe(false)
 
     // Sin ningún filtro activo, el ticker sin cruce pasa igual.
     expect(
-      pasaFiltros({ especie: undefined, pagos: 0, percentil: undefined }, FILTROS_ARMADOR_VACIOS),
+      pasaFiltros(datoBase({ especie: undefined, pagos: 0, percentil: undefined }), FILTROS_ARMADOR_VACIOS),
     ).toBe(true)
+  })
+
+  it('ticker sin cruce: tirMin y soloConCupones se evalúan igual, sin depender del universo', () => {
+    const filtros = { ...FILTROS_ARMADOR_VACIOS, tirMin: '6' }
+    expect(
+      pasaFiltros(
+        datoBase({ especie: undefined, percentil: undefined, rendimiento: 0.08, naturaleza: 'tir_usd' }),
+        filtros,
+      ),
+    ).toBe(true)
+    expect(
+      pasaFiltros(
+        datoBase({ especie: undefined, percentil: undefined, rendimiento: 0.04, naturaleza: 'tir_usd' }),
+        filtros,
+      ),
+    ).toBe(false)
+  })
+
+  it('tirMin: pasa con rendimiento igual o mayor al umbral, en puntos porcentuales', () => {
+    const filtros = { ...FILTROS_ARMADOR_VACIOS, tirMin: '6' }
+    expect(pasaFiltros(datoBase({ rendimiento: 0.08 }), filtros)).toBe(true)
+    expect(pasaFiltros(datoBase({ rendimiento: 0.06 }), filtros)).toBe(true) // igual al umbral, pasa
+    expect(pasaFiltros(datoBase({ rendimiento: 0.04 }), filtros)).toBe(false)
+  })
+
+  it('tirMin: un rendimiento null no pasa el filtro activo, aunque sin filtro se muestre', () => {
+    const filtros = { ...FILTROS_ARMADOR_VACIOS, tirMin: '6' }
+    expect(pasaFiltros(datoBase({ rendimiento: null }), filtros)).toBe(false)
+    expect(pasaFiltros(datoBase({ rendimiento: null }), FILTROS_ARMADOR_VACIOS)).toBe(true)
+  })
+
+  it('tirMin: sólo aplica a naturalezas de TIR (tir_usd, tir_dolar_linked); CER y TNA quedan afuera', () => {
+    const filtros = { ...FILTROS_ARMADOR_VACIOS, tirMin: '6' }
+    expect(pasaFiltros(datoBase({ rendimiento: 0.5, naturaleza: 'tasa_real_cer' }), filtros)).toBe(false)
+    expect(pasaFiltros(datoBase({ rendimiento: 0.5, naturaleza: 'tna_nominal_ars' }), filtros)).toBe(false)
+    expect(pasaFiltros(datoBase({ rendimiento: 0.08, naturaleza: 'tir_dolar_linked' }), filtros)).toBe(
+      true,
+    )
+  })
+
+  it('tirMin vacío no filtra: cualquier naturaleza y rendimiento pasan', () => {
+    expect(
+      pasaFiltros(datoBase({ rendimiento: null, naturaleza: 'tasa_real_cer' }), FILTROS_ARMADOR_VACIOS),
+    ).toBe(true)
+  })
+
+  it('soloConCupones: exige que el ticker esté en el conjunto de cupones', () => {
+    const filtros = { ...FILTROS_ARMADOR_VACIOS, soloConCupones: true }
+    expect(pasaFiltros(datoBase({ tieneCupon: true }), filtros)).toBe(true)
+    expect(pasaFiltros(datoBase({ tieneCupon: false }), filtros)).toBe(false)
+    // Desactivado, no filtra.
+    expect(pasaFiltros(datoBase({ tieneCupon: false }), FILTROS_ARMADOR_VACIOS)).toBe(true)
   })
 })
 
@@ -320,5 +399,31 @@ describe('filtrarMeses', () => {
 
     expect(resultado.total).toBe(1)
     expect(resultado.visibles).toBe(1)
+  })
+
+  it('con el default de fábrica, deja afuera TIR baja, sin dato y sin cupón', () => {
+    const meses = [mesVacio(0)]
+    meses[0] = {
+      ...meses[0],
+      instrumentos: [
+        instrumento({ ticker: 'ALTA', rendimiento: 0.08, naturaleza: 'tir_usd', pct_renta: 0.01 }),
+        instrumento({ ticker: 'BAJA', rendimiento: 0.02, naturaleza: 'tir_usd', pct_renta: 0.01 }),
+        instrumento({ ticker: 'SD', rendimiento: null, naturaleza: 'tir_usd', pct_renta: 0.01 }),
+        instrumento({
+          ticker: 'BULLET',
+          rendimiento: 0.08,
+          naturaleza: 'tir_usd',
+          pct_renta: 0,
+          pct_amortizacion: 1,
+        }),
+      ],
+    }
+    const cruce = new Map<string, Especie>()
+
+    const resultado = filtrarMeses(meses, cruce, FILTROS_ARMADOR_INICIALES)
+
+    expect(resultado.meses[0].instrumentos.map((i) => i.ticker)).toEqual(['ALTA'])
+    expect(resultado.visibles).toBe(1)
+    expect(resultado.total).toBe(4)
   })
 })

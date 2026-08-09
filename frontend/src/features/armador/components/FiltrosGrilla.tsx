@@ -178,6 +178,36 @@ export function FiltrosGrilla({
           </select>
         </Campo>
 
+        <Campo etiqueta="TIR mín. (%, sólo TIR USD / TIR DL)">
+          <input
+            type="number"
+            inputMode="decimal"
+            value={filtros.tirMin}
+            disabled={deshabilitado}
+            onChange={(e) => cambiar({ tirMin: e.target.value })}
+            style={estiloInput}
+          />
+        </Campo>
+
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+            fontSize: 11,
+            color: 'var(--dim)',
+            cursor: deshabilitado ? 'default' : 'pointer',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={filtros.soloConCupones}
+            disabled={deshabilitado}
+            onChange={(e) => cambiar({ soloConCupones: e.target.checked })}
+          />
+          Sólo con cupones
+        </label>
+
         <button type="button" onClick={() => limpiarFiltros()} style={estiloBoton}>
           limpiar filtros
         </button>

@@ -233,23 +233,23 @@ describe('la cobertura de la cartera seleccionada', () => {
   })
 })
 
-// --- GWT-4: el renglón, en una sola línea ------------------------------------------------------------
+// --- GWT-4: la tarjeta de un papel --------------------------------------------------------------------
 
-describe('el renglón de un papel', () => {
-  it('muestra ticker, moneda, cupón, rendimiento rotulado y año de vencimiento', async () => {
+describe('la tarjeta de un papel', () => {
+  it('muestra ticker, cupón, rendimiento rotulado y año de vencimiento', async () => {
     responderCon(respuesta())
     renderizar()
     await grillaCargada()
 
+    // Sin moneda ni badge de tipo de liquidación: no hay un dato real que los declare (regla 11).
     const renglon = screen.getAllByRole('button', { name: /^AL30/ })[0]
     expect(renglon).toHaveTextContent('AL30')
-    expect(renglon).toHaveTextContent('USD')
     expect(renglon).toHaveTextContent('0,75%')
     expect(renglon).toHaveTextContent('11,23% TIR USD')
     expect(renglon).toHaveTextContent('2030')
   })
 
-  it('con rendimiento null muestra s/d en vez de omitir la fila', async () => {
+  it('con rendimiento null muestra s/d en vez de omitir la tarjeta', async () => {
     responderCon(respuesta())
     renderizar()
     await grillaCargada()

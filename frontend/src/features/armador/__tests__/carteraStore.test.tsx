@@ -18,7 +18,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
-import { FILTROS_ARMADOR_VACIOS } from '../lib/filtros'
+import { FILTROS_ARMADOR_INICIALES, FILTROS_ARMADOR_VACIOS } from '../lib/filtros'
 import {
   ArmadorProvider,
   posicionesRentaFija,
@@ -226,10 +226,12 @@ describe('vaciar (F-018)', () => {
 // --- F-017: filtros, sin tocar pos/selMes/montoTotal ------------------------------------------------
 
 describe('filtros (F-017)', () => {
-  it('arranca en FILTROS_ARMADOR_VACIOS', () => {
+  it('arranca en FILTROS_ARMADOR_INICIALES (TIR ≥ 6% y sólo con cupones), no en el vacío', () => {
     renderizar()
 
-    expect(screen.getByTestId('filtros')).toHaveTextContent(JSON.stringify(FILTROS_ARMADOR_VACIOS))
+    expect(screen.getByTestId('filtros')).toHaveTextContent(
+      JSON.stringify(FILTROS_ARMADOR_INICIALES),
+    )
   })
 
   it('fijarFiltros pisa el objeto entero', async () => {

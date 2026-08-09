@@ -11,7 +11,6 @@ import { useMemo } from 'react'
 
 import { CLAVES_RENTA_VARIABLE, ordenarSegmentos } from '@/components/SelectorSegmento'
 
-import { DetalleMes } from './DetalleMes'
 import { FiltrosGrilla } from './FiltrosGrilla'
 import { GrillaDoceMeses } from './GrillaDoceMeses'
 import { useEspeciesUniverso } from '../hooks/useEspeciesUniverso'
@@ -89,10 +88,7 @@ export function GrillaFiltrada({ meses }: { meses: MesDelCalendario[] }) {
           &quot;limpiar filtros&quot; en la barra de arriba.
         </p>
       ) : (
-        <>
-          <GrillaDoceMeses meses={filtrado.meses} />
-          <DetalleMes meses={filtrado.meses} />
-        </>
+        <GrillaDoceMeses meses={filtrado.meses} />
       )}
     </>
   )
