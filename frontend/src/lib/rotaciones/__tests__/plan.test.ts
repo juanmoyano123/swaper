@@ -1,14 +1,27 @@
 /**
- * La aritmética del plan acumulado de F-036: acumulación de posiciones y de montos en cadena,
- * inversas de lo aceptado, y separación de candidatas ya decididas en la sesión.
+ * La aritmética del plan acumulado de F-036/F-037: acumulación de posiciones y de montos en
+ * cadena, costo acumulado en USD, inversas de lo aceptado, y separación de candidatas ya
+ * decididas en la sesión.
  */
 
 import { describe, expect, it } from 'vitest'
 
-import type { Candidata } from '../esquemaRotaciones'
-import { clavesInversas, montosAcumulados, posicionesAcumuladas, separarYaDecididas } from '../plan'
+import type { Candidata, CostoRotacion } from '../esquemaRotaciones'
+import { clavesInversas, costoAcumulado, montosAcumulados, posicionesAcumuladas, separarYaDecididas } from '../plan'
 
-function candidata(origenTicker: string, destinoTicker: string): Candidata {
+function costo(total_pct: number | null, verificable = true): CostoRotacion {
+  return {
+    arancel_pct_por_pata: 0.5,
+    spread_origen_pct: null,
+    spread_destino_pct: null,
+    total_pct,
+    verificable,
+    elevado: null,
+    payback_meses: null,
+  }
+}
+
+function candidata(origenTicker: string, destinoTicker: string, costoRotacion: CostoRotacion | null = null): Candidata {
   return {
     tipo: 'mejora_rendimiento',
     segmento: 'usd_hard',
@@ -47,7 +60,7 @@ function candidata(origenTicker: string, destinoTicker: string): Candidata {
     },
     premio_ley: null,
     riesgo_nota: 'mismo emisor — mismo riesgo crediticio',
-    costo: null,
+    costo: costoRotacion,
   }
 }
 
@@ -109,6 +122,69 @@ describe('montosAcumulados', () => {
     const originales = [{ ticker: 'A', monto: 300 }, { ticker: 'B', monto: 200 }]
     const { montos } = montosAcumulados(originales, [candidata('A', 'B')], monedaUsd, null)
     expect(montos).toEqual([{ ticker: 'B', monto: 500 }])
+  })
+})
+
+describe('costoAcumulado', () => {
+  const monedaUsd = () => 'usd' as const
+
+  it('una rotación verificable en USD: total en plata sobre el monto del origen', () => {
+    const originales = [{ ticker: 'A', monto: 1000 }]
+    const resultado = costoAcumulado(originales, [candidata('A', 'B', costo(2))], monedaUsd, null)
+    expect(resultado.totalUsd).toBeCloseTo(20)
+    expect(resultado.rotacionesVerificables).toBe(1)
+    expect(resultado.sinCostoVerificable).toEqual([])
+    expect(resultado.noConvertibles).toEqual([])
+  })
+
+  it('cadena A->B->C: la segunda pata cobra costo sobre el monto acumulado, no sobre el original', () => {
+    // B ya tenía 200 en la cartera; tras A->B, B queda en 1200 — si B->C cobrara sobre el monto
+    // original de A (1000) o sobre el B previo (200) en vez de sobre el acumulado (1200), el total
+    // daría distinto de 32.
+    const originales = [{ ticker: 'A', monto: 1000 }, { ticker: 'B', monto: 200 }]
+    const resultado = costoAcumulado(
+      originales,
+      [candidata('A', 'B', costo(2)), candidata('B', 'C', costo(1))],
+      monedaUsd,
+      null,
+    )
+    expect(resultado.totalUsd).toBeCloseTo(32)
+    expect(resultado.rotacionesVerificables).toBe(2)
+  })
+
+  it('normaliza a USD con el tipo de cambio cuando el origen cotiza en ARS', () => {
+    const monedaDe = (ticker: string) => (ticker === 'A' ? ('ars' as const) : ('usd' as const))
+    const originales = [{ ticker: 'A', monto: 105_000 }]
+    const resultado = costoAcumulado(originales, [candidata('A', 'B', costo(2))], monedaDe, 1050)
+    expect(resultado.totalUsd).toBeCloseTo(2)
+  })
+
+  it('sin tipo de cambio y monedas distintas, declara el destino no convertible y lo saca del total', () => {
+    const monedaDe = (ticker: string) => (ticker === 'A' ? ('ars' as const) : ('usd' as const))
+    const originales = [{ ticker: 'A', monto: 105_000 }]
+    const resultado = costoAcumulado(originales, [candidata('A', 'B', costo(2))], monedaDe, null)
+    expect(resultado.totalUsd).toBeNull()
+    expect(resultado.rotacionesVerificables).toBe(0)
+    expect(resultado.noConvertibles).toEqual(['B'])
+  })
+
+  it('costo null o no verificable: se declara en sinCostoVerificable con el par nombrado', () => {
+    const originales = [{ ticker: 'A', monto: 1000 }, { ticker: 'C', monto: 500 }]
+    const resultado = costoAcumulado(
+      originales,
+      [candidata('A', 'B', null), candidata('C', 'D', costo(null))],
+      monedaUsd,
+      null,
+    )
+    expect(resultado.sinCostoVerificable).toEqual(['A->B', 'C->D'])
+    expect(resultado.totalUsd).toBeNull()
+    expect(resultado.rotacionesVerificables).toBe(0)
+  })
+
+  it('sin aceptadas, el total es null y no hay rotaciones verificables', () => {
+    const resultado = costoAcumulado([{ ticker: 'A', monto: 1000 }], [], monedaUsd, null)
+    expect(resultado.totalUsd).toBeNull()
+    expect(resultado.rotacionesVerificables).toBe(0)
   })
 })
 
