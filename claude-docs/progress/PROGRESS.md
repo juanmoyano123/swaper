@@ -71,7 +71,7 @@ desde `/build-feature` a medida que cada una se implementa.
 | F-039 | Ficha de instrumento | Stage 1 | 112,0 | completada |
 | F-040 | Sensibilidad por repricing completo | Stage 1 | 66,7 | **completada** |
 | F-041 | Guardar, listar, reabrir y revaluar | Stage 1 | 180,0 | **completada** |
-| F-042 | Exportación a Excel y PDF | Stage 1 | 100,0 | pendiente |
+| F-042 | Exportación a Excel y PDF | Stage 1 | 100,0 | **completada** |
 | F-051 | Métricas propias: TIR, duración y paridad | Stage 1 | 160,0 | **completada** |
 | F-052 | Renta variable en el monitor | Stage 1 | 106,7 | **completada** |
 | F-053 | Ficha del activo de renta variable | Stage 1 | 140,0 | **completada** |
@@ -735,8 +735,48 @@ una cartera de cada origen. Consumió F-018 y F-037.
   la cartera guardada en el navegador dio exactamente `{origen, version, resueltas, posiciones,
   tipoDeCambio, montoTotalUsd, totalInvertidoUsd}` — la whitelist declarada, nada más.
 
-Siguiente paso: la **tanda 18 — F-042 (exportación a Excel y PDF), sola**. Consume F-041. Es la
-última tanda del camino crítico del plan.
+### Tanda 18 cerrada el 10/08/2026 — F-042 (exportación a Excel y PDF), sola
+
+Cierra el Ciclo 4 entero y el camino crítico del plan. Consumió F-041. Verificado en el
+navegador contra el backend real y el proyecto real de Supabase: cartera armada con posiciones
+reales → guardada → reabierta en `/carteras/:id` → exportada a Excel y a PDF, los dos archivos
+abiertos y leídos con `openpyxl`/`pdfplumber` para confirmar contenido, no sólo que el archivo
+existiera.
+
+- **El export siempre lee un `SnapshotCartera`**, guardado o armado en vivo: un solo
+  `modeloDesdeSnapshot()` cubre los dos orígenes que pide la spec ("cartera guardada o en
+  curso"). `write-excel-file` y `jspdf`/`jspdf-autotable` se cargan con `import()` dinámico
+  sólo al hacer click — confirmado con `npm run build` que quedan en chunks separados
+  (`browser-*.js`, `jspdf.es.min-*.js`, `html2canvas-*.js`) del bundle principal.
+- **El snapshot de F-041 no traía nada de lo que los GWT piden** (rendimiento, naturaleza,
+  lámina, vector de riesgo, calendario): se le agregó un bloque `mercado` opcional dentro de
+  `version: 1` — no una versión nueva — así que una fila guardada antes de esta feature sigue
+  parseando, con `mercado === undefined`, y el export declara el faltante por nombre en vez de
+  recalcularlo con precios de hoy (eso sería "Revaluar a hoy", otra función).
+- **GWT-1 verificado con datos reales**: la hoja "Rendimientos" trae las cuatro naturalezas
+  siempre abiertas, cada una con su propio rendimiento ponderado — TIR en dólares con dato, las
+  otras tres en `s/d` (número crudo, no texto, cuando hay dato; texto `s/d` cuando no) — y
+  ninguna celda ni fila las combina. El PDF replica exactamente la misma tabla.
+- **GWT-2 verificado con datos reales**: la hoja "Declaraciones" cuenta las posiciones sin
+  lámina informada y el % de la cartera sin ajustar (`0 posición(es) sin lámina informada
+  (0,00%)` con la única posición de la prueba, que sí tenía lámina); el caso con lámina
+  faltante está cubierto por test unitario sobre `declaracionLamina()`.
+- **GWT-3 verificado con datos reales, incluso con paginación**: el PDF de la prueba salió en 2
+  páginas y el pie — `Precios capturados: 10/08/2026, 17:00 · Demora de la fuente: 20 min
+  (BYMA...) · Generado: 10/08/2026, 18:43` — apareció en las dos, dibujado al final recorriendo
+  `getNumberOfPages()` en vez de con el hook de página de `autoTable`, para no depender de qué
+  sección cayó en qué hoja.
+- **Cierra design-system.md:118-123**: `ColumnaKpis` del armador ganó el flujo mes por mes (una
+  tabla por moneda de cobro, nunca una fila que sume monedas distintas) y el botón "Descargar
+  propuesta", los dos pendientes desde la Etapa 6 del rediseño.
+- **Deuda encontrada y saldada en el propio cierre**: el dev server de Vite tenía cacheados los
+  deps de antes de instalar `write-excel-file`/`jspdf`/`jspdf-autotable` — el `import()` dinámico
+  fallaba con `Failed to fetch dynamically imported module` sin ningún error de código de por
+  medio. Se resuelve reiniciando el servidor (o borrando `frontend/node_modules/.vite`) después
+  de instalar una dependencia nueva; no es un bug de F-042, pero conviene tenerlo presente para
+  la próxima instalación de paquete con el server ya corriendo.
+
+Con esto se cierra el Ciclo 4 y el camino crítico completo (F-001→F-042) del plan.
 
 ### Lo que F-013 puso a la vista, y la decisión que dejó abierta
 

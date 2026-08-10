@@ -119,8 +119,12 @@ resto.
 tarjeta de renta anual y los cuatro KPIs, tal como los describe esta sección (número en `--pos`,
 no `--ac` — ver la disciplina `--ac`/`--pos` de la Etapa 1). "Lo que falta" sólo trae avisos
 derivables de datos existentes (meses sin cobertura, posiciones sin resolver): "mes bajo el piso"
-y "renta variable por debajo del rango" necesitan A1 (mandato), que no existe todavía. El flujo
-mes por mes y "Descargar propuesta" quedan para cuando F-042 (export) esté en plan.
+y "renta variable por debajo del rango" necesitan A1 (mandato), que no existe todavía.
+
+**Flujo mes por mes y "Descargar propuesta" cerrados en F-042 (10/08/2026)**: una tabla por
+moneda de cobro (nunca una fila que sume monedas distintas), reusando `calcularRentaAnualPorMoneda`
+sin recalcular nada — mismos números que la tarjeta de renta anual. El botón exporta a Excel y
+PDF vía `useSnapshotArmador()`, el mismo hook que arma el snapshot al guardar la cartera.
 
 ### Sección B — Seguimiento
 
