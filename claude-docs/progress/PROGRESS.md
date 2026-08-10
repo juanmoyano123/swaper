@@ -55,7 +55,7 @@ desde `/build-feature` a medida que cada una se implementa.
 | F-030 | Valuación y diagnóstico de cartera | Stage 1 | 150,0 | completada |
 | F-031 | Vector de riesgo de seis ejes | Stage 1 | 100,0 | **completada** |
 | F-032 | Motor de rotaciones intra-segmento | Stage 1 | 100,0 | **completada** |
-| F-035 | Costo real de rotar y cupón próximo | Stage 1 | 180,0 | pendiente |
+| F-035 | Costo real de rotar y cupón próximo | Stage 1 | 180,0 | **completada** |
 
 > Milestone 3 — "El diagnóstico de una cartera ajena tarda minutos y no horas."
 
@@ -63,7 +63,7 @@ desde `/build-feature` a medida que cada una se implementa.
 
 | ID | Feature | Etiqueta | RICE | Estado |
 |---|---|---|---|---|
-| F-033 | Modo bajar riesgo | Stage 1 | 57,6 | pendiente |
+| F-033 | Modo bajar riesgo | Stage 1 | 57,6 | **completada** |
 | F-034 | Modo subir TIR con contrapartida | Stage 1 | 86,4 | pendiente |
 | F-036 | Aceptación rotación por rotación | Stage 1 | 57,6 | pendiente |
 | F-037 | Comparación original contra propuesta | Stage 1 | 72,0 | pendiente |
@@ -425,9 +425,40 @@ frontend (50 archivos) y 1087 en el backend.** Van **37 de 42 features de Stage 
   features previas que armaban un `Especie` completo necesitaron un campo más
   (`calificacion: null`) para seguir tipando — ajuste mecánico, sin tocar ningún test funcional.
 
-Siguiente paso: la **tanda 13 — F-033 (bajar riesgo) ∥ F-035 (costo real)**. Módulos distintos;
-si al planificar F-035 resulta que también toca el contrato de la fila de propuesta, F-035 va
-primero y sola (salvedad ya declarada en `plan-ejecucion-tandas.md`).
+**Tanda 13 cerrada el 09/08/2026** — F-033 (modo bajar riesgo) ∥ F-035 (costo real de rotar), en
+paralelo con un commit por feature. **502 tests offline en el frontend (54 archivos) y 1104 en el
+backend.** Van **39 de 42 features de Stage 1**.
+
+- **La salvedad no se activó**: declaraba que si F-035 tocaba el contrato de la fila de
+  propuesta, iba primero y sola. F-035 sí lo tocó —`Candidata.como_dict()` ganó el bloque `costo`
+  y `cupon.fecha`—, pero F-033 quedó **100 % frontend**, filtro puro sobre las candidatas de
+  F-032, sin leer ni modelar ese bloque: su esquema zod en modo strip (default) tolera la clave
+  `costo` presente o ausente. Los conjuntos de archivos fueron disjuntos (backend vs. frontend),
+  así que el paralelismo corrió sin fricción.
+- **F-035 lee `public.puntas`, que ya la puebla BYMA** — el cambio data912→BYMA del spec ya había
+  ocurrido en la ingesta (F-004/F-007); F-035 sólo agregó la primera lectura desde rotaciones,
+  con el mismo molde `LEFT JOIN LATERAL` que `renta_variable/lectura.py`. Filas con `fuente`
+  terminada en `-arrastre` (fecha de libro incierta) cuentan como sin punta.
+- **La política ante el spread faltante diverge del CLI a propósito, y queda documentada**:
+  `tools/mercado.py` cuenta un spread ausente como cero y devuelve un piso; F-035 en cambio deja
+  la propuesta `verificable=false` con `total_pct=null` — nunca un default silencioso (regla 1).
+  El ejemplo numérico de la spec original no cerraba aritméticamente contra su propia fórmula
+  textual; se priorizó la fórmula, verificada por paridad contra `tools/mercado.py`.
+- **F-033 reusa `vectorDeRiesgo` (F-031) sin duplicar su aritmética**: evalúa primero los cinco
+  ejes locales (duración, crédito, legislación, liquidez, moneda) sin red, y sólo dispara
+  `POST /concentracion` simulado para las candidatas que sobreviven esa etapa. Crédito y moneda
+  son compositivos y no son medibles como eje primario — elegidos así, el modo lo declara en vez
+  de devolver una lista vacía sin motivo.
+- **El signo del eje legislación se resolvió leyendo `motor.py`, no el texto de la spec**: la
+  consigna era autocontradictoria en su redacción; `mejora_ley` en el motor de F-032 define
+  mejorar como pasar a ley extranjera, y F-033 replicó ese criterio con un test que lo fija.
+- **Base común de la tanda**: `claves.mercado.rotaciones` en `queryKeys.ts` y `firmaDePesos`
+  exportada de `useConcentracion.ts` (antes privada) — F-033 las necesitaba para que las
+  concentraciones simuladas compartieran caché con el diagnóstico. Los dos archivos, un commit,
+  antes de soltar los agentes.
+
+Siguiente paso: la **tanda 14 — F-034 (subir TIR), sola**. Comparte el contrato de la fila de
+propuesta con F-033 (mandato del plan).
 
 ### Lo que F-013 puso a la vista, y la decisión que dejó abierta
 

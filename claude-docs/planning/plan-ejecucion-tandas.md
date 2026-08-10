@@ -58,7 +58,7 @@ de ejecución**. Si contradice a `plan.md` en una dependencia, gana `plan.md` y 
 |---|---|---|---|
 | 11 | **F-023** (curva TIR/duración) ∥ **F-030** (diagnóstico) | F-023 cierra el trío de métricas (serializado tras F-022); F-030 reusa servicios ya hechos sin modificarlos | completada (09/08/2026) |
 | 12 | **F-031** (vector de riesgo) ∥ **F-032** (motor de rotaciones) | F-031 después de F-030 porque extiende su salida (mandato del plan); F-032 envuelve `detectar_swaps.py`, módulo aparte | completada (09/08/2026) |
-| 13 | **F-033** (bajar riesgo) ∥ **F-035** (costo real) | Módulos distintos. **Salvedad**: si al planificar F-035 resulta que también toca el contrato de la fila de propuesta, F-035 va primero y sola | pendiente |
+| 13 | **F-033** (bajar riesgo) ∥ **F-035** (costo real) | Módulos distintos. **Salvedad no activada**: F-035 extendió el contrato de la fila (`Candidata.como_dict()` ganó `costo`), pero F-033 quedó 100% frontend con zod strip — archivos disjuntos | completada (09/08/2026) |
 | 14 | **F-034** (subir TIR) — sola | Comparte el contrato de la fila de propuesta con F-033 (mandato del plan) | pendiente |
 | 15 | **F-036** (aceptación por rotación) — sola | Consume F-033 + F-034 + F-035 | pendiente |
 | 16 | **F-037** (comparación original/propuesta) — sola | Consume F-036 | pendiente |
@@ -78,7 +78,7 @@ confidence 50 % porque la disponibilidad programática de las fechas de CNV no e
    paralelizarlas; con el criterio conservador del 06/08 quedan en tandas separadas.
 2. **F-020 y F-024 separadas** (tandas 9 y 8) aunque el plan no las lista como conflicto: las dos
    agregan elementos a la tabla de la cartera de F-018.
-3. **F-033 ∥ F-035** con salvedad declarada en la tanda 13.
+3. **F-033 ∥ F-035** con salvedad declarada en la tanda 13 — no se activó (ver tabla arriba).
 4. **F-011, F-013, F-034 y toda la cola 15–18 van solas.**
 5. **F-038 y F-039 adelantadas** del Ciclo 4 a las tandas 6–7: sus dependencias ya están y son las
    pantallas que muestran datos; no rompen ningún orden del plan porque el grafo lo permite.
