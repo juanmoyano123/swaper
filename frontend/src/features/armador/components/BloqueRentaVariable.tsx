@@ -33,6 +33,14 @@
  * además el **peso real dentro del bloque** (`resolverRentaVariable`, distinto de `pesoReal` de
  * `resolver.ts`, que reparte sobre el total de la cartera): es la cifra que importa para juzgar el
  * bloque de renta variable en sí mismo.
+ *
+ * **Etapa 3 del rediseño**: hasta acá el peso pedido de una acción sólo se podía cambiar con
+ * "Equiponderar" o agregando/sacando papeles — `fijarPeso` del store ya era agnóstico de clase,
+ * pero `CarteraEditable` (su único llamador) filtra la renta variable, así que nunca llegaba un
+ * input. La tarjeta gana su propio "% pedido", con el mismo trato visual que el de
+ * `CarteraEditable.tsx` (mono, `--ac`, resaltado si difiere del real más de
+ * `TOLERANCIA_DIFERENCIA_FILA`). La cabecera suma el mix pedido y el mix real (sobre lo
+ * efectivamente invertido) — dos cuentas distintas que pueden no coincidir, y las dos se muestran.
  */
 
 import { type ReactNode, useMemo, useState } from 'react'
@@ -43,8 +51,18 @@ import { type EspecieRentaVariable, useRentaVariable } from '@/lib/rentaVariable
 
 import { useCarteraResuelta } from '../hooks/useCarteraResuelta'
 import { useTipoDeCambio } from '../hooks/useTipoDeCambio'
+import { sumaPesos } from '../lib/mix'
 import { resolverRentaVariable, subtotalRentaVariableUsd, type PosicionRvResuelta } from '../lib/resolverRentaVariable'
-import { posicionesRentaVariable, useArmador, useArmadorAcciones } from '../store/carteraStore'
+import {
+  posicionesRentaVariable,
+  useArmador,
+  useArmadorAcciones,
+  type PosicionArmador,
+} from '../store/carteraStore'
+
+/** Mismo umbral que `CarteraEditable.tsx` (design system, sección A8): a partir de acá la
+ *  diferencia entre pedido y real se marca, no antes. */
+const TOLERANCIA_DIFERENCIA_FILA = 0.6
 
 const CLASES: { clave: 'accion' | 'cedear'; etiqueta: string }[] = [
   { clave: 'accion', etiqueta: 'Acciones' },
@@ -53,7 +71,7 @@ const CLASES: { clave: 'accion' | 'cedear'; etiqueta: string }[] = [
 
 export function BloqueRentaVariable() {
   const { pos, montoTotal } = useArmador()
-  const { alternarRentaVariable } = useArmadorAcciones()
+  const { alternarRentaVariable, fijarPeso } = useArmadorAcciones()
   const abrirInstrumento = useAbrirInstrumento()
 
   const acciones = useRentaVariable('accion')
@@ -98,6 +116,18 @@ export function BloqueRentaVariable() {
   const totalUsd =
     hayRfResuelta || hayAlgunaRvResuelta ? (hayRfResuelta ? subtotalRfUsd : 0) + (subtotalRvUsd ?? 0) : null
 
+  // Mix pedido: sobre `peso` (puntos porcentuales sobre la cartera entera), sin pasar por precio
+  // ni tipo de cambio — siempre calculable si hay posiciones.
+  const pesoRvPedido = sumaPesos(posicionesRv)
+  const pesoRfPedido = sumaPesos(pos) - pesoRvPedido
+
+  // Mix real: sobre lo efectivamente invertido en dólares. Es otra cuenta — puede no coincidir
+  // con el mix pedido si falta precio, tipo de cambio o si el redondeo por lámina movió algo — y
+  // sin `totalUsd` no hay de qué ser un porcentaje.
+  const mixRealRf = totalUsd !== null && totalUsd > 0 && hayRfResuelta ? (subtotalRfUsd / totalUsd) * 100 : null
+  const mixRealRv =
+    totalUsd !== null && totalUsd > 0 && subtotalRvUsd !== null ? (subtotalRvUsd / totalUsd) * 100 : null
+
   const yaEnCartera = new Set(posicionesRv.map((p) => p.ticker))
   const listaPicker = (clasePicker === 'accion' ? acciones.data : cedears.data) ?? []
   const cargandoPicker = clasePicker === 'accion' ? acciones.isPending : cedears.isPending
@@ -120,6 +150,13 @@ export function BloqueRentaVariable() {
         <Campo etiqueta="Renta fija (USD)">{hayRfResuelta ? fmtMonto(subtotalRfUsd, 'usd') : SIN_DATO}</Campo>
         <Campo etiqueta="Renta variable (USD)">{subtotalRvUsd !== null ? fmtMonto(subtotalRvUsd, 'usd') : SIN_DATO}</Campo>
         <Campo etiqueta="Total de la cartera (USD)">{totalUsd !== null ? fmtMonto(totalUsd, 'usd') : SIN_DATO}</Campo>
+        <Campo etiqueta="Σ pedido RV">{pos.length > 0 ? fmtPct(pesoRvPedido, 1) : SIN_DATO}</Campo>
+        <Campo etiqueta="Mix pedido RF/RV">
+          {pos.length > 0 ? `${fmtPct(pesoRfPedido, 1)} / ${fmtPct(pesoRvPedido, 1)}` : SIN_DATO}
+        </Campo>
+        <Campo etiqueta="Mix real RF/RV (sobre invertido)">
+          {mixRealRf !== null && mixRealRv !== null ? `${fmtPct(mixRealRf, 1)} / ${fmtPct(mixRealRv, 1)}` : SIN_DATO}
+        </Campo>
       </div>
 
       {posicionesRv.length === 0 ? (
@@ -143,10 +180,12 @@ export function BloqueRentaVariable() {
           {posicionesRv.map((posicion) => (
             <TarjetaRentaVariable
               key={posicion.ticker}
+              posicion={posicion}
               especie={porTicker.get(posicion.ticker) ?? null}
               resuelta={resueltas.find((r) => r.ticker === posicion.ticker) ?? null}
               onAbrir={() => abrirInstrumento(posicion.ticker)}
               onQuitar={() => alternarRentaVariable(posicion.ticker)}
+              onFijarPeso={(peso) => fijarPeso(posicion.ticker, peso)}
             />
           ))}
         </div>
@@ -304,21 +343,28 @@ function FilaPicker({
 }
 
 function TarjetaRentaVariable({
+  posicion,
   especie,
   resuelta,
   onAbrir,
   onQuitar,
+  onFijarPeso,
 }: {
+  posicion: PosicionArmador
   especie: EspecieRentaVariable | null
   resuelta: PosicionRvResuelta | null
   onAbrir: () => void
   onQuitar: () => void
+  onFijarPeso: (peso: number) => void
 }) {
   const variacionPct = especie?.variacion == null ? null : especie.variacion * 100
   const colorVariacion =
     variacionPct === null ? 'var(--ac2)' : variacionPct > 0 ? 'var(--pos)' : variacionPct < 0 ? 'var(--neg)' : 'var(--tx)'
   const textoVariacion = variacionPct === null ? SIN_DATO : `${variacionPct > 0 ? '+' : ''}${fmtPct(variacionPct)}`
-  const ticker = especie?.ticker ?? resuelta?.ticker ?? ''
+  const ticker = especie?.ticker ?? resuelta?.ticker ?? posicion.ticker
+
+  const pesoReal = resuelta?.pesoReal ?? null
+  const difiere = pesoReal !== null && Math.abs(pesoReal - posicion.peso) > TOLERANCIA_DIFERENCIA_FILA
 
   return (
     <article
@@ -365,8 +411,36 @@ function TarjetaRentaVariable({
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginTop: 8 }}>
-        <Metrica etiqueta="Peso">{resuelta?.pesoReal !== null && resuelta?.pesoReal !== undefined ? fmtPct(resuelta.pesoReal) : SIN_DATO}</Metrica>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6, marginTop: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <span style={{ fontSize: 9.5, color: 'var(--dim)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            % pedido
+          </span>
+          <input
+            type="number"
+            className="mono"
+            value={posicion.peso}
+            step={0.1}
+            onChange={(evento) => onFijarPeso(Number(evento.target.value) || 0)}
+            aria-label={`ponderación pedida de ${ticker}`}
+            style={{
+              width: '100%',
+              textAlign: 'right',
+              font: 'inherit',
+              fontSize: 12,
+              color: 'var(--ac)',
+              background: 'var(--pan2)',
+              border: '1px solid var(--lin)',
+              borderRadius: 3,
+              padding: '2px 4px',
+            }}
+          />
+        </div>
+        <Metrica etiqueta="% real" nota="Ponderación efectiva dentro del bloque de renta variable, sobre lo invertido.">
+          <span style={{ color: difiere ? 'var(--ac2)' : 'var(--tx)' }}>
+            {pesoReal !== null ? fmtPct(pesoReal) : SIN_DATO}
+          </span>
+        </Metrica>
         <Metrica etiqueta="Invertido">
           {resuelta?.invertidoUsd !== null && resuelta?.invertidoUsd !== undefined ? fmtMonto(resuelta.invertidoUsd, 'usd') : SIN_DATO}
         </Metrica>

@@ -7,12 +7,9 @@
 
 import { fmtPct } from '@/lib/fmt'
 
+import { sumaPesos } from '../lib/mix'
 import type { MesDelCalendario } from '../lib/schema'
 import { posicionesRentaFija, posicionesRentaVariable, useArmador } from '../store/carteraStore'
-
-function sumaPesos(pos: readonly { peso: number }[]): number {
-  return pos.reduce((acumulado, p) => acumulado + p.peso, 0)
-}
 
 /** Cuántos de los doce meses de la grilla tienen al menos un papel elegido pagando ahí. */
 export function ResumenCordillera({ meses }: { meses: readonly MesDelCalendario[] }) {

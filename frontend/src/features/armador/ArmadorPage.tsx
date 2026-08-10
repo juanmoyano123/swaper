@@ -50,6 +50,13 @@ import { ArmadorProvider } from './store/carteraStore'
  * `localStorage`, ver `lib/plegado.ts`) y tiene su propio color de identidad (borde izquierdo de
  * 3px, un `--catN` de la paleta categórica) — es la separación visual entre bloques que antes sólo
  * daba el `gap`. El orden de acentos sigue el orden vertical: cat1 a cat6, sin repetir.
+ *
+ * **Etapa 3**: las `bajada` de cada sección se reescribieron para declarar el flujo RF/RV en vez
+ * de sólo describir el contenido — en particular, que Cordillera/Armado asistido/Cartera arman la
+ * parte de renta fija y Renta variable arma su propia parte con su propio % pedido, las dos sobre
+ * el mismo 100% (ver `mixPedido` en `lib/mix.ts` y el % pedido editable de `BloqueRentaVariable`).
+ * No se numeraron como pasos 1-2-3 porque Cartera y Renta variable no son secciones consecutivas
+ * en la página — una numeración que salta habría sido más confusa que las referencias cruzadas.
  */
 export function ArmadorPage() {
   const consulta = useCalendarioUniverso()
@@ -69,7 +76,7 @@ export function ArmadorPage() {
             <SeccionDeArmador
               id="cordillera"
               rotulo="Cordillera"
-              bajada="Elegí papeles por mes de cobro, o filtrá la oferta antes de mirar la grilla."
+              bajada="Elegí bonos por mes de cobro, o filtrá la oferta antes de mirar la grilla. Punto de partida si la cartera lleva renta fija — si es sólo acciones y CEDEARs, se puede saltar directo a la sección Renta variable, al final."
               acento="var(--cat1)"
               resumen={<ResumenCordillera meses={consulta.data.meses} />}
             >
@@ -83,7 +90,7 @@ export function ArmadorPage() {
             <SeccionDeArmador
               id="asistido"
               rotulo="Armado asistido"
-              bajada="Precarga una cartera de arranque a partir del mandato del cliente; después se edita a mano."
+              bajada="Opcional: precarga una cartera de arranque a partir del mandato del cliente; después se edita a mano, papel por papel, en la sección Cartera."
               acento="var(--cat2)"
             >
               <Panel>
@@ -94,7 +101,7 @@ export function ArmadorPage() {
             <SeccionDeArmador
               id="cartera"
               rotulo="Cartera"
-              bajada="Ponderación pedida y ponderación real: si no coinciden, se muestra tal cual."
+              bajada="Ponderación pedida y ponderación real de los bonos elegidos arriba: si no coinciden, se muestra tal cual. Las acciones y CEDEARs comparten el mismo 100% pero se ponderan aparte, en Renta variable — no aparecen en esta tabla."
               acento="var(--cat3)"
               resumen={<ResumenCartera />}
             >
@@ -103,11 +110,21 @@ export function ArmadorPage() {
               </Panel>
             </SeccionDeArmador>
 
-            <SeccionDeArmador id="calendario" rotulo="Calendario de pagos" acento="var(--cat4)">
+            <SeccionDeArmador
+              id="calendario"
+              rotulo="Calendario de pagos"
+              bajada="Cómo cae la renta mes a mes, sólo de la parte de renta fija — una acción no tiene cupón que calendarizar."
+              acento="var(--cat4)"
+            >
               <PanelRenta />
             </SeccionDeArmador>
 
-            <SeccionDeArmador id="analisis" rotulo="Análisis" acento="var(--cat5)">
+            <SeccionDeArmador
+              id="analisis"
+              rotulo="Análisis"
+              bajada="Rendimientos, composición, concentración y riesgo de la cartera armada hasta acá — incluye lo pedido en Cartera y en Renta variable."
+              acento="var(--cat5)"
+            >
               <div style={{ display: 'grid', gap: 16 }}>
                 <PanelRendimientos />
                 <PanelComposicion />
@@ -119,6 +136,7 @@ export function ArmadorPage() {
             <SeccionDeArmador
               id="rv"
               rotulo="Renta variable"
+              bajada="Acciones y CEDEARs, con su propio % pedido sobre el mismo 100% de la cartera. Se suman al monto total pero no a la renta ni a los rendimientos de arriba — son otra clase de instrumento (regla 2)."
               acento="var(--cat6)"
               resumen={<ResumenRentaVariable />}
             >

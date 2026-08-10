@@ -197,6 +197,27 @@ describe('una tarjeta de renta variable', () => {
     expect(await screen.findByText('ficha de GGAL')).toBeInTheDocument()
   })
 
+  it('el % pedido se edita con un input propio, y actualiza el store (Etapa 3)', async () => {
+    responderCon({ acciones: [accion({ precio: 30 })] })
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar GGAL directo' }))
+    await userEvent.click(screen.getByRole('button', { name: 'monto 1.000' }))
+    const tarjeta = await screen.findByRole('article', { name: 'GGAL' })
+
+    const input = within(tarjeta).getByLabelText('ponderación pedida de GGAL')
+    expect(input).toHaveValue(100)
+
+    await userEvent.clear(input)
+    await userEvent.type(input, '40')
+
+    // El peso pedido bajó a 40, pero es la única posición del bloque: el peso real dentro del
+    // bloque sigue siendo 100% — son dos cuentas distintas y no se confunden.
+    expect(input).toHaveValue(40)
+    const filaReal = within(tarjeta).getByText('% real').closest('div')
+    expect(within(filaReal as HTMLElement).getByText('100,00%')).toBeInTheDocument()
+  })
+
   it('el botón × saca la posición de la cartera', async () => {
     responderCon({ acciones: [accion()] })
     renderizar()
@@ -271,6 +292,31 @@ describe('composición del monto total (GWT-4)', () => {
   })
 })
 
+// --- Etapa 3: el mix pedido y el mix real de la cabecera --------------------------------------------
+
+describe('el mix RF/RV de la cabecera', () => {
+  it('el mix pedido se calcula siempre que haya posiciones; el mix real exige las dos porciones resueltas', async () => {
+    responderCon({ acciones: [accion({ precio: 30 })] })
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar GGAL directo' }))
+    await userEvent.click(screen.getByRole('button', { name: 'monto 1.000' }))
+    await screen.findByRole('article', { name: 'GGAL' })
+
+    // Única posición, 100% pedido a renta variable: el mix pedido es 0,0% / 100,0%.
+    const campoMixPedido = (await screen.findByText('Mix pedido RF/RV')).closest('div')
+    expect(within(campoMixPedido as HTMLElement).getByText('0,0% / 100,0%')).toBeInTheDocument()
+
+    const campoSumaRv = (await screen.findByText('Σ pedido RV')).closest('div')
+    expect(within(campoSumaRv as HTMLElement).getByText('100,0%')).toBeInTheDocument()
+
+    // El mix real necesita renta fija resuelta, que acá no hay (s/d, no 0): no se muestra un mix
+    // a medias que sugeriría que la renta fija pesa 0% cuando en realidad no se sabe.
+    const campoMixReal = (await screen.findByText('Mix real RF/RV (sobre invertido)')).closest('div')
+    expect(within(campoMixReal as HTMLElement).getByText('s/d')).toBeInTheDocument()
+  })
+})
+
 // --- Regla 3: nunca se inventa un tipo de cambio externo -------------------------------------------
 
 describe('una especie en ARS sin tipo de cambio', () => {
@@ -288,7 +334,7 @@ describe('una especie en ARS sin tipo de cambio', () => {
     await userEvent.click(screen.getByRole('button', { name: 'agregar PAMP a la cartera' }))
 
     const tarjeta = await screen.findByRole('article', { name: 'PAMP' })
-    const filaPeso = within(tarjeta).getByText('Peso').closest('div')
+    const filaPeso = within(tarjeta).getByText('% real').closest('div')
     expect(within(filaPeso as HTMLElement).getByText('s/d')).toBeInTheDocument()
   })
 })

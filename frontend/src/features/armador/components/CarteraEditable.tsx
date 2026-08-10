@@ -26,6 +26,7 @@ import { AlertasCalendario } from './AlertasCalendario'
 import { useCalendarioCartera } from '../hooks/useCalendarioCartera'
 import { useCargarLamina } from '../hooks/useCargarLamina'
 import { useCarteraResuelta } from '../hooks/useCarteraResuelta'
+import { mixPedido } from '../lib/mix'
 import type { Especie } from '../lib/schema'
 import { type PosicionResuelta, type ResumenAjuste } from '../lib/resolver'
 import {
@@ -58,7 +59,11 @@ export function CarteraEditable() {
   // La tabla lista renta fija y FCI: la renta variable tiene su propio bloque con subtotal aparte
   // (F-026), y mezclarlas acá haría que una acción apareciera con columnas de VN y lámina.
   const posiciones = posicionesRentaFija(pos)
-  const sumaPesoPedido = posiciones.reduce((acumulado, p) => acumulado + p.peso, 0)
+  // El 100% del que habla esta cabecera es el de la cartera ENTERA (`peso` se pide así, ver
+  // `carteraStore.tsx`) — comparar sólo la suma de esta tabla contra 100 mentía apenas había
+  // renta variable cargada: el ámbar se prendía o se apagaba sin que el pedido real cambiara.
+  const mix = mixPedido(pos)
+  const sumaPesoPedidoTotal = mix.rf + mix.rv
 
   function onVaciar() {
     if (pos.length > 0 && !window.confirm('¿Vaciar la cartera en construcción?')) return
@@ -76,15 +81,20 @@ export function CarteraEditable() {
           marginBottom: 10,
         }}
       >
-        <Campo etiqueta="Σ ponderación pedida">
+        <Campo etiqueta="Σ pedida total (incl. RV)">
           <span
             className="mono"
             style={{
-              color: Math.abs(sumaPesoPedido - 100) > TOLERANCIA_SUMA_PESOS ? 'var(--ac2)' : 'var(--tx)',
+              color: Math.abs(sumaPesoPedidoTotal - 100) > TOLERANCIA_SUMA_PESOS ? 'var(--ac2)' : 'var(--tx)',
             }}
           >
-            {fmtPct(sumaPesoPedido)}
+            {fmtPct(sumaPesoPedidoTotal)}
           </span>
+          {mix.rv > 0 && (
+            <span className="mono" style={{ marginLeft: 6, fontSize: 10.5, color: 'var(--dim)' }}>
+              (RF {fmtPct(mix.rf, 1)} · RV {fmtPct(mix.rv, 1)})
+            </span>
+          )}
         </Campo>
         <Campo etiqueta="Invertido">
           <span className="mono" style={{ color: 'var(--tx)' }}>
