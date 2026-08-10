@@ -108,6 +108,37 @@ body {
   color: var(--dim);
 }
 
+/*
+  Armador — Etapa 6 del rediseño: dos columnas, la derecha fija (A9 del design system, 252px)
+  con la columna de KPIs. `position: sticky` va inline en ColumnaKpis.tsx (necesita `top: 66`,
+  la altura de la barra superior + la franja de estado); acá sólo la grilla, porque una media
+  query no se puede escribir en un objeto de estilos inline.
+*/
+.layout-armador {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 252px;
+  gap: 20px;
+  align-items: start;
+}
+
+/* Sticky sólo con la columna al lado (arriba de 1280px): apilada abajo, pegarla no tendría nada
+   que fijar contra — sólo taparía el contenido que sigue mientras se scrollea. */
+.columna-kpis {
+  position: sticky;
+  top: 66px;
+  align-self: start;
+}
+
+@media (max-width: 1279px) {
+  .layout-armador {
+    grid-template-columns: 1fr;
+  }
+
+  .columna-kpis {
+    position: static;
+  }
+}
+
 @keyframes pulso {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.25; }

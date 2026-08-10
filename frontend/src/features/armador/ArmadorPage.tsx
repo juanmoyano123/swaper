@@ -5,6 +5,7 @@ import { Panel } from '@/components/Panel'
 
 import { AlertasCalendario } from './components/AlertasCalendario'
 import { CarteraEditable } from './components/CarteraEditable'
+import { ColumnaKpis } from './components/ColumnaKpis'
 import { CoberturaSeleccion } from './components/CoberturaSeleccion'
 import { GrillaFiltrada } from './components/GrillaFiltrada'
 import { PanelArmadoAsistido } from './components/PanelArmadoAsistido'
@@ -57,6 +58,12 @@ import { ArmadorProvider } from './store/carteraStore'
  * el mismo 100% (ver `mixPedido` en `lib/mix.ts` y el % pedido editable de `BloqueRentaVariable`).
  * No se numeraron como pasos 1-2-3 porque Cartera y Renta variable no son secciones consecutivas
  * en la página — una numeración que salta habría sido más confusa que las referencias cruzadas.
+ *
+ * **Etapa 6**: columna lateral fija (`ColumnaKpis`, A9) con los números que resumen la cartera —
+ * renta anual, meses cubiertos, TIR ponderada, duración y mix RF/RV — para no tener que scrollear
+ * hasta el final de la página a chequear cómo va. `.layout-armador` (`index.css`) hace la grilla de
+ * dos columnas y la apila abajo en pantallas angostas (media query, no soportado por estilos
+ * inline). Bajo 1280px la columna deja de ser sticky y pasa a un bloque más al final.
  */
 export function ArmadorPage() {
   const consulta = useCalendarioUniverso()
@@ -72,78 +79,82 @@ export function ArmadorPage() {
       )}
       {consulta.data && (
         <ArmadorProvider>
-          <div style={{ display: 'grid', gap: 28 }}>
-            <SeccionDeArmador
-              id="cordillera"
-              rotulo="Cordillera"
-              bajada="Elegí bonos por mes de cobro, o filtrá la oferta antes de mirar la grilla. Punto de partida si la cartera lleva renta fija — si es sólo acciones y CEDEARs, se puede saltar directo a la sección Renta variable, al final."
-              acento="var(--cat1)"
-              resumen={<ResumenCordillera meses={consulta.data.meses} />}
-            >
-              <Panel>
-                <CoberturaSeleccion meses={consulta.data.meses} />
-                <GrillaFiltrada meses={consulta.data.meses} />
-                <AlertasCalendario alertas={consulta.data.alertas} />
-              </Panel>
-            </SeccionDeArmador>
+          <div className="layout-armador">
+            <div style={{ display: 'grid', gap: 28, minWidth: 0 }}>
+              <SeccionDeArmador
+                id="cordillera"
+                rotulo="Cordillera"
+                bajada="Elegí bonos por mes de cobro, o filtrá la oferta antes de mirar la grilla. Punto de partida si la cartera lleva renta fija — si es sólo acciones y CEDEARs, se puede saltar directo a la sección Renta variable, al final."
+                acento="var(--cat1)"
+                resumen={<ResumenCordillera meses={consulta.data.meses} />}
+              >
+                <Panel>
+                  <CoberturaSeleccion meses={consulta.data.meses} />
+                  <GrillaFiltrada meses={consulta.data.meses} />
+                  <AlertasCalendario alertas={consulta.data.alertas} />
+                </Panel>
+              </SeccionDeArmador>
 
-            <SeccionDeArmador
-              id="asistido"
-              rotulo="Armado asistido"
-              bajada="Opcional: precarga una cartera de arranque a partir del mandato del cliente; después se edita a mano, papel por papel, en la sección Cartera."
-              acento="var(--cat2)"
-            >
-              <Panel>
-                <PanelArmadoAsistido />
-              </Panel>
-            </SeccionDeArmador>
+              <SeccionDeArmador
+                id="asistido"
+                rotulo="Armado asistido"
+                bajada="Opcional: precarga una cartera de arranque a partir del mandato del cliente; después se edita a mano, papel por papel, en la sección Cartera."
+                acento="var(--cat2)"
+              >
+                <Panel>
+                  <PanelArmadoAsistido />
+                </Panel>
+              </SeccionDeArmador>
 
-            <SeccionDeArmador
-              id="cartera"
-              rotulo="Cartera"
-              bajada="Ponderación pedida y ponderación real de los bonos elegidos arriba: si no coinciden, se muestra tal cual. Las acciones y CEDEARs comparten el mismo 100% pero se ponderan aparte, en Renta variable — no aparecen en esta tabla."
-              acento="var(--cat3)"
-              resumen={<ResumenCartera />}
-            >
-              <Panel>
-                <CarteraEditable />
-              </Panel>
-            </SeccionDeArmador>
+              <SeccionDeArmador
+                id="cartera"
+                rotulo="Cartera"
+                bajada="Ponderación pedida y ponderación real de los bonos elegidos arriba: si no coinciden, se muestra tal cual. Las acciones y CEDEARs comparten el mismo 100% pero se ponderan aparte, en Renta variable — no aparecen en esta tabla."
+                acento="var(--cat3)"
+                resumen={<ResumenCartera />}
+              >
+                <Panel>
+                  <CarteraEditable />
+                </Panel>
+              </SeccionDeArmador>
 
-            <SeccionDeArmador
-              id="calendario"
-              rotulo="Calendario de pagos"
-              bajada="Cómo cae la renta mes a mes, sólo de la parte de renta fija — una acción no tiene cupón que calendarizar."
-              acento="var(--cat4)"
-            >
-              <PanelRenta />
-            </SeccionDeArmador>
+              <SeccionDeArmador
+                id="calendario"
+                rotulo="Calendario de pagos"
+                bajada="Cómo cae la renta mes a mes, sólo de la parte de renta fija — una acción no tiene cupón que calendarizar."
+                acento="var(--cat4)"
+              >
+                <PanelRenta />
+              </SeccionDeArmador>
 
-            <SeccionDeArmador
-              id="analisis"
-              rotulo="Análisis"
-              bajada="Rendimientos, composición, concentración y riesgo de la cartera armada hasta acá — incluye lo pedido en Cartera y en Renta variable."
-              acento="var(--cat5)"
-            >
-              <div style={{ display: 'grid', gap: 16 }}>
-                <PanelRendimientos />
-                <PanelComposicion />
-                <PanelConcentracion />
-                <PanelRiesgo />
-              </div>
-            </SeccionDeArmador>
+              <SeccionDeArmador
+                id="analisis"
+                rotulo="Análisis"
+                bajada="Rendimientos, composición, concentración y riesgo de la cartera armada hasta acá — incluye lo pedido en Cartera y en Renta variable."
+                acento="var(--cat5)"
+              >
+                <div style={{ display: 'grid', gap: 16 }}>
+                  <PanelRendimientos />
+                  <PanelComposicion />
+                  <PanelConcentracion />
+                  <PanelRiesgo />
+                </div>
+              </SeccionDeArmador>
 
-            <SeccionDeArmador
-              id="rv"
-              rotulo="Renta variable"
-              bajada="Acciones y CEDEARs, con su propio % pedido sobre el mismo 100% de la cartera. Se suman al monto total pero no a la renta ni a los rendimientos de arriba — son otra clase de instrumento (regla 2)."
-              acento="var(--cat6)"
-              resumen={<ResumenRentaVariable />}
-            >
-              <Panel>
-                <BloqueRentaVariable />
-              </Panel>
-            </SeccionDeArmador>
+              <SeccionDeArmador
+                id="rv"
+                rotulo="Renta variable"
+                bajada="Acciones y CEDEARs, con su propio % pedido sobre el mismo 100% de la cartera. Se suman al monto total pero no a la renta ni a los rendimientos de arriba — son otra clase de instrumento (regla 2)."
+                acento="var(--cat6)"
+                resumen={<ResumenRentaVariable />}
+              >
+                <Panel>
+                  <BloqueRentaVariable />
+                </Panel>
+              </SeccionDeArmador>
+            </div>
+
+            <ColumnaKpis meses={consulta.data.meses} />
           </div>
         </ArmadorProvider>
       )}
