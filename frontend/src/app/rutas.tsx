@@ -20,6 +20,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { ArmadorPage } from '@/features/armador/ArmadorPage'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { RequiereSesion } from '@/features/auth/RequiereSesion'
+import { CarteraGuardadaPage } from '@/features/carteras/CarteraGuardadaPage'
 import { CarterasPage } from '@/features/carteras/CarterasPage'
 import { InstrumentoDrawer } from '@/features/instrumento/InstrumentoDrawer'
 import { InstrumentoPage } from '@/features/instrumento/InstrumentoPage'
@@ -56,6 +57,7 @@ export function AppRoutes() {
           <Route path="armador" element={<ArmadorPage />} />
           <Route path="optimizador" element={<OptimizadorPage />} />
           <Route path="carteras" element={<CarterasPage />} />
+          <Route path="carteras/:id" element={<CarteraGuardadaPage />} />
           <Route path="instrumento/:ticker" element={<InstrumentoPage />} />
           <Route path="*" element={<NoEncontrada />} />
         </Route>

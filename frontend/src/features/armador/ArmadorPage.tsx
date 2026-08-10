@@ -8,6 +8,8 @@ import { CarteraEditable } from './components/CarteraEditable'
 import { ColumnaKpis } from './components/ColumnaKpis'
 import { CoberturaSeleccion } from './components/CoberturaSeleccion'
 import { GrillaFiltrada } from './components/GrillaFiltrada'
+import { GuardarCarteraArmador } from './components/GuardarCarteraArmador'
+import { HidratarDesdeCarteraGuardada } from './components/HidratarDesdeCarteraGuardada'
 import { PanelArmadoAsistido } from './components/PanelArmadoAsistido'
 import { PanelComposicion } from './components/PanelComposicion'
 import {
@@ -86,6 +88,7 @@ export function ArmadorPage() {
       )}
       {consulta.data && (
         <ArmadorProvider>
+          <HidratarDesdeCarteraGuardada />
           <div className="layout-armador">
             <div style={{ display: 'grid', gap: 28, minWidth: 0 }}>
               <SeccionDeArmador
@@ -159,6 +162,14 @@ export function ArmadorPage() {
                   <BloqueRentaVariable />
                 </Panel>
               </SeccionDeArmador>
+
+              {/* No es `SeccionDeArmador`: es una acción de cierre, no un tramo de armado, y la
+                  paleta categórica (`--cat1`..`--cat6`) ya está agotada por las seis secciones de
+                  arriba — agregar un séptimo color de identidad es una decisión de diseño que
+                  excede esta feature (F-041). */}
+              <Panel rotulo="Guardar cartera" ariaLabel="Guardar esta cartera">
+                <GuardarCarteraArmador />
+              </Panel>
             </div>
 
             <ColumnaKpis meses={consulta.data.meses} />
