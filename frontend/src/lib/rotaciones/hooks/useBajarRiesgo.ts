@@ -22,8 +22,8 @@ import { apiFetch } from '@/lib/api/client'
 import { claves } from '@/lib/api/queryKeys'
 import { esquemaConcentracion, type Concentracion, type NombreDePerfil } from '@/lib/cartera/esquemaConcentracion'
 import { firmaDePesos, useConcentracion, type PosicionConPeso } from '@/lib/cartera/hooks/useConcentracion'
-import { useEspeciesUniverso } from '@/lib/cartera/hooks/useEspeciesUniverso'
-import { vectorDeRiesgo, type EspecieRiesgo, type IdDeEje } from '@/lib/cartera/riesgo'
+import { useMapaRiesgo } from '@/lib/cartera/hooks/useMapaRiesgo'
+import { vectorDeRiesgo, type IdDeEje } from '@/lib/cartera/riesgo'
 
 import {
   EJES_NO_MEDIBLES_COMO_PRIMARIO,
@@ -41,28 +41,11 @@ export function useBajarRiesgo(posicionesActuales: PosicionConPeso[], perfil: No
   const [ejePrimario, setEjePrimario] = useState<IdDeEje>(EJE_PRIMARIO_DEFAULT)
   const noMedible = EJES_NO_MEDIBLES_COMO_PRIMARIO.has(ejePrimario)
 
-  const especiesUniverso = useEspeciesUniverso()
+  const especiesUniverso = useMapaRiesgo()
   const concentracionActual = useConcentracion(posicionesActuales, perfil)
   const rotaciones = useRotaciones(posicionesActuales, perfil)
 
-  const porTicker = useMemo(() => {
-    const mapa = new Map<string, EspecieRiesgo>()
-    for (const especie of especiesUniverso.data ?? []) {
-      mapa.set(especie.ticker, {
-        ticker: especie.ticker,
-        segmento: especie.segmento,
-        naturaleza: especie.naturaleza,
-        naturaleza_nombre: especie.naturaleza_nombre,
-        clase_activo: especie.clase_activo,
-        duracion: especie.duracion,
-        ley: especie.ley,
-        volumen_usd: especie.volumen_usd,
-        calificacion: especie.calificacion,
-        dato_sano: especie.dato_sano,
-      })
-    }
-    return mapa
-  }, [especiesUniverso.data])
+  const porTicker = especiesUniverso.porTicker
 
   const vectorActual = useMemo(
     () => vectorDeRiesgo(posicionesActuales, porTicker, concentracionActual.data ?? null),

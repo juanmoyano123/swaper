@@ -17,8 +17,8 @@ import { EstadoError } from '@/components/EstadoError'
 import { VectorDeRiesgo } from '@/components/VectorDeRiesgo'
 import type { NombreDePerfil } from '@/lib/cartera/esquemaConcentracion'
 import { useConcentracion } from '@/lib/cartera/hooks/useConcentracion'
-import { useEspeciesUniverso } from '@/lib/cartera/hooks/useEspeciesUniverso'
-import { vectorDeRiesgo, type EspecieRiesgo } from '@/lib/cartera/riesgo'
+import { useMapaRiesgo } from '@/lib/cartera/hooks/useMapaRiesgo'
+import { vectorDeRiesgo } from '@/lib/cartera/riesgo'
 
 export function SeccionRiesgo({
   posiciones,
@@ -27,27 +27,8 @@ export function SeccionRiesgo({
   posiciones: { ticker: string; peso: number }[]
   perfil: NombreDePerfil
 }) {
-  const especiesUniverso = useEspeciesUniverso()
+  const { porTicker } = useMapaRiesgo()
   const consulta = useConcentracion(posiciones, perfil)
-
-  const porTicker = useMemo(() => {
-    const mapa = new Map<string, EspecieRiesgo>()
-    for (const especie of especiesUniverso.data ?? []) {
-      mapa.set(especie.ticker, {
-        ticker: especie.ticker,
-        segmento: especie.segmento,
-        naturaleza: especie.naturaleza,
-        naturaleza_nombre: especie.naturaleza_nombre,
-        clase_activo: especie.clase_activo,
-        duracion: especie.duracion,
-        ley: especie.ley,
-        volumen_usd: especie.volumen_usd,
-        calificacion: especie.calificacion,
-        dato_sano: especie.dato_sano,
-      })
-    }
-    return mapa
-  }, [especiesUniverso.data])
 
   const ejes = useMemo(
     () => vectorDeRiesgo(posiciones, porTicker, consulta.data ?? null),

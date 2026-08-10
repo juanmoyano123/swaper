@@ -25,7 +25,30 @@
 import type { Concentracion } from '../cartera/esquemaConcentracion'
 import { vectorDeRiesgo, type EjeDeRiesgo, type EspecieRiesgo, type IdDeEje, type PosicionConPeso } from '../cartera/riesgo'
 
+import {
+  EJES_LOCALES,
+  carteraSimuladaDeCandidata,
+  claveCandidata,
+  estadoEjeLocal,
+  estadoPorValor,
+  indexarPorId,
+  NOMBRES_EJE,
+  TODOS_LOS_EJES,
+  type DescarteCandidata,
+  type MotivoDescarte,
+} from './ejes'
 import type { Candidata } from './esquemaRotaciones'
+
+// El vocabulario por eje vive en `ejes.ts` desde F-034 (lo comparten los dos modos). Se re-exporta
+// acá para que nada de lo que ya importaba de este módulo tenga que cambiar de ruta.
+export {
+  carteraSimuladaDeCandidata,
+  claveCandidata,
+  NOMBRES_EJE,
+  TODOS_LOS_EJES,
+  type DescarteCandidata,
+  type MotivoDescarte,
+}
 
 export const EJE_PRIMARIO_DEFAULT: IdDeEje = 'duracion'
 
@@ -37,25 +60,6 @@ export const BANDA_RENDIMIENTO_PP = 0.5
  *  métrica escalar sobre la que exigir una mejora estricta, así que no son elegibles como eje
  *  primario de este modo (regla 7 del dominio: no se inventa un orden para lo que no lo tiene). */
 export const EJES_NO_MEDIBLES_COMO_PRIMARIO: ReadonlySet<IdDeEje> = new Set(['credito', 'moneda'])
-
-export const TODOS_LOS_EJES: IdDeEje[] = ['duracion', 'credito', 'legislacion', 'liquidez', 'concentracion', 'moneda']
-
-export const NOMBRES_EJE: Record<IdDeEje, string> = {
-  duracion: 'Duración',
-  credito: 'Crédito',
-  legislacion: 'Legislación',
-  liquidez: 'Liquidez',
-  concentracion: 'Concentración',
-  moneda: 'Moneda',
-}
-
-export type MotivoDescarte = 'empeora' | 'sin_dato' | 'sin_criterio_medible' | 'fuera_de_banda'
-
-export interface DescarteCandidata {
-  candidata: Candidata
-  eje: IdDeEje
-  motivo: MotivoDescarte
-}
 
 export interface PropuestaBajarRiesgo {
   candidata: Candidata
@@ -87,68 +91,6 @@ export function resultadoNoMedible(ejePrimario: IdDeEje): ResultadoBajarRiesgo {
   }
 }
 
-/** Identifica una candidata por su par de tickers, para cachear/mapear su concentración simulada. */
-export function claveCandidata(candidata: Candidata): string {
-  return `${candidata.origen.ticker}->${candidata.destino.ticker}`
-}
-
-/** La cartera con el peso del origen movido al destino (sumado si el destino ya estaba). */
-export function carteraSimuladaDeCandidata(
-  posicionesActuales: PosicionConPeso[],
-  candidata: Candidata,
-): PosicionConPeso[] {
-  const pesoOrigen = posicionesActuales
-    .filter((p) => p.ticker === candidata.origen.ticker)
-    .reduce((acumulado, p) => acumulado + p.peso, 0)
-  const sinOrigen = posicionesActuales.filter((p) => p.ticker !== candidata.origen.ticker)
-  return sumarPorTicker([...sinOrigen, { ticker: candidata.destino.ticker, peso: pesoOrigen }])
-}
-
-function sumarPorTicker(posiciones: PosicionConPeso[]): PosicionConPeso[] {
-  const pesos = new Map<string, number>()
-  const orden: string[] = []
-  for (const p of posiciones) {
-    if (!pesos.has(p.ticker)) orden.push(p.ticker)
-    pesos.set(p.ticker, (pesos.get(p.ticker) ?? 0) + p.peso)
-  }
-  return orden.map((ticker) => ({ ticker, peso: pesos.get(ticker)! }))
-}
-
-function indexarPorId(ejes: EjeDeRiesgo[]): Record<IdDeEje, EjeDeRiesgo> {
-  const mapa = {} as Record<IdDeEje, EjeDeRiesgo>
-  for (const eje of ejes) mapa[eje.id] = eje
-  return mapa
-}
-
-type EstadoEje = 'mejora' | 'no_empeora' | 'empeora' | 'sin_dato'
-
-/**
- * Duración: menos años es mejor. Legislación: más peso bajo ley extranjera es mejor — la Ley N.Y.
- * reduce el riesgo jurisdiccional frente a la Ley Argentina (mismo sentido que `mejora_ley` en
- * `backend/app/rotaciones/motor.py`: pasar de ley local a extranjera es la mejora, no al revés).
- * Liquidez: más percentil es mejor. Concentración: menos peso máximo por crédito es mejor.
- */
-function estadoPorValor(eje: 'duracion' | 'legislacion' | 'liquidez' | 'concentracion', actual: number, simulado: number): EstadoEje {
-  const mejorSiMenor = eje === 'duracion' || eje === 'concentracion'
-  if (simulado === actual) return 'no_empeora'
-  const mejora = mejorSiMenor ? simulado < actual : simulado > actual
-  return mejora ? 'mejora' : 'empeora'
-}
-
-function estadoLocal(
-  eje: 'duracion' | 'legislacion' | 'liquidez',
-  candidata: Candidata,
-  ejeActual: EjeDeRiesgo,
-  ejeSimulado: EjeDeRiesgo,
-): EstadoEje {
-  if (eje === 'legislacion' && (candidata.origen.ley === null || candidata.destino.ley === null)) return 'sin_dato'
-  if (eje === 'liquidez' && candidata.destino.volumen_usd === null) return 'sin_dato'
-  if (ejeActual.valor === null || ejeSimulado.valor === null) return 'sin_dato'
-  return estadoPorValor(eje, ejeActual.valor, ejeSimulado.valor)
-}
-
-const EJES_LOCALES: readonly ('duracion' | 'legislacion' | 'liquidez')[] = ['duracion', 'legislacion', 'liquidez']
-
 function evaluarCandidataLocal(
   candidata: Candidata,
   ejePrimario: IdDeEje,
@@ -166,7 +108,7 @@ function evaluarCandidataLocal(
   const vectorSimuladoPorId = indexarPorId(vectorDeRiesgo(posicionesSimuladas, porTicker, null))
 
   for (const eje of EJES_LOCALES) {
-    const estado = estadoLocal(eje, candidata, vectorActualPorId[eje], vectorSimuladoPorId[eje])
+    const estado = estadoEjeLocal(eje, candidata, vectorActualPorId[eje], vectorSimuladoPorId[eje])
     const esPrimario = eje === ejePrimario
     if (esPrimario) {
       if (estado !== 'mejora') return { candidata, eje, motivo: estado === 'sin_dato' ? 'sin_dato' : 'empeora' }
