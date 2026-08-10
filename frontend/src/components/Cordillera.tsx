@@ -6,6 +6,9 @@
 
 import { picoDeColumnas, type ColumnaCordillera } from '@/lib/cartera/renta'
 
+const ROTULO_MARCA: Record<'se_llena' | 'se_vacia', string> = { se_llena: '▲', se_vacia: '▼' }
+const COLOR_MARCA: Record<'se_llena' | 'se_vacia', string> = { se_llena: 'var(--pos)', se_vacia: 'var(--neg)' }
+
 export function Cordillera({
   titulo,
   columnas,
@@ -13,6 +16,7 @@ export function Cordillera({
   colorBarra,
   formatoMonto,
   leyenda,
+  marcas,
 }: {
   titulo: string
   columnas: ColumnaCordillera[]
@@ -20,6 +24,9 @@ export function Cordillera({
   colorBarra: string
   formatoMonto: (valor: number) => string
   leyenda: string
+  /** F-037: mes que cambia de cobertura al comparar contra otra cartera, por `etiqueta`. Sin esta
+   *  prop, el render es idéntico al de antes de F-037. */
+  marcas?: ReadonlyMap<string, 'se_llena' | 'se_vacia'>
 }) {
   const pico = picoDeColumnas(columnas)
 
@@ -52,11 +59,27 @@ export function Cordillera({
       </div>
 
       <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-        {columnas.map((columna) => (
-          <div key={columna.etiqueta} className="mono" style={{ flex: 1, minWidth: 0, textAlign: 'center', fontSize: 9, color: 'var(--dim)' }}>
-            {columna.etiqueta}
-          </div>
-        ))}
+        {columnas.map((columna) => {
+          const marca = marcas?.get(columna.etiqueta)
+          return (
+            <div
+              key={columna.etiqueta}
+              className="mono"
+              title={marca === 'se_llena' ? 'Se llena' : marca === 'se_vacia' ? 'Se vacía' : undefined}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                textAlign: 'center',
+                fontSize: 9,
+                color: marca ? COLOR_MARCA[marca] : 'var(--dim)',
+                fontWeight: marca ? 700 : 400,
+              }}
+            >
+              {marca ? `${ROTULO_MARCA[marca]} ` : ''}
+              {columna.etiqueta}
+            </div>
+          )
+        })}
       </div>
 
       <p style={{ margin: '8px 0 0', fontSize: 10.5, color: 'var(--dim)' }}>{leyenda}</p>
