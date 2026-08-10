@@ -70,7 +70,7 @@ desde `/build-feature` a medida que cada una se implementa.
 | F-038 | Monitor de mercado | Stage 1 | 106,7 | completada |
 | F-039 | Ficha de instrumento | Stage 1 | 112,0 | completada |
 | F-040 | Sensibilidad por repricing completo | Stage 1 | 66,7 | **completada** |
-| F-041 | Guardar, listar, reabrir y revaluar | Stage 1 | 180,0 | pendiente |
+| F-041 | Guardar, listar, reabrir y revaluar | Stage 1 | 180,0 | **completada** |
 | F-042 | Exportación a Excel y PDF | Stage 1 | 100,0 | pendiente |
 | F-051 | Métricas propias: TIR, duración y paridad | Stage 1 | 160,0 | **completada** |
 | F-052 | Renta variable en el monitor | Stage 1 | 106,7 | **completada** |
@@ -692,7 +692,51 @@ cuatro naturalezas leyéndose en las dos columnas.
   aceptada hizo desaparecer `ComparacionCarteras` entera y devolvió las tres propuestas originales
   (incluida la que se acababa de aceptar) a la lista de "Subir la TIR".
 
-Siguiente paso: la **tanda 17 — F-041 (guardar/reabrir carteras), sola**. Consume F-018 y F-037.
+### Tanda 17 cerrada el 10/08/2026 — F-041 (guardar, listar, reabrir y revaluar carteras), sola
+
+Cierra el Ciclo 4 salvo F-042. Verificado en el navegador contra el proyecto real de Supabase
+(`xnkdsrzgxmceectenajp`), guardando, reabriendo, revaluando, reabriendo en el armador y borrando
+una cartera de cada origen. Consumió F-018 y F-037.
+
+- **Persistencia vía PostgREST + RLS desde el frontend, no vía FastAPI**: saldó la deuda declarada
+  al cerrar la Tanda 1 (línea de abajo) sin tocar el backend. `frontend/src/lib/supabase.ts`
+  (F-014, anon key) es el único cliente de Supabase; F-041 fue su primer consumidor de tablas de
+  usuario — hasta acá el cliente sólo se usaba para `auth`. El pool del backend sigue conectado
+  como `postgres` (`rolbypassrls=true`) y sigue sin servir ninguna tabla de usuario.
+- **El snapshot es `jsonb`, no columnas**: `carteras` ganó `origen`, `moneda_referencia`, `monto`,
+  `resumen`, `snapshot_en` (denormalizadas, para que el listado nunca baje un snapshot) y
+  `snapshot` (el estado congelado entero, unión discriminada por `origen` — `cargada` o
+  `armador` —, `z.strictObject` en todos los niveles propios). Normalizar en `posiciones` habría
+  exigido soltar su FK a `instrumentos` (rompe con tickers inválidos y con FCI) y adivinar columnas
+  que difieren por origen — mismo criterio que ya regía `propuestas.payload`. `posiciones` y
+  `propuestas` quedaron sin usar.
+- **`user_id` se completa solo**: `ALTER COLUMN user_id SET DEFAULT auth.uid()` — el INSERT del
+  frontend no lo manda, PostgREST lo toma del JWT y la policy `WITH CHECK` lo sigue verificando.
+- **GWT-1 (reabrir muestra lo guardado, no lo de hoy) es consecuencia de la implementación, no una
+  promesa**: `VistaCongelada` renderiza exclusivamente el `snapshot`; verificado en el navegador
+  con la fila real de Supabase, sin ningún request de mercado hasta tocar "Revaluar a hoy". Ese
+  botón recién ahí monta `useCarteraCargadaValuada` (origen `cargada`, el mismo hook del pipeline
+  vivo) o el universo + tipo de cambio de hoy (origen `armador`), y compara con `compararValuaciones`
+  — delta por posición sólo si la moneda coincide en las dos puntas, total en USD con el TC de cada
+  punta declarado, faltantes nombrados nunca estimados. Visto en producción, origen armador: "Total:
+  US$ 9.485,02 → US$ 9.483,71 (Δ US$ -1,31)" con cada ticker abierto y su delta o su motivo.
+- **"Abrir en el armador" rehidrata sólo el mandato**, no la foto valuada: `cargarCartera` +
+  `fijarMontoTotal` sobre las mismas posiciones y el mismo capital objetivo guardados —el armador
+  recalcula todo con precios de hoy, que es lo que "seguir trabajando" pide—. Verificado: la
+  cartera reabierta mostró los mismos % pedidos por ticker que tenía al guardar.
+  **Sólo entra para origen `armador`**; rehidratar el origen `cargada` (`CarteraConfirmada` +
+  `PlanRotacionProvider` con estado inicial) queda fuera de alcance, deuda declarada — ningún GWT
+  lo pedía y el snapshot ya guarda el plan de rotaciones validable con `esquemaCandidata`.
+- **GWT-3 (aislamiento entre asesores) verificado por SQL, no sólo por la policy en el papel**: con
+  `set local role authenticated` + `request.jwt.claims` simulando dos `sub` distintos, el asesor B
+  ve 0 filas de una cartera de A, y un INSERT de B con `user_id` de A explícito lo rechaza
+  `insufficient_privilege: new row violates row-level security policy for table "carteras"`.
+- **GWT-4 (sin campos de cliente) verificado en una fila real**: `jsonb_object_keys(snapshot)` de
+  la cartera guardada en el navegador dio exactamente `{origen, version, resueltas, posiciones,
+  tipoDeCambio, montoTotalUsd, totalInvertidoUsd}` — la whitelist declarada, nada más.
+
+Siguiente paso: la **tanda 18 — F-042 (exportación a Excel y PDF), sola**. Consume F-041. Es la
+última tanda del camino crítico del plan.
 
 ### Lo que F-013 puso a la vista, y la decisión que dejó abierta
 
@@ -823,10 +867,11 @@ corrida matinal de F-008, programada a las 09:00, no cae en la misma ventana vac
   contra la clave pública de `/auth/v1/.well-known/jwks.json` y **la variable ya no existe** — una
   firma asimétrica se verifica con una clave pública, así que no hay secreto que configurar.
 - **El pool del backend se conecta con un rol que saltea RLS** (`postgres`, `rolbypassrls=true`).
-  Hoy no se materializa porque ningún endpoint sirve tablas de usuario, pero **F-041 no puede
-  exponer carteras por `/api/v1/` sin resolver esto antes**: o el frontend las lee directo de
-  Supabase con el JWT del asesor, o la conexión asume el rol `authenticated` con el `sub` del
-  token antes de la consulta. Verificado empíricamente al cerrar la tanda.
+  **Saldada al cerrar la tanda 17 (F-041, 10/08/2026)**: se optó por la primera salida — el
+  frontend lee y escribe `carteras` directo contra PostgREST con el JWT del asesor
+  (`frontend/src/lib/supabase.ts`), sin pasar por `/api/v1/`. El pool del backend sigue con el
+  mismo rol y sigue sin servir ninguna tabla de usuario; la deuda no se resolvió tocándolo, se
+  esquivó por diseño.
 
 ### Lo que F-007 dejó pendiente, declarado
 
