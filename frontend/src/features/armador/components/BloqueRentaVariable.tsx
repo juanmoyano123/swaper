@@ -53,6 +53,7 @@ import { BadgeClase } from './BadgeClase'
 import { useCarteraResuelta } from '../hooks/useCarteraResuelta'
 import { useRentaVariableResuelta } from '../hooks/useRentaVariableResuelta'
 import { sumaPesos } from '../lib/mix'
+import { presetPorId, SIN_PERFILES_DE_EMPRESA } from '../lib/tematicas'
 import { type PosicionRvResuelta } from '../lib/resolverRentaVariable'
 import {
   useArmador,
@@ -81,7 +82,7 @@ const estiloSelectPicker = {
 } as const
 
 export function BloqueRentaVariable() {
-  const { pos } = useArmador()
+  const { pos, tematicaId } = useArmador()
   const { alternarRentaVariable, fijarPeso } = useArmadorAcciones()
   const abrirInstrumento = useAbrirInstrumento()
 
@@ -96,6 +97,16 @@ export function BloqueRentaVariable() {
   const [busqueda, setBusqueda] = useState('')
   const [sectorFiltro, setSectorFiltro] = useState<string | null>(null)
   const [industriaFiltro, setIndustriaFiltro] = useState<string | null>(null)
+
+  // Un preset temático (Tanda 13) filtra los dos lados a la vez: la grilla de bonos por su sector
+  // y este bloque por el rubro equivalente de Yahoo. El sector del preset se aplica al cambiar de
+  // temática y después queda editable — el chip es un punto de partida, no un modo.
+  const [tematicaAplicada, setTematicaAplicada] = useState<string | null>(null)
+  if (tematicaId !== tematicaAplicada) {
+    setTematicaAplicada(tematicaId)
+    setSectorFiltro(presetPorId(tematicaId)?.sectorRv ?? null)
+    setIndustriaFiltro(null)
+  }
 
   // Sector y rubro son del perfil de empresa (Etapa 5): las opciones de una clase no tienen por
   // qué existir en la otra, así que cambiar de Acciones a CEDEARs limpia la selección en vez de
@@ -299,6 +310,13 @@ export function BloqueRentaVariable() {
           </select>
         </label>
       </div>
+
+      {/* Sin perfiles cargados, los dos selects quedan con una sola opción y filtrar por rubro no
+          devuelve nada. Decirlo evita que una lista vacía se lea como "no hay papeles de este
+          rubro" cuando en realidad es que el dato todavía no se trajo (regla 1). */}
+      {!cargandoPicker && !erroresPicker && sectoresPicker.length === 0 && listaPicker.length > 0 && (
+        <p style={{ margin: '0 0 8px', fontSize: 11, color: 'var(--ac2)' }}>{SIN_PERFILES_DE_EMPRESA}</p>
+      )}
 
       {cargandoPicker && <p style={{ fontSize: 11.5, color: 'var(--dim)' }}>Cargando especies…</p>}
       {erroresPicker && <p style={{ fontSize: 11.5, color: 'var(--neg)' }}>No se pudo traer el universo de renta variable.</p>}

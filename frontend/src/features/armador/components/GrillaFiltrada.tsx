@@ -11,6 +11,7 @@ import { useMemo } from 'react'
 
 import { CLAVES_RENTA_VARIABLE, ordenarSegmentos } from '@/components/SelectorSegmento'
 
+import { ChipsTematicos } from './ChipsTematicos'
 import { FiltrosGrilla } from './FiltrosGrilla'
 import { GrillaDoceMeses } from './GrillaDoceMeses'
 import { useEspeciesUniverso } from '../hooks/useEspeciesUniverso'
@@ -108,6 +109,7 @@ export function GrillaFiltrada({ meses }: { meses: MesDelCalendario[] }) {
 
   return (
     <>
+      <ChipsTematicos />
       <FiltrosGrilla
         opciones={opciones}
         conteo={filtrado}

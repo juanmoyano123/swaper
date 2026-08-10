@@ -61,6 +61,9 @@ interface EstadoArmador {
   montoTotal: number
   /** Filtros de la barra de F-017 (A7): filtran la oferta que se ve en la grilla, nunca `pos`. */
   filtros: FiltrosArmador
+  /** Qué preset temático está aplicado, o `null`. Es sólo el chip prendido: los filtros que el
+   *  preset dejó viven en `filtros`, y tocarlos a mano apaga el chip sin deshacerlos. */
+  tematicaId: string | null
 }
 
 type AccionArmador =
@@ -74,6 +77,7 @@ type AccionArmador =
   | { tipo: 'agregarFci'; nombre: string; peso: number }
   | { tipo: 'fijarFiltros'; filtros: FiltrosArmador }
   | { tipo: 'limpiarFiltros' }
+  | { tipo: 'aplicarTematica'; id: string; filtros: FiltrosArmador }
   | { tipo: 'cargarCartera'; posiciones: PosicionArmador[] }
 
 const ESTADO_INICIAL: EstadoArmador = {
@@ -82,6 +86,7 @@ const ESTADO_INICIAL: EstadoArmador = {
   montoTotal: 0,
   // Default de fábrica: sólo TIR ≥ 6% con cupones, no "sin filtros" — ver FILTROS_ARMADOR_INICIALES.
   filtros: FILTROS_ARMADOR_INICIALES,
+  tematicaId: null,
 }
 
 /** Agrega el ticker con esa clase si no estaba; lo saca si ya estaba. El toggle es por ticker y no
@@ -137,10 +142,15 @@ function reducer(estado: EstadoArmador, accion: AccionArmador): EstadoArmador {
     // Los filtros filtran la oferta, no la cartera: estas dos acciones nunca tocan `pos`,
     // `selMes` ni `montoTotal` — un papel ya seleccionado sigue en la cartera aunque un filtro
     // le tape el renglón en la grilla.
+    // Tocar un filtro a mano apaga el chip de la temática, pero no deshace lo que el preset dejó
+    // puesto: el asesor sigue viendo lo que venía viendo, más su ajuste. Dejarlo prendido diría
+    // que la grilla muestra la temática cuando ya muestra otra cosa.
     case 'fijarFiltros':
-      return { ...estado, filtros: accion.filtros }
+      return { ...estado, filtros: accion.filtros, tematicaId: null }
     case 'limpiarFiltros':
-      return { ...estado, filtros: FILTROS_ARMADOR_VACIOS }
+      return { ...estado, filtros: FILTROS_ARMADOR_VACIOS, tematicaId: null }
+    case 'aplicarTematica':
+      return { ...estado, filtros: accion.filtros, tematicaId: accion.id }
     // F-019: el armado asistido es un punto de partida, no un agregado -- reemplaza `pos` entero
     // en vez de ir posición por posición como haría un `alternarPapel` en loop, que pisaría el
     // peso de lo que ya estuviera cargado en vez de reemplazarlo. `montoTotal`, `selMes` y
@@ -182,6 +192,8 @@ interface AccionesArmador {
   fijarFiltros: (filtros: FiltrosArmador) => void
   /** Vuelve todos los filtros a `FILTROS_ARMADOR_VACIOS` de una sola vez (GWT-3). */
   limpiarFiltros: () => void
+  /** Aplica un preset temático: deja sus filtros puestos y prende su chip. */
+  aplicarTematica: (id: string, filtros: FiltrosArmador) => void
   /** Reemplaza `pos` entero con lo que devolvió el armado asistido (F-019), normalizando los
    *  pesos a un decimal. Es un punto de partida: si ya había posiciones cargadas, se pisan sin
    *  pedir confirmación -- el asesor sigue pudiendo editar cada una después, igual que con
@@ -211,6 +223,8 @@ export function ArmadorProvider({ children }: { children: ReactNode }) {
       agregarFci: (nombre: string, peso: number) => dispatch({ tipo: 'agregarFci', nombre, peso }),
       fijarFiltros: (filtros: FiltrosArmador) => dispatch({ tipo: 'fijarFiltros', filtros }),
       limpiarFiltros: () => dispatch({ tipo: 'limpiarFiltros' }),
+      aplicarTematica: (id: string, filtros: FiltrosArmador) =>
+        dispatch({ tipo: 'aplicarTematica', id, filtros }),
       cargarCartera: (posiciones: PosicionArmador[]) =>
         dispatch({ tipo: 'cargarCartera', posiciones }),
     }),
