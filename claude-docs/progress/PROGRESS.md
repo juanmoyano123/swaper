@@ -492,6 +492,78 @@ precedente de F-017 — un archivo con muchos dueños simultáneos (`ArmadorPage
 532 tests de frontend (508 → 532) y 1130 de backend (1104 → 1130) en verde, tsc/build/lint
 limpios en las seis etapas. Verificado a mano contra el backend real en cada una.
 
+**Rediseño del flujo renta fija / renta variable del Armador, cerrado el 10/08/2026 — trabajo
+suelto entre tandas, diez commits.** Segunda mitad del rediseño de arriba: aquélla arregló la
+jerarquía visual de la pantalla, ésta arregla el flujo. Tampoco es una feature de `plan.md`, y por
+el mismo motivo se hizo serializada y no en paralelo — `ArmadorPage.tsx` y sus `components/` los
+tocan todos los cambios. **623 tests de frontend (532 → 623, 62 archivos) y 1160 de backend
+(1130 → 1160)**, tsc/build/lint limpios. Van **39 de 42 features de Stage 1**: el conteo no se
+mueve porque nada de esto es una feature.
+
+**Ojo con el rótulo**: los comentarios del código nuevo dicen "Tanda 13", pero ese número ya lo
+tiene la tanda F-033 ∥ F-035 de acá arriba. Es trabajo suelto entre tandas, como el rediseño; el
+nombre en el código quedó, el número no vale.
+
+- **Rebalanceo pro-rata** (`features/armador/lib/rebalanceo.ts`): agregar o quitar una posición
+  reparte proporcionalmente entre las que quedan, y la cartera vuelve a sumar 100,0 exacto. Antes
+  agregar daba `100/(n+1)` a la nueva sin tocar el resto y quitar dejaba el hueco sin repartir —
+  en una cartera mixta eso significaba que sacar toda la renta variable no devolvía ese 25% a
+  ninguna parte. El reparto se hace en **décimas enteras con el método del resto mayor** (1000
+  décimas, sobrante a los restos más grandes, desempate por peso y luego por orden de entrada):
+  sumar floats de a 0,1 acumula error y con quince posiciones el total termina en
+  99,99999999999999. **`fijarPeso` es la única acción que no rebalancea, a propósito**: editar un
+  porcentaje a mano es una intención sobre esa posición, no una orden de mover a las demás — y la
+  cabecera ya marca en ámbar cuando la suma se desvía.
+- **El monto dejó de estar duplicado** (`PanelArmadoAsistido.tsx`): había dos campos "monto" sin
+  relación entre sí. El del asistido viajaba al backend y se descartaba al cargar el resultado; el
+  de la cartera era el único que los resolvers usaban. Ahora los dos son vistas del mismo
+  `montoTotal` del store.
+- **Armado asistido RF+RV** (`backend/app/armado/renta_variable.py` nuevo, `api/v1/armado.py`
+  extendido): `POST /api/v1/armado` acepta `pct_rv` (default por perfil desde `PCT_RV_PERFIL` —
+  conservador 0 / moderado 25 / agresivo 60, calcados de `referencia/carteras-sugeridas-ifa.xlsx`)
+  y `sector_rv`. Devuelve cada posición con `clase: "renta_fija" | "renta_variable"` y un
+  `pct_rv_aplicado`. **El motor `armar()` no se tocó**: la paridad con `tools/armar_cartera.py`
+  queda intacta y la composición de los dos bloques vive en el endpoint. La renta variable no puede
+  armarse dentro de `motor.py` porque `EspecieUniverso` no representa una acción (`.naturaleza`
+  busca un segmento que no existe), así que tiene su propio tipo y su propio criterio: **liquidez
+  (`volumen_usd`) descendente con diversificación sectorial en dos pasadas**, empate por ticker.
+  Una especie sin `volumen_usd` no participa —no se le asume cero, regla 1— y con temática activa
+  una especie sin sector tampoco: no se puede afirmar que pertenezca.
+- **Badges de clase** (`components/BadgeClase.tsx`): SOB / SUB / ON / ACC / CEDEAR al lado del
+  ticker en grilla, cartera y renta variable. `clase_activo` es vocabulario curado del proyecto
+  (lo asigna `ingesta/consolidacion/clasificacion.py`), no un código propietario de una fuente, así
+  que traducir los cinco valores conocidos es leer lo que la fuente declara. **Un sexto valor se
+  mostraría crudo y sin color** en vez de entrar a la categoría más parecida (regla 11).
+- **La cartera se lee entera y por bloques** (`CarteraEditable.tsx`, `lib/bloques.ts`): la tabla
+  dejó de listar sólo renta fija en orden de incorporación. Ahora muestra la cartera completa
+  agrupada en cinco bloques con subtotal pedido —soberanos y subsoberanos, corporativos, fondos,
+  sin clasificar, renta variable—, que es el formato del Excel de la mesa. **El "% real" pasó a
+  medirse contra la cartera entera y no contra cada bloque**: cada uno resuelve su invertido con
+  otra aritmética (lámina y precio cada 100 VN contra unidades enteras) y apilarlos bajo la misma
+  columna daba porcentajes que no sumaban a nada. En la fila de una acción va la denominación de la
+  empresa donde el bono muestra el emisor, y la columna de pagos dice **"no aplica"**, no `s/d`: una
+  acción no tiene cronograma, el dato no falta, no existe.
+- **Atajos temáticos** (`lib/tematicas.ts`, `components/ChipsTematicos.tsx`): Energía, Financieras,
+  Tecnológicas y Cobertura inflación precargan de un clic los filtros de renta fija y el sector de
+  renta variable a la vez. **Los sectores de RF están verificados uno por uno contra
+  `data/condiciones_emision.csv`** — un preset que filtrara por un sector inexistente devolvería
+  cero sin explicar por qué. "Tecnológicas" declara que arma **sólo renta variable** porque el
+  universo de bonos no tiene emisores tecnológicos, y no se aproxima con Telecomunicaciones, que es
+  otra cosa. El chip se apaga cuando los filtros dejan de coincidir con lo que dejó puesto, pero no
+  deshace nada.
+- **Las bajadas declaran los dos caminos** (`ArmadorPage.tsx`): se reescribieron para decir que el
+  asistido (un botón) y el manual (Cordillera + Renta variable con temáticas) llegan a la misma
+  cartera y que los dos terminan en la sección Cartera. `docs/guia-armador.md` se reorganizó en esos
+  dos caminos.
+
+**Tarea pendiente que este trabajo dejó a la vista: el job de perfiles de Yahoo nunca corrió.**
+`public.perfil_renta_variable` está **vacía en producción (0 filas)** mientras `instrumentos` tiene
+434 acciones y 1.205 CEDEARs. La tabla y el job (`POST /api/v1/jobs/perfiles-renta-variable`) los
+dejó construidos la Etapa 4 del rediseño anterior; lo que falta es correrlo. Consecuencias
+prácticas, las dos declaradas en pantalla y ninguna un bug: los filtros por sector y rubro del
+buscador de renta variable no encuentran nada, y **la diversificación sectorial del armado asistido
+no puede aplicarse** — arma por liquidez pura y lo dice con la alerta `rv_sin_perfil_sectorial`.
+
 Siguiente paso: la **tanda 14 — F-034 (subir TIR), sola**. Comparte el contrato de la fila de
 propuesta con F-033 (mandato del plan).
 

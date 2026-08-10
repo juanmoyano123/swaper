@@ -283,6 +283,62 @@ más, sin tocar la semántica de los once de arriba:
 `--neg` a excedido/prohibición. `.rotulo` pasó de `--ac` a `--dim` — el rótulo de un panel no es
 ninguna de las cuatro cosas de arriba, y con acento en cada título el verde no distinguía nada.
 
+### Desviación aprobada — flujo renta fija / renta variable (10/08/2026)
+
+Esta spec describe la renta variable como un **panel aparte** (A4) y la cartera (A8) como una tabla
+de bonos en orden de incorporación. El rediseño del flujo RF/RV cambió las dos cosas: la cartera es
+una sola y se lee entera. Tres agregados, sin tocar la semántica de los tokens de arriba.
+
+**Badges de clase de activo.** Sigla de dos o tres letras al lado del ticker, en la grilla, en la
+cartera y en el bloque de renta variable. Mono 9 px, `letter-spacing: .04em`, padding 1×4 px, radio
+2 px, borde 1 px y texto **del mismo color**, fondo transparente. El `title` trae la descripción
+larga: nadie tiene por qué saber que SUB es subsoberano.
+
+| Sigla | Clase de activo | Color |
+|---|---|---|
+| `SOB` | Bono soberano | `--cat1` |
+| `SUB` | Bono subsoberano | `--cat1` |
+| `ON` | Obligación negociable | `--cat2` |
+| `ACC` | Acción | `--cat3` |
+| `CEDEAR` | CEDEAR | `--cat3` |
+
+Soberano y subsoberano comparten `--cat1` porque son el mismo eje (deuda pública, distinto emisor);
+acción y CEDEAR comparten `--cat3` por lo mismo. **Una clase que no está en esta tabla se muestra
+con su código crudo y en `--dim`, sin color**: `clase_activo` es vocabulario curado del proyecto,
+así que traducir los cinco valores conocidos es leer lo que la fuente declara, pero un sexto valor
+no se mete a la fuerza en la categoría más parecida (regla 11 del dominio). Sin dato de clase no se
+renderiza nada — un "s/d" al lado de cada ticker es ruido sin información.
+
+**Chips temáticos.** Píldoras arriba de la barra de filtros de Cordillera que precargan de un clic
+los filtros de renta fija y el sector de renta variable a la vez. Mismo molde que los chips de
+mandato (A1): radio 12 px, padding 4×11 px, 11,5 px. Activo: fondo `--ac`, texto `--bg`, borde
+`--ac`. Inactivo: fondo transparente, texto `--dim`, borde `--lin`. Rótulo "TEMÁTICAS" 10 px
+mayúsculas `letter-spacing: .06em` en `--dim` a la izquierda del grupo; el `title` de cada chip
+declara qué precarga y qué deja sin filtrar.
+
+El chip se apaga solo cuando los filtros dejan de coincidir con los que dejó puesto, pero **no
+deshace nada**: seguir prendido sobre una grilla que ya muestra otra cosa sería mentir sobre el
+estado. Un preset no puede referirse a un sector que no existe en el universo, y cuando la temática
+no tiene contraparte en una de las dos clases lo declara en vez de aproximar (no hay renta fija
+tecnológica, y ninguna acción ajusta por inflación por contrato).
+
+**Cartera agrupada por bloques.** A8 pasa de lista plana a **cinco bloques en orden fijo** —
+Soberanos y subsoberanos · Corporativos · Fondos comunes · Sin clasificar · Renta variable —, que es
+el orden del Excel de la mesa. Un bloque sin posiciones no se muestra.
+
+- Cabecera de bloque: `flex` con `justify-content: space-between`, padding 8/2/2 px. Rótulo 10 px
+  peso 600 mayúsculas `letter-spacing: .07em` en `--dim`; a la derecha el **subtotal de ponderación
+  pedida** del bloque, mono 11,5 px `--tx`.
+- **No lleva `role="row"`**: la tabla se navega por filas de posición, y contar separadores como
+  filas rompe la lectura por lector de pantalla.
+- **El "% real" de cada fila se mide contra la cartera entera, no contra su bloque.** Cada bloque
+  resuelve su invertido con una aritmética distinta (lámina y precio cada 100 VN en renta fija,
+  unidades enteras en renta variable); apilar las dos bases bajo la misma columna daría porcentajes
+  que no suman a nada.
+- En la fila de renta variable, la columna del emisor lleva la **denominación de la empresa**, la
+  cantidad va en unidades enteras (no hay valor nominal) y el mini-calendario dice **"no aplica"**,
+  no `s/d` — una acción no tiene cronograma: el dato no falta, no existe (regla 4 de esta spec).
+
 ### Tipografía
 
 - **Texto**: `ui-sans-serif, system-ui, "Helvetica Neue", sans-serif`, `-webkit-font-smoothing: antialiased`. Si el codebase tiene una grotesca propia, usarla.
