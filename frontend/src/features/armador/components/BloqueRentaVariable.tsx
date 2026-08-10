@@ -43,7 +43,7 @@
  * efectivamente invertido) — dos cuentas distintas que pueden no coincidir, y las dos se muestran.
  */
 
-import { type ReactNode, useMemo, useState } from 'react'
+import { type ReactNode, useState } from 'react'
 
 import { useAbrirInstrumento } from '@/features/instrumento/useAbrirInstrumento'
 import { fmtFecha, fmtMonto, fmtPct, SIN_DATO } from '@/lib/fmt'
@@ -51,11 +51,10 @@ import { type EspecieRentaVariable, useRentaVariable } from '@/lib/rentaVariable
 
 import { BadgeClase } from './BadgeClase'
 import { useCarteraResuelta } from '../hooks/useCarteraResuelta'
-import { useTipoDeCambio } from '../hooks/useTipoDeCambio'
+import { useRentaVariableResuelta } from '../hooks/useRentaVariableResuelta'
 import { sumaPesos } from '../lib/mix'
-import { resolverRentaVariable, subtotalRentaVariableUsd, type PosicionRvResuelta } from '../lib/resolverRentaVariable'
+import { type PosicionRvResuelta } from '../lib/resolverRentaVariable'
 import {
-  posicionesRentaVariable,
   useArmador,
   useArmadorAcciones,
   type PosicionArmador,
@@ -82,13 +81,12 @@ const estiloSelectPicker = {
 } as const
 
 export function BloqueRentaVariable() {
-  const { pos, montoTotal } = useArmador()
+  const { pos } = useArmador()
   const { alternarRentaVariable, fijarPeso } = useArmadorAcciones()
   const abrirInstrumento = useAbrirInstrumento()
 
   const acciones = useRentaVariable('accion')
   const cedears = useRentaVariable('cedear')
-  const tipoDeCambio = useTipoDeCambio()
   // Sólo lectura: F-021/F-020 ya extrajeron este hook para no repetir el pipeline. Se usa acá
   // únicamente para declarar cómo se compone el monto total (GWT-4) — este bloque no recalcula
   // nada de renta fija.
@@ -108,31 +106,16 @@ export function BloqueRentaVariable() {
     setIndustriaFiltro(null)
   }
 
-  const porTicker = useMemo(() => {
-    const mapa = new Map<string, EspecieRentaVariable>()
-    for (const especie of acciones.data ?? []) mapa.set(especie.ticker, especie)
-    for (const especie of cedears.data ?? []) mapa.set(especie.ticker, especie)
-    return mapa
-  }, [acciones.data, cedears.data])
-
-  const posicionesRv = posicionesRentaVariable(pos)
-  const tcValor = tipoDeCambio.data?.tipo_de_cambio.valor ?? null
-
-  const resueltas = useMemo(() => {
-    const entradas = posicionesRv.map((p) => {
-      const especie = porTicker.get(p.ticker)
-      return {
-        ticker: p.ticker,
-        peso: p.peso,
-        precio: especie?.precio ?? null,
-        monedaCotizacion: especie?.moneda_cotizacion ?? null,
-      }
-    })
-    return resolverRentaVariable(entradas, montoTotal, tcValor)
-  }, [posicionesRv, porTicker, montoTotal, tcValor])
-
-  const subtotalRvUsd = subtotalRentaVariableUsd(resueltas)
-  const hayAlgunaRvResuelta = resueltas.some((r) => r.invertidoUsd !== null)
+  // El cruce contra el universo y la resolución a unidades enteras viven en el hook desde la
+  // Tanda 13: `CarteraEditable` muestra las mismas posiciones en su bloque de renta variable y los
+  // dos paneles tienen que dar el mismo número.
+  const {
+    posiciones: posicionesRv,
+    resueltas,
+    porTicker,
+    subtotalUsd: subtotalRvUsd,
+    hayAlgunaResuelta: hayAlgunaRvResuelta,
+  } = useRentaVariableResuelta()
 
   // GWT-4: el monto total incluye las dos porciones, cada una con su subtotal identificado. Sin
   // ninguna de las dos resuelta no hay total que declarar — no es 0, es sin dato.
