@@ -157,7 +157,12 @@ async def refresh_intra_rueda(
     )
 
     capturado_en = datetime.now(UTC)
-    escritura = await persistir(conn, consolidacion_refresco, capturado_en)
+    escritura = await persistir(
+        conn,
+        consolidacion_refresco,
+        capturado_en,
+        serie_historica=settings.serie_historica_habilitada,
+    )
     fin = datetime.now(UTC)
 
     alertas = [*rueda.snapshot.alertas, *alertas_consolidacion, *escritura.alertas]

@@ -8,9 +8,11 @@ se toque cuando la corrida no trajo uno usable, y que el fallo de un bloque no a
 
 from datetime import UTC, datetime
 
+from app.ingesta.alertas import Severidad
 from app.ingesta.consolidacion.armado import Consolidacion
 from app.ingesta.consolidacion.persistencia import (
     CODIGO_ESCRITURA_FALLIDA,
+    CODIGO_PODA_FALLIDA,
     COLUMNAS_INSTRUMENTOS,
     COLUMNAS_PRECIOS,
     persistir,
@@ -191,9 +193,11 @@ async def test_persistir_nunca_lanza() -> None:
 async def test_cada_bloque_abre_y_cierra_su_propia_transaccion() -> None:
     conn = FakeConexionEscritura()
 
+    # Cuatro y no tres desde el 10/08/2026: la poda de snapshots es un bloque más, con su propia
+    # transacción para que un problema borrando no arrastre una escritura que salió bien.
     await persistir(conn, consolidacion_minima(), CAPTURADO_EN)
 
-    assert conn.transacciones == ["begin", "commit"] * 3
+    assert conn.transacciones == ["begin", "commit"] * 4
 
 
 # --- Lotes --------------------------------------------------------------------------------------
@@ -208,3 +212,71 @@ async def test_las_escrituras_grandes_se_trocean() -> None:
     lotes = [args for query, args in conn.escrituras if "INTO public.instrumentos" in query]
     assert [len(lote) for lote in lotes] == [1000, 1000, 500]
     assert escritura.filas_por_tabla["instrumentos"] == 2500
+
+
+# --- Poda de snapshots: que la tabla deje de crecer sin perder cotizaciones ----------------------
+
+
+def _deletes(conn: FakeConexionEscritura) -> list[str]:
+    return [query for query, _ in conn.escrituras if query.startswith("DELETE")]
+
+
+async def test_por_defecto_se_poda_y_queda_una_fila_por_ticker() -> None:
+    """Sin serie histórica, cada corrida borra lo anterior de las dos tablas que acumulaban."""
+    conn = FakeConexionEscritura()
+
+    await persistir(conn, consolidacion_minima(), CAPTURADO_EN)
+
+    borrados = _deletes(conn)
+    assert len(borrados) == 2
+    assert any("DELETE FROM public.precios" in sql for sql in borrados)
+    assert any("DELETE FROM public.puntas" in sql for sql in borrados)
+
+
+async def test_la_poda_se_correlaciona_por_ticker_y_no_contra_el_maximo_global() -> None:
+    """El test que impide reintroducir el borrado que rompe el producto.
+
+    La versión ingenua —`WHERE capturado_en < (SELECT max(capturado_en) FROM precios)`— parece
+    equivalente y no lo es: BYMA sólo publica lo que operó, así que una especie que no cotizó hoy
+    tiene su fila más nueva días atrás y ese DELETE la deja sin ninguna. Medido sobre la base real
+    el 10/08/2026: 291 tickers de 3.176 en esa situación, 28 de ellos con precio. La vista `resumen`
+    los publicaría con precio, TIR y volumen en NULL.
+    """
+    conn = FakeConexionEscritura()
+
+    await persistir(conn, consolidacion_minima(), CAPTURADO_EN)
+
+    for sql in _deletes(conn):
+        assert "q.ticker = p.ticker" in sql, "la poda tiene que ser por ticker, no global"
+
+
+async def test_con_serie_historica_no_se_borra_nada() -> None:
+    """El código de la serie queda utilizable: prender el flag devuelve el comportamiento previo."""
+    conn = FakeConexionEscritura()
+
+    await persistir(conn, consolidacion_minima(), CAPTURADO_EN, serie_historica=True)
+
+    assert _deletes(conn) == []
+    assert conn.transacciones == ["begin", "commit"] * 3
+
+
+async def test_la_poda_va_despues_de_escribir_y_no_antes() -> None:
+    """Podar primero dejaría a la base sin foto si la corrida fallara a mitad de camino."""
+    conn = FakeConexionEscritura()
+
+    await persistir(conn, consolidacion_minima(), CAPTURADO_EN)
+
+    ordenes = [query.split()[0] for query, _ in conn.escrituras]
+    assert ordenes.index("DELETE") > max(i for i, o in enumerate(ordenes) if o == "INSERT")
+
+
+async def test_un_fallo_podando_no_invalida_la_corrida() -> None:
+    """Lo escrito quedó bien; lo único que pasa es que la tanda anterior no se borró."""
+    conn = FakeConexionEscritura(fallar_en="DELETE FROM public.precios")
+
+    escritura = await persistir(conn, consolidacion_minima(), CAPTURADO_EN)
+
+    assert escritura.filas_por_tabla["precios"] == 1
+    assert escritura.filas_por_tabla["puntas"] == 1
+    assert [a.codigo for a in escritura.alertas] == [CODIGO_PODA_FALLIDA]
+    assert escritura.alertas[0].severidad is Severidad.ADVERTENCIA

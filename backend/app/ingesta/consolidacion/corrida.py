@@ -216,7 +216,9 @@ async def consolidar(
         hoy=capturado_en.date(),
     )
 
-    escritura = await persistir(conn, consolidacion, capturado_en)
+    escritura = await persistir(
+        conn, consolidacion, capturado_en, serie_historica=settings.serie_historica_habilitada
+    )
 
     logger.info(
         "consolidacion_termino",

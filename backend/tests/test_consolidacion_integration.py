@@ -82,7 +82,15 @@ async def test_las_columnas_nuevas_existen_con_el_tipo_declarado(conexion) -> No
 
 @pytest.mark.integration
 async def test_toda_la_corrida_quedo_en_un_solo_instante(conexion) -> None:
-    """`max(capturado_en)` tiene que nombrar una corrida, no la última fila que se escribió."""
+    """`max(capturado_en)` tiene que nombrar una corrida, no la última fila que se escribió.
+
+    Hasta el 10/08/2026 esto se verificaba contando: las filas del último instante tenían que ser
+    tantas como tickers hubiera en la tabla. Con la poda de snapshots eso dejó de ser cierto **y
+    está bien que así sea**: BYMA sólo publica lo que operó, así que una especie que no cotizó en la
+    última corrida conserva su última cotización conocida, con el instante de aquel día. Lo que se
+    afirma ahora es lo que el test siempre quiso decir — que el instante agrupa a una corrida entera
+    y no a una fila suelta.
+    """
     ultimo = await conexion.fetchval("SELECT max(capturado_en) FROM public.precios")
     if ultimo is None:
         pytest.skip("todavía no corrió ninguna consolidación contra esta base")
@@ -90,9 +98,24 @@ async def test_toda_la_corrida_quedo_en_un_solo_instante(conexion) -> None:
     de_esa_corrida = await conexion.fetchval(
         "SELECT count(*) FROM public.precios WHERE capturado_en = $1", ultimo
     )
-    total_tickers = await conexion.fetchval("SELECT count(DISTINCT ticker) FROM public.precios")
 
-    assert de_esa_corrida == total_tickers
+    assert de_esa_corrida > 1, "un capturado_en que nombra una sola fila no nombra una corrida"
+
+
+@pytest.mark.integration
+async def test_la_poda_deja_exactamente_una_fila_por_ticker(conexion) -> None:
+    """El invariante de `SERIE_HISTORICA_HABILITADA=false`: la tabla no acumula.
+
+    Si este test falla con más filas que tickers, o la poda dejó de correr o alguien prendió la
+    serie histórica. Las dos cosas son legítimas, pero ninguna es el estado por defecto.
+    """
+    for tabla in ("precios", "puntas"):
+        filas = await conexion.fetchval(f"SELECT count(*) FROM public.{tabla}")
+        tickers = await conexion.fetchval(f"SELECT count(DISTINCT ticker) FROM public.{tabla}")
+        if not filas:
+            pytest.skip(f"{tabla} está vacía: todavía no corrió ninguna consolidación")
+
+        assert filas == tickers, f"{tabla} acumuló {filas - tickers} filas de más"
 
 
 @pytest.mark.integration

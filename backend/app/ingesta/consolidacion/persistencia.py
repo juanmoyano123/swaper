@@ -33,6 +33,7 @@ from app.ingesta.consolidacion.armado import Consolidacion
 logger = structlog.get_logger()
 
 CODIGO_ESCRITURA_FALLIDA = "escritura_fallida"
+CODIGO_PODA_FALLIDA = "poda_snapshots_fallida"
 
 COLUMNAS_INSTRUMENTOS: tuple[str, ...] = (
     "ticker",
@@ -200,6 +201,24 @@ def sql_puntas() -> str:
     )
 
 
+def sql_poda(tabla: str) -> str:
+    """Borra de `tabla` todo lo anterior a la fila más reciente **de cada ticker**.
+
+    La correlación `q.ticker = p.ticker` es la feature entera, no un detalle de estilo. La versión
+    ingenua —comparar contra el `max(capturado_en)` de la tabla, sin correlacionar— parece
+    equivalente y rompe el producto: BYMA sólo publica lo que operó, así que una especie que no
+    cotizó en la última corrida tiene su fila más nueva días atrás. Medido el 10/08/2026 sobre la
+    base real: de 3.176 tickers, **291 estaban en esa situación y 28 de ellos con precio**. Ese
+    DELETE los dejaría sin ninguna fila, y como `resumen` los toma con LEFT JOIN LATERAL, saldrían
+    publicados con precio, TIR, paridad y volumen en NULL. Hay un test que fija la correlación.
+    """
+    return (
+        f"DELETE FROM public.{tabla} p "
+        f"WHERE p.capturado_en < ("
+        f"SELECT max(q.capturado_en) FROM public.{tabla} q WHERE q.ticker = p.ticker)"
+    )
+
+
 def sql_cashflow() -> str:
     asignaciones = ", ".join(
         f"{col} = EXCLUDED.{col}"
@@ -220,6 +239,20 @@ def _tuplas(
     return [tuple(fijos.get(col, fila.get(col)) for col in columnas) for fila in filas]
 
 
+def poda_fallida(motivo: str) -> Alerta:
+    """La poda falló pero lo escrito quedó bien: la corrida sirve, la tabla creció de más."""
+    return Alerta(
+        codigo=CODIGO_PODA_FALLIDA,
+        mensaje=f"No se pudieron borrar los snapshots anteriores: {motivo}.",
+        severidad=Severidad.ADVERTENCIA,
+        accion_requerida=(
+            "Los precios de esta corrida se guardaron bien; lo único que quedó fue la tanda "
+            "anterior sin borrar. Se limpia sola en la próxima corrida."
+        ),
+        detalle={"motivo": motivo},
+    )
+
+
 def escritura_fallida(tabla: str, motivo: str) -> Alerta:
     return Alerta(
         codigo=CODIGO_ESCRITURA_FALLIDA,
@@ -237,12 +270,23 @@ async def _escribir_lotes(conn: Any, sql: str, tuplas: Sequence[tuple[Any, ...]]
         await conn.executemany(sql, tuplas[inicio : inicio + TAMANO_LOTE])
 
 
-async def persistir(conn: Any, consolidacion: Consolidacion, capturado_en: datetime) -> Escritura:
-    """Escribe las cuatro tablas en tres bloques independientes y declara qué quedó afuera.
+async def persistir(
+    conn: Any,
+    consolidacion: Consolidacion,
+    capturado_en: datetime,
+    *,
+    serie_historica: bool = False,
+) -> Escritura:
+    """Escribe las cuatro tablas en bloques independientes y declara qué quedó afuera.
 
     `conn` es una conexión de asyncpg (o cualquier cosa con `transaction()` y `executemany()`), y
     llega por parámetro en vez de sacarse de `app.state` para que F-008 pueda invocar esto desde un
     job, fuera del ciclo HTTP.
+
+    `serie_historica` llega por parámetro y no de `get_settings()` por el mismo motivo: esta función
+    no lee configuración global, así que un test controla el modo sin tocar el entorno. En `False`
+    —el default— se poda al final y queda una fila por ticker; en `True` se acumula un snapshot por
+    corrida, que es como funcionó hasta el 10/08/2026.
     """
     filas_por_tabla: dict[str, int] = {}
     alertas: list[Alerta] = []
@@ -299,10 +343,34 @@ async def persistir(conn: Any, consolidacion: Consolidacion, capturado_en: datet
             filas_por_tabla["cashflow"] = 0
             alertas.append(escritura_fallida("cashflow", f"{type(exc).__name__}: {exc}"))
 
+    # Bloque 4: poda. Va último y en su propia transacción — podar antes de escribir dejaría a la
+    # base sin foto si la corrida fallara a mitad de camino, y compartir transacción con los bloques
+    # de arriba haría que un problema borrando tire abajo una escritura que salió bien.
+    podadas: dict[str, int] = {}
+    if not serie_historica:
+        try:
+            async with conn.transaction():
+                for tabla in ("precios", "puntas"):
+                    resultado = await conn.execute(sql_poda(tabla))
+                    podadas[tabla] = _filas_borradas(resultado)
+        except Exception as exc:
+            podadas = {}
+            alertas.append(poda_fallida(f"{type(exc).__name__}: {exc}"))
+
     logger.info(
         "consolidacion_persistida",
         capturado_en=capturado_en.isoformat(),
         **filas_por_tabla,
+        serie_historica=serie_historica,
+        podadas=podadas,
         fallos=len(alertas),
     )
     return Escritura(filas_por_tabla=filas_por_tabla, alertas=alertas)
+
+
+def _filas_borradas(resultado: Any) -> int:
+    """asyncpg devuelve el command tag (`"DELETE 128"`); los fakes de los tests devuelven `None`."""
+    if not isinstance(resultado, str):
+        return 0
+    partes = resultado.split()
+    return int(partes[-1]) if partes and partes[-1].isdigit() else 0

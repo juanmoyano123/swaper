@@ -75,6 +75,22 @@ class Settings(BaseSettings):
     ingesta_rueda_desde: str = "11:00"
     ingesta_rueda_hasta: str = "17:00"
 
+    # `precios` y `puntas` tienen PK `(ticker, capturado_en)`, así que cada corrida agregaba una
+    # tanda entera en vez de pisar la anterior: ~2.900 filas cada 15 minutos, ~11 MB por día hábil,
+    # y nada las borraba. Con esto en False cada corrida deja **una fila por ticker** —la más
+    # reciente— y la tabla se estabiliza en el tamaño del universo.
+    #
+    # En True vuelve el comportamiento original, bit por bit: un snapshot por corrida, con la serie
+    # intradiaria reconstruible. Se dejó implementado a pedido del dueño del producto (10/08/2026)
+    # porque a futuro puede servir, pero hoy no se usa: la herramienta es para armar carteras
+    # —consultar un precio, mirar la TIR, decidir— y no para hacer seguimiento. El único histórico
+    # que el producto necesita es el precio al que se armó una cartera, y ese vive en
+    # `posiciones.precio_compra`.
+    #
+    # OJO: esto no es `ingesta_habilitada`. Los precios se siguen actualizando cada 15 minutos; lo
+    # que se apaga es la acumulación, no la ingesta.
+    serie_historica_habilitada: bool = False
+
     # F-014 — Supabase Auth no declara settings propios, y eso es un arreglo y no un olvido. El
     # backend valida los JWT contra el JWKS público del proyecto, que cuelga de `supabase_url`:
     # la clave con la que se verifica una firma asimétrica es pública por definición, así que no
