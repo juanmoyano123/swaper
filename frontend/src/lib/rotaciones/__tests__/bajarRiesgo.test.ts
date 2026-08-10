@@ -77,6 +77,9 @@ function candidata(overrides: {
     },
     premio_ley: null,
     riesgo_nota: 'mismo emisor — mismo riesgo crediticio',
+    // Explícito aunque F-033 no lo lea: desde F-034 el contrato lo declara, y un fixture que lo
+    // omitiera dejaría de describir lo que el backend realmente manda.
+    costo: null,
   } as Candidata
 }
 

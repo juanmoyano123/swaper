@@ -6,11 +6,15 @@
  * leídos directamente en vez de asumidos. Mismo criterio que `esquemaConcentracion.ts`: se valida
  * entero lo que se usa, todo lo demás lo tolera el modo strip por defecto de Zod.
  *
- * **Modo strip a propósito.** F-035 (tanda 13, en paralelo) le agrega a esta misma respuesta un
- * bloque `"costo"` en cada candidata — no se declara acá, así que el parseo no falla exista o no
- * ese commit todavía. Tampoco se declara `cupon` (puede traer o no un campo `fecha` por el mismo
- * motivo, y F-033 no lo necesita): cualquier clave no declarada, en cualquier nivel, se descarta
- * en silencio en vez de romper el contrato.
+ * **Modo strip a propósito.** Cualquier clave no declarada, en cualquier nivel, se descarta en
+ * silencio en vez de romper el contrato. `cupon` sigue sin declararse porque ninguno de los dos
+ * modos lo usa todavía.
+ *
+ * **`costo` se declara desde F-034** (tanda 14). Lo agrega F-035 a cada candidata y viajaba
+ * descartado desde entonces: la feature había quedado sin UI, así que el dato llegaba al browser
+ * y se tiraba. El bloque es `nullable` y no `optional` porque el backend siempre emite la clave
+ * (`motor.py`, `Candidata.como_dict()`) — emite `null` cuando el motor corre sin el servicio que
+ * resuelve puntas, no omite el campo.
  */
 
 import { z } from 'zod'
@@ -40,6 +44,24 @@ export const esquemaEspecieRotacion = z.object({
   volumen_usd: z.number().nullable(),
 })
 
+/**
+ * `CostoRotacion.como_dict()` de `backend/app/rotaciones/costos.py` — F-035.
+ *
+ * `verificable` es `false` cuando falta una punta viva en alguna pata; ahí `total_pct`, `elevado`
+ * y `payback_meses` viajan `null` en vez de calcularse sobre un supuesto. El arancel sí es siempre
+ * un número (es una constante del broker, no un dato de mercado), así que no es nullable: lo único
+ * que se puede afirmar sin puntas es ese piso, y se declara como piso.
+ */
+export const esquemaCostoRotacion = z.object({
+  arancel_pct_por_pata: z.number(),
+  spread_origen_pct: z.number().nullable(),
+  spread_destino_pct: z.number().nullable(),
+  total_pct: z.number().nullable(),
+  verificable: z.boolean(),
+  elevado: z.boolean().nullable(),
+  payback_meses: z.number().nullable(),
+})
+
 export const esquemaCandidata = z.object({
   tipo: z.enum(['mejora_rendimiento', 'mejora_perfil']),
   segmento: z.string(),
@@ -64,6 +86,7 @@ export const esquemaCandidata = z.object({
     })
     .nullable(),
   riesgo_nota: z.string(),
+  costo: esquemaCostoRotacion.nullable(),
 })
 
 export const esquemaRotaciones = z.object({
@@ -76,6 +99,7 @@ export const esquemaRotaciones = z.object({
 })
 
 export type AlertaRotacion = z.infer<typeof esquemaAlertaRotacion>
+export type CostoRotacion = z.infer<typeof esquemaCostoRotacion>
 export type EspecieRotacion = z.infer<typeof esquemaEspecieRotacion>
 export type Candidata = z.infer<typeof esquemaCandidata>
 export type ResultadoRotaciones = z.infer<typeof esquemaRotaciones>

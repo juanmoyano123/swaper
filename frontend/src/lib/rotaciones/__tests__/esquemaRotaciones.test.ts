@@ -1,7 +1,11 @@
 /**
- * F-033 — el contrato de `POST /rotaciones` tiene que tolerar el bloque `costo` que F-035 le
- * agrega en paralelo (tanda 13, mismo commit de base) sin declararlo: es la prueba de que el modo
- * strip por defecto de Zod no rompe el parseo exista o no ese campo todavía.
+ * El contrato de `POST /rotaciones` (F-032), con el bloque `costo` de F-035 ya declarado desde
+ * F-034 (tanda 14) y `cupon` todavía tolerado sin declarar por el modo strip de Zod.
+ *
+ * El shape del costo sale de `backend/app/rotaciones/costos.py` (`CostoRotacion.como_dict()`),
+ * leído directamente: las dos formas que emite el backend —verificable y no verificable— se
+ * parsean acá, porque la diferencia entre las dos es lo que la UI tiene que declarar (un costo sin
+ * puntas vivas no es cero, es no verificable).
  */
 
 import { describe, expect, it } from 'vitest'
@@ -24,6 +28,20 @@ function especie(extra: Record<string, unknown> = {}) {
   }
 }
 
+/** El costo tal como lo emite `calcular_costo` cuando las dos patas tienen puntas vivas. */
+function costoVerificable(extra: Record<string, unknown> = {}) {
+  return {
+    arancel_pct_por_pata: 0.75,
+    spread_origen_pct: 1.2,
+    spread_destino_pct: 0.8,
+    total_pct: 2.5,
+    verificable: true,
+    elevado: false,
+    payback_meses: 16.7,
+    ...extra,
+  }
+}
+
 function candidata(extra: Record<string, unknown> = {}) {
   return {
     tipo: 'mejora_rendimiento',
@@ -41,6 +59,7 @@ function candidata(extra: Record<string, unknown> = {}) {
     },
     premio_ley: null,
     riesgo_nota: 'mismo emisor — mismo riesgo crediticio',
+    costo: costoVerificable(),
     ...extra,
   }
 }
@@ -54,8 +73,8 @@ function respuesta(extra: Record<string, unknown> = {}) {
     sin_rendimiento: [],
     alertas: [
       {
-        codigo: 'costo_rotacion_no_calculado',
-        mensaje: 'El costo real de rotar todavía no se calcula.',
+        codigo: 'percentil_liquidez_no_aplica',
+        mensaje: 'El segmento tiene menos destinos operables que el mínimo para el percentil.',
         severidad: 'info',
         accion_requerida: null,
         detalle: {},
@@ -71,16 +90,34 @@ describe('esquemaRotaciones', () => {
     expect(resultado.success).toBe(true)
   })
 
-  it('tolera un bloque "costo" no declarado en cada candidata (F-035, en paralelo)', () => {
-    const conCosto = respuesta({
-      candidatas: [
-        candidata({
-          costo: { arancel_pp: 0.05, spread_pp: 0.1, payback_dias: 40 },
-        }),
-      ],
+  it('parsea el costo verificable de F-035 y lo deja llegar a la UI', () => {
+    const resultado = esquemaRotaciones.parse(respuesta())
+    expect(resultado.candidatas[0].costo).toEqual(costoVerificable())
+  })
+
+  it('parsea el costo no verificable sin convertir los faltantes en ceros', () => {
+    // Falta la punta del destino: el backend manda el arancel (constante conocida) y deja el total,
+    // el flag de elevado y el payback en null. Que sobrevivan como null es la condición para que la
+    // UI pueda declarar "no verificable" en vez de mostrar un costo inventado (regla 1).
+    const sinPuntaDestino = costoVerificable({
+      spread_destino_pct: null,
+      total_pct: null,
+      verificable: false,
+      elevado: null,
+      payback_meses: null,
     })
-    const resultado = esquemaRotaciones.parse(conCosto)
-    expect(resultado.candidatas[0]).not.toHaveProperty('costo')
+    const resultado = esquemaRotaciones.parse(respuesta({ candidatas: [candidata({ costo: sinPuntaDestino })] }))
+    expect(resultado.candidatas[0].costo).toEqual(sinPuntaDestino)
+  })
+
+  it('acepta "costo" en null: el motor puede correr sin el servicio que resuelve puntas', () => {
+    const resultado = esquemaRotaciones.parse(respuesta({ candidatas: [candidata({ costo: null })] }))
+    expect(resultado.candidatas[0].costo).toBeNull()
+  })
+
+  it('rechaza una candidata sin la clave "costo" — el backend siempre la emite', () => {
+    const { costo: _costo, ...sinCosto } = candidata()
+    expect(esquemaRotaciones.safeParse(respuesta({ candidatas: [sinCosto] })).success).toBe(false)
   })
 
   it('tolera "cupon" con o sin el campo "fecha" al no declararse en el esquema', () => {
