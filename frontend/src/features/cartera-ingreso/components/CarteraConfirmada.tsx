@@ -29,6 +29,7 @@ import { PERFILES, type NombreDePerfil } from '@/lib/cartera/esquemaConcentracio
 import type { PosicionCruda } from '../types'
 
 import { SeccionBajarRiesgo } from '@/features/optimizador/components/SeccionBajarRiesgo'
+import { SeccionSubirTir } from '@/features/optimizador/components/SeccionSubirTir'
 
 import { BotonAccion } from './BotonAccion'
 
@@ -77,7 +78,14 @@ export function CarteraConfirmada({
               ))}
             </select>
           </label>
-          <SeccionBajarRiesgo posiciones={posicionesConPeso} perfil={perfil} />
+          {/* Los dos modos del optimizador, apilados: parten de las mismas candidatas de F-032 y
+              las particionan sin solaparse —F-033 se queda con las que mantienen el rendimiento
+              dentro de ±0,5pp, F-034 con las que lo suben más que eso—, así que mostrar uno no
+              implica esconder el otro. */}
+          <div style={{ display: 'grid', gap: 12 }}>
+            <SeccionBajarRiesgo posiciones={posicionesConPeso} perfil={perfil} />
+            <SeccionSubirTir posiciones={posicionesConPeso} perfil={perfil} />
+          </div>
         </div>
       )}
 
