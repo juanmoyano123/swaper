@@ -82,7 +82,7 @@ describe('montosAcumulados', () => {
   })
 
   it('normaliza con el tipo de cambio cuando las monedas de cotización difieren', () => {
-    const monedaDe = (ticker: string) => (ticker === 'A' ? 'ars' : 'usd') as const
+    const monedaDe = (ticker: string) => ticker === 'A' ? ('ars' as const) : ('usd' as const)
     const originales = [{ ticker: 'A', monto: 105_000 }]
     const { montos, noConvertibles } = montosAcumulados(originales, [candidata('A', 'B')], monedaDe, 1050)
     expect(montos).toEqual([{ ticker: 'B', monto: 100 }])
@@ -90,7 +90,7 @@ describe('montosAcumulados', () => {
   })
 
   it('sin tipo de cambio y monedas distintas, declara el ticker no convertible y no inventa un monto', () => {
-    const monedaDe = (ticker: string) => (ticker === 'A' ? 'ars' : 'usd') as const
+    const monedaDe = (ticker: string) => ticker === 'A' ? ('ars' as const) : ('usd' as const)
     const originales = [{ ticker: 'A', monto: 105_000 }]
     const { montos, noConvertibles } = montosAcumulados(originales, [candidata('A', 'B')], monedaDe, null)
     expect(montos).toEqual([])

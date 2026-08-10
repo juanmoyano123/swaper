@@ -10,6 +10,9 @@
  * `useSubirTir` y la dibuja. Sección hermana de `SeccionBajarRiesgo`: los dos modos parten de las
  * mismas candidatas y las particionan sin solaparse, así que conviven apiladas en vez de
  * esconderse detrás de un toggle.
+ *
+ * **F-036** suma la decisión y el efecto de calendario, igual que en `SeccionBajarRiesgo` — ver el
+ * docstring de ese archivo para el criterio de `excluir`.
  */
 
 import { EstadoCarga } from '@/components/EstadoCarga'
@@ -19,18 +22,29 @@ import type { PosicionConPeso } from '@/lib/cartera/hooks/useConcentracion'
 import { fmtPct } from '@/lib/fmt'
 import { NOMBRES_EJE } from '@/lib/rotaciones/ejes'
 import { useSubirTir } from '@/lib/rotaciones/hooks/useSubirTir'
+import type { PosicionConMonto } from '@/lib/rotaciones/plan'
 import { contrapartidasDe, type EvaluacionEje, type PropuestaSubirTir, type ResultadoSubirTir } from '@/lib/rotaciones/subirTir'
 
-import { formatoValor, NotaCosto, ResumenDescartes } from './compartidos'
+import { BotonesDecision, EfectoCalendarioNota, formatoValor, NotaCosto, ResumenDescartes } from './compartidos'
 
 export function SeccionSubirTir({
   posiciones,
   perfil,
+  excluir,
+  montos = [],
+  monedaDe = () => null,
+  tipoDeCambio = null,
+  noConvertibles = [],
 }: {
   posiciones: PosicionConPeso[]
   perfil: NombreDePerfil
+  excluir?: ReadonlySet<string>
+  montos?: PosicionConMonto[]
+  monedaDe?: (ticker: string) => 'usd' | 'ars' | null
+  tipoDeCambio?: number | null
+  noConvertibles?: string[]
 }) {
-  const { cargando, error, resultado } = useSubirTir(posiciones, perfil)
+  const { cargando, error, resultado, excluidasPorDecision } = useSubirTir(posiciones, perfil, excluir)
 
   if (posiciones.length === 0) return null
 
@@ -47,18 +61,37 @@ export function SeccionSubirTir({
 
       <p style={{ margin: '0 0 10px', fontSize: 11, color: 'var(--dim)', textWrap: 'pretty' }}>
         Rotaciones que suben el rendimiento del segmento. Cada una nombra qué eje empeora y en
-        cuánto: no se propone una mejora sin decir qué riesgo se asume a cambio. Sólo propuesta, sin
-        botón de aceptar.
+        cuánto, y qué mes del calendario se llena o se vacía si se acepta.
       </p>
+      {excluidasPorDecision > 0 && (
+        <p className="mono" style={{ margin: '0 0 10px', fontSize: 10.5, color: 'var(--sd)' }}>
+          {excluidasPorDecision} {excluidasPorDecision === 1 ? 'rotación no se propone' : 'rotaciones no se proponen'}:
+          ya decidida en esta sesión (descartada, o inversa de una aceptada).
+        </p>
+      )}
 
       {cargando && <EstadoCarga que="las rotaciones que suben el rendimiento" />}
       {!cargando && error && <EstadoError error={error} />}
-      {!cargando && !error && resultado && <Veredicto resultado={resultado} />}
+      {!cargando && !error && resultado && (
+        <Veredicto resultado={resultado} montos={montos} monedaDe={monedaDe} tipoDeCambio={tipoDeCambio} noConvertibles={noConvertibles} />
+      )}
     </section>
   )
 }
 
-function Veredicto({ resultado }: { resultado: ResultadoSubirTir }) {
+function Veredicto({
+  resultado,
+  montos,
+  monedaDe,
+  tipoDeCambio,
+  noConvertibles,
+}: {
+  resultado: ResultadoSubirTir
+  montos: PosicionConMonto[]
+  monedaDe: (ticker: string) => 'usd' | 'ars' | null
+  tipoDeCambio: number | null
+  noConvertibles: string[]
+}) {
   if (!resultado.hayPropuesta && resultado.evaluadas === 0) {
     return (
       <p role="status" style={{ margin: 0, fontSize: 12, color: 'var(--tx)', textWrap: 'pretty' }}>
@@ -75,6 +108,10 @@ function Veredicto({ resultado }: { resultado: ResultadoSubirTir }) {
             <FilaSubirTir
               key={`${propuesta.candidata.origen.ticker}->${propuesta.candidata.destino.ticker}`}
               propuesta={propuesta}
+              montos={montos}
+              monedaDe={monedaDe}
+              tipoDeCambio={tipoDeCambio}
+              noConvertible={noConvertibles.includes(propuesta.candidata.destino.ticker)}
             />
           ))}
         </ul>
@@ -101,7 +138,19 @@ function encabezadoDescartes(resultado: ResultadoSubirTir): string {
   return `${rotaciones} el rendimiento; ${mostradas}, ${descartes.length} sin mostrar:`
 }
 
-function FilaSubirTir({ propuesta }: { propuesta: PropuestaSubirTir }) {
+function FilaSubirTir({
+  propuesta,
+  montos,
+  monedaDe,
+  tipoDeCambio,
+  noConvertible,
+}: {
+  propuesta: PropuestaSubirTir
+  montos: PosicionConMonto[]
+  monedaDe: (ticker: string) => 'usd' | 'ars' | null
+  tipoDeCambio: number | null
+  noConvertible: boolean
+}) {
   const { candidata } = propuesta
   const contrapartidas = contrapartidasDe(propuesta)
   const conCoberturaParcial = propuesta.ejes.filter((e) => e.cobertura?.parcial && e.estado === 'empeora')
@@ -147,6 +196,16 @@ function FilaSubirTir({ propuesta }: { propuesta: PropuestaSubirTir }) {
 
       <p style={{ margin: 0, fontSize: 11, color: 'var(--dim)', textWrap: 'pretty' }}>{candidata.riesgo_nota}</p>
       <NotaCosto costo={candidata.costo} />
+      <EfectoCalendarioNota candidata={candidata} montos={montos} monedaDe={monedaDe} tipoDeCambio={tipoDeCambio} />
+      <BotonesDecision
+        candidata={candidata}
+        deshabilitado={noConvertible}
+        motivoDeshabilitado={
+          noConvertible
+            ? `No hay tipo de cambio para llevar el monto de ${candidata.origen.ticker} a la moneda de ${candidata.destino.ticker}.`
+            : null
+        }
+      />
     </li>
   )
 }

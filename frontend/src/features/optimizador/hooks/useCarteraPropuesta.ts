@@ -44,6 +44,8 @@ export function useCarteraPropuesta(montosOriginales: PosicionConMonto[]) {
 
   return {
     ...resultado,
+    monedaDe,
+    tipoDeCambio: tcValor,
     cargando: especiesUniverso.isPending || tipoDeCambio.isPending,
     error: especiesUniverso.error ?? tipoDeCambio.error,
   }

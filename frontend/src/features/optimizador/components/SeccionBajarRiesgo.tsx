@@ -4,11 +4,10 @@
  * dentro de la banda de rendimiento de ±0,5pp. La lib pura vive en `@/lib/rotaciones/bajarRiesgo`;
  * este componente sólo la conecta con `useBajarRiesgo` y la dibuja.
  *
- * **Alcance de esta sección, declarado a propósito**: esto es sólo la propuesta. No hay botón de
- * aceptar (llega con F-036) y no toca el calendario de cupones ni ninguna otra pantalla. Lo que sí
- * cambió desde F-034: **cada fila declara el costo real de rotar** (arancel y spread de las dos
- * patas, F-035), o dice que no es verificable cuando falta una punta. Mostrar una rotación como
- * "gratis" sería la regla 8 del dominio rota: toda mejora que se propone nombra qué se resigna.
+ * **F-036 suma la decisión.** Cada fila declara el costo real de rotar (F-035) y ahora también qué
+ * mes del calendario se llena o se vacía si se acepta, y trae Aceptar/Descartar. `excluir` son las
+ * claves que el plan ya decidió en esta sesión (descartadas, o inversas de una rotación aceptada):
+ * se filtran antes de evaluar y se declaran aparte, nunca como un descarte por eje.
  */
 
 import { EstadoCarga } from '@/components/EstadoCarga'
@@ -24,18 +23,33 @@ import {
   type DescarteCandidata,
   type PropuestaBajarRiesgo,
 } from '@/lib/rotaciones/bajarRiesgo'
+import type { PosicionConMonto } from '@/lib/rotaciones/plan'
 import type { IdDeEje } from '@/lib/cartera/riesgo'
 
-import { formatoValor, NotaCosto, ResumenDescartes } from './compartidos'
+import { BotonesDecision, EfectoCalendarioNota, formatoValor, NotaCosto, ResumenDescartes } from './compartidos'
 
 export function SeccionBajarRiesgo({
   posiciones,
   perfil,
+  excluir,
+  montos = [],
+  monedaDe = () => null,
+  tipoDeCambio = null,
+  noConvertibles = [],
 }: {
   posiciones: PosicionConPeso[]
   perfil: NombreDePerfil
+  excluir?: ReadonlySet<string>
+  montos?: PosicionConMonto[]
+  monedaDe?: (ticker: string) => 'usd' | 'ars' | null
+  tipoDeCambio?: number | null
+  noConvertibles?: string[]
 }) {
-  const { ejePrimario, setEjePrimario, cargando, error, resultado } = useBajarRiesgo(posiciones, perfil)
+  const { ejePrimario, setEjePrimario, cargando, error, resultado, excluidasPorDecision } = useBajarRiesgo(
+    posiciones,
+    perfil,
+    excluir,
+  )
 
   if (posiciones.length === 0) return null
 
@@ -65,14 +79,28 @@ export function SeccionBajarRiesgo({
       </header>
 
       <p style={{ margin: '0 0 10px', fontSize: 11, color: 'var(--dim)', textWrap: 'pretty' }}>
-        Sólo propuesta: no hay botón de aceptar, no toca el calendario ni ninguna otra pantalla.
-        Cada fila declara el costo real de rotar —arancel y spread de las dos patas— o avisa cuando
-        no es verificable porque falta una punta de mercado.
+        Cada fila declara el costo real de rotar —arancel y spread de las dos patas— y qué mes del
+        calendario se llena o se vacía si se acepta.
       </p>
+      {excluidasPorDecision > 0 && (
+        <p className="mono" style={{ margin: '0 0 10px', fontSize: 10.5, color: 'var(--sd)' }}>
+          {excluidasPorDecision} {excluidasPorDecision === 1 ? 'rotación no se propone' : 'rotaciones no se proponen'}:
+          ya decidida en esta sesión (descartada, o inversa de una aceptada).
+        </p>
+      )}
 
       {cargando && <EstadoCarga que="las rotaciones candidatas" />}
       {!cargando && error && <EstadoError error={error} />}
-      {!cargando && !error && resultado && <Veredicto resultado={resultado} ejePrimario={ejePrimario} />}
+      {!cargando && !error && resultado && (
+        <Veredicto
+          resultado={resultado}
+          ejePrimario={ejePrimario}
+          montos={montos}
+          monedaDe={monedaDe}
+          tipoDeCambio={tipoDeCambio}
+          noConvertibles={noConvertibles}
+        />
+      )}
     </section>
   )
 }
@@ -80,9 +108,17 @@ export function SeccionBajarRiesgo({
 function Veredicto({
   resultado,
   ejePrimario,
+  montos,
+  monedaDe,
+  tipoDeCambio,
+  noConvertibles,
 }: {
   resultado: { hayPropuesta: boolean; noMedible: boolean; motivo: string | null; propuestas: PropuestaBajarRiesgo[]; descartes: DescarteCandidata[] }
   ejePrimario: IdDeEje
+  montos: PosicionConMonto[]
+  monedaDe: (ticker: string) => 'usd' | 'ars' | null
+  tipoDeCambio: number | null
+  noConvertibles: string[]
 }) {
   if (resultado.noMedible) {
     return (
@@ -109,7 +145,14 @@ function Veredicto({
     <div style={{ display: 'grid', gap: 10 }}>
       <ul role="list" aria-label="Propuestas de rotación" style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 8 }}>
         {resultado.propuestas.map((propuesta) => (
-          <FilaPropuesta key={`${propuesta.candidata.origen.ticker}->${propuesta.candidata.destino.ticker}`} propuesta={propuesta} />
+          <FilaPropuesta
+            key={`${propuesta.candidata.origen.ticker}->${propuesta.candidata.destino.ticker}`}
+            propuesta={propuesta}
+            montos={montos}
+            monedaDe={monedaDe}
+            tipoDeCambio={tipoDeCambio}
+            noConvertible={noConvertibles.includes(propuesta.candidata.destino.ticker)}
+          />
         ))}
       </ul>
       <p className="mono" style={{ margin: 0, fontSize: 10.5, color: 'var(--sd)' }}>
@@ -121,7 +164,19 @@ function Veredicto({
   )
 }
 
-function FilaPropuesta({ propuesta }: { propuesta: PropuestaBajarRiesgo }) {
+function FilaPropuesta({
+  propuesta,
+  montos,
+  monedaDe,
+  tipoDeCambio,
+  noConvertible,
+}: {
+  propuesta: PropuestaBajarRiesgo
+  montos: PosicionConMonto[]
+  monedaDe: (ticker: string) => 'usd' | 'ars' | null
+  tipoDeCambio: number | null
+  noConvertible: boolean
+}) {
   const { candidata } = propuesta
   return (
     <li
@@ -141,6 +196,16 @@ function FilaPropuesta({ propuesta }: { propuesta: PropuestaBajarRiesgo }) {
         Δ rendimiento {fmtPct(candidata.delta.rendimiento_pp, 2)}
       </p>
       <NotaCosto costo={candidata.costo} />
+      <EfectoCalendarioNota candidata={candidata} montos={montos} monedaDe={monedaDe} tipoDeCambio={tipoDeCambio} />
+      <BotonesDecision
+        candidata={candidata}
+        deshabilitado={noConvertible}
+        motivoDeshabilitado={
+          noConvertible
+            ? `No hay tipo de cambio para llevar el monto de ${candidata.origen.ticker} a la moneda de ${candidata.destino.ticker}.`
+            : null
+        }
+      />
     </li>
   )
 }

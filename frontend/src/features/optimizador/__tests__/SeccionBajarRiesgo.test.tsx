@@ -20,6 +20,7 @@ import type { Especie } from '@/lib/cartera/esquemaEspecie'
 import type { Concentracion } from '@/lib/cartera/esquemaConcentracion'
 
 import { SeccionBajarRiesgo } from '../components/SeccionBajarRiesgo'
+import { PlanRotacionProvider } from '../store/planRotacionStore'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -105,12 +106,14 @@ function responderCon({
   return fetchMock
 }
 
-function renderizar() {
+function renderizar(opciones: { excluir?: ReadonlySet<string> } = {}) {
   const cliente = crearQueryClient()
   cliente.setDefaultOptions({ queries: { retry: false } })
   return render(
     <QueryClientProvider client={cliente}>
-      <SeccionBajarRiesgo posiciones={[{ ticker: 'AL30D', peso: 100 }]} perfil="moderado" />
+      <PlanRotacionProvider posiciones={[{ ticker: 'AL30D', peso: 100 }]}>
+        <SeccionBajarRiesgo posiciones={[{ ticker: 'AL30D', peso: 100 }]} perfil="moderado" excluir={opciones.excluir} />
+      </PlanRotacionProvider>
     </QueryClientProvider>,
   )
 }
@@ -226,5 +229,44 @@ describe('costo de rotar en la fila', () => {
     expect(nota).toHaveTextContent(/falta punta de mercado/)
     // El único número que aparece es el arancel, declarado como piso: nunca un total supuesto.
     expect(nota).toHaveTextContent(/arancel 0,75% por pata/)
+  })
+})
+
+// F-036: decisión de la fila y exclusión de lo ya decidido en la sesión.
+describe('decisión de la fila', () => {
+  const CANDIDATA = {
+    tipo: 'mejora_perfil',
+    segmento: 'usd_hard',
+    origen: { ticker: 'AL30D', emisor: 'República Argentina', rendimiento: 0.11, duracion: 3.5, moneda_cupon: 'USD', ley: 'Ley N.Y.', calificacion: null, lamina: 1, frecuencia_cupon: 'semestral', volumen_usd: 100_000 },
+    destino: { ticker: 'GD30D', emisor: 'República Argentina', rendimiento: 0.112, duracion: 2.5, moneda_cupon: 'USD', ley: 'Ley N.Y.', calificacion: null, lamina: 1, frecuencia_cupon: 'semestral', volumen_usd: 300_000 },
+    delta: { rendimiento_pp: 0.2, duracion: -1 },
+    flags: { mismo_emisor: true, pasa_a_cable: false, mejora_ley: false, empeora_ley: false, mejora_volumen: true, posible_distress: false },
+    premio_ley: null,
+    riesgo_nota: 'mismo emisor — mismo riesgo crediticio',
+    costo: null,
+  }
+  const ESPECIES = [especie(), especie({ ticker: 'GD30D', emision: 'GD30', duracion: 2.5, volumen_usd: 300_000 })]
+
+  it('cada fila trae Aceptar y Descartar', async () => {
+    responderCon({ especies: ESPECIES, rotaciones: resultadoRotaciones([CANDIDATA]) })
+    renderizar()
+
+    expect(await screen.findByRole('button', { name: 'Aceptar' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Descartar' })).toBeInTheDocument()
+  })
+
+  it('con la clave en excluir, la fila no aparece y el conteo se declara (GWT-4)', async () => {
+    responderCon({ especies: ESPECIES, rotaciones: resultadoRotaciones([CANDIDATA]) })
+    renderizar({ excluir: new Set(['AL30D->GD30D']) })
+
+    expect(await screen.findByText(/1 rotación no se propone/)).toBeInTheDocument()
+    expect(screen.queryByText(/AL30D.*GD30D/)).not.toBeInTheDocument()
+  })
+
+  it('sin excluir, la fila aparece normalmente', async () => {
+    responderCon({ especies: ESPECIES, rotaciones: resultadoRotaciones([CANDIDATA]) })
+    renderizar()
+
+    expect(await screen.findByText(/AL30D.*GD30D/)).toBeInTheDocument()
   })
 })

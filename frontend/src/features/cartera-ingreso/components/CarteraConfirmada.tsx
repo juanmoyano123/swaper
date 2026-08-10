@@ -17,6 +17,11 @@
  * mantiene su propio estado de perfil, independiente del selector de `DiagnosticoCartera`: elegir
  * un perfil para medir concentración no tiene por qué ser el mismo perfil contra el que se buscan
  * rotaciones.
+ *
+ * **Tanda 15 (F-036):** el bloque del optimizador se monta dentro de `PlanRotacionProvider`, con
+ * `key={firmaDePesos(...)}` — confirmar otra cartera desmonta el plan de rotaciones de la anterior y
+ * arranca uno vacío. `BloqueOptimizador` lee el plan y pasa a las dos secciones la cartera
+ * acumulada, las claves ya decididas en la sesión y los montos de la cartera propuesta.
  */
 
 import { useState } from 'react'
@@ -24,14 +29,50 @@ import { useState } from 'react'
 import { DiagnosticoCartera } from '@/features/cartera-diagnostico/components/DiagnosticoCartera'
 import { useCarteraCargadaValuada } from '@/features/cartera-diagnostico/hooks/useCarteraCargadaValuada'
 import { ResolucionCartera } from '@/features/cartera-resolucion/components/ResolucionCartera'
+import { firmaDePesos, type PosicionConPeso } from '@/lib/cartera/hooks/useConcentracion'
 import { PERFILES, type NombreDePerfil } from '@/lib/cartera/esquemaConcentracion'
+import type { PosicionConMonto } from '@/lib/rotaciones/plan'
 
 import type { PosicionCruda } from '../types'
 
+import { PlanDeRotacion } from '@/features/optimizador/components/PlanDeRotacion'
 import { SeccionBajarRiesgo } from '@/features/optimizador/components/SeccionBajarRiesgo'
 import { SeccionSubirTir } from '@/features/optimizador/components/SeccionSubirTir'
+import { useCarteraPropuesta } from '@/features/optimizador/hooks/useCarteraPropuesta'
+import { PlanRotacionProvider, usePlanRotacion } from '@/features/optimizador/store/planRotacionStore'
 
 import { BotonAccion } from './BotonAccion'
+
+function BloqueOptimizador({ montosOriginales, perfil }: { montosOriginales: PosicionConMonto[]; perfil: NombreDePerfil }) {
+  const plan = usePlanRotacion()
+  const propuesta = useCarteraPropuesta(montosOriginales)
+
+  return (
+    <>
+      <div style={{ display: 'grid', gap: 12 }}>
+        <SeccionBajarRiesgo
+          posiciones={plan.posicionesAcumuladas}
+          perfil={perfil}
+          excluir={plan.clavesExcluidas}
+          montos={propuesta.montos}
+          monedaDe={propuesta.monedaDe}
+          tipoDeCambio={propuesta.tipoDeCambio}
+          noConvertibles={propuesta.noConvertibles}
+        />
+        <SeccionSubirTir
+          posiciones={plan.posicionesAcumuladas}
+          perfil={perfil}
+          excluir={plan.clavesExcluidas}
+          montos={propuesta.montos}
+          monedaDe={propuesta.monedaDe}
+          tipoDeCambio={propuesta.tipoDeCambio}
+          noConvertibles={propuesta.noConvertibles}
+        />
+      </div>
+      <PlanDeRotacion montos={propuesta.montos} perfil={perfil} />
+    </>
+  )
+}
 
 export function CarteraConfirmada({
   posiciones,
@@ -43,7 +84,8 @@ export function CarteraConfirmada({
   const invalidas = posiciones.filter((p) => !p.valida).length
 
   const { valuacion } = useCarteraCargadaValuada(posiciones)
-  const posicionesConPeso = (valuacion?.valuadas ?? []).map((v) => ({ ticker: v.ticker, peso: v.pesoReal }))
+  const posicionesConPeso: PosicionConPeso[] = (valuacion?.valuadas ?? []).map((v) => ({ ticker: v.ticker, peso: v.pesoReal }))
+  const montosOriginales: PosicionConMonto[] = (valuacion?.valuadas ?? []).map((v) => ({ ticker: v.ticker, monto: v.invertido }))
   const [perfil, setPerfil] = useState<NombreDePerfil>('moderado')
 
   return (
@@ -81,11 +123,11 @@ export function CarteraConfirmada({
           {/* Los dos modos del optimizador, apilados: parten de las mismas candidatas de F-032 y
               las particionan sin solaparse —F-033 se queda con las que mantienen el rendimiento
               dentro de ±0,5pp, F-034 con las que lo suben más que eso—, así que mostrar uno no
-              implica esconder el otro. */}
-          <div style={{ display: 'grid', gap: 12 }}>
-            <SeccionBajarRiesgo posiciones={posicionesConPeso} perfil={perfil} />
-            <SeccionSubirTir posiciones={posicionesConPeso} perfil={perfil} />
-          </div>
+              implica esconder el otro. El plan de rotaciones (F-036) vive en su propio provider,
+              reiniciado por `key` cada vez que cambia la cartera confirmada. */}
+          <PlanRotacionProvider posiciones={posicionesConPeso} key={firmaDePesos(posicionesConPeso)}>
+            <BloqueOptimizador montosOriginales={montosOriginales} perfil={perfil} />
+          </PlanRotacionProvider>
         </div>
       )}
 

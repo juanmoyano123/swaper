@@ -130,7 +130,7 @@ describe('useEfectoCalendario', () => {
 
   it('sin tipo de cambio y monedas distintas, declara no calculable sin pedir el calendario simulado', async () => {
     mockFetch()
-    const monedaDe = (ticker: string) => (ticker === 'A' ? 'ars' : 'usd') as const
+    const monedaDe = (ticker: string) => ticker === 'A' ? ('ars' as const) : ('usd' as const)
     const { result } = renderHook(
       () => useEfectoCalendario([{ ticker: 'A', monto: 1000 }], candidata('A', 'B'), monedaDe, null),
       { wrapper: envolver() },

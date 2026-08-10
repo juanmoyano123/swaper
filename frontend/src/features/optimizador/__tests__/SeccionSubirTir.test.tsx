@@ -19,6 +19,7 @@ import type { Concentracion } from '@/lib/cartera/esquemaConcentracion'
 import type { Especie } from '@/lib/cartera/esquemaEspecie'
 
 import { SeccionSubirTir } from '../components/SeccionSubirTir'
+import { PlanRotacionProvider } from '../store/planRotacionStore'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -140,7 +141,9 @@ function renderizar(posiciones = [{ ticker: 'AL30D', peso: 100 }]) {
   cliente.setDefaultOptions({ queries: { retry: false } })
   return render(
     <QueryClientProvider client={cliente}>
-      <SeccionSubirTir posiciones={posiciones} perfil="moderado" />
+      <PlanRotacionProvider posiciones={posiciones}>
+        <SeccionSubirTir posiciones={posiciones} perfil="moderado" />
+      </PlanRotacionProvider>
     </QueryClientProvider>,
   )
 }

@@ -86,7 +86,9 @@ export function PlanRotacionProvider({
   children,
 }: {
   posiciones: PosicionConPeso[]
-  children: ReactNode
+  // Opcional sólo por el tipado de `React.createElement` en tests que arman el árbol a mano
+  // (`createElement(Provider, { posiciones }, children)`): en JSX siempre viaja.
+  children?: ReactNode
 }) {
   const [estado, dispatch] = useReducer(reducer, ESTADO_INICIAL)
 
