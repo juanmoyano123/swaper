@@ -176,39 +176,55 @@ describe('alternarMes', () => {
   })
 })
 
-describe('alternarPapel — peso al agregar (F-018)', () => {
-  it('asigna 100/(n+1) al agregar un papel nuevo, sin tocar el peso de los que ya estaban', async () => {
+describe('alternarPapel — peso al agregar (F-018, rebalanceado en la Tanda 13)', () => {
+  it('asigna 100/(n+1) al papel nuevo y achica pro-rata a los que ya estaban', async () => {
     renderizar()
 
     await userEvent.click(screen.getByRole('button', { name: 'alternar AL30' }))
     expect(screen.getByTestId('pesos')).toHaveTextContent('AL30:100')
 
     await userEvent.click(screen.getByRole('button', { name: 'alternar GD30' }))
-    // n=1 antes de agregar GD30: 100/2 = 50. AL30 sigue en 100, no se recalcula.
-    expect(screen.getByTestId('pesos')).toHaveTextContent('AL30:100,GD30:50')
+    // GD30 pide 100/2 = 50 y AL30 se achica del 100 al 50 para hacerle lugar: suma 100.
+    expect(screen.getByTestId('pesos')).toHaveTextContent('AL30:50,GD30:50')
 
     await userEvent.click(screen.getByRole('button', { name: 'alternar AE38' }))
-    // n=2 antes de agregar AE38: 100/3 = 33,3. Los otros dos siguen como estaban.
-    expect(screen.getByTestId('pesos')).toHaveTextContent('AL30:100,GD30:50,AE38:33.3')
+    // 100/3 = 33,3 para cada uno, con la décima del residuo en el primero: suma 100,0 exacto.
+    expect(screen.getByTestId('pesos')).toHaveTextContent('AL30:33.4,GD30:33.3,AE38:33.3')
   })
-})
 
-describe('fijarPeso (F-018)', () => {
-  it('pisa el peso pedido de esa posición y no toca las demás', async () => {
+  it('al sacar un papel reparte su peso entre los que quedan', async () => {
     renderizar()
 
     await userEvent.click(screen.getByRole('button', { name: 'alternar AL30' }))
     await userEvent.click(screen.getByRole('button', { name: 'alternar GD30' }))
-    // Antes: AL30:100,GD30:50.
+    await userEvent.click(screen.getByRole('button', { name: 'alternar AE38' }))
+    // AL30:33.4, GD30:33.3, AE38:33.3.
+
+    await userEvent.click(screen.getByRole('button', { name: 'alternar AE38' }))
+
+    // El 33,3 que liberó AE38 vuelve a los otros dos en proporción a lo que ya pesaban.
+    expect(screen.getByTestId('pesos')).toHaveTextContent('AL30:50.1,GD30:49.9')
+  })
+})
+
+describe('fijarPeso (F-018)', () => {
+  it('pisa el peso pedido de esa posición y no toca las demás — es la excepción al rebalanceo', async () => {
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'alternar AL30' }))
+    await userEvent.click(screen.getByRole('button', { name: 'alternar GD30' }))
+    // Antes: AL30:50,GD30:50.
 
     await userEvent.click(screen.getByRole('button', { name: 'fijar peso AL30 en 60' }))
 
+    // Editar a mano es una decisión sobre esa posición: GD30 no se mueve y la suma queda en 110.
+    // La cabecera de CarteraEditable es la que avisa del desvío; el store no lo corrige solo.
     expect(screen.getByTestId('pesos')).toHaveTextContent('AL30:60,GD30:50')
   })
 })
 
 describe('equiponderar (F-018)', () => {
-  it('reparte 100/n igual a todas las posiciones', async () => {
+  it('reparte 100/n igual a todas las posiciones, con el residuo en la primera', async () => {
     renderizar()
 
     await userEvent.click(screen.getByRole('button', { name: 'alternar AL30' }))
@@ -218,7 +234,8 @@ describe('equiponderar (F-018)', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'equiponderar' }))
 
-    expect(screen.getByTestId('pesos')).toHaveTextContent('AL30:33.3,GD30:33.3,AE38:33.3')
+    // 33,3 tres veces daría 99,9: la décima que falta va a la primera para cerrar en 100,0.
+    expect(screen.getByTestId('pesos')).toHaveTextContent('AL30:33.4,GD30:33.3,AE38:33.3')
   })
 })
 
@@ -317,8 +334,24 @@ describe('clase de posición', () => {
     await userEvent.click(screen.getByRole('button', { name: 'alternar GGAL' }))
 
     // La cartera estándar del cliente es 60-70 / 30-40: si cada bloque tuviera su propio 100%,
-    // el mix dejaría de ser visible en la ponderación.
-    expect(screen.getByTestId('pesos')).toHaveTextContent('AL30:100,GGAL:50')
+    // el mix dejaría de ser visible en la ponderación. La acción entra por 50 y el bono se
+    // achica del 100 al 50 para hacerle lugar, sobre el mismo 100% de la cartera entera.
+    expect(screen.getByTestId('pesos')).toHaveTextContent('AL30:50,GGAL:50')
+  })
+
+  it('sacar la renta variable devuelve su peso a la renta fija', async () => {
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'alternar AL30' }))
+    await userEvent.click(screen.getByRole('button', { name: 'alternar GD30' }))
+    await userEvent.click(screen.getByRole('button', { name: 'alternar GGAL' }))
+    // AL30:33.4, GD30:33.3, GGAL:33.3.
+
+    await userEvent.click(screen.getByRole('button', { name: 'alternar GGAL' }))
+
+    // Es el caso que motivó el rebalanceo: el asesor saca las acciones y el porcentaje vuelve a
+    // los bonos solo, sin tener que reasignarlo posición por posición.
+    expect(screen.getByTestId('pesos')).toHaveTextContent('AL30:50.1,GD30:49.9')
   })
 
   it('equiponderar y vaciar operan sobre la cartera entera, sin distinguir clase', async () => {

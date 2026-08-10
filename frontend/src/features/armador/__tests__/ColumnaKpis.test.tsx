@@ -258,9 +258,9 @@ describe('cartera mixta (renta fija + renta variable)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'peso AL30 a 60' }))
     await userEvent.click(screen.getByRole('button', { name: 'agregar GGAL' }))
 
-    // AL30 quedó en 60% (fijado a mano) y GGAL entra con 100/(1+1) = 50% — el store no
-    // recalcula los pesos existentes al agregar, así que el mix ni siquiera suma 100: se
-    // muestra tal cual, sin normalizar (mismo criterio que la Σ de CarteraEditable).
-    expect(await screen.findByText('1,9a · 60%/50%')).toBeInTheDocument()
+    // AL30 se había fijado a mano en 60%, pero agregar GGAL rebalancea: la acción entra con
+    // 100/(1+1) = 50% y el bono se achica al 50% restante. El mix se muestra tal cual sale del
+    // store, sin volver a normalizar (mismo criterio que la Σ de CarteraEditable).
+    expect(await screen.findByText('1,6a · 50%/50%')).toBeInTheDocument()
   })
 })

@@ -17,6 +17,12 @@
 import { createContext, type ReactNode, useContext, useMemo, useReducer } from 'react'
 
 import { FILTROS_ARMADOR_INICIALES, FILTROS_ARMADOR_VACIOS, type FiltrosArmador } from '../lib/filtros'
+import {
+  agregarConProRata,
+  equiponderarPesos,
+  normalizarA100,
+  quitarConProRata,
+} from '../lib/rebalanceo'
 
 /**
  * Qué clase de instrumento es una posición. Determina de qué cálculos participa:
@@ -32,9 +38,11 @@ export type ClasePosicion = 'renta_fija' | 'renta_variable' | 'fci'
 /** Una posición del armador. */
 export interface PosicionArmador {
   ticker: string
-  /** Ponderación pedida, en puntos porcentuales (16.5 = 16,5%). Al agregar un papel nuevo se
-   *  asigna 100/(n+1) redondeado a un decimal; los pesos de los demás NO se tocan — por eso la
-   *  suma puede no dar 100, y eso se muestra, no se corrige solo.
+  /** Ponderación pedida, en puntos porcentuales (16.5 = 16,5%). Al agregar un papel nuevo entra
+   *  con 100/(n+1) y los demás se achican pro-rata para hacerle lugar; al sacar uno, lo que
+   *  liberó se reparte entre los que quedan. Después de cualquiera de las dos la suma da 100,0
+   *  exacto (ver `lib/rebalanceo.ts`). Editar un peso a mano con `fijarPeso` es la excepción: ahí
+   *  la suma puede desviarse, y eso se muestra en ámbar, no se corrige solo.
    *
    *  Es el peso sobre la cartera **entera**, incluida la renta variable: la cartera estándar del
    *  cliente es 60-70 / 30-40, así que el 100% es del total y no de cada bloque. */
@@ -76,21 +84,18 @@ const ESTADO_INICIAL: EstadoArmador = {
   filtros: FILTROS_ARMADOR_INICIALES,
 }
 
-/** 100/n a un decimal — el mismo redondeo que usan `alternarPapel` y `equiponderar`. */
-function pesoIgualitario(n: number): number {
-  return Math.round((100 / n) * 10) / 10
-}
-
 /** Agrega el ticker con esa clase si no estaba; lo saca si ya estaba. El toggle es por ticker y no
- *  por (ticker, clase): un mismo símbolo no puede estar dos veces con clases distintas. */
+ *  por (ticker, clase): un mismo símbolo no puede estar dos veces con clases distintas.
+ *
+ *  Las dos ramas rebalancean pro-rata, así que la cartera sale sumando 100,0 de cualquiera de los
+ *  dos lados: sacar la renta variable devuelve su porcentaje a los bonos sin que el asesor tenga
+ *  que reasignarlo a mano. */
 function alternar(estado: EstadoArmador, ticker: string, clase: ClasePosicion): EstadoArmador {
   const yaEsta = estado.pos.some((p) => p.ticker === ticker)
   if (yaEsta) {
-    return { ...estado, pos: estado.pos.filter((p) => p.ticker !== ticker) }
+    return { ...estado, pos: quitarConProRata(estado.pos, (p) => p.ticker === ticker) }
   }
-  // `n` es la cantidad de posiciones ANTES de agregar; los pesos existentes no se recalculan.
-  const pesoNuevo = pesoIgualitario(estado.pos.length + 1)
-  return { ...estado, pos: [...estado.pos, { ticker, peso: pesoNuevo, clase }] }
+  return { ...estado, pos: agregarConProRata(estado.pos, { ticker, peso: 0, clase }) }
 }
 
 function reducer(estado: EstadoArmador, accion: AccionArmador): EstadoArmador {
@@ -114,15 +119,20 @@ function reducer(estado: EstadoArmador, accion: AccionArmador): EstadoArmador {
     // del total y la renta variable participa del reparto (F-026).
     case 'equiponderar': {
       if (estado.pos.length === 0) return estado
-      const pesoParejo = pesoIgualitario(estado.pos.length)
-      return { ...estado, pos: estado.pos.map((p) => ({ ...p, peso: pesoParejo })) }
+      return { ...estado, pos: equiponderarPesos(estado.pos) }
     }
     case 'vaciar':
       return { ...estado, pos: [] }
+    // El FCI entra con el peso que pidió el llamador (a diferencia de un papel de la grilla, que
+    // entra con 100/(n+1)); las demás posiciones se achican pro-rata para hacerle ese lugar.
     case 'agregarFci':
       return {
         ...estado,
-        pos: [...estado.pos, { ticker: accion.nombre, peso: accion.peso, clase: 'fci' }],
+        pos: agregarConProRata(
+          estado.pos,
+          { ticker: accion.nombre, peso: accion.peso, clase: 'fci' },
+          accion.peso,
+        ),
       }
     // Los filtros filtran la oferta, no la cartera: estas dos acciones nunca tocan `pos`,
     // `selMes` ni `montoTotal` — un papel ya seleccionado sigue en la cartera aunque un filtro
@@ -135,35 +145,47 @@ function reducer(estado: EstadoArmador, accion: AccionArmador): EstadoArmador {
     // en vez de ir posición por posición como haría un `alternarPapel` en loop, que pisaría el
     // peso de lo que ya estuviera cargado en vez de reemplazarlo. `montoTotal`, `selMes` y
     // `filtros` no cambian: el asesor sigue pudiendo editar después.
-    case 'cargarCartera':
-      return { ...estado, pos: accion.posiciones }
+    //
+    // Los pesos se normalizan al entrar: el backend manda fracciones exactas (14.285714285714286)
+    // y la cartera se edita y se muestra a un decimal, así que el redondeo se hace una sola vez
+    // acá, repartiendo el residuo, en vez de dejar que cada consumidor trunque por su cuenta.
+    case 'cargarCartera': {
+      const pesos = normalizarA100(accion.posiciones.map((p) => p.peso))
+      return { ...estado, pos: accion.posiciones.map((p, i) => ({ ...p, peso: pesos[i] })) }
+    }
   }
 }
 
 interface AccionesArmador {
-  /** Agrega el papel de renta fija si no está en la cartera; lo saca si ya estaba. */
+  /** Agrega el papel de renta fija si no está en la cartera; lo saca si ya estaba. En los dos
+   *  casos rebalancea pro-rata: la cartera queda sumando 100,0. */
   alternarPapel: (ticker: string) => void
   /** Lo mismo para una acción o un CEDEAR (F-026). Acción aparte y no un parámetro de
    *  `alternarPapel` para no cambiarle la firma a la grilla, que no conoce la renta variable. */
   alternarRentaVariable: (ticker: string) => void
   /** Abre el mes si no era el activo; lo cierra si ya lo era. */
   alternarMes: (indice: number) => void
-  /** Pisa el peso pedido de esa posición; no toca las demás. */
+  /** Pisa el peso pedido de esa posición; **no toca las demás y no rebalancea**. Es la única
+   *  acción que puede dejar la cartera sumando distinto de 100, a propósito: un peso escrito a
+   *  mano es una decisión sobre esa posición, no una orden de mover al resto. */
   fijarPeso: (ticker: string, peso: number) => void
   fijarMontoTotal: (monto: number) => void
-  /** Pone `100 / n` a todas las posiciones, a un decimal. */
+  /** Reparte 100 en partes iguales, con el residuo de la división en las primeras posiciones
+   *  (tres posiciones dan 33,4 / 33,3 / 33,3). */
   equiponderar: () => void
   vaciar: () => void
-  /** Agrega una línea de FCI: tiene peso pero no precio (GWT-4 de F-018). */
+  /** Agrega una línea de FCI con el peso pedido: tiene peso pero no precio (GWT-4 de F-018). Las
+   *  demás posiciones se achican pro-rata para hacerle lugar. */
   agregarFci: (nombre: string, peso: number) => void
   /** Pisa el objeto de filtros entero: el llamador arma el objeto (mismo patrón `onCambio` del
    *  monitor). */
   fijarFiltros: (filtros: FiltrosArmador) => void
   /** Vuelve todos los filtros a `FILTROS_ARMADOR_VACIOS` de una sola vez (GWT-3). */
   limpiarFiltros: () => void
-  /** Reemplaza `pos` entero con lo que devolvió el armado asistido (F-019). Es un punto de
-   *  partida: si ya había posiciones cargadas, se pisan sin pedir confirmación -- el asesor sigue
-   *  pudiendo editar cada una después, igual que con cualquier otra. */
+  /** Reemplaza `pos` entero con lo que devolvió el armado asistido (F-019), normalizando los
+   *  pesos a un decimal. Es un punto de partida: si ya había posiciones cargadas, se pisan sin
+   *  pedir confirmación -- el asesor sigue pudiendo editar cada una después, igual que con
+   *  cualquier otra. */
   cargarCartera: (posiciones: PosicionArmador[]) => void
 }
 
