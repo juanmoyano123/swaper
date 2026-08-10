@@ -59,6 +59,13 @@ import { ArmadorProvider } from './store/carteraStore'
  * No se numeraron como pasos 1-2-3 porque Cartera y Renta variable no son secciones consecutivas
  * en la página — una numeración que salta habría sido más confusa que las referencias cruzadas.
  *
+ * **Tanda 13**: las bajadas declaran los **dos caminos** que llegan a la misma cartera — el
+ * asistido (un botón arma renta fija y renta variable juntas) y el manual (Cordillera + Renta
+ * variable, con atajos temáticos que filtran los dos lados a la vez). La sección Cartera dejó de
+ * ser "la tabla de bonos" para pasar a mostrar la cartera entera agrupada por clase de activo, así
+ * que Renta variable quedó como el buscador para sumar papeles, no como el único lugar donde se
+ * los pondera.
+ *
  * **Etapa 6**: columna lateral fija (`ColumnaKpis`, A9) con los números que resumen la cartera —
  * renta anual, meses cubiertos, TIR ponderada, duración y mix RF/RV — para no tener que scrollear
  * hasta el final de la página a chequear cómo va. `.layout-armador` (`index.css`) hace la grilla de
@@ -71,7 +78,7 @@ export function ArmadorPage() {
   return (
     <Pantalla
       titulo="Armador"
-      bajada="Elegir bonos de forma que los cupones caigan repartidos a lo largo del año."
+      bajada="Dos caminos para llegar a la misma cartera: Armado asistido la arma entera de un botón y después la editás, o la armás vos papel por papel desde Cordillera y Renta variable. Los dos terminan en la sección Cartera, que muestra el 100% repartido entre bonos y acciones."
     >
       {consulta.isPending && <EstadoCarga que="la grilla de doce meses" />}
       {consulta.isError && (
@@ -84,7 +91,7 @@ export function ArmadorPage() {
               <SeccionDeArmador
                 id="cordillera"
                 rotulo="Cordillera"
-                bajada="Elegí bonos por mes de cobro, o filtrá la oferta antes de mirar la grilla. Punto de partida si la cartera lleva renta fija — si es sólo acciones y CEDEARs, se puede saltar directo a la sección Renta variable, al final."
+                bajada="Camino manual: elegí bonos por mes de cobro. Los atajos temáticos filtran de un clic los dos lados de la cartera —bonos acá y acciones en Renta variable— y después afinás con los filtros."
                 acento="var(--cat1)"
                 resumen={<ResumenCordillera meses={consulta.data.meses} />}
               >
@@ -98,7 +105,7 @@ export function ArmadorPage() {
               <SeccionDeArmador
                 id="asistido"
                 rotulo="Armado asistido"
-                bajada="Opcional: precarga una cartera de arranque a partir del mandato del cliente; después se edita a mano, papel por papel, en la sección Cartera."
+                bajada="Camino asistido: con el mandato del cliente arma una cartera entera de arranque y la carga en Cartera, donde se edita posición por posición. Reemplaza lo que hubiera cargado."
                 acento="var(--cat2)"
               >
                 <Panel>
@@ -109,7 +116,7 @@ export function ArmadorPage() {
               <SeccionDeArmador
                 id="cartera"
                 rotulo="Cartera"
-                bajada="Ponderación pedida y ponderación real de los bonos elegidos arriba: si no coinciden, se muestra tal cual. Las acciones y CEDEARs comparten el mismo 100% pero se ponderan aparte, en Renta variable — no aparecen en esta tabla."
+                bajada="La cartera entera, agrupada por clase de activo y con subtotal por bloque: soberanos, corporativos, fondos y acciones sobre el mismo 100%. El % pedido se edita acá; agregar o sacar una posición reparte el resto pro-rata."
                 acento="var(--cat3)"
                 resumen={<ResumenCartera />}
               >
@@ -144,7 +151,7 @@ export function ArmadorPage() {
               <SeccionDeArmador
                 id="rv"
                 rotulo="Renta variable"
-                bajada="Acciones y CEDEARs, con su propio % pedido sobre el mismo 100% de la cartera. Se suman al monto total pero no a la renta ni a los rendimientos de arriba — son otra clase de instrumento (regla 2)."
+                bajada="El buscador para sumar acciones y CEDEARs a la cartera. Ya cargadas se editan también desde Cartera, arriba. No suman a la renta ni a los rendimientos: una acción no tiene cupón ni TIR (regla 2)."
                 acento="var(--cat6)"
                 resumen={<ResumenRentaVariable />}
               >
