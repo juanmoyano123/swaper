@@ -457,6 +457,41 @@ backend.** Van **39 de 42 features de Stage 1**.
   concentraciones simuladas compartieran caché con el diagnóstico. Los dos archivos, un commit,
   antes de soltar los agentes.
 
+**Rediseño integral del Armador, cerrado el 09/08/2026 — trabajo suelto entre tandas, seis etapas
+commiteadas por separado.** No es una feature de `plan.md`: lo pidió el dueño del producto sobre
+la pantalla ya construida (jerarquía visual rota, todo el mismo verde, sin forma de plegar una
+sección, flujo renta fija/variable no integrado). Se hizo aparte de la tanda 14 siguiendo el
+precedente de F-017 — un archivo con muchos dueños simultáneos (`ArmadorPage.tsx` y casi todos sus
+`components/`) no es terreno para paralelismo de agentes.
+
+- **Etapa 1 — paleta categórica**: seis tokens `--cat1..--cat6` (dark+light) en `index.css`;
+  `DistribucionBarras` colorea por índice de tramo en vez de un solo verde para todo;
+  `VectorDeRiesgo` y el tope de `PanelConcentracion` pasan a `--medida` (medición, no selección);
+  `.rotulo` de `--ac` a `--dim`; disciplina `--ac`/`--pos` (mismo hex hoy, uso clasificado).
+- **Etapa 2 — secciones plegables**: `SeccionDeArmador` gana `id`/`acento`/`resumen`, con el
+  estado de plegado en `localStorage` (`lib/plegado.ts`) — no en el store de la cartera, porque
+  F-041 va a persistir su forma exacta y una preferencia de UI no le pertenece. Borde izquierdo de
+  3px por sección (cat1 a cat6, en orden) como separación visual.
+- **Etapa 3 — % editable para renta variable**: `fijarPeso` del store ya era agnóstico de clase,
+  pero sólo `CarteraEditable` lo llamaba y filtra RV. `BloqueRentaVariable` gana su propio input
+  de "% pedido"; nueva `lib/mix.ts` (`sumaPesos`/`mixPedido`) declara el mix RF/RV pedido y real
+  en las dos cabeceras, sin normalizar cuando no suma 100.
+- **Etapa 4 — perfil de empresa (backend)**: tabla `perfil_renta_variable` (migración aplicada al
+  proyecto real) poblada por `POST /api/v1/jobs/perfiles-renta-variable`, contra un método liviano
+  de Yahoo (`ClienteYahoo.perfil_de_empresa` — chart de un día, no el año completo de
+  `bloque_externo`) que corta al primer 429 sin insistir. Job incremental, `limite` por corrida.
+- **Etapa 5 — filtros**: calificación (multiselect literal + `CALIFICACION_NO_INFORMADA`, nunca
+  ordenada — cuatro calificadoras sin escala común) en la grilla de renta fija; sector/rubro +
+  búsqueda por nombre en el bloque de renta variable, alimentados por la Etapa 4.
+- **Etapa 6 — columna de KPIs (A9)**: `ColumnaKpis` fija a la derecha (`.layout-armador`,
+  `.columna-kpis` en `index.css` — sticky sólo arriba de 1280px), reusando los mismos hooks que
+  `PanelRenta`/`PanelRendimientos`/`lib/mix.ts`. "Lo que falta" declara sólo lo derivable de datos
+  existentes (meses sin cobertura, posiciones sin resolver) — el mandato del cliente (A1 del
+  design system) queda fuera: alcance de producto nuevo, sin feature ni fuente de datos.
+
+532 tests de frontend (508 → 532) y 1130 de backend (1104 → 1130) en verde, tsc/build/lint
+limpios en las seis etapas. Verificado a mano contra el backend real en cada una.
+
 Siguiente paso: la **tanda 14 — F-034 (subir TIR), sola**. Comparte el contrato de la fila de
 propuesta con F-033 (mandato del plan).
 

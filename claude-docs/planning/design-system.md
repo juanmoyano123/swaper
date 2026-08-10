@@ -53,7 +53,11 @@ La aplicación tiene **una sola ruta** con dos secciones conmutadas por un toggl
 
 Estructura vertical dentro de un contenedor de padding 14/18 px:
 
-**A1. Mandato del cliente** (panel colapsable, ancho completo)
+**A1. Mandato del cliente** (panel colapsable, ancho completo) — **no implementado.** Es alcance
+de producto nuevo sin feature en `plan.md` (modelo de mandato, guardado, validación contra
+cartera). El patrón de plegado de la Etapa 2 del rediseño del armador (09/08/2026,
+`SeccionDeArmador`) es el mismo que pide este panel — implementarlo es la base ya lista, falta el
+resto.
 - Cabecera clickeable: rótulo "MANDATO DEL CLIENTE" 10 px mayúsculas `letter-spacing: 0.13em` en `--ac`; resumen en una línea (`nombre · perfil · horizonte · piso US$ X/mes · cubrir …`) 12,5 px; a la derecha "guardado dd/mm hh:mm" o "sin guardar" en mono 11 px `--dim`; chevron ▲/▼.
 - Cuerpo abierto: grilla `1.3fr 1fr 1fr`, `gap: 20px`.
   - Columna 1: textarea "Qué busca" (2 filas, 12,5 px, `line-height: 1.5`), input "Piso mensual (US$)" (mono 14 px, texto `--ac`, 96 px), selects "Horizonte" (2/5/8 años) y "Perfil" (Conservador / Moderado / Agresivo declarado).
@@ -110,6 +114,13 @@ Estructura vertical dentro de un contenedor de padding 14/18 px:
 - Cuatro KPIs en grilla 2×2: Meses cubiertos (n/12), Parejo (%), TIR ponderada USD (sólo dólar hard), Duración + mix RF/RV.
 - "Lo que falta": lista de avisos accionables (mes bajo el piso → abre ese mes; renta variable por debajo del rango → abre el segmento).
 - Flujo mes por mes en mono 10,5 px, total anual y botón "Descargar propuesta".
+
+**Implementado en la Etapa 6 del rediseño del armador (`ColumnaKpis.tsx`, 09/08/2026)**: la
+tarjeta de renta anual y los cuatro KPIs, tal como los describe esta sección (número en `--pos`,
+no `--ac` — ver la disciplina `--ac`/`--pos` de la Etapa 1). "Lo que falta" sólo trae avisos
+derivables de datos existentes (meses sin cobertura, posiciones sin resolver): "mes bajo el piso"
+y "renta variable por debajo del rango" necesitan A1 (mandato), que no existe todavía. El flujo
+mes por mes y "Descargar propuesta" quedan para cuando F-042 (export) esté en plan.
 
 ### Sección B — Seguimiento
 
@@ -250,6 +261,27 @@ resolver(posiciones, monto, monedaOperación):
 `--bg #f2f4f7` · `--pan #ffffff` · `--pan2 #eef1f5` · `--lin #d5dce4` · `--tx #182430` · `--dim #61717f` · `--ac #0e8a55` · `--ac2 #a86a06` · `--neg #c0392b` · `--pos #0e8a55` · `--sd #94a4b4`
 
 Fondos de selección: oscuro `rgba(94,227,154,.07–.10)`, claro `rgba(14,138,85,.06–.08)`.
+
+### Desviación aprobada — paleta categórica (Etapa 1 del rediseño del armador, 09/08/2026)
+
+Esta spec no define una paleta para distinguir tramos entre sí dentro de una misma distribución
+(sector, clase, calificación...): en la implementación original todos compartían `--ac`, y con
+seis-más distribuciones en pantalla el verde dejó de significar nada. Se agregaron seis tokens
+más, sin tocar la semántica de los once de arriba:
+
+| Token | Oscuro | Claro | Uso |
+|---|---|---|---|
+| `--cat1` | `#5c9de5` | `#2e6db4` | Distribución categórica, tramo 1 (azul) |
+| `--cat2` | `#46c2b4` | `#0e8177` | tramo 2 (teal) |
+| `--cat3` | `#a08df0` | `#6d4fc4` | tramo 3 (violeta) |
+| `--cat4` | `#7e93a8` | `#566b7e` | tramo 4 (acero) |
+| `--cat5` | `#7379e8` | `#4550b4` | tramo 5 (índigo) |
+| `--cat6` | `#b98bd6` | `#8a4fa8` | tramo 6 (malva) |
+| `--medida` | `= --cat1` | `= --cat1` | Barra que mide contra una escala (no reparte una composición) — duración, percentiles, topes |
+
+`--ac`/`--pos` quedan reservados a renta, positivo y selección/interacción; `--ac2` a advertencia;
+`--neg` a excedido/prohibición. `.rotulo` pasó de `--ac` a `--dim` — el rótulo de un panel no es
+ninguna de las cuatro cosas de arriba, y con acento en cada título el verde no distinguía nada.
 
 ### Tipografía
 
