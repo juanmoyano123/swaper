@@ -25,6 +25,112 @@ const esquemaClasePosicion = z.enum(['renta_fija', 'renta_variable', 'fci'])
 
 const esquemaPerfil = z.enum(['conservador', 'moderado', 'agresivo'])
 
+// --- F-042: mercado congelado (opcional — ausente en filas guardadas antes de esta feature) -----
+//
+// Todo lo que el export necesita y el snapshot de F-041 no llevaba: atributos por posición
+// (naturaleza, lámina, ley...), el vector de seis ejes, el calendario de cupones y la punta de la
+// fuente del dato. Se agrega como bloque `.optional()` dentro de `version: 1` — no una versión
+// nueva — porque una fila vieja sigue parseando con `mercado === undefined`, y quien exporte esa
+// fila declara el faltante en vez de romper (regla 1). `z.strictObject` en todos los niveles: es
+// dato de mercado, no de cliente, así que no hay excepción al GWT-4.
+
+const esquemaEspecieCongelada = z.strictObject({
+  ticker: z.string(),
+  clase_activo: z.string().nullable(),
+  segmento: z.string().nullable(),
+  naturaleza: z.string().nullable(),
+  naturaleza_nombre: z.string().nullable(),
+  rendimiento: z.number().nullable(),
+  duracion: z.number().nullable(),
+  vencimiento: z.string().nullable(),
+  ley: z.string().nullable(),
+  emisor: z.string().nullable(),
+  /** `null` = lámina no informada — GWT-2 de F-042. */
+  lamina: z.number().nullable(),
+  calificacion: z.string().nullable(),
+  sector: z.string().nullable(),
+  moneda_cupon: z.string().nullable(),
+  /** Renta variable: `nombre_largo`/`nombre_corto` de Yahoo. `null` en renta fija y FCI. */
+  denominacion: z.string().nullable(),
+})
+
+const esquemaTramoDeEje = z.strictObject({
+  nombre: z.string(),
+  valor: z.number(),
+  unidad: z.enum(['pp', 'percentil']),
+  sinDato: z.boolean(),
+  tope: z.number().nullable(),
+})
+
+const esquemaGrupoDeEje = z.strictObject({
+  titulo: z.string(),
+  tramos: z.array(esquemaTramoDeEje),
+})
+
+const esquemaCoberturaDeEje = z.strictObject({
+  conDato: z.number(),
+  posiciones: z.number(),
+  pesoConDato: z.number(),
+  pesoTotal: z.number(),
+  notas: z.array(z.string()),
+})
+
+/** Espejo exacto de `EjeDeRiesgo` (`@/lib/cartera/riesgo.ts`) — congelado, no recalculado: la
+ *  concentración es respuesta del backend y la liquidez pondera contra el universo entero, así
+ *  que ninguno de los dos es reproducible offline al exportar una cartera vieja. */
+const esquemaEjeCongelado = z.strictObject({
+  id: z.enum(['duracion', 'credito', 'legislacion', 'liquidez', 'concentracion', 'moneda']),
+  nombre: z.string(),
+  valor: z.number().nullable(),
+  unidad: z.enum(['años', 'percentil', 'pp']).nullable(),
+  grupos: z.array(esquemaGrupoDeEje),
+  cobertura: esquemaCoberturaDeEje,
+})
+
+const esquemaInstrumentoCongelado = z.strictObject({
+  ticker: z.string(),
+  moneda: z.string(),
+  fechas: z.array(z.string()),
+  renta: z.number().nullable(),
+  amortizacion: z.number().nullable(),
+})
+
+const esquemaMesCongelado = z.strictObject({
+  anio: z.number(),
+  mes: z.number(),
+  etiqueta: z.string(),
+  nombre: z.string(),
+  renta: z.record(z.string(), z.number()).nullable(),
+  amortizacion: z.record(z.string(), z.number()).nullable(),
+  instrumentos: z.array(esquemaInstrumentoCongelado),
+})
+
+/** Whitelist de `POST /calendario/cartera?detalle=true` — sólo lo que el export usa. */
+const esquemaCalendarioCongelado = z.strictObject({
+  meses: z.array(esquemaMesCongelado),
+  rentaAnual: z.record(z.string(), z.number()).nullable(),
+  amortizacionAnual: z.record(z.string(), z.number()).nullable(),
+})
+
+/** La punta del dato al momento de guardar (GWT-3): la demora vigente hoy no es la de una fila
+ *  guardada ayer, así que se congela junto con el resto. */
+const esquemaFuenteDelDato = z.strictObject({
+  capturadoEn: z.string().nullable(),
+  demoraMinutos: z.number().nullable(),
+  demoraFuente: z.string().nullable(),
+})
+
+export const esquemaMercadoCongelado = z.strictObject({
+  especies: z.array(esquemaEspecieCongelada),
+  /** `null` = el vector no se pudo medir al guardar (p.ej. sin respuesta del servicio de
+   *  concentración) — declarado, nunca recalculado después. */
+  vector: z.array(esquemaEjeCongelado).nullable(),
+  /** Contra qué perfil se midieron los topes de concentración del vector. */
+  perfilConcentracion: esquemaPerfil.nullable(),
+  calendario: esquemaCalendarioCongelado.nullable(),
+  fuenteDelDato: esquemaFuenteDelDato.nullable(),
+})
+
 // --- Origen A: cartera cargada -------------------------------------------------------------------
 
 const esquemaPosicionCrudaGuardada = z.strictObject({
@@ -67,6 +173,8 @@ export const esquemaSnapshotCargada = z.strictObject({
     aceptadas: z.array(esquemaCandidata),
     descartadas: z.array(z.string()),
   }),
+  /** Ausente en filas guardadas antes de F-042: el export lo declara, no lo rellena. */
+  mercado: esquemaMercadoCongelado.optional(),
 })
 
 // --- Origen B: armador -------------------------------------------------------------------------
@@ -100,6 +208,8 @@ export const esquemaSnapshotArmador = z.strictObject({
   /** La foto valuada, congelada al momento de guardar. */
   resueltas: z.array(esquemaResueltaGuardada),
   totalInvertidoUsd: z.number(),
+  /** Ausente en filas guardadas antes de F-042: el export lo declara, no lo rellena. */
+  mercado: esquemaMercadoCongelado.optional(),
 })
 
 export const esquemaSnapshotCartera = z.discriminatedUnion('origen', [
@@ -113,6 +223,11 @@ export type SnapshotCartera = z.infer<typeof esquemaSnapshotCartera>
 export type ValuadaGuardada = z.infer<typeof esquemaValuadaGuardada>
 export type ExcluidaGuardada = z.infer<typeof esquemaExcluidaGuardada>
 export type ResueltaGuardada = z.infer<typeof esquemaResueltaGuardada>
+export type MercadoCongelado = z.infer<typeof esquemaMercadoCongelado>
+export type EspecieCongelada = z.infer<typeof esquemaEspecieCongelada>
+export type EjeCongelado = z.infer<typeof esquemaEjeCongelado>
+export type CalendarioCongelado = z.infer<typeof esquemaCalendarioCongelado>
+export type FuenteDelDatoCongelada = z.infer<typeof esquemaFuenteDelDato>
 
 // --- Filas de la tabla `carteras` ----------------------------------------------------------------
 

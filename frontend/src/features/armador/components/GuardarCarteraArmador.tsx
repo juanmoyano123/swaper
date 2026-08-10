@@ -1,47 +1,21 @@
 /**
- * F-041 — arma el snapshot del mandato armado acá (renta fija + FCI de `useCarteraResuelta`, renta
- * variable de `useRentaVariableResuelta`) y lo pasa al formulario compartido de `features/carteras`.
- * Vive en `armador` y no en `carteras`: necesita los hooks del store del armador, que
- * `features/carteras` no conoce — sólo recibe el snapshot ya armado.
+ * F-041/F-042 — arma el snapshot del mandato armado (renta fija + FCI, renta variable, y desde
+ * F-042 los atributos de mercado para exportar) y lo pasa al formulario compartido de
+ * `features/carteras`. Vive en `armador` y no en `carteras`: necesita los hooks del store del
+ * armador, que `features/carteras` no conoce — sólo recibe el snapshot ya armado.
+ *
+ * El armado en sí vive en `useSnapshotArmador`, compartido con el botón "Descargar propuesta" de
+ * `ColumnaKpis` — un solo cálculo, sin duplicar pedidos ni poder divergir entre los dos.
  */
 
-import { useMemo } from 'react'
-
 import { GuardarCartera } from '@/features/carteras/components/GuardarCartera'
-import { armarSnapshotArmador } from '@/features/carteras/lib/armarSnapshot'
 
-import { useCarteraResuelta } from '../hooks/useCarteraResuelta'
-import { useRentaVariableResuelta } from '../hooks/useRentaVariableResuelta'
-import { useArmador } from '../store/carteraStore'
+import { useSnapshotArmador } from '../hooks/useSnapshotArmador'
 
 export function GuardarCarteraArmador() {
-  const { pos, montoTotal } = useArmador()
-  const carteraResuelta = useCarteraResuelta()
-  const rentaVariableResuelta = useRentaVariableResuelta()
+  const snapshot = useSnapshotArmador()
 
-  const snapshot = useMemo(
-    () =>
-      armarSnapshotArmador(
-        pos,
-        carteraResuelta.resueltas,
-        carteraResuelta.porTicker,
-        rentaVariableResuelta.resueltas,
-        rentaVariableResuelta.porTicker,
-        carteraResuelta.tipoDeCambio,
-        montoTotal,
-      ),
-    [
-      pos,
-      carteraResuelta.resueltas,
-      carteraResuelta.porTicker,
-      carteraResuelta.tipoDeCambio,
-      rentaVariableResuelta.resueltas,
-      rentaVariableResuelta.porTicker,
-      montoTotal,
-    ],
-  )
-
-  if (pos.length === 0 || montoTotal === 0) {
+  if (!snapshot) {
     return (
       <p style={{ margin: 0, fontSize: 11.5, color: 'var(--dim)' }}>
         Armá una cartera y cargá el capital objetivo para poder guardarla.

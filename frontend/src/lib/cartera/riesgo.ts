@@ -13,6 +13,7 @@
  */
 
 import type { Concentracion } from './esquemaConcentracion'
+import type { Especie } from './esquemaEspecie'
 import {
   rendimientosPorNaturaleza,
   type EspecieMetricas,
@@ -74,6 +75,24 @@ export interface EjeDeRiesgo {
   unidad: 'años' | 'percentil' | 'pp' | null
   grupos: GrupoDeEje[]
   cobertura: CoberturaDeEje
+}
+
+/** Adapta una especie del universo (`/especies`) a lo que el vector necesita — mismo criterio en
+ *  todo consumidor (armador, cartera cargada, export F-042) para que "la misma composición mide
+ *  el mismo vector" (R12) no dependa de que cada uno copie el mapeo a mano. */
+export function especieDeRiesgo(especie: Especie): EspecieRiesgo {
+  return {
+    ticker: especie.ticker,
+    segmento: especie.segmento,
+    naturaleza: especie.naturaleza,
+    naturaleza_nombre: especie.naturaleza_nombre,
+    clase_activo: especie.clase_activo,
+    duracion: especie.duracion,
+    ley: especie.ley,
+    volumen_usd: especie.volumen_usd,
+    calificacion: especie.calificacion,
+    dato_sano: especie.dato_sano,
+  }
 }
 
 interface FilaRiesgo {

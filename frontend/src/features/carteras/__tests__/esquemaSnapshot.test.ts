@@ -161,6 +161,91 @@ describe('esquemaSnapshotCartera (union discriminada)', () => {
   })
 })
 
+function mercadoCongelado() {
+  return {
+    especies: [
+      {
+        ticker: 'AL30D',
+        clase_activo: 'bono_soberano',
+        segmento: 'usd_hard',
+        naturaleza: 'tir_usd',
+        naturaleza_nombre: 'TIR en dólares (hard dollar)',
+        rendimiento: 0.12,
+        duracion: 3.5,
+        vencimiento: '2030-07-09',
+        ley: 'Ley N.Y.',
+        emisor: 'República Argentina',
+        lamina: 1,
+        calificacion: null,
+        sector: 'Soberano',
+        moneda_cupon: 'USD',
+        denominacion: null,
+      },
+    ],
+    vector: [
+      {
+        id: 'duracion' as const,
+        nombre: 'Duración',
+        valor: 3.5,
+        unidad: 'años' as const,
+        grupos: [],
+        cobertura: { conDato: 1, posiciones: 1, pesoConDato: 100, pesoTotal: 100, notas: [] },
+      },
+    ],
+    perfilConcentracion: 'moderado' as const,
+    calendario: {
+      meses: [
+        {
+          anio: 2026,
+          mes: 9,
+          etiqueta: '09/2026',
+          nombre: 'Septiembre 2026',
+          renta: { usd: 35 },
+          amortizacion: null,
+          instrumentos: [{ ticker: 'AL30D', moneda: 'usd', fechas: ['2026-09-09'], renta: 35, amortizacion: null }],
+        },
+      ],
+      rentaAnual: { usd: 420 },
+      amortizacionAnual: null,
+    },
+    fuenteDelDato: { capturadoEn: '2026-08-10T12:00:00Z', demoraMinutos: 20, demoraFuente: 'BYMA' },
+  }
+}
+
+describe('esquemaSnapshotCargada — mercado congelado (F-042)', () => {
+  it('sin `mercado` (fila guardada antes de F-042) parsea igual', () => {
+    const original = snapshotCargada()
+    expect(original.mercado).toBeUndefined()
+    const parseado = esquemaSnapshotCargada.parse(JSON.parse(JSON.stringify(original)))
+    expect(parseado.mercado).toBeUndefined()
+  })
+
+  it('con `mercado`, round-trip sin pérdida', () => {
+    const original = snapshotCargada({ mercado: mercadoCongelado() })
+    const parseado = esquemaSnapshotCargada.parse(JSON.parse(JSON.stringify(original)))
+    expect(parseado).toEqual(original)
+  })
+
+  it('rechaza una clave no declarada dentro de una especie congelada (GWT-4 heredado)', () => {
+    const original = snapshotCargada({ mercado: mercadoCongelado() })
+    const conPii = {
+      ...original,
+      mercado: { ...original.mercado, especies: [{ ...original.mercado!.especies[0], telefonoCliente: '11-5555' }] },
+    }
+    expect(() => esquemaSnapshotCargada.parse(conPii)).toThrow('unrecognized')
+  })
+
+  it('rechaza una clave no declarada dentro de la cobertura de un eje', () => {
+    const original = snapshotCargada({ mercado: mercadoCongelado() })
+    const eje = original.mercado!.vector![0]
+    const conPii = {
+      ...original,
+      mercado: { ...original.mercado, vector: [{ ...eje, cobertura: { ...eje.cobertura, dniAsesor: '1' } }] },
+    }
+    expect(() => esquemaSnapshotCargada.parse(conPii)).toThrow('unrecognized')
+  })
+})
+
 describe('esquemaFilaListado / esquemaFilaDetalle', () => {
   it('la fila del listado no exige el snapshot entero', () => {
     const fila = {

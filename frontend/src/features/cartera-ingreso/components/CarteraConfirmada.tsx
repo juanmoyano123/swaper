@@ -39,10 +39,13 @@ import { DiagnosticoCartera } from '@/features/cartera-diagnostico/components/Di
 import { useCarteraCargadaValuada } from '@/features/cartera-diagnostico/hooks/useCarteraCargadaValuada'
 import { ResolucionCartera } from '@/features/cartera-resolucion/components/ResolucionCartera'
 import { GuardarCartera } from '@/features/carteras/components/GuardarCartera'
-import { armarSnapshotCargada } from '@/features/carteras/lib/armarSnapshot'
-import { firmaDePesos, type PosicionConPeso } from '@/lib/cartera/hooks/useConcentracion'
+import { armarMercadoCongelado, armarSnapshotCargada } from '@/features/carteras/lib/armarSnapshot'
+import { useEstadoDelDato } from '@/features/estado-dato/hooks/useEstadoDelDato'
+import { useCalendarioCartera } from '@/lib/cartera/hooks/useCalendarioCartera'
+import { firmaDePesos, useConcentracion, type PosicionConPeso } from '@/lib/cartera/hooks/useConcentracion'
 import { PERFILES, type NombreDePerfil } from '@/lib/cartera/esquemaConcentracion'
 import type { Especie } from '@/lib/cartera/esquemaEspecie'
+import { especieDeRiesgo, vectorDeRiesgo, type EspecieRiesgo } from '@/lib/cartera/riesgo'
 import type { PosicionConMonto } from '@/lib/rotaciones/plan'
 
 import type { PosicionCruda } from '../types'
@@ -75,6 +78,50 @@ function BloqueOptimizador({
   const plan = usePlanRotacion()
   const propuesta = useCarteraPropuesta(montosOriginales)
 
+  // F-042 — los mismos atributos de mercado que el armador congela, para que el export tenga algo
+  // que declarar (naturaleza, lámina, vector de seis ejes, calendario, fuente del dato). Las mismas
+  // claves que ya pide `DiagnosticoCartera` más arriba: cache-hit de TanStack Query, sin pedido extra.
+  const posicionesConPeso = useMemo(
+    () => (valuacion?.valuadas ?? []).map((v) => ({ ticker: v.ticker, peso: v.pesoReal })),
+    [valuacion],
+  )
+  const posicionesParaCalendario = useMemo(
+    () => (valuacion?.valuadas ?? []).map((v) => ({ ticker: v.ticker, monto: v.invertido })),
+    [valuacion],
+  )
+  const tickers = useMemo(() => posicionesConPeso.map((p) => p.ticker), [posicionesConPeso])
+
+  const concentracion = useConcentracion(posicionesConPeso, perfil)
+  const calendario = useCalendarioCartera(posicionesParaCalendario)
+  const estadoDelDato = useEstadoDelDato()
+
+  const porTickerRiesgo = useMemo(() => {
+    const mapa = new Map<string, EspecieRiesgo>()
+    for (const especie of porTicker.values()) mapa.set(especie.ticker, especieDeRiesgo(especie))
+    return mapa
+  }, [porTicker])
+
+  const vector = useMemo(
+    () =>
+      posicionesConPeso.length > 0
+        ? vectorDeRiesgo(posicionesConPeso, porTickerRiesgo, concentracion.data ?? null)
+        : null,
+    [posicionesConPeso, porTickerRiesgo, concentracion.data],
+  )
+
+  const mercado = useMemo(
+    () =>
+      armarMercadoCongelado({
+        tickers,
+        porTickerRentaFija: porTicker,
+        vector,
+        perfilConcentracion: perfil,
+        calendario: calendario.data ?? null,
+        estadoDelDato: estadoDelDato.data ?? null,
+      }),
+    [tickers, porTicker, vector, perfil, calendario.data, estadoDelDato.data],
+  )
+
   const snapshot = useMemo(
     () =>
       valuacion
@@ -85,9 +132,10 @@ function BloqueOptimizador({
             perfil,
             { aceptadas: plan.aceptadas, descartadas: plan.descartadas },
             tipoDeCambio,
+            mercado,
           )
         : null,
-    [posicionesCrudas, valuacion, porTicker, perfil, plan.aceptadas, plan.descartadas, tipoDeCambio],
+    [posicionesCrudas, valuacion, porTicker, perfil, plan.aceptadas, plan.descartadas, tipoDeCambio, mercado],
   )
 
   return (

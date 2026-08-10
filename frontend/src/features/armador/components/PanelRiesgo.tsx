@@ -16,26 +16,10 @@ import { EstadoError } from '@/components/EstadoError'
 import { Panel } from '@/components/Panel'
 import { VectorDeRiesgo } from '@/components/VectorDeRiesgo'
 import { PERFILES, type NombreDePerfil } from '@/lib/cartera/esquemaConcentracion'
-import { vectorDeRiesgo, type EspecieRiesgo } from '@/lib/cartera/riesgo'
-import type { Especie } from '@/lib/cartera/esquemaEspecie'
+import { especieDeRiesgo, vectorDeRiesgo, type EspecieRiesgo } from '@/lib/cartera/riesgo'
 
 import { useCarteraResuelta } from '../hooks/useCarteraResuelta'
 import { useConcentracion } from '../hooks/useConcentracion'
-
-function aEspecieRiesgo(especie: Especie): EspecieRiesgo {
-  return {
-    ticker: especie.ticker,
-    segmento: especie.segmento,
-    naturaleza: especie.naturaleza,
-    naturaleza_nombre: especie.naturaleza_nombre,
-    clase_activo: especie.clase_activo,
-    duracion: especie.duracion,
-    ley: especie.ley,
-    volumen_usd: especie.volumen_usd,
-    calificacion: especie.calificacion,
-    dato_sano: especie.dato_sano,
-  }
-}
 
 export function PanelRiesgo() {
   const [perfil, setPerfil] = useState<NombreDePerfil>('moderado')
@@ -52,7 +36,7 @@ export function PanelRiesgo() {
 
   const porTicker = useMemo(() => {
     const mapa = new Map<string, EspecieRiesgo>()
-    for (const especie of porTickerEspecie.values()) mapa.set(especie.ticker, aEspecieRiesgo(especie))
+    for (const especie of porTickerEspecie.values()) mapa.set(especie.ticker, especieDeRiesgo(especie))
     return mapa
   }, [porTickerEspecie])
 

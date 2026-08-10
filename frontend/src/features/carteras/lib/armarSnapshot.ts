@@ -18,10 +18,15 @@ import type {
 } from '@/features/armador/store/carteraStore'
 import type { PosicionResuelta } from '@/features/armador/lib/resolver'
 import type { PosicionRvResuelta } from '@/features/armador/lib/resolverRentaVariable'
+import type { EstadoDelDato } from '@/features/estado-dato/lib/schema'
+import type { CalendarioUniverso } from '@/lib/cartera/esquemaCalendario'
 import type { NombreDePerfil } from '@/lib/cartera/esquemaConcentracion'
+import type { EjeDeRiesgo } from '@/lib/cartera/riesgo'
 import type { Candidata } from '@/lib/rotaciones/esquemaRotaciones'
 
 import type {
+  EspecieCongelada,
+  MercadoCongelado,
   ResueltaGuardada,
   SnapshotArmador,
   SnapshotCargada,
@@ -40,6 +45,126 @@ function monedaNormalizada(cruda: string | null | undefined): 'usd' | 'ars' | nu
   return m === 'usd' || m === 'ars' ? m : null
 }
 
+/** Lo que hace falta de una especie de renta fija (`/especies`) para congelarla — F-042. */
+interface EspecieRentaFijaParaCongelar {
+  clase_activo: string
+  segmento: string
+  naturaleza: string
+  naturaleza_nombre: string
+  rendimiento: number | null
+  duracion: number | null
+  vencimiento: string | null
+  ley: string | null
+  moneda_cupon: string | null
+  emisor: string | null
+  lamina: number | null
+  calificacion: string | null
+  sector: string | null
+}
+
+/** Lo que hace falta de una especie de renta variable para congelarla — F-042. */
+interface EspecieRentaVariableParaCongelar {
+  nombre_corto: string | null
+  nombre_largo: string | null
+}
+
+/** Todo lo necesario para `armarMercadoCongelado` — F-042. Cada campo acepta `null`/ausente sin
+ *  que la función invente nada: es lo que había disponible en el momento de guardar. */
+export interface EntradaMercado {
+  /** Sólo los tickers de la cartera se congelan — nunca el universo entero. */
+  tickers: readonly string[]
+  porTickerRentaFija: ReadonlyMap<string, EspecieRentaFijaParaCongelar>
+  porTickerRentaVariable?: ReadonlyMap<string, EspecieRentaVariableParaCongelar>
+  vector: EjeDeRiesgo[] | null
+  perfilConcentracion: NombreDePerfil | null
+  calendario: CalendarioUniverso | null
+  estadoDelDato: EstadoDelDato | null
+}
+
+const ESPECIE_VACIA: Omit<EspecieCongelada, 'ticker' | 'denominacion'> = {
+  clase_activo: null,
+  segmento: null,
+  naturaleza: null,
+  naturaleza_nombre: null,
+  rendimiento: null,
+  duracion: null,
+  vencimiento: null,
+  ley: null,
+  emisor: null,
+  lamina: null,
+  calificacion: null,
+  sector: null,
+  moneda_cupon: null,
+}
+
+/** Congela los atributos de mercado que F-042 necesita para exportar — puro, whitelist explícita
+ *  (GWT-4). Un ticker que no cruza contra ningún universo (fuera del universo, o FCI) queda con
+ *  todo `null`: es dato ausente, no se completa por analogía (regla 1). */
+export function armarMercadoCongelado(entrada: EntradaMercado): MercadoCongelado {
+  const especies: EspecieCongelada[] = entrada.tickers.map((ticker) => {
+    const rf = entrada.porTickerRentaFija.get(ticker)
+    if (rf) {
+      return {
+        ticker,
+        clase_activo: rf.clase_activo,
+        segmento: rf.segmento,
+        naturaleza: rf.naturaleza,
+        naturaleza_nombre: rf.naturaleza_nombre,
+        rendimiento: rf.rendimiento,
+        duracion: rf.duracion,
+        vencimiento: rf.vencimiento,
+        ley: rf.ley,
+        emisor: rf.emisor,
+        lamina: rf.lamina,
+        calificacion: rf.calificacion,
+        sector: rf.sector,
+        moneda_cupon: rf.moneda_cupon,
+        denominacion: null,
+      }
+    }
+    const rv = entrada.porTickerRentaVariable?.get(ticker)
+    if (rv) {
+      return { ticker, ...ESPECIE_VACIA, denominacion: rv.nombre_largo ?? rv.nombre_corto }
+    }
+    // FCI (no cotiza, sin especie por construcción) o ticker fuera de los dos universos.
+    return { ticker, ...ESPECIE_VACIA, denominacion: null }
+  })
+
+  return {
+    especies,
+    vector: entrada.vector,
+    perfilConcentracion: entrada.perfilConcentracion,
+    calendario: entrada.calendario
+      ? {
+          meses: entrada.calendario.meses.map((mes) => ({
+            anio: mes.anio,
+            mes: mes.mes,
+            etiqueta: mes.etiqueta,
+            nombre: mes.nombre,
+            renta: mes.renta,
+            amortizacion: mes.amortizacion,
+            instrumentos: mes.instrumentos.map((i) => ({
+              ticker: i.ticker,
+              moneda: i.moneda,
+              fechas: i.fechas,
+              renta: i.renta,
+              amortizacion: i.amortizacion,
+            })),
+          })),
+          rentaAnual: entrada.calendario.resumen.renta_anual,
+          amortizacionAnual: entrada.calendario.resumen.amortizacion_anual,
+        }
+      : null,
+    fuenteDelDato: entrada.estadoDelDato
+      ? {
+          capturadoEn: entrada.estadoDelDato.dato.capturado_en,
+          demoraMinutos: entrada.estadoDelDato.dato.demora.minutos,
+          demoraFuente: entrada.estadoDelDato.dato.demora.fuente,
+        }
+      : null,
+  }
+}
+
 export function armarSnapshotCargada(
   posiciones: readonly PosicionCruda[],
   valuacion: CarteraValuada,
@@ -47,6 +172,7 @@ export function armarSnapshotCargada(
   perfil: NombreDePerfil,
   plan: { aceptadas: readonly Candidata[]; descartadas: readonly string[] },
   tipoDeCambio: number | null,
+  mercado: MercadoCongelado | null = null,
 ): SnapshotCargada {
   return {
     version: 1,
@@ -79,6 +205,7 @@ export function armarSnapshotCargada(
       aceptadas: plan.aceptadas.map((c) => ({ ...c })),
       descartadas: [...plan.descartadas],
     },
+    mercado: mercado ?? undefined,
   }
 }
 
@@ -90,6 +217,7 @@ export function armarSnapshotArmador(
   porTickerRentaVariable: ReadonlyMap<string, EspecieConMonedaYPrecio>,
   tipoDeCambio: number | null,
   montoTotalUsd: number,
+  mercado: MercadoCongelado | null = null,
 ): SnapshotArmador {
   const resueltaRfPorTicker = new Map(resueltasRentaFija.map((r) => [r.ticker, r]))
   const resueltaRvPorTicker = new Map(resueltasRentaVariable.map((r) => [r.ticker, r]))
@@ -138,6 +266,7 @@ export function armarSnapshotArmador(
     posiciones: pos.map((p) => ({ ticker: p.ticker, peso: p.peso, clase: p.clase })),
     resueltas,
     totalInvertidoUsd,
+    mercado: mercado ?? undefined,
   }
 }
 

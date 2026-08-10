@@ -6,7 +6,13 @@ import type { PosicionRvResuelta } from '@/features/armador/lib/resolverRentaVar
 import type { PosicionArmador } from '@/features/armador/store/carteraStore'
 import type { PosicionCruda } from '@/features/cartera-ingreso/types'
 
-import { armarSnapshotArmador, armarSnapshotCargada, montoDeCartera, resumenDeCartera } from '../lib/armarSnapshot'
+import {
+  armarMercadoCongelado,
+  armarSnapshotArmador,
+  armarSnapshotCargada,
+  montoDeCartera,
+  resumenDeCartera,
+} from '../lib/armarSnapshot'
 import type { SnapshotArmador, SnapshotCargada } from '../lib/esquemaSnapshot'
 
 describe('armarSnapshotCargada', () => {
@@ -146,6 +152,160 @@ describe('resumenDeCartera', () => {
       totalInvertidoUsd: 9000,
     }
     expect(resumenDeCartera(snapshot)).toBe('3 posiciones · 1 renta fija · 1 renta variable · 1 FCI')
+  })
+})
+
+describe('armarMercadoCongelado', () => {
+  const especieRentaFija = {
+    clase_activo: 'bono_soberano',
+    segmento: 'usd_hard',
+    naturaleza: 'tir_usd',
+    naturaleza_nombre: 'TIR en dólares (hard dollar)',
+    rendimiento: 0.12,
+    duracion: 3.5,
+    vencimiento: '2030-07-09',
+    ley: 'Ley N.Y.',
+    moneda_cupon: 'USD',
+    emisor: 'República Argentina',
+    lamina: null, // no informada — dispara GWT-2 en el export
+    calificacion: null,
+    sector: 'Soberano',
+  }
+
+  it('congela un ticker de renta fija con su lámina declarada como null, no como 0', () => {
+    const mercado = armarMercadoCongelado({
+      tickers: ['AL30D'],
+      porTickerRentaFija: new Map([['AL30D', especieRentaFija]]),
+      vector: null,
+      perfilConcentracion: null,
+      calendario: null,
+      estadoDelDato: null,
+    })
+    expect(mercado.especies).toEqual([{ ticker: 'AL30D', ...especieRentaFija, denominacion: null }])
+  })
+
+  it('un ticker de renta variable congela sólo la denominación, el resto queda null', () => {
+    const mercado = armarMercadoCongelado({
+      tickers: ['GGAL'],
+      porTickerRentaFija: new Map(),
+      porTickerRentaVariable: new Map([['GGAL', { nombre_corto: 'Galicia', nombre_largo: 'Grupo Financiero Galicia' }]]),
+      vector: null,
+      perfilConcentracion: null,
+      calendario: null,
+      estadoDelDato: null,
+    })
+    expect(mercado.especies[0]).toEqual({
+      ticker: 'GGAL',
+      clase_activo: null,
+      segmento: null,
+      naturaleza: null,
+      naturaleza_nombre: null,
+      rendimiento: null,
+      duracion: null,
+      vencimiento: null,
+      ley: null,
+      emisor: null,
+      lamina: null,
+      calificacion: null,
+      sector: null,
+      moneda_cupon: null,
+      denominacion: 'Grupo Financiero Galicia',
+    })
+  })
+
+  it('un FCI (fuera de los dos universos) congela todo en null, no se inventa', () => {
+    const mercado = armarMercadoCongelado({
+      tickers: ['FCI-RENTA'],
+      porTickerRentaFija: new Map(),
+      vector: null,
+      perfilConcentracion: null,
+      calendario: null,
+      estadoDelDato: null,
+    })
+    expect(mercado.especies[0].clase_activo).toBeNull()
+    expect(mercado.especies[0].denominacion).toBeNull()
+  })
+
+  it('vector, calendario y fuenteDelDato ausentes quedan null, jamás se recalculan', () => {
+    const mercado = armarMercadoCongelado({
+      tickers: [],
+      porTickerRentaFija: new Map(),
+      vector: null,
+      perfilConcentracion: null,
+      calendario: null,
+      estadoDelDato: null,
+    })
+    expect(mercado.vector).toBeNull()
+    expect(mercado.calendario).toBeNull()
+    expect(mercado.fuenteDelDato).toBeNull()
+  })
+
+  it('la fuente del dato se toma tal cual del estado del dato, sin reinterpretarla', () => {
+    const mercado = armarMercadoCongelado({
+      tickers: [],
+      porTickerRentaFija: new Map(),
+      vector: null,
+      perfilConcentracion: null,
+      calendario: null,
+      estadoDelDato: {
+        dato: { capturado_en: '2026-08-10T12:00:00Z', demora: { minutos: 20, fuente: 'BYMA', por_que: 'x' } },
+      } as never,
+    })
+    expect(mercado.fuenteDelDato).toEqual({ capturadoEn: '2026-08-10T12:00:00Z', demoraMinutos: 20, demoraFuente: 'BYMA' })
+  })
+
+  it('el calendario congelado reduce el instrumento a la whitelist del export', () => {
+    const mercado = armarMercadoCongelado({
+      tickers: [],
+      porTickerRentaFija: new Map(),
+      vector: null,
+      perfilConcentracion: null,
+      calendario: {
+        resumen: { renta_anual: { usd: 420 }, amortizacion_anual: null },
+        meses: [
+          {
+            anio: 2026,
+            mes: 9,
+            etiqueta: '09/2026',
+            nombre: 'Septiembre 2026',
+            renta: { usd: 35 },
+            amortizacion: null,
+            instrumentos: [
+              {
+                ticker: 'AL30D',
+                emision: 'AL30',
+                fechas: ['2026-09-09'],
+                pct_renta: 0.005,
+                pct_amortizacion: 0,
+                renta: 35,
+                amortizacion: null,
+                moneda: 'usd',
+                rendimiento: 0.12,
+                naturaleza: 'tir_usd',
+                naturaleza_nombre: 'TIR en dólares (hard dollar)',
+                vencimiento: '2030-07-09',
+              },
+            ],
+          },
+        ],
+      } as never,
+      estadoDelDato: null,
+    })
+    expect(mercado.calendario).toEqual({
+      meses: [
+        {
+          anio: 2026,
+          mes: 9,
+          etiqueta: '09/2026',
+          nombre: 'Septiembre 2026',
+          renta: { usd: 35 },
+          amortizacion: null,
+          instrumentos: [{ ticker: 'AL30D', moneda: 'usd', fechas: ['2026-09-09'], renta: 35, amortizacion: null }],
+        },
+      ],
+      rentaAnual: { usd: 420 },
+      amortizacionAnual: null,
+    })
   })
 })
 
