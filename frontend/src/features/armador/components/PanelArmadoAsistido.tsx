@@ -218,6 +218,19 @@ export function PanelArmadoAsistido() {
         </p>
       )}
 
+      {/* Lo pedido y lo aplicado pueden no coincidir: si no hubo acciones que cumplieran (hoy pasa
+          con cualquier temática, porque el job de perfiles de empresa nunca corrió), la renta fija
+          queda ocupando la cartera entera sin reescalarse. Sin este aviso, el pedido se vería
+          ignorado en silencio y sólo lo explicaría una alerta más abajo. */}
+      {mutacion.isSuccess &&
+        mutacion.data.pct_rv_aplicado < (mutacion.variables?.pct_rv ?? 0) && (
+          <p style={{ margin: 0, fontSize: 11.5, color: 'var(--ac2)' }}>
+            Pediste {mutacion.variables?.pct_rv}% en renta variable y entró{' '}
+            {mutacion.data.pct_rv_aplicado}%: no hubo acciones que cumplieran. El resto quedó en
+            renta fija — mirá las alertas de abajo.
+          </p>
+        )}
+
       {mutacion.isSuccess && <AlertasCalendario alertas={mutacion.data.alertas} />}
     </div>
   )

@@ -177,4 +177,41 @@ describe('PanelArmadoAsistido', () => {
     // no cambiaba nada de lo que se veía más abajo.
     expect(screen.getByTestId('montoTotal')).toHaveTextContent('80000')
   })
+
+  it('avisa cuando la renta variable pedida no entró — el pedido no se ignora en silencio', async () => {
+    // El caso real de hoy: con temática puesta no hay ninguna acción con sector informado, así que
+    // el backend devuelve pct_rv_aplicado 0 y deja la renta fija ocupando la cartera entera.
+    mockFetch(200, {
+      ...RESULTADO_OK,
+      pct_rv_aplicado: 0,
+      alertas: [
+        {
+          codigo: 'rv_sin_candidatos',
+          mensaje: 'ninguna especie de renta variable pasó los filtros pedidos',
+          severidad: 'advertencia',
+          accion_requerida: null,
+          detalle: {},
+        },
+      ],
+    })
+    renderizar()
+
+    await userEvent.type(screen.getByLabelText('Monto a invertir (USD)'), '100000')
+    await userEvent.click(screen.getByRole('button', { name: 'Armar cartera asistida' }))
+
+    expect(
+      await screen.findByText(/Pediste 25% en renta variable y entró 0%/),
+    ).toBeInTheDocument()
+  })
+
+  it('no avisa nada cuando lo pedido y lo aplicado coinciden', async () => {
+    mockFetch(200, { ...RESULTADO_OK, pct_rv_aplicado: 25 })
+    renderizar()
+
+    await userEvent.type(screen.getByLabelText('Monto a invertir (USD)'), '100000')
+    await userEvent.click(screen.getByRole('button', { name: 'Armar cartera asistida' }))
+
+    await waitFor(() => expect(screen.getByTestId('cartera')).toHaveTextContent('GD35'))
+    expect(screen.queryByText(/Pediste/)).not.toBeInTheDocument()
+  })
 })
