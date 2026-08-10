@@ -339,6 +339,33 @@ el orden del Excel de la mesa. Un bloque sin posiciones no se muestra.
   cantidad va en unidades enteras (no hay valor nominal) y el mini-calendario dice **"no aplica"**,
   no `s/d` — una acción no tiene cronograma: el dato no falta, no existe (regla 4 de esta spec).
 
+### Desviación aprobada — la fila de propuesta del optimizador (10/08/2026)
+
+Esta spec no describe los dos modos del optimizador como secciones separadas. F-033 y F-034
+conviven **apiladas** en la cartera confirmada, sin toggle: parten de las mismas candidatas y las
+particionan sin solaparse, así que mostrar una no implica esconder la otra.
+
+**La línea de contrapartida (F-034) siempre se dibuja.** Es la regla 8 del dominio sostenida en el
+render: o enumera los ejes que empeoran —cada uno en su unidad, separados por `·`— o dice con todas
+las letras que ninguno empeora. Nunca queda un espacio en blanco donde debería estar lo que se
+resigna. Dos precisiones de copy que son de dominio y no de estilo:
+
+- El delta se rotula **"Δ rendimiento"**, nunca "TIR": el modo se llama así en la ficha, pero una
+  tasa real sobre CER o una TNA en pesos no son una TIR en dólares (regla 2).
+- El eje legislación se nombra por lo que mide —**"peso bajo ley extranjera 100% → 0%"**— y no como
+  algo que "sube" o "baja", que se leería como un puntaje (regla 7). El cambio de ley va al lado
+  entre paréntesis, con los literales de la fuente (`Ley N.Y. → Ley Argentina`, regla 11).
+
+**Nota de costo de rotar**, al pie de cada fila de los dos modos, mono 10,5 px:
+
+| Estado | Qué se muestra | Color |
+|---|---|---|
+| verificable | total, arancel por pata y en cuántos meses lo paga la mejora | `--sd`, o `--neg` si es elevado |
+| no verificable | "falta punta de mercado en alguna pata" + el arancel como piso conocido | `--sd` |
+| sin bloque de costo | `Costo de rotar: s/d` | `--sd` |
+
+Un spread ausente **nunca** se cuenta como cero: haría leer una rotación cara como barata (regla 1).
+
 ### Tipografía
 
 - **Texto**: `ui-sans-serif, system-ui, "Helvetica Neue", sans-serif`, `-webkit-font-smoothing: antialiased`. Si el codebase tiene una grotesca propia, usarla.

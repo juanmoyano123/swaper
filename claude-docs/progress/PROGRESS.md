@@ -64,7 +64,7 @@ desde `/build-feature` a medida que cada una se implementa.
 | ID | Feature | Etiqueta | RICE | Estado |
 |---|---|---|---|---|
 | F-033 | Modo bajar riesgo | Stage 1 | 57,6 | **completada** |
-| F-034 | Modo subir TIR con contrapartida | Stage 1 | 86,4 | pendiente |
+| F-034 | Modo subir TIR con contrapartida | Stage 1 | 86,4 | **completada** |
 | F-036 | Aceptación rotación por rotación | Stage 1 | 57,6 | pendiente |
 | F-037 | Comparación original contra propuesta | Stage 1 | 72,0 | pendiente |
 | F-038 | Monitor de mercado | Stage 1 | 106,7 | completada |
@@ -564,8 +564,47 @@ prácticas, las dos declaradas en pantalla y ninguna un bug: los filtros por sec
 buscador de renta variable no encuentran nada, y **la diversificación sectorial del armado asistido
 no puede aplicarse** — arma por liquidez pura y lo dice con la alerta `rv_sin_perfil_sectorial`.
 
-Siguiente paso: la **tanda 14 — F-034 (subir TIR), sola**. Comparte el contrato de la fila de
-propuesta con F-033 (mandato del plan).
+**Tanda 14 cerrada el 10/08/2026** — F-034 (modo "subir la TIR declarando la contrapartida"), sola.
+**652 tests offline en el frontend (64 archivos) y 1.165 en el backend.** Van **40 de 42 features de
+Stage 1**; quedan F-027 (fuera de tanda) y el camino crítico 15–18.
+
+- **F-034 salió 100 % frontend, como F-033, y por un motivo que estaba en el propio contrato**:
+  `candidata.tipo == "mejora_rendimiento"` (d_rend ≥ 0,5pp) es el **complemento exacto** de la banda
+  de ±0,5pp con la que F-033 filtra. Los dos modos particionan el mismo conjunto de candidatas de
+  F-032 sin solaparse, así que no hizo falta ni un parámetro nuevo en `POST /rotaciones`. Se ve en
+  la pantalla real: con una cartera AL30D+AO27D, F-033 descarta las seis por "el rendimiento se
+  mueve más de 0,5%" y F-034 muestra exactamente esas seis.
+- **Los dos modos deciden distinto y por eso no comparten el tipo de salida.** F-033 **filtra** (el
+  eje primario mejora, los otros cinco no empeoran); F-034 **declara** (nada se descarta por
+  empeorar: empeorar es lo que hay para mostrar). Lo que sí se unificó, pensando en F-036, es el
+  vocabulario por eje — `lib/rotaciones/ejes.ts`, con los signos, los estados y los motivos de
+  descarte que antes eran privados de `bajarRiesgo.ts`.
+- **El criterio que concilia los dos GWT que parecían tirar para lados opuestos** (uno dice que sin
+  deltas la fila no se muestra, otro que la cobertura parcial se declara al lado del delta): un
+  faltante **en las puntas** de la rotación mata la fila —sin dato en la punta el delta no es
+  atribuible a la rotación, y mostrarla afirmaría que ese eje no empeora, que es distinto de no
+  saberlo—; un faltante **en el resto de la cartera** no la mata, porque el delta agregado existe.
+- **Un cambio de emisor cuenta como contrapartida aunque ningún número empeore.** Crédito no tiene
+  métrica escalar (regla 7), así que "no empeoró" no se puede afirmar: se nombra el cambio con las
+  calificaciones tal como las trae la fuente, ausencia incluida ("sin calificación → A1 (FIX)").
+- **Primera UI del costo de rotar.** F-035 había cerrado sin pantalla: el bloque `costo` viajaba en
+  cada candidata y el modo strip de Zod lo descartaba en silencio. Ahora cada fila de los dos modos
+  declara total, arancel y payback, o dice que no es verificable cuando falta una punta. De paso se
+  corrigieron dos textos que habían quedado mintiendo desde ese cierre ("el costo todavía no se
+  calcula", "el spread llega con F-035").
+- **Bug de producción encontrado al verificar contra el backend real, y arreglado**: `POST
+  /api/v1/rotaciones` devolvía **500** en cuanto una candidata tenía las dos puntas vivas —
+  `public.puntas` guarda `numeric`, asyncpg lo entrega como `Decimal` y `calcular_costo` lo suma con
+  el arancel, que es `float`. Ninguna suite lo veía porque todos los fixtures de F-035 pasan floats.
+  En los hechos el endpoint venía roto desde que F-035 empezó a leer puntas: **F-033 tampoco
+  funcionaba end-to-end**. La conversión va en `puntas.py`, donde la firma promete `float | None`
+  desde el principio, con un test que usa `Decimal` como lo hace la base.
+- **Lección de verificación**: los tests de `SeccionBajarRiesgo` mockeaban siempre `candidatas: []`,
+  así que la fila de propuesta nunca se había renderizado en una suite y el parseo del contrato no
+  estaba ejercitado desde la pantalla. Un test verde no dice nada sobre el camino que no recorre.
+
+Siguiente paso: la **tanda 15 — F-036 (aceptación rotación por rotación), sola**. Consume F-033,
+F-034 y F-035, que ahora comparten vocabulario de ejes y bloque de costo.
 
 ### Lo que F-013 puso a la vista, y la decisión que dejó abierta
 
