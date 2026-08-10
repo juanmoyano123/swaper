@@ -73,7 +73,7 @@ export function PanelRenta() {
         bajada="Tocá un mes para abrirlo y comparar los papeles que pagan ahí."
         columnas={columnasUsd}
         alto={290}
-        colorBarra="var(--ac)"
+        colorBarra="var(--pos)"
         formatoMonto={(v) => fmtMonto(v, 'usd', 0)}
         leyenda="Renta (cupón) en dólares · ◆ amortización de capital, no es renta."
       />

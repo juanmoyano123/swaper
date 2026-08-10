@@ -62,7 +62,7 @@ export function TarjetaPapel({ instrumento }: { instrumento: InstrumentoDelMes }
       </span>
       <div className="mono" style={{ display: 'flex', flexWrap: 'wrap', columnGap: 10, rowGap: 2, fontSize: 10.5 }}>
         <Campo rotulo="Cupón" valor={fmtPct(instrumento.pct_renta * 100)} color="var(--ac2)" />
-        <span style={{ color: 'var(--ac)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+        <span style={{ color: 'var(--pos)', fontWeight: 600, whiteSpace: 'nowrap' }}>
           {instrumento.rendimiento === null
             ? SIN_DATO
             : `${fmtPct(instrumento.rendimiento * 100)} ${unidadDeNaturaleza(instrumento.naturaleza)}`}

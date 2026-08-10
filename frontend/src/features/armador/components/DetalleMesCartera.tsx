@@ -20,7 +20,7 @@ const NOMBRE_MONEDA: Record<string, string> = {
 }
 
 const COLOR_MONEDA: Record<string, string> = {
-  usd: 'var(--ac)',
+  usd: 'var(--pos)',
   ars: 'var(--ac2)',
 }
 
@@ -93,7 +93,7 @@ export function DetalleMesCartera({ meses }: { meses: MesDelCalendario[] }) {
 }
 
 function GrupoDeMoneda({ grupo }: { grupo: GrupoDelMes }) {
-  const color = COLOR_MONEDA[grupo.moneda] ?? 'var(--ac)'
+  const color = COLOR_MONEDA[grupo.moneda] ?? 'var(--pos)'
   const formato = formatoDeMoneda(grupo.moneda)
   const titulo = NOMBRE_MONEDA[grupo.moneda] ?? `Cobros en ${grupo.moneda}`
 

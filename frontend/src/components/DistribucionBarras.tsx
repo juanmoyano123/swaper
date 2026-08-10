@@ -11,6 +11,11 @@
  * apagado. Repartir esas posiciones entre los tramos conocidos, o simplemente omitirlas, haría que
  * la distribución sumara 100 % mintiendo sobre la cobertura (reglas 1 y 11 del dominio).
  *
+ * **Color por índice, no un solo verde para todo.** Etapa 1 del rediseño del armador: cada tramo
+ * toma su color de `--cat1..--cat6` según su posición en el array (`sinDato` sigue en `--sd`). El
+ * verde (`--ac`/`--pos`) queda reservado a renta/positivo/selección — acá no se está afirmando que
+ * un tramo sea "bueno", sólo cuánto pesa.
+ *
  * No decide nada sobre lo que muestra: no ordena por criterio propio, no marca excesos y no emite
  * juicio. El orden lo fija quien lo llama y las advertencias de tope las pone su propio panel —
  * acá sólo se ve cómo está repartida la cartera.
@@ -36,6 +41,18 @@ interface Props {
 
 const ALTO_BARRA = 8
 
+// Paleta categórica (Etapa 1 del rediseño del armador): un color estable por índice de tramo,
+// no uno solo para todos. El orden de `tramos` lo fija quien llama a este componente y ya es
+// estable entre renders, así que el color de cada nombre no salta al refrescar.
+const CATEGORICOS = [
+  'var(--cat1)',
+  'var(--cat2)',
+  'var(--cat3)',
+  'var(--cat4)',
+  'var(--cat5)',
+  'var(--cat6)',
+]
+
 export function DistribucionBarras({ titulo, tramos, vacio }: Props) {
   const total = tramos.reduce((acumulado, t) => acumulado + t.peso, 0)
 
@@ -59,7 +76,7 @@ export function DistribucionBarras({ titulo, tramos, vacio }: Props) {
         </p>
       ) : (
         <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 5 }}>
-          {tramos.map((tramo) => (
+          {tramos.map((tramo, indice) => (
             <li key={tramo.nombre} style={{ display: 'grid', gap: 2 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11.5 }}>
                 <span style={{ color: tramo.sinDato ? 'var(--sd)' : 'var(--tx)' }}>
@@ -85,7 +102,7 @@ export function DistribucionBarras({ titulo, tramos, vacio }: Props) {
                     // sí, que es lo que este panel responde.
                     width: total > 0 ? `${(tramo.peso / total) * 100}%` : '0%',
                     height: '100%',
-                    background: tramo.sinDato ? 'var(--sd)' : 'var(--ac)',
+                    background: tramo.sinDato ? 'var(--sd)' : CATEGORICOS[indice % CATEGORICOS.length],
                   }}
                 />
               </div>

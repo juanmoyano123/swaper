@@ -21,6 +21,21 @@
   --pos: #5ee39a;
   --sd: #516373;
 
+  /*
+    Paleta categórica — Etapa 1 del rediseño del armador (claude-docs/planning/design-system.md
+    no la define; se agrega para distinguir tramos entre sí sin tocar la semántica de --ac/--ac2/
+    --neg). Seis tonos neutros, ninguno verde ni ámbar para no competir con "renta"/"advertencia".
+    Contraste ≥3:1 contra la pista --pan2 (#0d141b), que es donde corren las barras.
+  */
+  --cat1: #5c9de5; /* azul */
+  --cat2: #46c2b4; /* teal */
+  --cat3: #a08df0; /* violeta */
+  --cat4: #7e93a8; /* acero */
+  --cat5: #7379e8; /* índigo */
+  --cat6: #b98bd6; /* malva */
+  /* Barras de medición (no distribución categórica): duración, percentiles, topes. */
+  --medida: var(--cat1);
+
   /* Fondo de selección; cambia por tema porque el acento cambia de luminosidad. */
   --sel: rgba(94, 227, 154, 0.1);
 
@@ -44,6 +59,14 @@
   --neg: #c0392b;
   --pos: #0e8a55;
   --sd: #94a4b4;
+
+  /* Mismos seis tonos, oscurecidos para ≥3:1 contra la pista --pan2 (#eef1f5) y contra #ffffff. */
+  --cat1: #2e6db4;
+  --cat2: #0e8177;
+  --cat3: #6d4fc4;
+  --cat4: #566b7e;
+  --cat5: #4550b4;
+  --cat6: #8a4fa8;
 
   --sel: rgba(14, 138, 85, 0.08);
 
@@ -72,13 +95,17 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Rótulo en mayúsculas de cabecera de panel (10 px, letter-spacing .13em, en acento). */
+/*
+  Rótulo en mayúsculas de cabecera de panel (10 px, letter-spacing .13em). En --dim, no en
+  acento: el verde quedó reservado a renta/positivo y a selección — un rótulo no es ninguna de
+  las dos cosas, y con --ac en cada título de cada panel el verde dejaba de significar nada.
+*/
 .rotulo {
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.13em;
   text-transform: uppercase;
-  color: var(--ac);
+  color: var(--dim);
 }
 
 @keyframes pulso {

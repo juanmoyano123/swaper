@@ -13,6 +13,11 @@
  * - concentración: sin barra superior — se resuelve directo con los tramos con tope.
  * - crédito y moneda (compositivos, `valor: null`): sin barra superior — la fila entera es la
  *   composición de sus grupos, con `DistribucionBarras`.
+ *
+ * Color (Etapa 1 del rediseño del armador): las barras de este componente miden un valor contra
+ * una escala, no reparten una composición — usan `--medida`, no la paleta categórica de
+ * `DistribucionBarras`. El verde (`--ac`) queda para selección/interacción; acá una medición no
+ * es "positivo" ni "elegido". Excedido sigue en `--neg`, sin dato en `--sd`.
  */
 
 import { DistribucionBarras, type TramoDistribucion } from './DistribucionBarras'
@@ -124,7 +129,7 @@ function BarraSimple({ valor, escala }: { valor: number | null; escala: number }
   const fraccion = valor === null ? 0 : Math.min(1, Math.max(0, valor / escala))
   return (
     <div aria-hidden style={{ height: ALTO_BARRA, background: 'var(--pan2)', borderRadius: 2, overflow: 'hidden' }}>
-      <div style={{ width: `${fraccion * 100}%`, height: '100%', background: valor === null ? 'var(--sd)' : 'var(--ac)' }} />
+      <div style={{ width: `${fraccion * 100}%`, height: '100%', background: valor === null ? 'var(--sd)' : 'var(--medida)' }} />
     </div>
   )
 }
@@ -152,7 +157,7 @@ function GrupoPercentiles({ grupo }: { grupo: GrupoDeEje }) {
               style={{
                 width: `${Math.min(100, Math.max(0, tramo.valor))}%`,
                 height: '100%',
-                background: tramo.sinDato ? 'var(--sd)' : 'var(--ac)',
+                background: tramo.sinDato ? 'var(--sd)' : 'var(--medida)',
               }}
             />
           </div>
@@ -168,7 +173,7 @@ function TramoConTope({ tramo }: { tramo: TramoDeEje }) {
   const tope = tramo.tope
   const escala = Math.max(tramo.valor, tope ?? 0, 1) * 1.08
   const excedido = tope !== null && tramo.valor > tope
-  const color = tramo.sinDato ? 'var(--sd)' : excedido ? 'var(--neg)' : 'var(--ac)'
+  const color = tramo.sinDato ? 'var(--sd)' : excedido ? 'var(--neg)' : 'var(--medida)'
 
   return (
     <div style={{ display: 'grid', gap: 2 }}>

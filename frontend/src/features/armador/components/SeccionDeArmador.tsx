@@ -22,7 +22,7 @@ export function SeccionDeArmador({
       <header>
         <h2
           className="rotulo"
-          style={{ margin: 0, fontSize: 12, letterSpacing: '0.13em' }}
+          style={{ margin: 0, fontSize: 12, letterSpacing: '0.13em', color: 'var(--tx)' }}
         >
           {rotulo}
         </h2>

@@ -244,8 +244,8 @@ describe('los topes', () => {
 
     expect(await screen.findByText('YPF S.A.')).toHaveStyle({ color: 'var(--neg)' })
     expect(screen.getByText('+15,0% sobre el tope')).toBeInTheDocument()
-    // El que está dentro del tope no se tiñe.
-    expect(screen.getByText('30,0% / 40%')).toHaveStyle({ color: 'var(--ac)' })
+    // El que está dentro del tope no se tiñe con el acento de selección — es una medición.
+    expect(screen.getByText('30,0% / 40%')).toHaveStyle({ color: 'var(--medida)' })
   })
 
   it('muestra el peso contra su tope y no como porcentaje del tope', async () => {

@@ -237,7 +237,7 @@ function FilaDeTope({ tope }: { tope: EstadoDeTope }) {
   // La escala llega hasta el mayor de los dos con un margen, para que el tope se vea siempre y un
   // exceso del doble no se salga de la barra ni se recorte a "lleno".
   const escala = Math.max(tope.peso, tope.tope) * 1.08
-  const color = tope.excedido ? 'var(--neg)' : 'var(--ac)'
+  const color = tope.excedido ? 'var(--neg)' : 'var(--medida)'
 
   return (
     <li style={{ display: 'grid', gap: 2 }}>

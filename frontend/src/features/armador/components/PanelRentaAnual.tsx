@@ -53,12 +53,12 @@ function TarjetaRentaAnual({ datos }: { datos: RentaAnualPorMoneda }) {
     <div style={{ background: 'var(--pan)', border: '1px solid var(--lin)', borderRadius: 4, padding: '14px 16px' }}>
       <div
         className="rotulo"
-        style={{ fontSize: 10, letterSpacing: '0.13em', color: 'var(--ac)', textTransform: 'uppercase' }}
+        style={{ fontSize: 10, letterSpacing: '0.13em', textTransform: 'uppercase' }}
       >
         Renta anual en {rotuloMoneda}
       </div>
 
-      <div className="mono" style={{ fontSize: 36, fontWeight: 600, lineHeight: 1.15, color: 'var(--ac)' }}>
+      <div className="mono" style={{ fontSize: 36, fontWeight: 600, lineHeight: 1.15, color: 'var(--pos)' }}>
         {datos.pct !== null ? fmtPct(datos.pct) : SIN_DATO}
       </div>
 

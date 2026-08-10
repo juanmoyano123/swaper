@@ -224,7 +224,7 @@ function LeyendaDeColumnas() {
         : sin precio o sin tipo de cambio — el dato falta, no es cero.
       </span>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-        <span style={{ display: 'inline-block', width: 7, height: 12, borderRadius: 2, background: 'var(--ac)' }} />
+        <span style={{ display: 'inline-block', width: 7, height: 12, borderRadius: 2, background: 'var(--pos)' }} />
         mes en que el papel paga renta
       </span>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>

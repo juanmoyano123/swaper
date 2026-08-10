@@ -5,7 +5,7 @@
  * las filas del monitor (F-038) y las tarjetas comparables del detalle de mes (F-016), y si cada
  * una tuviera su versión las dos pantallas dibujarían el mismo dato distinto.
  *
- * Las celdas se pintan con lo que el dato dice y nada más: `renta` en acento, `atencion` en ámbar
+ * Las celdas se pintan con lo que el dato dice y nada más: `renta` en `--pos`, `atencion` en ámbar
  * (amortizaciones, dividendos estimados — lo que el design system marca con `--ac2`), y `null`
  * queda transparente con borde. Una celda vacía es un mes sin pagos, que es dato, no ausencia.
  */
@@ -39,7 +39,7 @@ export function MiniCalendario({
             height: 16,
             borderRadius: 2,
             background:
-              celda === 'renta' ? 'var(--ac)' : celda === 'atencion' ? 'var(--ac2)' : 'transparent',
+              celda === 'renta' ? 'var(--pos)' : celda === 'atencion' ? 'var(--ac2)' : 'transparent',
             border: celda === null ? '1px solid var(--lin)' : '1px solid transparent',
           }}
         />

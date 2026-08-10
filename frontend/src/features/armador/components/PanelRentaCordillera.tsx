@@ -41,7 +41,7 @@ export function PanelRentaCordillera({
   return (
     <div style={{ background: 'var(--pan)', border: '1px solid var(--lin)', borderRadius: 4, padding: '12px 16px' }}>
       <header style={{ marginBottom: 10 }}>
-        <div className="rotulo" style={{ fontSize: 10, letterSpacing: '0.13em', color: 'var(--ac)', textTransform: 'uppercase' }}>
+        <div className="rotulo" style={{ fontSize: 10, letterSpacing: '0.13em', textTransform: 'uppercase' }}>
           {titulo}
         </div>
         {bajada && <p style={{ margin: '2px 0 0', fontSize: 11.5, color: 'var(--dim)', textWrap: 'pretty' }}>{bajada}</p>}
