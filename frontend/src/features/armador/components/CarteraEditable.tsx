@@ -23,6 +23,7 @@ import { MiniCalendario, type CeldaMes } from '@/components/MiniCalendario'
 import { fmtMonto, fmtNumero, fmtPct, SIN_DATO } from '@/lib/fmt'
 
 import { AlertasCalendario } from './AlertasCalendario'
+import { BadgeClase } from './BadgeClase'
 import { useCalendarioCartera } from '../hooks/useCalendarioCartera'
 import { useCargarLamina } from '../hooks/useCargarLamina'
 import { useCarteraResuelta } from '../hooks/useCarteraResuelta'
@@ -350,8 +351,11 @@ function FilaCartera({
       }}
     >
       <div>
-        <span className="mono" style={{ fontSize: 12.5, color: 'var(--tx)' }}>
-          {posicion.ticker}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+          <span className="mono" style={{ fontSize: 12.5, color: 'var(--tx)' }}>
+            {posicion.ticker}
+          </span>
+          {posicion.clase !== 'fci' && <BadgeClase claseActivo={especie?.clase_activo} />}
         </span>
         <span style={{ display: 'block', fontSize: 9.5, color: 'var(--dim)' }}>
           {posicion.clase === 'fci' ? 'FCI' : (especie?.moneda_cotizacion ?? SIN_DATO)}

@@ -21,17 +21,22 @@
 import { unidadDeNaturaleza } from '@/components/SelectorSegmento'
 import { fmtPct, SIN_DATO } from '@/lib/fmt'
 
+import { BadgeClase } from './BadgeClase'
 import type { InstrumentoDelMes } from '../lib/schema'
 import { useArmador, useArmadorAcciones } from '../store/carteraStore'
 
 export function TarjetaPapel({
   instrumento,
   calificacion,
+  claseActivo,
 }: {
   instrumento: InstrumentoDelMes
   /** `undefined` = el ticker no cruzó contra el universo; `null` = cruzó pero sin calificación
    *  informada por la fuente. Los dos se muestran como "sin calif.", nunca se ocultan (regla 11). */
   calificacion?: string | null
+  /** Soberano, subsoberano u ON: sin esto el ticker solo no dice qué crédito estás comprando.
+   *  `undefined` (el ticker no cruzó) no dibuja badge. */
+  claseActivo?: string | null
 }) {
   const { pos } = useArmador()
   const { alternarPapel } = useArmadorAcciones()
@@ -62,17 +67,20 @@ export function TarjetaPapel({
         textAlign: 'left',
       }}
     >
-      <span
-        className="mono"
-        style={{
-          fontSize: 12.5,
-          fontWeight: 600,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {instrumento.ticker}
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+        <span
+          className="mono"
+          style={{
+            fontSize: 12.5,
+            fontWeight: 600,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {instrumento.ticker}
+        </span>
+        <BadgeClase claseActivo={claseActivo} />
       </span>
       <div className="mono" style={{ display: 'flex', flexWrap: 'wrap', columnGap: 10, rowGap: 2, fontSize: 10.5 }}>
         <Campo rotulo="Cupón" valor={fmtPct(instrumento.pct_renta * 100)} color="var(--ac2)" />

@@ -49,6 +49,7 @@ import { useAbrirInstrumento } from '@/features/instrumento/useAbrirInstrumento'
 import { fmtFecha, fmtMonto, fmtPct, SIN_DATO } from '@/lib/fmt'
 import { type EspecieRentaVariable, useRentaVariable } from '@/lib/rentaVariable'
 
+import { BadgeClase } from './BadgeClase'
 import { useCarteraResuelta } from '../hooks/useCarteraResuelta'
 import { useTipoDeCambio } from '../hooks/useTipoDeCambio'
 import { sumaPesos } from '../lib/mix'
@@ -398,6 +399,7 @@ function FilaPicker({
       >
         {especie.ticker}
       </button>
+      <BadgeClase claseActivo={especie.clase_activo} />
       {especie.nombre_corto && (
         <span
           style={{
@@ -489,6 +491,10 @@ function TarjetaRentaVariable({
         >
           {ticker}
         </button>
+        {/* La clase sale del badge y no de un ternario "si no es acción, es CEDEAR": ese descarte
+            etiquetaba mal cualquier valor nuevo que apareciera. Acá al lado queda el nombre de la
+            empresa, que es el otro dato que identifica al papel. */}
+        <BadgeClase claseActivo={especie?.clase_activo} />
         <span
           style={{
             fontSize: 10.5,
@@ -504,15 +510,9 @@ function TarjetaRentaVariable({
               : undefined
           }
         >
-          {/* Con perfil de empresa (Etapa 5): nombre + clase. Sin él, sólo la clase — es lo único
-              descriptivo que hay hasta que el job de enriquecimiento pase por este ticker. */}
-          {especie?.nombre_corto
-            ? `${especie.nombre_corto} · ${especie.clase_activo === 'accion' ? 'Acción' : 'CEDEAR'}`
-            : especie
-              ? especie.clase_activo === 'accion'
-                ? 'Acción'
-                : 'CEDEAR'
-              : SIN_DATO}
+          {/* Sin perfil de empresa el espacio va vacío: el job de enriquecimiento todavía no pasó
+              por este ticker y no hay nombre que mostrar (regla 1). */}
+          {especie?.nombre_corto ?? SIN_DATO}
         </span>
         <span className="mono" style={{ marginLeft: 'auto', fontSize: 12, color: colorVariacion }}>
           {textoVariacion}

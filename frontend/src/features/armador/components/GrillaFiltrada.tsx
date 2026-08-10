@@ -88,6 +88,13 @@ export function GrillaFiltrada({ meses }: { meses: MesDelCalendario[] }) {
     return mapa
   }, [cruce])
 
+  // Lo mismo con la clase de activo: sin ella, soberano y corporativo se leen igual en la grilla.
+  const clasePorTicker = useMemo(() => {
+    const mapa = new Map<string, string>()
+    for (const especie of cruce.values()) mapa.set(especie.ticker, especie.clase_activo)
+    return mapa
+  }, [cruce])
+
   const filtrado = useMemo(() => {
     if (!universoDisponible) {
       const tickers = new Set(meses.flatMap((mes) => mes.instrumentos.map((i) => i.ticker)))
@@ -113,7 +120,11 @@ export function GrillaFiltrada({ meses }: { meses: MesDelCalendario[] }) {
           &quot;limpiar filtros&quot; en la barra de arriba.
         </p>
       ) : (
-        <GrillaDoceMeses meses={filtrado.meses} calificacionPorTicker={calificacionPorTicker} />
+        <GrillaDoceMeses
+          meses={filtrado.meses}
+          calificacionPorTicker={calificacionPorTicker}
+          clasePorTicker={clasePorTicker}
+        />
       )}
     </>
   )

@@ -189,14 +189,16 @@ describe('una tarjeta de renta variable', () => {
     expect(within(divEst as HTMLElement).getByText('s/d')).toBeInTheDocument()
   })
 
-  it('declara "Acción" o "CEDEAR" en vez de un emisor inventado (el dato no existe)', async () => {
+  it('declara la clase con un badge en vez de un emisor inventado (el dato no existe)', async () => {
     responderCon({ acciones: [accion()], cedears: [cedear()] })
     renderizar()
 
     await userEvent.click(screen.getByRole('button', { name: 'agregar GGAL directo' }))
 
     const tarjeta = await screen.findByRole('article', { name: 'GGAL' })
-    expect(within(tarjeta).getByText('Acción')).toBeInTheDocument()
+    // El badge dice qué es el papel; sin perfil de empresa cargado, el nombre queda en s/d y no
+    // se rellena con el ticker ni con nada parecido.
+    expect(within(tarjeta).getByText('ACC')).toBeInTheDocument()
   })
 
   it('clic en el ticker abre la ficha del instrumento', async () => {

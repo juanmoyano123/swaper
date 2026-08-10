@@ -23,11 +23,15 @@ import { TarjetaPapel } from './TarjetaPapel'
 export function GrillaDoceMeses({
   meses,
   calificacionPorTicker,
+  clasePorTicker,
 }: {
   meses: MesDelCalendario[]
   /** Calificación declarada por ticker, del cruce contra el universo — `undefined` si el ticker
    *  no cruzó, `null` si cruzó pero la fuente no la informó. Se muestra siempre, filtre o no. */
   calificacionPorTicker: Map<string, string | null>
+  /** Clase de activo por ticker (soberano, subsoberano, ON…), también del cruce. `undefined` si
+   *  el ticker no cruzó: ahí la tarjeta no muestra badge. */
+  clasePorTicker: Map<string, string>
 }) {
   const { selMes } = useArmador()
   const { alternarMes } = useArmadorAcciones()
@@ -48,6 +52,7 @@ export function GrillaDoceMeses({
           seleccionado={selMes === indice}
           onSeleccionar={() => alternarMes(indice)}
           calificacionPorTicker={calificacionPorTicker}
+          clasePorTicker={clasePorTicker}
         />
       ))}
     </div>
@@ -59,11 +64,13 @@ function PanelMes({
   seleccionado,
   onSeleccionar,
   calificacionPorTicker,
+  clasePorTicker,
 }: {
   mes: MesDelCalendario
   seleccionado: boolean
   onSeleccionar: () => void
   calificacionPorTicker: Map<string, string | null>
+  clasePorTicker: Map<string, string>
 }) {
   return (
     <div
@@ -108,6 +115,7 @@ function PanelMes({
             key={instrumento.ticker}
             instrumento={instrumento}
             calificacion={calificacionPorTicker.get(instrumento.ticker)}
+            claseActivo={clasePorTicker.get(instrumento.ticker)}
           />
         ))}
       </div>
