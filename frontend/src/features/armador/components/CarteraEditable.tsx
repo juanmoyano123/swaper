@@ -21,15 +21,19 @@ import { useState, type ReactNode } from 'react'
 
 import { MiniCalendario, type CeldaMes } from '@/components/MiniCalendario'
 import { fmtMonto, fmtNumero, fmtPct, SIN_DATO } from '@/lib/fmt'
+import type { EspecieRentaVariable } from '@/lib/rentaVariable'
 
 import { AlertasCalendario } from './AlertasCalendario'
 import { BadgeClase } from './BadgeClase'
 import { useCalendarioCartera } from '../hooks/useCalendarioCartera'
 import { useCargarLamina } from '../hooks/useCargarLamina'
 import { useCarteraResuelta } from '../hooks/useCarteraResuelta'
+import { useRentaVariableResuelta } from '../hooks/useRentaVariableResuelta'
+import { agruparEnBloques } from '../lib/bloques'
 import { mixPedido } from '../lib/mix'
 import type { Especie } from '../lib/schema'
 import { type PosicionResuelta, type ResumenAjuste } from '../lib/resolver'
+import type { PosicionRvResuelta } from '../lib/resolverRentaVariable'
 import {
   posicionesRentaFija,
   useArmador,
@@ -57,9 +61,26 @@ export function CarteraEditable() {
 
   const calendario = useCalendarioCartera(posicionesParaCalendario)
 
-  // La tabla lista renta fija y FCI: la renta variable tiene su propio bloque con subtotal aparte
-  // (F-026), y mezclarlas acá haría que una acción apareciera con columnas de VN y lámina.
+  const rv = useRentaVariableResuelta()
+
+  // La tabla lista la cartera ENTERA agrupada por clase de activo (Tanda 13), como el formato de
+  // la mesa: soberanos, corporativos, fondos, y renta variable al final con su propia fila. Antes
+  // listaba sólo renta fija y FCI en orden de incorporación, y la renta variable vivía en otra
+  // sección: había que saltar entre las dos para leer una sola cartera.
   const posiciones = posicionesRentaFija(pos)
+  const bloques = agruparEnBloques(pos, (ticker) => porTicker.get(ticker)?.clase_activo)
+
+  // El "% real" de la tabla se calcula contra la cartera entera y no contra cada bloque. Cada
+  // resolver reparte sobre su propia base —`resolver` sobre el total de renta fija resuelta,
+  // `resolverRentaVariable` sobre el bloque de acciones—, y apilar las dos bases bajo la misma
+  // columna haría que un 25% de un lado y un 25% del otro se leyeran como la misma porción de
+  // plata sin serlo. La cuenta es aritmética sobre lo invertido, no una estimación.
+  const totalCarteraUsd = sumaInvertidoUsd + (rv.subtotalUsd ?? 0)
+  const hayTotalDeCartera = (hayAlgunaResuelta || rv.hayAlgunaResuelta) && totalCarteraUsd > 0
+  const pesoRealDeCartera = (invertidoUsd: number | null | undefined): number | null =>
+    hayTotalDeCartera && invertidoUsd !== null && invertidoUsd !== undefined
+      ? (invertidoUsd / totalCarteraUsd) * 100
+      : null
   // El 100% del que habla esta cabecera es el de la cartera ENTERA (`peso` se pide así, ver
   // `carteraStore.tsx`) — comparar sólo la suma de esta tabla contra 100 mentía apenas había
   // renta variable cargada: el ámbar se prendía o se apagaba sin que el pedido real cambiara.
@@ -144,7 +165,7 @@ export function CarteraEditable() {
         )}
       </header>
 
-      {posiciones.length === 0 ? (
+      {pos.length === 0 ? (
         <p style={{ margin: 0, fontSize: 12, color: 'var(--sd)' }}>
           Sin posiciones. Elegí papeles en la grilla de arriba para empezar a armar la cartera.
         </p>
@@ -155,15 +176,36 @@ export function CarteraEditable() {
           style={{ display: 'grid', gap: 4, overflowX: 'auto' }}
         >
           <EncabezadosDeColumna />
-          {posiciones.map((posicion) => (
-            <FilaCartera
-              key={posicion.ticker}
-              posicion={posicion}
-              especie={porTicker.get(posicion.ticker) ?? null}
-              resuelta={resueltas.find((r) => r.ticker === posicion.ticker) ?? null}
-              meses={calendario.data?.meses ?? null}
-              onFijarPeso={(peso) => fijarPeso(posicion.ticker, peso)}
-            />
+          {bloques.map((bloque) => (
+            <div key={bloque.id} style={{ display: 'grid', gap: 4 }}>
+              <TituloDeBloque rotulo={bloque.rotulo} pesoPedido={bloque.pesoPedido} />
+              {bloque.posiciones.map((posicion) =>
+                bloque.id === 'renta_variable' ? (
+                  <FilaRentaVariable
+                    key={posicion.ticker}
+                    posicion={posicion}
+                    especie={rv.porTicker.get(posicion.ticker) ?? null}
+                    resuelta={rv.resueltas.find((r) => r.ticker === posicion.ticker) ?? null}
+                    pesoReal={pesoRealDeCartera(
+                      rv.resueltas.find((r) => r.ticker === posicion.ticker)?.invertidoUsd,
+                    )}
+                    onFijarPeso={(peso) => fijarPeso(posicion.ticker, peso)}
+                  />
+                ) : (
+                  <FilaCartera
+                    key={posicion.ticker}
+                    posicion={posicion}
+                    especie={porTicker.get(posicion.ticker) ?? null}
+                    resuelta={resueltas.find((r) => r.ticker === posicion.ticker) ?? null}
+                    pesoReal={pesoRealDeCartera(
+                      resueltas.find((r) => r.ticker === posicion.ticker)?.invertidoUsd,
+                    )}
+                    meses={calendario.data?.meses ?? null}
+                    onFijarPeso={(peso) => fijarPeso(posicion.ticker, peso)}
+                  />
+                ),
+              )}
+            </div>
           ))}
           <LeyendaDeColumnas />
         </div>
@@ -219,6 +261,169 @@ function EncabezadosDeColumna() {
         Paga en
       </span>
       <span role="columnheader" aria-hidden style={estiloCabecera} />
+    </div>
+  )
+}
+
+/**
+ * La cabecera de un bloque, con su subtotal pedido — el formato de la mesa.
+ *
+ * No lleva `role="row"`: la tabla se navega por filas de posición, y meter separadores como filas
+ * haría que un lector de pantalla (y los tests que buscan por rol) contara títulos como si fueran
+ * papeles.
+ */
+function TituloDeBloque({ rotulo, pesoPedido }: { rotulo: string; pesoPedido: number }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'baseline',
+        justifyContent: 'space-between',
+        gap: 8,
+        padding: '8px 2px 2px',
+      }}
+    >
+      <span
+        style={{
+          fontSize: 10,
+          fontWeight: 600,
+          color: 'var(--dim)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.07em',
+        }}
+      >
+        {rotulo}
+      </span>
+      <span className="mono" style={{ fontSize: 11.5, color: 'var(--tx)' }}>
+        {fmtPct(pesoPedido)}
+      </span>
+    </div>
+  )
+}
+
+/**
+ * Una posición de renta variable dentro de la tabla de la cartera.
+ *
+ * Comparte la grilla con las filas de renta fija para que las columnas de porcentaje queden
+ * alineadas, pero **VN, lámina y calendario van vacíos con su motivo en el `title`**: una acción no
+ * tiene valor nominal ni cronograma de pagos, y poner un cero o un "s/d" ahí sugeriría que el dato
+ * falta cuando en realidad no existe (reglas 2 y 11). En su lugar, donde la renta fija muestra el
+ * emisor, la renta variable muestra la denominación de la empresa — que es exactamente lo que hace
+ * el Excel de la mesa.
+ */
+function FilaRentaVariable({
+  posicion,
+  especie,
+  resuelta,
+  pesoReal,
+  onFijarPeso,
+}: {
+  posicion: PosicionArmador
+  especie: EspecieRentaVariable | null
+  resuelta: PosicionRvResuelta | null
+  /** Sobre la cartera entera, no sobre el bloque: lo calcula `CarteraEditable`. */
+  pesoReal: number | null
+  onFijarPeso: (peso: number) => void
+}) {
+  const { alternarRentaVariable } = useArmadorAcciones()
+  const difiere = pesoReal !== null && Math.abs(pesoReal - posicion.peso) > TOLERANCIA_DIFERENCIA_FILA
+
+  return (
+    <div
+      role="row"
+      aria-label={posicion.ticker}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: GRID_FILA,
+        alignItems: 'center',
+        gap: 8,
+        padding: '4px 2px',
+        borderBottom: '1px solid var(--lin)',
+      }}
+    >
+      <div>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+          <span className="mono" style={{ fontSize: 12.5, color: 'var(--tx)' }}>
+            {posicion.ticker}
+          </span>
+          <BadgeClase claseActivo={especie?.clase_activo} />
+        </span>
+        <span style={{ display: 'block', fontSize: 9.5, color: 'var(--dim)' }}>
+          {especie?.moneda_cotizacion ?? SIN_DATO}
+        </span>
+      </div>
+
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{ fontSize: 11.5, color: 'var(--tx)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+          title={especie?.nombre_largo ?? undefined}
+        >
+          {especie?.nombre_corto ?? SIN_DATO}
+        </div>
+        <div className="mono" style={{ fontSize: 10, color: 'var(--sd)' }}>
+          <span title="Una acción no tiene valor nominal: se compra por unidad entera.">
+            {resuelta?.cantidad !== null && resuelta?.cantidad !== undefined
+              ? `${fmtNumero(resuelta.cantidad, 0)} un.`
+              : SIN_DATO}
+          </span>
+          {' · '}
+          {resuelta?.invertido !== null && resuelta?.invertido !== undefined
+            ? fmtMonto(resuelta.invertido, especie?.moneda_cotizacion === 'ARS' ? 'ars' : 'usd')
+            : SIN_DATO}
+        </div>
+      </div>
+
+      <input
+        type="number"
+        className="mono"
+        value={posicion.peso}
+        step={0.1}
+        onChange={(evento) => onFijarPeso(Number(evento.target.value) || 0)}
+        aria-label={`ponderación pedida de ${posicion.ticker}`}
+        style={{
+          width: '100%',
+          textAlign: 'right',
+          font: 'inherit',
+          fontSize: 12,
+          color: 'var(--tx)',
+          background: 'var(--pan2)',
+          border: '1px solid var(--lin)',
+          borderRadius: 3,
+          padding: '3px 5px',
+        }}
+      />
+
+      <span
+        className="mono"
+        style={{ fontSize: 12, textAlign: 'right', color: difiere ? 'var(--ac2)' : 'var(--tx)' }}
+      >
+        {pesoReal !== null ? fmtPct(pesoReal) : SIN_DATO}
+      </span>
+
+      <span
+        style={{ fontSize: 10, color: 'var(--sd)' }}
+        title="La renta variable no tiene cronograma de cupones: no hay meses de pago que mostrar."
+      >
+        no aplica
+      </span>
+
+      <button
+        type="button"
+        onClick={() => alternarRentaVariable(posicion.ticker)}
+        aria-label={`sacar ${posicion.ticker} de la cartera`}
+        style={{
+          font: 'inherit',
+          fontSize: 12,
+          lineHeight: 1,
+          color: 'var(--dim)',
+          background: 'transparent',
+          border: 'none',
+          cursor: 'pointer',
+          padding: 2,
+        }}
+      >
+        ×
+      </button>
     </div>
   )
 }
@@ -312,12 +517,16 @@ function FilaCartera({
   posicion,
   especie,
   resuelta,
+  pesoReal,
   meses,
   onFijarPeso,
 }: {
   posicion: PosicionArmador
   especie: Especie | null
   resuelta: PosicionResuelta | null
+  /** Sobre la cartera entera (renta fija + renta variable), no sobre el bloque de bonos: lo
+   *  calcula `CarteraEditable`, que es el único que ve las dos porciones. */
+  pesoReal: number | null
   meses: { nombre: string; instrumentos: { ticker: string; pct_renta: number }[] }[] | null
   onFijarPeso: (peso: number) => void
 }) {
@@ -333,7 +542,6 @@ function FilaCartera({
     return 'renta'
   })
 
-  const pesoReal = resuelta?.pesoReal ?? null
   const difiere = pesoReal !== null && Math.abs(pesoReal - posicion.peso) > TOLERANCIA_DIFERENCIA_FILA
   const motivoDiferencia = resuelta?.laminaConocida ? 'redondeado a lámina conocida' : 'lámina no informada'
 

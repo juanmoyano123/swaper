@@ -103,6 +103,7 @@ function responderCon({
   tipoDeCambio = { valor: 1500, disponible: true },
   calendario = calendarioVacio(),
   lamina,
+  acciones = [],
 }: {
   especies?: Especie[]
   tipoDeCambio?: { valor: number | null; disponible: boolean }
@@ -110,6 +111,8 @@ function responderCon({
   /** F-025: respuesta de `POST .../lamina`. Sin esto, ese endpoint no está mockeado — como los
    *  demás, tirar si un test lo golpea sin haberlo declarado. */
   lamina?: { status: number; cuerpo: unknown }
+  /** Tanda 13: la tabla muestra también el bloque de renta variable, así que pide su universo. */
+  acciones?: unknown[]
 } = {}) {
   const fetchMock = vi.fn((entrada: RequestInfo | URL, _init?: RequestInit) => {
     const url = typeof entrada === 'string' ? entrada : entrada.toString()
@@ -121,6 +124,8 @@ function responderCon({
       cuerpo = { tipo_de_cambio: tipoDeCambio, alertas: [] }
     } else if (url.includes('/calendario/cartera')) {
       cuerpo = calendario
+    } else if (url.includes('/renta-variable/especies')) {
+      cuerpo = { items: url.includes('clase=accion') ? acciones : [], next_cursor: null }
     } else if (url.includes('/lamina')) {
       if (!lamina) throw new Error(`fetch no mockeado en este test: ${url}`)
       status = lamina.status
@@ -138,11 +143,15 @@ function responderCon({
 
 /** Expone las acciones del store que en la pantalla real dispara la grilla de F-016. */
 function Arnes() {
-  const { alternarPapel, agregarFci, fijarPeso, fijarMontoTotal } = useArmadorAcciones()
+  const { alternarPapel, agregarFci, fijarPeso, fijarMontoTotal, alternarRentaVariable } =
+    useArmadorAcciones()
   return (
     <div>
       <button type="button" onClick={() => alternarPapel('AL30')}>
         agregar AL30
+      </button>
+      <button type="button" onClick={() => alternarRentaVariable('GGAL')}>
+        agregar GGAL
       </button>
       <button type="button" onClick={() => alternarPapel('GD30')}>
         agregar GD30
@@ -197,7 +206,10 @@ describe('la cabecera', () => {
     await userEvent.click(screen.getByRole('button', { name: 'peso AL30 a 50' }))
     await userEvent.click(screen.getByRole('button', { name: 'peso GD30 a 47,4' }))
 
-    const suma = await screen.findByText('97,40%')
+    // Por el rótulo de la cabecera y no por el texto suelto: el subtotal del bloque de soberanos
+    // muestra el mismo 97,40% cuando la cartera tiene un bloque solo.
+    const cabecera = (await screen.findByText('Σ pedida total (incl. RV)')).closest('div')
+    const suma = within(cabecera as HTMLElement).getByText('97,40%')
     expect(suma).toHaveStyle({ color: 'var(--ac2)' })
   })
 
@@ -446,5 +458,96 @@ describe('encabezados de columna', () => {
     await screen.findByRole('row', { name: 'AL30' })
 
     expect(screen.getByText(/sin precio o sin tipo de cambio — el dato falta, no es cero/)).toBeInTheDocument()
+  })
+})
+
+// --- Tanda 13: la tabla muestra la cartera entera agrupada en bloques ----------------------------
+
+/** Una acción del universo de renta variable, como la devuelve `/renta-variable/especies`. */
+function accionGgal(extra: Record<string, unknown> = {}) {
+  return {
+    ticker: 'GGAL',
+    clase_activo: 'accion',
+    precio: 5000,
+    moneda_cotizacion: 'ARS',
+    cierre_anterior: 4900,
+    variacion: 0.02,
+    volumen: 1_000_000,
+    volumen_usd: 666,
+    px_bid: null,
+    px_ask: null,
+    operaciones: null,
+    fuente: 'byma',
+    nombre_corto: 'Grupo Galicia',
+    nombre_largo: 'Grupo Financiero Galicia S.A.',
+    sector: 'Financial Services',
+    industria: 'Banks',
+    pais: 'Argentina',
+    perfil_fuente: 'yahoo',
+    perfil_capturado_en: '2026-08-01T00:00:00Z',
+    ...extra,
+  }
+}
+
+describe('bloques por clase de activo', () => {
+  it('agrupa la renta fija y la renta variable en la misma tabla, con subtotal por bloque', async () => {
+    responderCon({
+      especies: [especie({ clase_activo: 'bono_soberano' })],
+      acciones: [accionGgal()],
+    })
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar AL30' }))
+    await userEvent.click(screen.getByRole('button', { name: 'agregar GGAL' }))
+
+    expect(await screen.findByText('Soberanos y subsoberanos')).toBeInTheDocument()
+    expect(screen.getByText('Renta variable')).toBeInTheDocument()
+    // Las dos posiciones entraron con 50 y 50 tras el rebalanceo: ese es el subtotal de cada bloque.
+    expect(screen.getAllByText('50,00%')).toHaveLength(2)
+  })
+
+  it('la fila de una acción muestra la denominación de la empresa donde el bono muestra el emisor', async () => {
+    responderCon({ especies: [especie()], acciones: [accionGgal()] })
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar GGAL' }))
+
+    const fila = await screen.findByRole('row', { name: 'GGAL' })
+    expect(within(fila).getByText('Grupo Galicia')).toBeInTheDocument()
+  })
+
+  it('la acción declara "no aplica" en la columna de pagos: no tiene cronograma que mostrar', async () => {
+    responderCon({ especies: [especie()], acciones: [accionGgal()] })
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar GGAL' }))
+
+    const fila = await screen.findByRole('row', { name: 'GGAL' })
+    // No es "s/d": el dato no falta, es que una acción no paga cupones (regla 2). El title explica
+    // la diferencia, que es justamente lo que un "s/d" ahí borraría.
+    expect(within(fila).getByText('no aplica')).toHaveAttribute(
+      'title',
+      'La renta variable no tiene cronograma de cupones: no hay meses de pago que mostrar.',
+    )
+  })
+
+  it('el % pedido de la acción se edita desde la misma tabla', async () => {
+    responderCon({ especies: [especie()], acciones: [accionGgal()] })
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar GGAL' }))
+
+    const fila = await screen.findByRole('row', { name: 'GGAL' })
+    expect(within(fila).getByLabelText('ponderación pedida de GGAL')).toHaveValue(100)
+  })
+
+  it('un ticker sin cruce contra el universo queda visible en "sin clasificar", no escondido', async () => {
+    responderCon({ especies: [] })
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar AL30' }))
+
+    expect(await screen.findByText('Sin clasificar')).toBeInTheDocument()
+    expect(screen.getByRole('row', { name: 'AL30' })).toBeInTheDocument()
   })
 })
