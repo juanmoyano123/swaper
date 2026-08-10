@@ -14,9 +14,17 @@ cualquiera de los dos, o con un cierre anterior que no es un precio válido, que
 ticker: esa regla es de especies de liquidación de renta fija y aplicarla a una acción sería
 completar por analogía. Sin moneda utilizable, `volumen_usd` queda `None` y se cuenta como
 faltante — sobre el universo de hoy son 341 CEDEARs y acciones en `EXT`, más las que no declaran.
+
+**Nombre, sector, industria y país (Etapa 4 del rediseño del armador).** Vienen de
+`public.perfil_renta_variable`, poblada por un job de enriquecimiento aparte contra Yahoo Finance
+(`app/renta_variable/enriquecimiento.py`) — no de BYMA, y no siempre están: el job es incremental
+y una especie recién agregada al universo puede no tener fila todavía. `perfil_fuente` y
+`perfil_capturado_en` declaran de dónde salió y cuándo, igual que el resto de los datos externos
+del proyecto (regla 11): nunca se muestran sin decir su origen.
 """
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from app.universo.cambio import MONEDA_EN_PESOS, MONEDAS_EN_DOLARES, TipoDeCambio
@@ -42,6 +50,16 @@ class EspecieRentaVariable:
     """Experimento data912: de dónde salió `precio`. Ver `universo/segmentacion.py:EspecieUniverso.
     fuente` para el vocabulario completo."""
 
+    # Perfil de empresa (Etapa 4): todos `None` hasta que el job de enriquecimiento pase por este
+    # ticker. Valores de Yahoo tal como la fuente los declara, sin traducir (regla 11).
+    nombre_corto: str | None = None
+    nombre_largo: str | None = None
+    sector: str | None = None
+    industria: str | None = None
+    pais: str | None = None
+    perfil_fuente: str | None = None
+    perfil_capturado_en: str | None = None
+
     def como_dict(self) -> dict[str, object]:
         return {
             "ticker": self.ticker,
@@ -56,6 +74,13 @@ class EspecieRentaVariable:
             "px_ask": self.px_ask,
             "operaciones": self.operaciones,
             "fuente": self.fuente,
+            "nombre_corto": self.nombre_corto,
+            "nombre_largo": self.nombre_largo,
+            "sector": self.sector,
+            "industria": self.industria,
+            "pais": self.pais,
+            "perfil_fuente": self.perfil_fuente,
+            "perfil_capturado_en": self.perfil_capturado_en,
         }
 
 
@@ -106,6 +131,11 @@ def _entero(valor: object) -> int | None:
     return None if numero is None else int(numero)
 
 
+def _fecha_iso(valor: object) -> str | None:
+    """`perfil_capturado_en` llega de un `timestamptz` como `datetime`, no como texto."""
+    return valor.isoformat() if isinstance(valor, datetime) else None
+
+
 def armar_renta_variable(
     filas: list[dict[str, Any]], cambio: TipoDeCambio
 ) -> list[EspecieRentaVariable]:
@@ -130,6 +160,13 @@ def armar_renta_variable(
                 px_ask=a_numero(fila.get("px_ask")),
                 operaciones=_entero(fila.get("operaciones")),
                 fuente=_texto(fila.get("fuente")),
+                nombre_corto=_texto(fila.get("nombre_corto")),
+                nombre_largo=_texto(fila.get("nombre_largo")),
+                sector=_texto(fila.get("sector")),
+                industria=_texto(fila.get("industria")),
+                pais=_texto(fila.get("pais")),
+                perfil_fuente=_texto(fila.get("perfil_fuente")),
+                perfil_capturado_en=_fecha_iso(fila.get("perfil_capturado_en")),
             )
         )
     return especies

@@ -84,6 +84,15 @@ para el módulo, **nunca de la del `chart`**: que la cotización esté en pesos 
 exprese el EPS en pesos, y suponerlo es el hueco que la regla 11 no deja rellenar. Un monto sin
 moneda declarada no se muestra y su nombre viaja en `montos_sin_moneda`, para que el faltante se
 declare en vez de desaparecer.
+
+ENRIQUECIMIENTO DE RENTA VARIABLE (Etapa 4 del rediseño del armador, 09/08/2026)
+---------------------------------------------------------------------------------
+`ClienteYahoo.perfil_de_empresa` es un camino aparte de `bloque_externo`: pide el chart con un día
+de historia en vez de un año (el nombre de la empresa viaja en el mismo `meta`, y es lo único que
+hace falta de ese endpoint acá) y sólo el módulo `assetProfile` de `quoteSummary`, sin
+`defaultKeyStatistics`. Lo usa `app/renta_variable/enriquecimiento.py` para poblar
+`public.perfil_renta_variable`, que el listado de renta variable necesita para poder filtrar por
+rubro o por empresa — dato que la ficha individual ya tenía pero el listado no.
 """
 
 import asyncio
@@ -234,6 +243,32 @@ class PerfilExterno:
 
 
 @dataclass(frozen=True, slots=True)
+class ResultadoPerfilEmpresa:
+    """Lo que `ClienteYahoo.perfil_de_empresa` devuelve — nombre, país, sector e industria para el
+    enriquecimiento del listado de renta variable (Etapa 4 del rediseño del armador).
+
+    No es `BloqueExterno`: ese pide un año de histórico del chart porque la ficha lo muestra, y acá
+    sólo hace falta el nombre (que también viaja en el `meta` del chart) y el perfil de
+    `assetProfile` — pedir un día de historia en vez de un año es la diferencia entre un job liviano
+    para ~750 tickers y uno que tarda órdenes de magnitud más por un dato que no se usa.
+
+    `status` es el código HTTP del fallo cuando lo hay (429 en particular): el job de
+    enriquecimiento lo mira para decidir si corta la corrida entera en vez de seguir ticker por
+    ticker contra una fuente que está limitando la IP.
+    """
+
+    disponible: bool
+    motivo: str | None
+    status: int | None
+    nombre_corto: str | None
+    nombre_largo: str | None
+    pais: str | None
+    sector: str | None
+    industria: str | None
+    capturado_en: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class MontoExterno:
     """Un número que es plata, con la moneda que la fuente declaró para *ese* número.
 
@@ -341,6 +376,22 @@ def _no_disponible(simbolo: str, motivo: str) -> BloqueExterno:
         perfil=None,
         valuacion=None,
         perfil_motivo=None,
+    )
+
+
+def _perfil_no_disponible(
+    motivo: str, status: int | None, capturado_en: datetime
+) -> ResultadoPerfilEmpresa:
+    return ResultadoPerfilEmpresa(
+        disponible=False,
+        motivo=motivo,
+        status=status,
+        nombre_corto=None,
+        nombre_largo=None,
+        pais=None,
+        sector=None,
+        industria=None,
+        capturado_en=capturado_en,
     )
 
 
@@ -715,6 +766,108 @@ class ClienteYahoo:
         return BloqueExterno(
             FUENTE, simbolo, True, None, cotizacion, perfil, valuacion, perfil_motivo
         )
+
+    async def perfil_de_empresa(self, ticker: str) -> ResultadoPerfilEmpresa:
+        """Nombre, país, sector e industria — lo que el enriquecimiento de renta variable necesita.
+
+        Reusa el mismo símbolo y la misma credencial cacheada que `bloque_externo`, pero con un
+        pedido de chart liviano (un día de historia, no un año) y sin las cachés de TTL de
+        cotización/perfil: acá el que controla el ritmo y la persistencia es el job
+        (`app/renta_variable/enriquecimiento.py`), no un clic del asesor, así que cachear en memoria
+        no aporta nada y sólo complicaría el re-procesamiento de tickers vencidos.
+        """
+        simbolo = self.simbolo_de(ticker)
+        capturado_en = self._ahora()
+
+        async with self._abrir() as cliente:
+            try:
+                cotizacion = await self._chart_liviano(cliente, simbolo, capturado_en)
+            except ErrorDeFuente as exc:
+                return _perfil_no_disponible(
+                    f"{FUENTE} {self._motivo_castellano(exc)}", exc.status, capturado_en
+                )
+            if cotizacion is None:
+                return _perfil_no_disponible(
+                    f"{FUENTE} respondió con otra bolsa o con otro símbolo que el pedido",
+                    None,
+                    capturado_en,
+                )
+
+            try:
+                crumb, cookies = await self._credencial(cliente)
+                cliente.cookies.update(cookies)
+                perfil_json = await self._pedir_asset_profile(cliente, simbolo, crumb)
+            except ErrorDeFuente as exc:
+                # El nombre sí se consiguió del chart; el país/sector/industria no.
+                return ResultadoPerfilEmpresa(
+                    disponible=True,
+                    motivo=f"sin perfil de empresa: {self._motivo_castellano(exc)}",
+                    status=exc.status,
+                    nombre_corto=cotizacion.nombre_corto,
+                    nombre_largo=cotizacion.nombre_largo,
+                    pais=None,
+                    sector=None,
+                    industria=None,
+                    capturado_en=capturado_en,
+                )
+
+        perfil = leer_perfil(perfil_json, capturado_en=capturado_en.isoformat())
+        return ResultadoPerfilEmpresa(
+            disponible=True,
+            motivo=None,
+            status=None,
+            nombre_corto=cotizacion.nombre_corto,
+            nombre_largo=cotizacion.nombre_largo,
+            pais=perfil.pais if perfil else None,
+            sector=perfil.sector if perfil else None,
+            industria=perfil.industria if perfil else None,
+            capturado_en=capturado_en,
+        )
+
+    async def _chart_liviano(
+        self, cliente: httpx.AsyncClient, simbolo: str, capturado_en: datetime
+    ) -> CotizacionExterna | None:
+        """Mismo endpoint que `_cotizacion`, con un día de historia en vez de un año: acá sólo hace
+        falta el nombre del `meta`, no la serie."""
+        url = URL_CHART.format(simbolo=simbolo)
+        parametros = "?range=1d&interval=1d"
+
+        async def intento() -> httpx.Response:
+            return await pedir(cliente, "GET", url + parametros, fuente=FUENTE)
+
+        respuesta = await con_reintentos(
+            intento,
+            descripcion=f"{FUENTE} chart (liviano)",
+            politica=self._politica,
+            dormir=self._dormir,
+        )
+        return leer_cotizacion(
+            _json(respuesta), simbolo=simbolo, capturado_en=capturado_en.isoformat()
+        )
+
+    async def _pedir_asset_profile(
+        self, cliente: httpx.AsyncClient, simbolo: str, crumb: str
+    ) -> object:
+        """`assetProfile` solo, sin `defaultKeyStatistics`: la valuación no hace falta acá."""
+        url = URL_PERFIL.format(simbolo=simbolo)
+        parametros = f"?modules=assetProfile&crumb={crumb}"
+
+        async def intento() -> httpx.Response:
+            return await pedir(cliente, "GET", url + parametros, fuente=FUENTE)
+
+        respuesta = await con_reintentos(
+            intento,
+            descripcion=f"{FUENTE} quoteSummary (perfil liviano)",
+            politica=self._politica,
+            dormir=self._dormir,
+        )
+        return _json(respuesta)
+
+    def _motivo_castellano(self, exc: ErrorDeFuente) -> str:
+        """El mismo mapeo de `_recordar_fallo`, sin el efecto colateral de anotar el fallo: acá el
+        ritmo lo controla el job, no una caché de TTL pensada para clics del asesor."""
+        motivo = MOTIVOS_POR_STATUS.get(exc.status or 0)
+        return motivo if motivo is not None else f"no respondió: {exc.motivo}"
 
     def _abrir(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(

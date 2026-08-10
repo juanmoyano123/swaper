@@ -8,6 +8,7 @@ endpoint lee lo que dice leer. El universo que se usa para el tipo de cambio tie
 dólares de las especies en pesos queda `s/d`.
 """
 
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -113,6 +114,43 @@ async def test_ninguna_fila_trae_rendimiento(app_con_renta_variable) -> None:
         respuesta = await http.get(RUTA, params={"clase": "accion"})
 
     assert all("rendimiento" not in fila for fila in respuesta.json()["items"])
+
+
+async def test_sin_fila_de_perfil_los_campos_nuevos_viajan_en_null(app_con_renta_variable) -> None:
+    """Etapa 4 del rediseño del armador: una especie sin perfil enriquecido todavía no inventa
+    nombre, sector, industria ni país — viajan declarados vacíos, no ausentes del contrato."""
+    async with cliente(app_con_renta_variable(renta_variable=[GGAL])) as http:
+        respuesta = await http.get(RUTA, params={"clase": "accion"})
+
+    (ggal,) = respuesta.json()["items"]
+    assert ggal["nombre_corto"] is None
+    assert ggal["sector"] is None
+    assert ggal["industria"] is None
+    assert ggal["pais"] is None
+    assert ggal["perfil_fuente"] is None
+    assert ggal["perfil_capturado_en"] is None
+
+
+async def test_con_fila_de_perfil_los_campos_nuevos_viajan_tal_cual(app_con_renta_variable) -> None:
+    # `perfil_capturado_en` llega de asyncpg como `datetime` (columna timestamptz), no como texto.
+    ggal_con_perfil = {
+        **GGAL,
+        "nombre_corto": "GRUPO FINANCIERO GALICIA",
+        "nombre_largo": "Grupo Financiero Galicia S.A.",
+        "sector": "Financial Services",
+        "industria": "Banks - Regional",
+        "pais": "Argentina",
+        "perfil_fuente": "Yahoo Finance",
+        "perfil_capturado_en": datetime(2026, 8, 9, 12, 0, tzinfo=UTC),
+    }
+    async with cliente(app_con_renta_variable(renta_variable=[ggal_con_perfil])) as http:
+        respuesta = await http.get(RUTA, params={"clase": "accion"})
+
+    (ggal,) = respuesta.json()["items"]
+    assert ggal["nombre_corto"] == "GRUPO FINANCIERO GALICIA"
+    assert ggal["sector"] == "Financial Services"
+    assert ggal["pais"] == "Argentina"
+    assert ggal["perfil_fuente"] == "Yahoo Finance"
 
 
 async def test_fila_ars_sin_fx_da_volumen_usd_null_y_la_usd_lo_conserva(

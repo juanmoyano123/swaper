@@ -112,3 +112,73 @@ async def test_disparar_matinal_sin_base_responde_503(crear_app) -> None:
         respuesta = await http.post("/api/v1/jobs/corridas/matinal")
 
     assert respuesta.status_code == 503
+
+
+# --- Enriquecimiento de renta variable: Etapa 4 del rediseño del armador -------------------------
+
+
+async def test_disparar_enriquecimiento_renta_variable_delega_y_devuelve_el_resumen(
+    crear_app, monkeypatch
+) -> None:
+    llamado = {}
+
+    async def _falsa(conn, cliente_yahoo, *, limite):
+        llamado["conn"] = conn
+        llamado["cliente_yahoo"] = cliente_yahoo
+        llamado["limite"] = limite
+        return _ResumenFalso()
+
+    monkeypatch.setattr(modulo_jobs, "enriquecer_perfiles", _falsa)
+    app = crear_app(_FakeConexionCorridas())
+
+    async with cliente(app) as http:
+        respuesta = await http.post("/api/v1/jobs/perfiles-renta-variable")
+
+    assert respuesta.status_code == 200
+    assert respuesta.json() == {
+        "pendientes": 3,
+        "procesados": 3,
+        "guardados": 2,
+        "cortado_por_limite_de_fuente": False,
+        "motivo_corte": None,
+    }
+    assert "conn" in llamado
+    assert llamado["limite"] == modulo_jobs.LIMITE_POR_CORRIDA
+
+
+async def test_disparar_enriquecimiento_renta_variable_respeta_el_limite_pedido(
+    crear_app, monkeypatch
+) -> None:
+    limites_recibidos = []
+
+    async def _falsa(conn, cliente_yahoo, *, limite):
+        limites_recibidos.append(limite)
+        return _ResumenFalso()
+
+    monkeypatch.setattr(modulo_jobs, "enriquecer_perfiles", _falsa)
+    app = crear_app(_FakeConexionCorridas())
+
+    async with cliente(app) as http:
+        await http.post("/api/v1/jobs/perfiles-renta-variable?limite=5")
+
+    assert limites_recibidos == [5]
+
+
+async def test_disparar_enriquecimiento_renta_variable_sin_base_responde_503(crear_app) -> None:
+    app = crear_app(None)
+
+    async with cliente(app) as http:
+        respuesta = await http.post("/api/v1/jobs/perfiles-renta-variable")
+
+    assert respuesta.status_code == 503
+
+
+class _ResumenFalso:
+    def como_dict(self) -> dict:
+        return {
+            "pendientes": 3,
+            "procesados": 3,
+            "guardados": 2,
+            "cortado_por_limite_de_fuente": False,
+            "motivo_corte": None,
+        }

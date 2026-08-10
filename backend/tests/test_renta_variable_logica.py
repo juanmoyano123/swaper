@@ -5,6 +5,8 @@ nada del universo ni de la base — se prueban con valores a mano, igual que `ca
 propia matemática.
 """
 
+from datetime import UTC, datetime
+
 import pytest
 
 from app.renta_variable.especies import armar_renta_variable, variacion_diaria, volumen_en_dolares
@@ -80,3 +82,61 @@ def test_como_dict_no_tiene_rendimiento_ni_naturaleza_ni_segmento() -> None:
     assert "segmento" not in cuerpo
     assert cuerpo["ticker"] == "GGAL"
     assert cuerpo["variacion"] == pytest.approx((5000.0 - 4850.0) / 4850.0)
+
+
+# --- Perfil de empresa: Etapa 4 del rediseño del armador ------------------------------------------
+
+
+def test_sin_fila_de_perfil_todos_los_campos_nuevos_quedan_none() -> None:
+    """Una especie recién agregada al universo, antes de que el job de enriquecimiento la toque."""
+    filas = [
+        {
+            "ticker": "GGAL",
+            "clase_activo": "accion",
+            "lastPrice": 5000.0,
+            "effectiveVolume": 1_500_000_000.0,
+            "cierre_anterior": 4850.0,
+            "moneda_cotizacion": "ARS",
+            "px_bid": 4995.0,
+            "px_ask": 5005.0,
+            "operaciones": 120,
+        }
+    ]
+    (especie,) = armar_renta_variable(filas, TipoDeCambio())
+    assert especie.nombre_corto is None
+    assert especie.nombre_largo is None
+    assert especie.sector is None
+    assert especie.industria is None
+    assert especie.pais is None
+    assert especie.perfil_fuente is None
+    assert especie.perfil_capturado_en is None
+
+
+def test_con_fila_de_perfil_los_campos_llegan_tal_como_la_fuente_los_declaro() -> None:
+    capturado = datetime(2026, 8, 9, 12, 0, tzinfo=UTC)
+    filas = [
+        {
+            "ticker": "GGAL",
+            "clase_activo": "accion",
+            "lastPrice": 5000.0,
+            "effectiveVolume": 1_500_000_000.0,
+            "cierre_anterior": 4850.0,
+            "moneda_cotizacion": "ARS",
+            "px_bid": 4995.0,
+            "px_ask": 5005.0,
+            "operaciones": 120,
+            "nombre_corto": "GRUPO FINANCIERO GALICIA",
+            "nombre_largo": "Grupo Financiero Galicia S.A.",
+            "sector": "Financial Services",
+            "industria": "Banks - Regional",
+            "pais": "Argentina",
+            "perfil_fuente": "Yahoo Finance",
+            "perfil_capturado_en": capturado,
+        }
+    ]
+    (especie,) = armar_renta_variable(filas, TipoDeCambio())
+    assert especie.nombre_corto == "GRUPO FINANCIERO GALICIA"
+    assert especie.sector == "Financial Services"
+    assert especie.pais == "Argentina"
+    assert especie.perfil_fuente == "Yahoo Finance"
+    assert especie.perfil_capturado_en == capturado.isoformat()

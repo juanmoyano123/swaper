@@ -522,3 +522,91 @@ async def test_vencido_el_ttl_de_cotizacion_se_vuelve_a_pedir_el_precio_pero_no_
 @pytest.mark.parametrize("ticker", ["GGAL", "ggal", " GGAL "])
 async def test_el_ticker_se_normaliza_a_un_solo_simbolo(ticker: str) -> None:
     assert cliente().simbolo_de(ticker) == SIMBOLO
+
+
+# --- perfil_de_empresa: Etapa 4 del rediseño del armador --------------------------------------
+
+
+async def test_perfil_de_empresa_trae_nombre_y_perfil_sin_pedir_el_historico() -> None:
+    with respx.mock:
+        ruta_chart = respx.get(url__startswith=CHART).mock(
+            return_value=httpx.Response(200, json=chart())
+        )
+        _montar_nivel_2()
+        resultado = await cliente().perfil_de_empresa("GGAL")
+
+    assert resultado.disponible is True
+    assert resultado.motivo is None
+    assert resultado.status is None
+    assert resultado.nombre_corto == "GRUPO FINANCIERO GALICIA"
+    assert resultado.nombre_largo == "Grupo Financiero Galicia S.A."
+    assert resultado.pais == "Argentina"
+    assert resultado.sector == "Financial Services"
+    assert resultado.industria == "Banks - Regional"
+    # Un día de historia, no un año: el job es liviano por diseño.
+    assert "range=1d" in str(ruta_chart.calls.last.request.url)
+    assert "range=1y" not in str(ruta_chart.calls.last.request.url)
+
+
+async def test_perfil_de_empresa_no_pide_defaultkeystatistics() -> None:
+    """La valuación no hace falta acá — pedirla sería un módulo más por nada."""
+    with respx.mock:
+        respx.get(url__startswith=CHART).mock(return_value=httpx.Response(200, json=chart()))
+        respx.get(URL_COOKIE).mock(return_value=httpx.Response(404))
+        respx.get(URL_CRUMB).mock(return_value=httpx.Response(200, text="abc123"))
+        ruta_perfil = respx.get(url__startswith=PERFIL).mock(
+            return_value=httpx.Response(200, json=perfil())
+        )
+        await cliente().perfil_de_empresa("GGAL")
+
+    assert "modules=assetProfile" in str(ruta_perfil.calls.last.request.url)
+    assert "defaultKeyStatistics" not in str(ruta_perfil.calls.last.request.url)
+
+
+async def test_perfil_de_empresa_sin_nivel_2_igual_trae_el_nombre() -> None:
+    """Si el crumb se rompe, el nombre del nivel 1 no se pierde — es otro pedido, otro fallo."""
+    with respx.mock:
+        respx.get(url__startswith=CHART).mock(return_value=httpx.Response(200, json=chart()))
+        respx.get(URL_COOKIE).mock(return_value=httpx.Response(404))
+        respx.get(URL_CRUMB).mock(return_value=httpx.Response(401, text="Unauthorized"))
+        resultado = await cliente().perfil_de_empresa("GGAL")
+
+    assert resultado.disponible is True
+    assert resultado.nombre_corto == "GRUPO FINANCIERO GALICIA"
+    assert resultado.pais is None
+    assert resultado.sector is None
+    assert resultado.motivo is not None and "sin perfil de empresa" in resultado.motivo
+
+
+async def test_perfil_de_empresa_declara_el_429_con_su_status_para_que_el_job_corte() -> None:
+    with respx.mock:
+        respx.get(url__startswith=CHART).mock(return_value=httpx.Response(429))
+        resultado = await cliente().perfil_de_empresa("GGAL")
+
+    assert resultado.disponible is False
+    assert resultado.status == 429
+    assert resultado.nombre_corto is None
+    assert resultado.motivo is not None and "limitando los pedidos" in resultado.motivo
+
+
+async def test_perfil_de_empresa_bolsa_distinta_no_se_muestra() -> None:
+    """Mismo guardia de la regla 11 que `bloque_externo`: no se muestra el dato de otro papel."""
+    with respx.mock:
+        respx.get(url__startswith=CHART).mock(
+            return_value=httpx.Response(200, json=chart(exchangeName="NMS", currency="USD"))
+        )
+        resultado = await cliente().perfil_de_empresa("GGAL")
+
+    assert resultado.disponible is False
+    assert resultado.status is None
+    assert resultado.nombre_corto is None
+
+
+async def test_perfil_de_empresa_yahoo_caido_no_lanza() -> None:
+    with respx.mock:
+        respx.get(url__startswith=CHART).mock(side_effect=httpx.ConnectError("sin red"))
+        resultado = await cliente().perfil_de_empresa("GGAL")
+
+    assert resultado.disponible is False
+    assert resultado.nombre_corto is None
+    assert resultado.motivo is not None

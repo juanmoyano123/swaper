@@ -12,8 +12,11 @@ from fastapi import APIRouter, Depends
 
 from app.api.deps import get_db
 from app.core.config import Settings, get_settings
+from app.externos import cliente_yahoo
 from app.jobs.corridas import corrida_matinal, refresh_intra_rueda
 from app.jobs.registro import listar_corridas
+from app.renta_variable import enriquecer_perfiles
+from app.renta_variable.enriquecimiento import LIMITE_POR_CORRIDA
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -60,3 +63,22 @@ async def disparar_refresh(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> dict[str, object]:
     return await refresh_intra_rueda(conn, settings)
+
+
+@router.post(
+    "/perfiles-renta-variable",
+    summary=(
+        "Enriquece nombre, sector, industria y país de acciones y CEDEARs pendientes, contra "
+        "Yahoo Finance"
+    ),
+    responses={503: {"description": "La base de datos no está disponible"}},
+)
+async def disparar_enriquecimiento_renta_variable(
+    conn: Annotated[asyncpg.Connection, Depends(get_db)],
+    limite: int = LIMITE_POR_CORRIDA,
+) -> dict[str, object]:
+    """Incremental: procesa hasta `limite` tickers pendientes por corrida, corta al primer 429 de
+    la fuente y deja el resto para la próxima invocación (ver
+    `app/renta_variable/enriquecimiento.py`)."""
+    resumen = await enriquecer_perfiles(conn, cliente_yahoo(), limite=limite)
+    return resumen.como_dict()
