@@ -289,3 +289,75 @@ async def test_un_pct_rv_fuera_de_rango_se_rechaza(app_con_universo) -> None:
         assert (
             await http.post(RUTA, json={"monto": 100_000, "pct_rv": 101})
         ).status_code == 422
+
+
+# --- El estado real de hoy: `public.perfil_renta_variable` vacía --------------------------------
+#
+# Verificado contra producción (08/2026): la tabla tiene 0 filas mientras `instrumentos` tiene 434
+# acciones y 1205 CEDEARs -- el job de enriquecimiento de Yahoo (`app.renta_variable.
+# enriquecimiento`) nunca corrió. Consecuencia real, no hipotética: HOY toda especie de renta
+# variable llega con `sector=None` (el LEFT JOIN sin fila del lado de `perfil_renta_variable`).
+# Sin la clave "sector" en la fila cruda, `EspecieRentaVariable.sector` sale `None` -- mismo
+# camino que toma la lectura real, no un atajo del fixture.
+FILAS_RENTA_VARIABLE_SIN_PERFIL: list[dict[str, Any]] = [
+    {
+        "ticker": "GGAL",
+        "clase_activo": "accion",
+        "lastPrice": 5000.0,
+        "effectiveVolume": 1_500_000.0,
+        "moneda_cotizacion": "USD",
+    },
+    {
+        "ticker": "YPFD",
+        "clase_activo": "accion",
+        "lastPrice": 30_000.0,
+        "effectiveVolume": 800_000.0,
+        "moneda_cotizacion": "USD",
+    },
+    {
+        "ticker": "PAMP",
+        "clase_activo": "accion",
+        "lastPrice": 2000.0,
+        "effectiveVolume": 600_000.0,
+        "moneda_cotizacion": "USD",
+    },
+]
+
+
+async def test_sin_perfiles_de_renta_variable_la_cartera_sigue_siendo_usable(
+    app_con_universo,
+) -> None:
+    """El caso de hoy, no un borde raro: sin un sólo `sector` informado en todo el universo de
+    renta variable, `pct_rv > 0` igual devuelve un bloque de renta variable elegido por liquidez
+    pura, la cartera sigue sumando 100% y la alerta declara por qué no se pudo diversificar por
+    sector -- no se rompe nada, no se inventa un sector para poder diversificar."""
+    async with cliente(app_con_universo(renta_variable=FILAS_RENTA_VARIABLE_SIN_PERFIL)) as http:
+        cuerpo = (await http.post(RUTA, json={"monto": 100_000, "perfil": "moderado"})).json()
+
+    assert cuerpo["pct_rv_aplicado"] == pytest.approx(25.0)
+    posiciones_rv = [p for p in cuerpo["posiciones"] if p["clase"] == "renta_variable"]
+    assert posiciones_rv
+    assert all(p["ticker"] in {"GGAL", "YPFD", "PAMP"} for p in posiciones_rv)
+    codigos = {a["codigo"] for a in cuerpo["alertas"]}
+    assert "rv_sin_perfil_sectorial" in codigos
+    assert sum(p["pct_cartera"] for p in cuerpo["posiciones"]) == pytest.approx(100.0, abs=0.5)
+
+
+async def test_sin_perfiles_y_con_tematica_activa_no_hay_ningun_match(app_con_universo) -> None:
+    """Mismo estado real, pero pidiendo una temática sectorial explícita: sin un sólo sector
+    informado, ninguna especie puede afirmarse que pertenece a esa temática (regla 1 del dominio,
+    no se completa el dato que falta), así que el bloque de renta variable queda vacío,
+    `rv_sin_candidatos` lo declara, y la renta fija no se reescala -- queda sumando 100% con lo
+    que armó `armar()`."""
+    async with cliente(app_con_universo(renta_variable=FILAS_RENTA_VARIABLE_SIN_PERFIL)) as http:
+        cuerpo = (
+            await http.post(
+                RUTA, json={"monto": 100_000, "perfil": "moderado", "sector_rv": "Bancos"}
+            )
+        ).json()
+
+    assert cuerpo["pct_rv_aplicado"] == 0.0
+    assert all(p["clase"] == "renta_fija" for p in cuerpo["posiciones"])
+    codigos = {a["codigo"] for a in cuerpo["alertas"]}
+    assert "rv_sin_candidatos" in codigos
+    assert sum(p["pct_cartera"] for p in cuerpo["posiciones"]) == pytest.approx(100.0, abs=0.5)

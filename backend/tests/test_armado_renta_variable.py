@@ -3,6 +3,8 @@ asistido, probado puro y sin base. Ver el docstring del módulo para el algoritm
 prueba cada paso por separado con fixtures armadas a mano.
 """
 
+import pytest
+
 from app.armado.renta_variable import (
     CODIGO_RV_SIN_CANDIDATOS,
     CODIGO_RV_SIN_PERFIL_SECTORIAL,
@@ -134,6 +136,44 @@ def test_sector_none_se_admite_sin_tematica() -> None:
     ]
     posiciones, _ = armar_renta_variable(especies, pct_rv=20.0, n_rv=5, monto_total=100_000)
     assert {p.ticker for p in posiciones} == {"GGAL", "YPFD"}
+
+
+def test_universo_real_sin_perfiles_arma_igual_por_liquidez_pura() -> None:
+    """El estado real de hoy: `public.perfil_renta_variable` está vacía (0 filas, el job de
+    Yahoo nunca corrió), así que TODAS las especies de renta variable llegan con `sector=None`.
+    No es un caso borde raro -- es el camino que se ejecuta en cada corrida hasta que el job
+    corra. La primera pasada (sector nuevo) queda vacía siempre y todo se decide en la segunda,
+    por orden de liquidez pura, sin romper nada."""
+    especies = [
+        _especie("GGAL", volumen_usd=1000.0, sector=None),
+        _especie("YPFD", volumen_usd=900.0, sector=None),
+        _especie("PAMP", volumen_usd=800.0, sector=None),
+        _especie("AAPL", volumen_usd=700.0, sector=None, clase_activo="cedear"),
+        _especie("TSLA", volumen_usd=600.0, sector=None, clase_activo="cedear"),
+    ]
+    posiciones, alertas = armar_renta_variable(especies, pct_rv=25.0, n_rv=3, monto_total=100_000)
+
+    # Se eligen las tres de mayor liquidez, ni una de sector distinto entra antes que una de
+    # más volumen: sin dato de sector no hay "sector nuevo" que preferir.
+    assert [p.ticker for p in posiciones] == ["GGAL", "YPFD", "PAMP"]
+    assert sum(p.pct_cartera for p in posiciones) == pytest.approx(25.0)
+    assert [a.codigo for a in alertas] == [CODIGO_RV_SIN_PERFIL_SECTORIAL]
+
+
+def test_universo_real_sin_perfiles_con_tematica_activa_no_tiene_ningun_match() -> None:
+    """Mismo estado real, pero con `sector_rv` explícito: sin un solo sector informado, ninguna
+    especie puede afirmarse que pertenece a la temática (regla 1), así que el bloque de renta
+    variable queda vacío y declarado -- no hay ningún candidato que armar_renta_variable pueda
+    inventar para llenarlo."""
+    especies = [
+        _especie("GGAL", volumen_usd=1000.0, sector=None),
+        _especie("YPFD", volumen_usd=900.0, sector=None),
+    ]
+    posiciones, alertas = armar_renta_variable(
+        especies, pct_rv=25.0, n_rv=3, sector_rv="Bancos", monto_total=100_000
+    )
+    assert posiciones == []
+    assert [a.codigo for a in alertas] == [CODIGO_RV_SIN_CANDIDATOS]
 
 
 def test_diversifica_por_sector_en_la_primera_pasada() -> None:
