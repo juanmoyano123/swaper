@@ -37,8 +37,13 @@ function mockFetch(status: number, cuerpo: unknown) {
 }
 
 function CarteraVisible() {
-  const { pos } = useArmador()
-  return <p data-testid="cartera">{pos.map((p) => `${p.ticker}:${p.peso}`).join(',')}</p>
+  const { pos, montoTotal } = useArmador()
+  return (
+    <>
+      <p data-testid="cartera">{pos.map((p) => `${p.ticker}:${p.peso}`).join(',')}</p>
+      <p data-testid="montoTotal">{montoTotal}</p>
+    </>
+  )
 }
 
 function renderizar() {
@@ -77,7 +82,7 @@ describe('PanelArmadoAsistido', () => {
     const fetchMock = mockFetch(200, RESULTADO_OK)
     renderizar()
 
-    await userEvent.type(screen.getByLabelText('Monto a invertir'), '100000')
+    await userEvent.type(screen.getByLabelText('Monto a invertir (USD)'), '100000')
     await userEvent.selectOptions(screen.getByLabelText('Moneda de referencia'), 'usd')
     await userEvent.selectOptions(screen.getByLabelText('Objetivo de cobertura'), 'devaluacion')
     await userEvent.selectOptions(screen.getByLabelText('Perfil'), 'conservador')
@@ -100,7 +105,7 @@ describe('PanelArmadoAsistido', () => {
     mockFetch(200, RESULTADO_OK)
     renderizar()
 
-    await userEvent.type(screen.getByLabelText('Monto a invertir'), '100000')
+    await userEvent.type(screen.getByLabelText('Monto a invertir (USD)'), '100000')
     await userEvent.click(screen.getByRole('button', { name: 'Armar cartera asistida' }))
 
     await waitFor(() =>
@@ -115,5 +120,16 @@ describe('PanelArmadoAsistido', () => {
     renderizar()
 
     expect(screen.getByRole('button', { name: 'Armar cartera asistida' })).toBeDisabled()
+  })
+
+  it('el monto del asistido es el mismo capital que reparte la cartera, no un campo aparte', async () => {
+    renderizar()
+
+    await userEvent.type(screen.getByLabelText('Monto a invertir (USD)'), '80000')
+
+    // Escribir acá mueve el `montoTotal` del store, que es el que usan los resolvers para
+    // calcular nominales: antes eran dos números sin relación y cargar el capital en esta ficha
+    // no cambiaba nada de lo que se veía más abajo.
+    expect(screen.getByTestId('montoTotal')).toHaveTextContent('80000')
   })
 })

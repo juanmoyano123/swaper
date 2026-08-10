@@ -10,6 +10,11 @@
  * El botón dispara `useArmadoAsistido`, que en éxito reemplaza la cartera del store entero — es un
  * punto de partida, no un agregado, así que no pide confirmación aunque ya hubiera posiciones
  * cargadas: el asesor sigue pudiendo editar cada una después en `CarteraEditable`.
+ *
+ * **El monto sale del store, no de un estado local (Tanda 13).** Antes había dos campos "monto"
+ * sin relación: el de esta ficha, que se mandaba al backend y se descartaba, y el de la cartera,
+ * que era el único que los resolvers usaban para calcular nominales. Cargar el capital acá no
+ * hacía nada visible más abajo, y cargarlo en los dos lugares se leía como el doble de plata.
  */
 
 import { useState, type ReactNode } from 'react'
@@ -17,6 +22,7 @@ import { useState, type ReactNode } from 'react'
 import { AlertasCalendario } from './AlertasCalendario'
 import { useArmadoAsistido } from '../hooks/useArmadoAsistido'
 import type { ParametrosArmadoAsistido } from '../lib/schemaArmado'
+import { useArmador, useArmadorAcciones } from '../store/carteraStore'
 
 const MONEDAS: Array<{ valor: ParametrosArmadoAsistido['moneda']; etiqueta: string }> = [
   { valor: 'todas', etiqueta: 'cualquiera' },
@@ -44,7 +50,12 @@ const HORIZONTES: Array<{ valor: ParametrosArmadoAsistido['horizonte']; etiqueta
 ]
 
 export function PanelArmadoAsistido() {
-  const [monto, setMonto] = useState('')
+  // El monto vive en el store y no acá: es el mismo capital que reparte `CarteraEditable`, y
+  // tenerlo duplicado hacía que cargar 10.000 en el asistido y 10.000 en la cartera se leyera como
+  // 20.000 sin que nada lo dijera. Los dos campos son ahora dos vistas del mismo número.
+  const { montoTotal } = useArmador()
+  const { fijarMontoTotal } = useArmadorAcciones()
+
   const [moneda, setMoneda] = useState<ParametrosArmadoAsistido['moneda']>('todas')
   const [cobertura, setCobertura] = useState<ParametrosArmadoAsistido['cobertura']>('mixta')
   const [perfil, setPerfil] = useState<ParametrosArmadoAsistido['perfil']>('moderado')
@@ -52,24 +63,23 @@ export function PanelArmadoAsistido() {
 
   const mutacion = useArmadoAsistido()
 
-  const montoNumerico = Number(monto)
-  const montoValido = monto !== '' && Number.isFinite(montoNumerico) && montoNumerico > 0
+  const montoValido = Number.isFinite(montoTotal) && montoTotal > 0
 
   function armar() {
     if (!montoValido) return
-    mutacion.mutate({ monto: montoNumerico, moneda, cobertura, perfil, horizonte })
+    mutacion.mutate({ monto: montoTotal, moneda, cobertura, perfil, horizonte })
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={estiloFila}>
-        <Campo etiqueta="Monto a invertir">
+        <Campo etiqueta="Monto a invertir (USD)">
           <input
             type="number"
             inputMode="decimal"
             min={0}
-            value={monto}
-            onChange={(e) => setMonto(e.target.value)}
+            value={montoTotal === 0 ? '' : montoTotal}
+            onChange={(e) => fijarMontoTotal(Number(e.target.value) || 0)}
             style={estiloInput}
           />
         </Campo>
