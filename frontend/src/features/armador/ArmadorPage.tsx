@@ -16,6 +16,11 @@ import {
 } from './components/PanelesDeLaCartera'
 import { PanelRendimientos } from './components/PanelRendimientos'
 import { PanelRiesgo } from './components/PanelRiesgo'
+import {
+  ResumenCartera,
+  ResumenCordillera,
+  ResumenRentaVariable,
+} from './components/ResumenesDeSeccion'
 import { SeccionDeArmador } from './components/SeccionDeArmador'
 import { useCalendarioUniverso } from './hooks/useCalendarioUniverso'
 import { ArmadorProvider } from './store/carteraStore'
@@ -40,6 +45,11 @@ import { ArmadorProvider } from './store/carteraStore'
  * El orden vertical de las once piezas no cambió — sólo se agruparon bajo seis secciones y cada una
  * dejó de autoimponerse su propio `marginTop`, porque ahora el espaciado entre bloques lo da el
  * `gap` del contenedor de la página y el de cada sección.
+ *
+ * **Etapa 2 del rediseño**: cada sección es plegable (`SeccionDeArmador` guarda el estado en
+ * `localStorage`, ver `lib/plegado.ts`) y tiene su propio color de identidad (borde izquierdo de
+ * 3px, un `--catN` de la paleta categórica) — es la separación visual entre bloques que antes sólo
+ * daba el `gap`. El orden de acentos sigue el orden vertical: cat1 a cat6, sin repetir.
  */
 export function ArmadorPage() {
   const consulta = useCalendarioUniverso()
@@ -57,8 +67,11 @@ export function ArmadorPage() {
         <ArmadorProvider>
           <div style={{ display: 'grid', gap: 28 }}>
             <SeccionDeArmador
+              id="cordillera"
               rotulo="Cordillera"
               bajada="Elegí papeles por mes de cobro, o filtrá la oferta antes de mirar la grilla."
+              acento="var(--cat1)"
+              resumen={<ResumenCordillera meses={consulta.data.meses} />}
             >
               <Panel>
                 <CoberturaSeleccion meses={consulta.data.meses} />
@@ -68,8 +81,10 @@ export function ArmadorPage() {
             </SeccionDeArmador>
 
             <SeccionDeArmador
+              id="asistido"
               rotulo="Armado asistido"
               bajada="Precarga una cartera de arranque a partir del mandato del cliente; después se edita a mano."
+              acento="var(--cat2)"
             >
               <Panel>
                 <PanelArmadoAsistido />
@@ -77,19 +92,22 @@ export function ArmadorPage() {
             </SeccionDeArmador>
 
             <SeccionDeArmador
+              id="cartera"
               rotulo="Cartera"
               bajada="Ponderación pedida y ponderación real: si no coinciden, se muestra tal cual."
+              acento="var(--cat3)"
+              resumen={<ResumenCartera />}
             >
               <Panel>
                 <CarteraEditable />
               </Panel>
             </SeccionDeArmador>
 
-            <SeccionDeArmador rotulo="Calendario de pagos">
+            <SeccionDeArmador id="calendario" rotulo="Calendario de pagos" acento="var(--cat4)">
               <PanelRenta />
             </SeccionDeArmador>
 
-            <SeccionDeArmador rotulo="Análisis">
+            <SeccionDeArmador id="analisis" rotulo="Análisis" acento="var(--cat5)">
               <div style={{ display: 'grid', gap: 16 }}>
                 <PanelRendimientos />
                 <PanelComposicion />
@@ -98,7 +116,12 @@ export function ArmadorPage() {
               </div>
             </SeccionDeArmador>
 
-            <SeccionDeArmador rotulo="Renta variable">
+            <SeccionDeArmador
+              id="rv"
+              rotulo="Renta variable"
+              acento="var(--cat6)"
+              resumen={<ResumenRentaVariable />}
+            >
               <Panel>
                 <BloqueRentaVariable />
               </Panel>

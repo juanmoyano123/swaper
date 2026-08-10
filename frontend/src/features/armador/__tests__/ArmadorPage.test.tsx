@@ -293,3 +293,53 @@ describe('el contrato de la respuesta', () => {
     expect(await screen.findByText(/contract_mismatch/)).toBeInTheDocument()
   })
 })
+
+// --- Etapa 2 del rediseño: secciones plegables ---------------------------------------------------
+
+describe('plegar una sección', () => {
+  it('oculta su contenido y muestra el resumen en su lugar', async () => {
+    responderCon(respuesta())
+    renderizar()
+    await grillaCargada()
+
+    const boton = screen.getByRole('button', { name: /^Cordillera/ })
+    expect(boton).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getAllByRole('button', { name: /^AL30/ }).length).toBeGreaterThan(0)
+
+    await userEvent.click(boton)
+
+    expect(boton).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('button', { name: /^AL30/ })).not.toBeInTheDocument()
+    expect(screen.getByText('sin papeles elegidos todavía')).toBeInTheDocument()
+  })
+
+  it('el resumen de Cartera cuenta las posiciones elegidas', async () => {
+    responderCon(respuesta())
+    renderizar()
+    await grillaCargada()
+    await userEvent.click(screen.getAllByRole('button', { name: /^AL30/ })[0])
+
+    await userEvent.click(screen.getByRole('button', { name: /^Cartera\b/ }))
+
+    expect(screen.getByText(/1 posición · Σ/)).toBeInTheDocument()
+  })
+
+  it('persiste al volver a montar la página, como un refresh', async () => {
+    responderCon(respuesta())
+    const { unmount } = renderizar()
+    await grillaCargada()
+
+    await userEvent.click(screen.getByRole('button', { name: /^Cordillera/ }))
+    expect(screen.queryByRole('button', { name: /^AL30/ })).not.toBeInTheDocument()
+
+    unmount()
+    renderizar()
+    await screen.findByText('sin papeles elegidos todavía')
+
+    expect(screen.queryByRole('button', { name: /^AL30/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Cordillera/ })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    )
+  })
+})
