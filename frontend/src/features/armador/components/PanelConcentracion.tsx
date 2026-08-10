@@ -35,6 +35,7 @@ import { useMemo, useState } from 'react'
 import { DistribucionBarras, type TramoDistribucion } from '@/components/DistribucionBarras'
 import { EstadoCarga } from '@/components/EstadoCarga'
 import { EstadoError } from '@/components/EstadoError'
+import { Panel } from '@/components/Panel'
 import { fmtPct } from '@/lib/fmt'
 
 import { useCarteraResuelta } from '../hooks/useCarteraResuelta'
@@ -84,32 +85,11 @@ export function PanelConcentracion() {
   const consulta = useConcentracion(posiciones, perfil)
 
   return (
-    <section
-      aria-label="Límites de concentración"
-      style={{
-        marginTop: 16,
-        background: 'var(--pan)',
-        border: '1px solid var(--lin)',
-        borderRadius: 4,
-        padding: '12px 16px',
-      }}
-    >
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'baseline',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: 12,
-          marginBottom: 10,
-        }}
-      >
-        <div>
-          <div className="rotulo">Concentración</div>
-          <h2 style={{ font: '600 15px/1.3 inherit', margin: '2px 0 0' }}>
-            Límites del perfil, en vivo
-          </h2>
-        </div>
+    <Panel
+      ariaLabel="Límites de concentración"
+      rotulo="Concentración"
+      titulo="Límites del perfil, en vivo"
+      acciones={
         <label
           style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--dim)' }}
         >
@@ -134,8 +114,8 @@ export function PanelConcentracion() {
             ))}
           </select>
         </label>
-      </header>
-
+      }
+    >
       {posiciones.length === 0 ? (
         <p style={{ margin: 0, fontSize: 12, color: 'var(--sd)' }}>
           Sin posiciones de renta fija. Los topes se miden cuando haya al menos una.
@@ -152,7 +132,7 @@ export function PanelConcentracion() {
           {consulta.data && <Veredicto datos={consulta.data} />}
         </>
       )}
-    </section>
+    </Panel>
   )
 }
 

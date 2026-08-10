@@ -13,6 +13,7 @@ import { useMemo, useState } from 'react'
 
 import { EstadoCarga } from '@/components/EstadoCarga'
 import { EstadoError } from '@/components/EstadoError'
+import { Panel } from '@/components/Panel'
 import { VectorDeRiesgo } from '@/components/VectorDeRiesgo'
 import { PERFILES, type NombreDePerfil } from '@/lib/cartera/esquemaConcentracion'
 import { vectorDeRiesgo, type EspecieRiesgo } from '@/lib/cartera/riesgo'
@@ -61,30 +62,11 @@ export function PanelRiesgo() {
   )
 
   return (
-    <section
-      aria-label="Vector de riesgo"
-      style={{
-        marginTop: 16,
-        background: 'var(--pan)',
-        border: '1px solid var(--lin)',
-        borderRadius: 4,
-        padding: '12px 16px',
-      }}
-    >
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'baseline',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: 12,
-          marginBottom: 10,
-        }}
-      >
-        <div>
-          <div className="rotulo">Riesgo</div>
-          <h2 style={{ font: '600 15px/1.3 inherit', margin: '2px 0 0' }}>Vector de seis ejes</h2>
-        </div>
+    <Panel
+      ariaLabel="Vector de riesgo"
+      rotulo="Riesgo"
+      titulo="Vector de seis ejes"
+      acciones={
         <label
           style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--dim)' }}
         >
@@ -109,8 +91,8 @@ export function PanelRiesgo() {
             ))}
           </select>
         </label>
-      </header>
-
+      }
+    >
       {posiciones.length === 0 ? (
         <p style={{ margin: 0, fontSize: 12, color: 'var(--sd)' }}>
           Sin posiciones de renta fija. El vector se mide cuando haya al menos una.
@@ -127,7 +109,7 @@ export function PanelRiesgo() {
           {!consulta.isPending && !consulta.isError && <VectorDeRiesgo ejes={ejes} />}
         </>
       )}
-    </section>
+    </Panel>
   )
 }
 

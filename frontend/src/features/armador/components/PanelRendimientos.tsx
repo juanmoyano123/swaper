@@ -12,8 +12,9 @@
  * se sigue el mismo estilo de tarjeta/panel compacto ya establecido en esta carpeta.
  */
 
-import { fmtNumero, fmtPct, SIN_DATO } from '@/lib/fmt'
+import { Panel } from '@/components/Panel'
 import { nombreSegmento, unidadDeNaturaleza } from '@/components/SelectorSegmento'
+import { fmtNumero, fmtPct, SIN_DATO } from '@/lib/fmt'
 
 import { useCarteraResuelta } from '../hooks/useCarteraResuelta'
 import {
@@ -49,35 +50,23 @@ export function PanelRendimientos() {
   const segmentos = sensibilidadPorSegmento(resueltas, porTicker)
 
   return (
-    <section
-      aria-label="Rendimientos"
-      style={{
-        marginTop: 16,
-        background: 'var(--pan)',
-        border: '1px solid var(--lin)',
-        borderRadius: 4,
-        padding: '12px 16px',
-        display: 'grid',
-        gap: 14,
-      }}
+    <Panel
+      ariaLabel="Rendimientos"
+      rotulo="Rendimientos"
+      titulo="Por naturaleza de tasa, nunca promediados"
     >
-      <header>
-        <div className="rotulo">Rendimientos</div>
-        <h2 style={{ font: '600 15px/1.3 inherit', margin: '2px 0 0' }}>
-          Por naturaleza de tasa, nunca promediados
-        </h2>
-      </header>
+      <div style={{ display: 'grid', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+          {naturalezas.map((n) => (
+            <TarjetaNaturaleza key={n.naturaleza} datos={n} />
+          ))}
+        </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-        {naturalezas.map((n) => (
-          <TarjetaNaturaleza key={n.naturaleza} datos={n} />
-        ))}
+        <PlazoPromedio anios={plazo.anios} posicionesExcluidas={plazo.posicionesExcluidas} />
+
+        <SensibilidadSegmentos segmentos={segmentos} />
       </div>
-
-      <PlazoPromedio anios={plazo.anios} posicionesExcluidas={plazo.posicionesExcluidas} />
-
-      <SensibilidadSegmentos segmentos={segmentos} />
-    </section>
+    </Panel>
   )
 }
 

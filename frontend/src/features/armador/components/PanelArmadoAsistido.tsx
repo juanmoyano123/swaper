@@ -61,7 +61,7 @@ export function PanelArmadoAsistido() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, margin: '10px 0' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={estiloFila}>
         <Campo etiqueta="Monto a invertir">
           <input

@@ -16,6 +16,7 @@ import {
 } from './components/PanelesDeLaCartera'
 import { PanelRendimientos } from './components/PanelRendimientos'
 import { PanelRiesgo } from './components/PanelRiesgo'
+import { SeccionDeArmador } from './components/SeccionDeArmador'
 import { useCalendarioUniverso } from './hooks/useCalendarioUniverso'
 import { ArmadorProvider } from './store/carteraStore'
 
@@ -23,30 +24,22 @@ import { ArmadorProvider } from './store/carteraStore'
  * Armado de una cartera nueva a partir del mandato del cliente. Es el diseño Cordillera.
  *
  * F-016 invierte el orden habitual: el calendario es la entrada, no la salida. `ArmadorProvider`
- * envuelve sólo lo que depende de la selección en curso — F-018 agregó `CarteraEditable`, debajo
- * de la grilla; F-017 agregó la barra de filtros y el cruce grilla × universo (`GrillaFiltrada`),
- * adentro del mismo provider. La maqueta final de dos columnas (A7 izquierda / A8+A9 derecha) es
- * de una tanda de refinamiento visual posterior — acá lo que importa es que el dato y las
- * acciones existan y sean correctos.
+ * envuelve todo lo que depende de la selección en curso.
  *
- * **Los tres paneles de la Tanda 9 ya están montados** (ver `PanelesDeLaCartera`): cada feature
- * reemplaza el cuerpo del suyo y nadie edita este archivo, que queda congelado durante la
- * ejecución en paralelo. El orden es deliberado: primero qué cobra la cartera (F-021), después
- * qué riesgo tiene (F-020), y al final el bloque que no participa de ninguno de los dos (F-026).
+ * **Refinamiento visual posterior a la Tanda 12: sección / tarjeta / sub-tarjeta.** Hasta acá la
+ * página apilaba once componentes como hermanos planos dentro de un único `<Panel>` — sin
+ * separación entre bloques, y con `--pan` (la tarjeta) anidado sobre `--pan` (el panel envolvente),
+ * que en los dos temas se lee sin contraste. La regla que reemplaza eso:
  *
- * **Tanda 10:** `PanelArmadoAsistido` (F-019) va arriba de `CarteraEditable` — precarga la
- * cartera que esa tabla después edita a mano. `PanelRendimientos` (F-022) va junto a `PanelRenta`
- * y `PanelConcentracion`: los tres leen `useCarteraResuelta` y responden "cuánto cobra", "qué
- * riesgo tiene" y "qué rinde", en ese orden. Mismo criterio de congelamiento: cada feature
- * reemplaza el cuerpo de su propio stub, nadie más edita este archivo.
+ * - **Sección** (`SeccionDeArmador`): un rótulo sobre `--bg`, sin fondo propio. Agrupa un tramo de
+ *   la página; no es una tarjeta y no debe anidarse dentro de una.
+ * - **Tarjeta** (`Panel`, o un `<section>` que arma el mismo contenedor a mano): `--pan` + borde
+ *   `--lin`, siempre montada directo sobre `--bg` — nunca dentro de otra tarjeta.
+ * - **Sub-tarjeta**: `--pan2`, para lo que vive adentro de una tarjeta (inputs, tramos, celdas).
  *
- * **Tanda 11:** `PanelComposicion` (F-023) va entre `PanelRendimientos` y `PanelConcentracion` —
- * la curva TIR/duración es rendimiento y duración por posición, así que pega junto a "qué rinde"
- * antes de "qué riesgo tiene". Mismo stub-propio-por-feature.
- *
- * **Tanda 12:** `PanelRiesgo` (F-031) va después de `PanelConcentracion` — el vector de seis ejes
- * lee el resultado de concentración ya cacheado (uno de los seis ejes es ese mismo dato), así que
- * pega justo detrás de él. Mismo stub-propio-por-feature.
+ * El orden vertical de las once piezas no cambió — sólo se agruparon bajo seis secciones y cada una
+ * dejó de autoimponerse su propio `marginTop`, porque ahora el espaciado entre bloques lo da el
+ * `gap` del contenedor de la página y el de cada sección.
  */
 export function ArmadorPage() {
   const consulta = useCalendarioUniverso()
@@ -56,27 +49,63 @@ export function ArmadorPage() {
       titulo="Armador"
       bajada="Elegir bonos de forma que los cupones caigan repartidos a lo largo del año."
     >
-      <Panel rotulo="Cordillera">
-        {consulta.isPending && <EstadoCarga que="la grilla de doce meses" />}
-        {consulta.isError && (
-          <EstadoError error={consulta.error} onRetry={() => void consulta.refetch()} />
-        )}
-        {consulta.data && (
-          <ArmadorProvider>
-            <CoberturaSeleccion meses={consulta.data.meses} />
-            <GrillaFiltrada meses={consulta.data.meses} />
-            <AlertasCalendario alertas={consulta.data.alertas} />
-            <PanelArmadoAsistido />
-            <CarteraEditable />
-            <PanelRenta />
-            <PanelRendimientos />
-            <PanelComposicion />
-            <PanelConcentracion />
-            <PanelRiesgo />
-            <BloqueRentaVariable />
-          </ArmadorProvider>
-        )}
-      </Panel>
+      {consulta.isPending && <EstadoCarga que="la grilla de doce meses" />}
+      {consulta.isError && (
+        <EstadoError error={consulta.error} onRetry={() => void consulta.refetch()} />
+      )}
+      {consulta.data && (
+        <ArmadorProvider>
+          <div style={{ display: 'grid', gap: 28 }}>
+            <SeccionDeArmador
+              rotulo="Cordillera"
+              bajada="Elegí papeles por mes de cobro, o filtrá la oferta antes de mirar la grilla."
+            >
+              <Panel>
+                <CoberturaSeleccion meses={consulta.data.meses} />
+                <GrillaFiltrada meses={consulta.data.meses} />
+                <AlertasCalendario alertas={consulta.data.alertas} />
+              </Panel>
+            </SeccionDeArmador>
+
+            <SeccionDeArmador
+              rotulo="Armado asistido"
+              bajada="Precarga una cartera de arranque a partir del mandato del cliente; después se edita a mano."
+            >
+              <Panel>
+                <PanelArmadoAsistido />
+              </Panel>
+            </SeccionDeArmador>
+
+            <SeccionDeArmador
+              rotulo="Cartera"
+              bajada="Ponderación pedida y ponderación real: si no coinciden, se muestra tal cual."
+            >
+              <Panel>
+                <CarteraEditable />
+              </Panel>
+            </SeccionDeArmador>
+
+            <SeccionDeArmador rotulo="Calendario de pagos">
+              <PanelRenta />
+            </SeccionDeArmador>
+
+            <SeccionDeArmador rotulo="Análisis">
+              <div style={{ display: 'grid', gap: 16 }}>
+                <PanelRendimientos />
+                <PanelComposicion />
+                <PanelConcentracion />
+                <PanelRiesgo />
+              </div>
+            </SeccionDeArmador>
+
+            <SeccionDeArmador rotulo="Renta variable">
+              <Panel>
+                <BloqueRentaVariable />
+              </Panel>
+            </SeccionDeArmador>
+          </div>
+        </ArmadorProvider>
+      )}
     </Pantalla>
   )
 }

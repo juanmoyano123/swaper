@@ -33,6 +33,7 @@ import { useMemo, useState } from 'react'
 import { DistribucionBarras } from '@/components/DistribucionBarras'
 import { EstadoCarga } from '@/components/EstadoCarga'
 import { EstadoError } from '@/components/EstadoError'
+import { Panel } from '@/components/Panel'
 import { SIN_MONEDA_DECLARADA, contarPorMoneda, monedaInicial } from '@/components/SelectorMoneda'
 import {
   SEGMENTO_POR_CREDITO,
@@ -141,7 +142,6 @@ export function PanelComposicion() {
     return (
       <div
         style={{
-          marginTop: 16,
           padding: '10px 12px',
           border: '1px dashed var(--lin)',
           borderRadius: 4,
@@ -161,67 +161,51 @@ export function PanelComposicion() {
   const conPesoReal = resueltas.filter((r) => r.pesoReal !== null).length
 
   return (
-    <section
-      aria-label="Composición"
-      style={{
-        marginTop: 16,
-        background: 'var(--pan)',
-        border: '1px solid var(--lin)',
-        borderRadius: 4,
-        padding: '12px 16px',
-        display: 'grid',
-        gap: 14,
-      }}
-    >
-      <header>
-        <div className="rotulo">Composición</div>
-        <h2 style={{ font: '600 15px/1.3 inherit', margin: '2px 0 0' }}>
-          Por clase, segmento y emisor
-        </h2>
-      </header>
+    <Panel ariaLabel="Composición" rotulo="Composición" titulo="Por clase, segmento y emisor">
+      <div style={{ display: 'grid', gap: 14 }}>
+        <p style={{ margin: 0, fontSize: 11, color: 'var(--dim)', textWrap: 'pretty' }}>
+          {leyendaDelPeso(conPesoReal, resueltas.length)}
+        </p>
 
-      <p style={{ margin: 0, fontSize: 11, color: 'var(--dim)', textWrap: 'pretty' }}>
-        {leyendaDelPeso(conPesoReal, resueltas.length)}
-      </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
+          <DistribucionBarras titulo="Clase de activo" tramos={porClase} />
+          <DistribucionBarras titulo="Segmento" tramos={porSegmento} />
+          <DistribucionBarras titulo="Emisor" tramos={porEmisor} />
+        </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
-        <DistribucionBarras titulo="Clase de activo" tramos={porClase} />
-        <DistribucionBarras titulo="Segmento" tramos={porSegmento} />
-        <DistribucionBarras titulo="Emisor" tramos={porEmisor} />
+        <div style={{ borderTop: '1px solid var(--lin)', paddingTop: 12 }}>
+          <h3
+            style={{
+              margin: '0 0 8px',
+              fontSize: 10,
+              color: 'var(--dim)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+            }}
+          >
+            Curva TIR/duración
+          </h3>
+
+          {activa === null ? (
+            <p style={{ margin: 0, fontSize: 12.5, color: 'var(--dim)' }}>
+              Ninguna posición de la cartera tiene segmento conocido: no hay curva para elegir.
+            </p>
+          ) : (
+            <>
+              <SelectorSegmento segmentos={pestanias} activo={activa} onCambio={setSegmentoElegido} />
+              <div style={{ marginTop: 10 }}>
+                {universo.isPending && <EstadoCarga que="el universo del segmento" />}
+                {universo.isError && (
+                  <EstadoError error={universo.error} onRetry={() => void universo.refetch()} />
+                )}
+                {universo.data && (
+                  <CurvaTirDuracion candidatos={candidatos} cartera={carteraDelSegmento} naturaleza={naturaleza} />
+                )}
+              </div>
+            </>
+          )}
+        </div>
       </div>
-
-      <div style={{ borderTop: '1px solid var(--lin)', paddingTop: 12 }}>
-        <h3
-          style={{
-            margin: '0 0 8px',
-            fontSize: 10,
-            color: 'var(--dim)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-          }}
-        >
-          Curva TIR/duración
-        </h3>
-
-        {activa === null ? (
-          <p style={{ margin: 0, fontSize: 12.5, color: 'var(--dim)' }}>
-            Ninguna posición de la cartera tiene segmento conocido: no hay curva para elegir.
-          </p>
-        ) : (
-          <>
-            <SelectorSegmento segmentos={pestanias} activo={activa} onCambio={setSegmentoElegido} />
-            <div style={{ marginTop: 10 }}>
-              {universo.isPending && <EstadoCarga que="el universo del segmento" />}
-              {universo.isError && (
-                <EstadoError error={universo.error} onRetry={() => void universo.refetch()} />
-              )}
-              {universo.data && (
-                <CurvaTirDuracion candidatos={candidatos} cartera={carteraDelSegmento} naturaleza={naturaleza} />
-              )}
-            </div>
-          </>
-        )}
-      </div>
-    </section>
+    </Panel>
   )
 }

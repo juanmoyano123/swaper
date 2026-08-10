@@ -66,7 +66,7 @@ export function CarteraEditable() {
   }
 
   return (
-    <div style={{ marginTop: 16 }}>
+    <div>
       <header
         style={{
           display: 'flex',
@@ -138,7 +138,12 @@ export function CarteraEditable() {
           Sin posiciones. Elegí papeles en la grilla de arriba para empezar a armar la cartera.
         </p>
       ) : (
-        <div role="table" aria-label="Cartera en construcción" style={{ display: 'grid', gap: 4 }}>
+        <div
+          role="table"
+          aria-label="Cartera en construcción"
+          style={{ display: 'grid', gap: 4, overflowX: 'auto' }}
+        >
+          <EncabezadosDeColumna />
           {posiciones.map((posicion) => (
             <FilaCartera
               key={posicion.ticker}
@@ -149,11 +154,86 @@ export function CarteraEditable() {
               onFijarPeso={(peso) => fijarPeso(posicion.ticker, peso)}
             />
           ))}
+          <LeyendaDeColumnas />
         </div>
       )}
 
       {calendario.data && <AlertasCalendario alertas={calendario.data.alertas} />}
     </div>
+  )
+}
+
+/** Encabezados de columna del `GRID_FILA` — no existían antes del refinamiento visual, y sin ellos
+ *  "% real" y el minicalendario no se entendían de un vistazo. */
+function EncabezadosDeColumna() {
+  const estiloCabecera = {
+    fontSize: 9.5,
+    color: 'var(--dim)',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.06em',
+    minWidth: 0,
+  }
+  return (
+    <div
+      role="row"
+      style={{
+        display: 'grid',
+        gridTemplateColumns: GRID_FILA,
+        gap: 8,
+        padding: '0 2px 4px',
+        borderBottom: '1px solid var(--lin)',
+      }}
+    >
+      <span role="columnheader" style={estiloCabecera}>
+        Papel
+      </span>
+      <span role="columnheader" style={estiloCabecera}>
+        Emisor · VN · invertido
+      </span>
+      <span role="columnheader" style={{ ...estiloCabecera, textAlign: 'right' }}>
+        % pedido
+      </span>
+      <span
+        role="columnheader"
+        style={{ ...estiloCabecera, textAlign: 'right', cursor: 'help' }}
+        title="Ponderación efectiva tras redondear a lámina, con precio y tipo de cambio del día. s/d: falta precio o tipo de cambio."
+      >
+        % real
+      </span>
+      <span
+        role="columnheader"
+        style={{ ...estiloCabecera, cursor: 'help' }}
+        title="Meses de la ventana de 12 en que el papel paga renta."
+      >
+        Paga en
+      </span>
+      <span role="columnheader" aria-hidden style={estiloCabecera} />
+    </div>
+  )
+}
+
+/** Qué significa lo que la tabla acaba de mostrar — el "s/d" y el minicalendario no se explican
+ *  solos (regla 11: lo que falta se declara, no se deja mudo). */
+function LeyendaDeColumnas() {
+  return (
+    <p style={{ margin: '6px 0 0', fontSize: 10.5, color: 'var(--dim)', display: 'flex', flexWrap: 'wrap', gap: '4px 14px' }}>
+      <span>
+        <span className="mono" style={{ color: 'var(--sd)' }}>
+          s/d
+        </span>
+        : sin precio o sin tipo de cambio — el dato falta, no es cero.
+      </span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <span style={{ display: 'inline-block', width: 7, height: 12, borderRadius: 2, background: 'var(--ac)' }} />
+        mes en que el papel paga renta
+      </span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <span
+          style={{ display: 'inline-block', width: 7, height: 12, borderRadius: 2, border: '1px solid var(--lin)' }}
+        />
+        mes sin pago (dato, no ausencia)
+      </span>
+    </p>
   )
 }
 
@@ -227,16 +307,19 @@ function FilaCartera({
   posicion: PosicionArmador
   especie: Especie | null
   resuelta: PosicionResuelta | null
-  meses: { instrumentos: { ticker: string; pct_renta: number }[] }[] | null
+  meses: { nombre: string; instrumentos: { ticker: string; pct_renta: number }[] }[] | null
   onFijarPeso: (peso: number) => void
 }) {
   const { alternarPapel } = useArmadorAcciones()
 
+  const mesesQuePaga: string[] = []
   const celdas: CeldaMes[] = Array.from({ length: 12 }, (_, indice) => {
     const mes = meses?.[indice]
     if (!mes) return null
     const paga = mes.instrumentos.find((i) => i.ticker === posicion.ticker)
-    return paga && paga.pct_renta > 0 ? 'renta' : null
+    if (!paga || paga.pct_renta <= 0) return null
+    mesesQuePaga.push(mes.nombre)
+    return 'renta'
   })
 
   const pesoReal = resuelta?.pesoReal ?? null
@@ -313,13 +396,32 @@ function FilaCartera({
         style={{
           fontSize: 12,
           textAlign: 'right',
-          color: difiere ? 'var(--ac2)' : 'var(--tx)',
+          color: pesoReal === null ? 'var(--sd)' : difiere ? 'var(--ac2)' : 'var(--tx)',
+          borderBottom: pesoReal === null ? '1px dotted var(--sd)' : undefined,
+          cursor: pesoReal === null ? 'help' : undefined,
         }}
       >
         {fmtPct(pesoReal)}
       </span>
 
-      <MiniCalendario meses={celdas} etiqueta={`${posicion.ticker}: meses en que paga`} />
+      {meses === null ? (
+        <span
+          className="mono"
+          title="calendario aún sin calcular"
+          style={{ fontSize: 11, color: 'var(--sd)' }}
+        >
+          {SIN_DATO}
+        </span>
+      ) : (
+        <MiniCalendario
+          meses={celdas}
+          etiqueta={
+            mesesQuePaga.length > 0
+              ? `${posicion.ticker}: paga en ${mesesQuePaga.join(', ')}`
+              : `${posicion.ticker}: no paga en ningún mes de la ventana`
+          }
+        />
+      )}
 
       <button
         type="button"

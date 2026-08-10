@@ -26,6 +26,7 @@ import { useCalendarioCartera } from '../hooks/useCalendarioCartera'
 import { useCarteraResuelta } from '../hooks/useCarteraResuelta'
 import { calcularRentaAnualPorMoneda, columnasDeCordillera, invertidoPorMoneda } from '../lib/renta'
 
+import { DetalleMesCartera } from './DetalleMesCartera'
 import { PanelRentaAnual } from './PanelRentaAnual'
 import { PanelRentaCordillera } from './PanelRentaCordillera'
 
@@ -66,7 +67,7 @@ export function PanelRenta() {
   const hayPosicionesEnPesos = resumen.monedas.includes('ars')
 
   return (
-    <div style={{ display: 'grid', gap: 14, marginTop: 16 }}>
+    <div style={{ display: 'grid', gap: 14 }}>
       <PanelRentaCordillera
         titulo="Cordillera en dólares"
         bajada="Tocá un mes para abrirlo y comparar los papeles que pagan ahí."
@@ -101,6 +102,8 @@ export function PanelRenta() {
           mostrar.
         </div>
       )}
+
+      <DetalleMesCartera meses={meses} />
 
       <PanelRentaAnual datos={porMoneda} />
     </div>

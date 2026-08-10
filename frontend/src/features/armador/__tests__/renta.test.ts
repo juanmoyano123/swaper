@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest'
 import {
   calcularRentaAnualPorMoneda,
   columnasDeCordillera,
+  desgloseDelMes,
   invertidoPorMoneda,
   picoDeColumnas,
 } from '../lib/renta'
@@ -204,5 +205,70 @@ describe('calcularRentaAnualPorMoneda', () => {
 
     expect(resultados).toHaveLength(2)
     expect(resultados.map((r) => r.moneda).sort()).toEqual(['ars', 'usd'])
+  })
+})
+
+describe('desgloseDelMes', () => {
+  it('un papel que paga dos veces en el mes queda en una sola fila con el total y ambas fechas intactas', () => {
+    const elMes = mes({
+      instrumentos: [instrumento({ fechas: ['2026-09-09', '2026-09-20'], renta: 300 })],
+    })
+
+    const [grupo] = desgloseDelMes(elMes)
+
+    expect(grupo.filas).toHaveLength(1)
+    expect(grupo.filas[0].fechas).toEqual(['2026-09-09', '2026-09-20'])
+    expect(grupo.filas[0].renta).toBe(300)
+  })
+
+  it('separa por moneda de cobro: un mes con dólares y pesos arma dos grupos, ningún número cruza', () => {
+    const elMes = mes({
+      instrumentos: [
+        instrumento({ ticker: 'AL30', moneda: 'usd', renta: 100 }),
+        instrumento({ ticker: 'TX26', moneda: 'ars', renta: 50000 }),
+      ],
+    })
+
+    const grupos = desgloseDelMes(elMes)
+
+    expect(grupos).toHaveLength(2)
+    const usd = grupos.find((g) => g.moneda === 'usd')!
+    const ars = grupos.find((g) => g.moneda === 'ars')!
+    expect(usd.filas.map((f) => f.ticker)).toEqual(['AL30'])
+    expect(ars.filas.map((f) => f.ticker)).toEqual(['TX26'])
+    expect(usd.pico).toBe(100)
+    expect(ars.pico).toBe(50000)
+  })
+
+  it('renta null se propaga como null, nunca como 0', () => {
+    const elMes = mes({
+      instrumentos: [instrumento({ renta: null, amortizacion: 40 })],
+    })
+
+    const [grupo] = desgloseDelMes(elMes)
+
+    expect(grupo.filas[0].renta).toBeNull()
+    expect(grupo.pico).toBe(40)
+  })
+
+  it('un instrumento sin renta ni amortización no entra al desglose', () => {
+    const elMes = mes({
+      instrumentos: [instrumento({ renta: 0, amortizacion: 0 })],
+    })
+
+    expect(desgloseDelMes(elMes)).toEqual([])
+  })
+
+  it('ordena las filas de cada grupo por renta descendente', () => {
+    const elMes = mes({
+      instrumentos: [
+        instrumento({ ticker: 'AL30', renta: 50 }),
+        instrumento({ ticker: 'GD30', renta: 200 }),
+      ],
+    })
+
+    const [grupo] = desgloseDelMes(elMes)
+
+    expect(grupo.filas.map((f) => f.ticker)).toEqual(['GD30', 'AL30'])
   })
 })

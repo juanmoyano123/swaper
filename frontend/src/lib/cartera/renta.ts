@@ -13,7 +13,7 @@
  * el resultado es `null`, nunca 0 ni un valor inventado (regla 1).
  */
 
-import type { MesDelCalendario } from './esquemaCalendario'
+import type { InstrumentoDelMes, MesDelCalendario } from './esquemaCalendario'
 
 /** Lo que paga un instrumento en un mes, dentro de una cordillera de una sola moneda. */
 export interface SegmentoDeMes {
@@ -156,5 +156,52 @@ export function calcularRentaAnualPorMoneda(
     const pct = invertido !== null && invertido > 0 ? (total / invertido) * 100 : null
 
     return { moneda, rentaAnual: total, invertido, pct, mesesCubiertos, parejo, mesMasFlaco, mesMasFuerte, serie }
+  })
+}
+
+/** Lo que paga un papel en el mes, para el detalle abierto al clickear una columna de la cordillera. */
+export interface FilaDelDesglose {
+  ticker: string
+  /** Fechas exactas de cobro dentro del mes, tal cual las declara la fuente — puede haber más de
+   *  una. El contrato no reparte `renta` entre ellas (ver `GrupoDelMes`). */
+  fechas: string[]
+  /** Total del mes para este papel en esta moneda. `null` es dato faltante, nunca 0. */
+  renta: number | null
+  amortizacion: number | null
+}
+
+/** Los papeles que cobran en un mes, agrupados por moneda — nunca sumados entre monedas ni entre
+ *  renta y amortización (regla 3 del proyecto). */
+export interface GrupoDelMes {
+  /** Tal cual la declara la fuente, sin traducir (regla 11). */
+  moneda: string
+  /** Orden: renta descendente. */
+  filas: FilaDelDesglose[]
+  /** El mayor entre renta y amortización de este grupo — la escala de las barras del detalle. */
+  pico: number
+}
+
+/**
+ * Arma el detalle de un mes de `useCalendarioCartera`, abierto por moneda de cobro.
+ *
+ * Si un papel paga dos veces en el mismo mes, el contrato (`InstrumentoDelMes`) ya viene agregado
+ * por instrumento y no por fecha: `renta` es el total del mes y `fechas` trae las dos fechas. Acá no
+ * se reparte ese total entre las fechas — no hay de dónde sacar el reparto sin inventarlo (regla 1).
+ */
+export function desgloseDelMes(mes: MesDelCalendario): GrupoDelMes[] {
+  const porMoneda = new Map<string, InstrumentoDelMes[]>()
+  for (const instrumento of mes.instrumentos) {
+    if ((instrumento.renta ?? 0) <= 0 && (instrumento.amortizacion ?? 0) <= 0) continue
+    const grupo = porMoneda.get(instrumento.moneda) ?? []
+    grupo.push(instrumento)
+    porMoneda.set(instrumento.moneda, grupo)
+  }
+
+  return [...porMoneda.entries()].map(([moneda, instrumentos]) => {
+    const filas: FilaDelDesglose[] = [...instrumentos]
+      .sort((a, b) => (b.renta ?? 0) - (a.renta ?? 0))
+      .map((i) => ({ ticker: i.ticker, fechas: i.fechas, renta: i.renta, amortizacion: i.amortizacion }))
+    const pico = filas.reduce((max, f) => Math.max(max, f.renta ?? 0, f.amortizacion ?? 0), 0)
+    return { moneda, filas, pico }
   })
 }

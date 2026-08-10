@@ -423,3 +423,28 @@ describe('F-025: carga asistida de lámina', () => {
     expect(within(fila).getByLabelText('cargar lámina de AL30')).toBeInTheDocument()
   })
 })
+
+// --- Refinamiento visual: encabezados de columna, leyenda del s/d y placeholder de calendario ---
+
+describe('encabezados de columna', () => {
+  it('muestra "% real" y "Paga en" para que el s/d y el minicalendario se entiendan de un vistazo', async () => {
+    responderCon({ especies: [especie()] })
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar AL30' }))
+    await screen.findByRole('row', { name: 'AL30' })
+
+    expect(screen.getByRole('columnheader', { name: '% real' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Paga en' })).toBeInTheDocument()
+  })
+
+  it('la leyenda al pie explica qué significa el s/d y las celdas del minicalendario', async () => {
+    responderCon({ especies: [especie()] })
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar AL30' }))
+    await screen.findByRole('row', { name: 'AL30' })
+
+    expect(screen.getByText(/sin precio o sin tipo de cambio — el dato falta, no es cero/)).toBeInTheDocument()
+  })
+})

@@ -9,10 +9,13 @@ export {
   picoDeColumnas,
   invertidoPorMoneda,
   calcularRentaAnualPorMoneda,
+  desgloseDelMes,
 } from '@/lib/cartera/renta'
 export type {
   SegmentoDeMes,
   ColumnaCordillera,
   MesDeRenta,
   RentaAnualPorMoneda,
+  FilaDelDesglose,
+  GrupoDelMes,
 } from '@/lib/cartera/renta'

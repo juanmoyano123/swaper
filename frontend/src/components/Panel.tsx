@@ -8,6 +8,7 @@ export function Panel({
   acciones,
   children,
   className,
+  ariaLabel,
 }: {
   /** Rótulo en mayúsculas del design system, en color de acento. */
   rotulo?: string
@@ -15,10 +16,13 @@ export function Panel({
   acciones?: ReactNode
   children?: ReactNode
   className?: string
+  /** Nombre accesible del `<section>`, para paneles que ya lo declaraban a mano antes de migrar acá. */
+  ariaLabel?: string
 }) {
   return (
     <section
       className={className}
+      aria-label={ariaLabel}
       style={{
         background: 'var(--pan)',
         border: '1px solid var(--lin)',

@@ -108,13 +108,12 @@ export function BloqueRentaVariable() {
       : listaPicker.filter((e) => e.ticker.toLowerCase().includes(busqueda.trim().toLowerCase()))
 
   return (
-    <div style={{ marginTop: 16 }}>
-      <header style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 14, marginBottom: 8 }}>
-        <span className="rotulo">RENTA VARIABLE</span>
-        <span style={{ fontSize: 11, color: 'var(--dim)' }}>
+    <div>
+      <header style={{ marginBottom: 8 }}>
+        <p style={{ margin: 0, fontSize: 11, color: 'var(--dim)' }}>
           Acciones y CEDEARs. Fuera del cálculo de renta fija, de la TIR, la duración y los cuatro
           rendimientos por naturaleza de tasa.
-        </span>
+        </p>
       </header>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, marginBottom: 12 }}>
