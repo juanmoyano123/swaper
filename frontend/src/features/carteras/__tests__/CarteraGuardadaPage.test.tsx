@@ -221,6 +221,20 @@ describe('CarteraGuardadaPage — snapshot corrupto', () => {
     renderizar()
 
     expect(await screen.findByText('No se pudo leer el snapshot de esta cartera.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Descargar Excel' })).not.toBeInTheDocument()
+  })
+})
+
+describe('CarteraGuardadaPage — F-042: exportar', () => {
+  it('con snapshot legible, ofrece descargar Excel y PDF', async () => {
+    resultadoDetalle = { data: filaDetalle(snapshotCargada, 'cargada'), error: null }
+    mockFetch()
+
+    renderizar()
+    await screen.findByText('AL30D')
+
+    expect(screen.getByRole('button', { name: 'Descargar Excel' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Descargar PDF' })).toBeInTheDocument()
   })
 })
 

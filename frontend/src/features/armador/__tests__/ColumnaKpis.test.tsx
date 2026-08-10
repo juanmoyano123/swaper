@@ -154,6 +154,12 @@ function responderCon({
       cuerpo = { tipo_de_cambio: tipoDeCambio, alertas: [] }
     } else if (url.includes('/calendario/cartera')) {
       cuerpo = cartera
+    } else if (url.includes('/renta-variable')) {
+      cuerpo = { items: [], next_cursor: null }
+    } else if (url.includes('/concentracion')) {
+      cuerpo = { topes: [], sectores: { peso_sin_sector: 0 }, peso: { medido: 0, declarado: 0 }, fuera_del_universo: [] }
+    } else if (url.includes('/estado-del-dato')) {
+      cuerpo = { dato: { capturado_en: null, dato_valido_hasta: null, antiguedad_minutos: null, demora: { minutos: 0, fuente: 'x', por_que: 'x' } } }
     } else {
       throw new Error(`fetch no mockeado en este test: ${url}`)
     }
@@ -246,6 +252,41 @@ describe('con una cartera resuelta', () => {
     // El mismo store que la grilla: no hay forma directa de leer selMes desde acá, pero el clic
     // no debe tirar ni desaparecer el botón (sigue siendo el mismo mes, sigue sin cobertura).
     expect(screen.getByRole('button', { name: /03\/2026 sin cobertura/ })).toBeInTheDocument()
+  })
+})
+
+describe('F-042: flujo mes por mes y «Descargar propuesta»', () => {
+  it('sin ninguna posición, no hay calendario que mostrar ni botón de descarga', async () => {
+    responderCon()
+    renderizar()
+
+    expect(await screen.findByText('Sin calendario para mostrar el flujo.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Descargar Excel' })).not.toBeInTheDocument()
+  })
+
+  it('con una cartera resuelta, muestra las 12 filas del flujo, el total anual y el botón de descarga — sin sumar monedas', async () => {
+    responderCon({
+      especies: [especie({ precio: 100 })],
+      cartera: calendarioCartera({
+        rentaAnual: { usd: 717.39 },
+        sobrescribir: { 3: { renta: { usd: 717.39 }, instrumentos: [instrumento({ renta: 717.39 })] } },
+      }),
+    })
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar AL30' }))
+    await userEvent.click(screen.getByRole('button', { name: 'peso AL30 a 60' }))
+    await userEvent.click(screen.getByRole('button', { name: 'monto 10.000' }))
+
+    // Las 12 etiquetas de mes del flujo (aparecen también en la grilla de arriba, por eso se
+    // cuentan dentro del bloque "USD" en vez de buscarlas sueltas).
+    const totalAnual = await screen.findByText('Total anual')
+    expect(totalAnual.parentElement).toHaveTextContent('US$ 717') // el total anual, 0 decimales
+    // No hay ninguna otra moneda en este fixture: ningún total en pesos que pudiera mezclarse.
+    expect(screen.queryByText(/^\$ /)).not.toBeInTheDocument()
+
+    expect(await screen.findByRole('button', { name: 'Descargar Excel' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Descargar PDF' })).toBeInTheDocument()
   })
 })
 

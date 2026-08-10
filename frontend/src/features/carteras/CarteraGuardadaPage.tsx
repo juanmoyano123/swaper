@@ -17,6 +17,7 @@ import { Panel } from '@/components/Panel'
 import { fmtFechaHora, fmtMonto } from '@/lib/fmt'
 
 import { Boton } from './components/Boton'
+import { BotonExportar } from './components/BotonExportar'
 import { Revaluacion } from './components/Revaluacion'
 import { VistaCongelada } from './components/VistaCongelada'
 import { useBorrarCartera } from './hooks/useBorrarCartera'
@@ -65,6 +66,18 @@ export function CarteraGuardadaPage() {
                 No se pudo leer el snapshot de esta cartera.
               </p>
             </Panel>
+          )}
+
+          {consulta.data.snapshot && (
+            <BotonExportar
+              snapshot={consulta.data.snapshot}
+              contexto={{
+                nombre: consulta.data.nombre,
+                descripcion: consulta.data.descripcion,
+                snapshotEn: consulta.data.snapshotEn,
+                generadoEn: new Date().toISOString(),
+              }}
+            />
           )}
 
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>

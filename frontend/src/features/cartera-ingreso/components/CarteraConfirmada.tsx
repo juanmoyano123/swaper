@@ -38,6 +38,7 @@ import { useMemo, useState } from 'react'
 import { DiagnosticoCartera } from '@/features/cartera-diagnostico/components/DiagnosticoCartera'
 import { useCarteraCargadaValuada } from '@/features/cartera-diagnostico/hooks/useCarteraCargadaValuada'
 import { ResolucionCartera } from '@/features/cartera-resolucion/components/ResolucionCartera'
+import { BotonExportar } from '@/features/carteras/components/BotonExportar'
 import { GuardarCartera } from '@/features/carteras/components/GuardarCartera'
 import { armarMercadoCongelado, armarSnapshotCargada } from '@/features/carteras/lib/armarSnapshot'
 import { useEstadoDelDato } from '@/features/estado-dato/hooks/useEstadoDelDato'
@@ -169,8 +170,17 @@ function BloqueOptimizador({
         perfil={perfil}
       />
       {snapshot && (
-        <div style={{ marginTop: 16 }}>
+        <div style={{ marginTop: 16, display: 'grid', gap: 10 }}>
           <GuardarCartera snapshot={snapshot} />
+          <BotonExportar
+            snapshot={snapshot}
+            contexto={{
+              nombre: 'Cartera cargada (en curso)',
+              descripcion: null,
+              snapshotEn: new Date().toISOString(),
+              generadoEn: new Date().toISOString(),
+            }}
+          />
         </div>
       )}
     </>

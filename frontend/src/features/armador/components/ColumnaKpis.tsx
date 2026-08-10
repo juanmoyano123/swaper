@@ -15,11 +15,13 @@
  * partir; agregar el control sin esa fuente sería fabricar un estado (regla 1).
  */
 
+import { BotonExportar } from '@/features/carteras/components/BotonExportar'
 import { fmtMonto, fmtNumero, fmtPct, SIN_DATO } from '@/lib/fmt'
 import { unidadDeNaturaleza } from '@/components/SelectorSegmento'
 
 import { useCalendarioCartera } from '../hooks/useCalendarioCartera'
 import { useCarteraResuelta } from '../hooks/useCarteraResuelta'
+import { useSnapshotArmador } from '../hooks/useSnapshotArmador'
 import { calcularRentaAnualPorMoneda, invertidoPorMoneda, type RentaAnualPorMoneda } from '../lib/renta'
 import { mixPedido } from '../lib/mix'
 import { plazoPromedio, rendimientosPorNaturaleza } from '../lib/rendimientos'
@@ -50,12 +52,15 @@ export function ColumnaKpis({ meses }: { meses: MesDelCalendario[] }) {
   const mix = mixPedido(pos)
 
   let rentaUsd: RentaAnualPorMoneda | null = null
+  let porMoneda: RentaAnualPorMoneda[] = []
   if (calendario.data) {
     const invertidoMapa = invertidoPorMoneda(calendario.data.meses, resueltas)
     const rentaAnual = calendario.data.resumen.renta_anual ?? {}
-    const porMoneda = calcularRentaAnualPorMoneda(calendario.data.meses, rentaAnual, invertidoMapa)
+    porMoneda = calcularRentaAnualPorMoneda(calendario.data.meses, rentaAnual, invertidoMapa)
     rentaUsd = porMoneda.find((r) => r.moneda === 'usd') ?? null
   }
+
+  const snapshotParaExportar = useSnapshotArmador()
 
   return (
     <aside
@@ -153,7 +158,73 @@ export function ColumnaKpis({ meses }: { meses: MesDelCalendario[] }) {
           </ul>
         )}
       </div>
+
+      <div style={{ borderTop: '1px solid var(--lin)', paddingTop: 10 }}>
+        <div
+          className="rotulo"
+          style={{ fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}
+        >
+          Flujo mes por mes
+        </div>
+        <FlujoMesAMes porMoneda={porMoneda} />
+      </div>
+
+      {snapshotParaExportar && (
+        <div style={{ borderTop: '1px solid var(--lin)', paddingTop: 10 }}>
+          <BotonExportar
+            snapshot={snapshotParaExportar}
+            contexto={{
+              nombre: 'Propuesta del armador (en curso)',
+              descripcion: null,
+              snapshotEn: new Date().toISOString(),
+              generadoEn: new Date().toISOString(),
+            }}
+          />
+        </div>
+      )}
     </aside>
+  )
+}
+
+/** El flujo mensual, una tabla por moneda de cobro — nunca una fila que sume monedas distintas
+ *  (regla 3). Mismos números que ya calcula `calcularRentaAnualPorMoneda` (F-021), reusados acá y
+ *  no recalculados. */
+function FlujoMesAMes({ porMoneda }: { porMoneda: RentaAnualPorMoneda[] }) {
+  if (porMoneda.length === 0) {
+    return <p style={{ margin: 0, fontSize: 11, color: 'var(--dim)' }}>Sin calendario para mostrar el flujo.</p>
+  }
+
+  return (
+    <div style={{ display: 'grid', gap: 10 }}>
+      {porMoneda.map((r) => (
+        <div key={r.moneda}>
+          <div style={{ fontSize: 10, color: 'var(--dim)', marginBottom: 3, textTransform: 'uppercase' }}>
+            {r.moneda.toUpperCase()}
+          </div>
+          <div className="mono" style={{ fontSize: 10.5, display: 'grid', gap: 1 }}>
+            {r.serie.map((mes) => (
+              <div key={mes.etiqueta} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--dim)' }}>{mes.etiqueta}</span>
+                <span>{fmtMonto(mes.monto, r.moneda === 'ars' ? 'ars' : 'usd', 0)}</span>
+              </div>
+            ))}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                borderTop: '1px solid var(--lin)',
+                marginTop: 2,
+                paddingTop: 3,
+                fontWeight: 600,
+              }}
+            >
+              <span>Total anual</span>
+              <span>{fmtMonto(r.rentaAnual, r.moneda === 'ars' ? 'ars' : 'usd', 0)}</span>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
   )
 }
 
