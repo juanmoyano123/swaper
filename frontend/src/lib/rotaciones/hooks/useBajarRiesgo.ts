@@ -11,6 +11,12 @@
  * `useConcentracion`, así que si dos candidatas distintas terminan en la misma cartera simulada (o
  * coinciden con una concentración que `SeccionRiesgo` ya pidió para la cartera real) comparten
  * caché en vez de repetir el POST.
+ *
+ * **`excluir` — F-036.** Claves (`claveCandidata`) que no se vuelven a proponer en esta sesión:
+ * descartadas por el asesor o inversas de una rotación ya aceptada (`clavesExcluidas` del plan). Se
+ * filtran antes de la etapa local, así que no entran a `descartes` — no son un descarte por eje, son
+ * una decisión del asesor, y mezclar los dos conteos mentiría en `ResumenDescartes`. Sin `excluir`,
+ * el comportamiento es idéntico al de antes de F-036.
  */
 
 import { useMemo, useState } from 'react'
@@ -25,6 +31,8 @@ import { firmaDePesos, useConcentracion, type PosicionConPeso } from '@/lib/cart
 import { useMapaRiesgo } from '@/lib/cartera/hooks/useMapaRiesgo'
 import { vectorDeRiesgo, type IdDeEje } from '@/lib/cartera/riesgo'
 
+import type { Candidata } from '../esquemaRotaciones'
+import { separarYaDecididas } from '../plan'
 import {
   EJES_NO_MEDIBLES_COMO_PRIMARIO,
   EJE_PRIMARIO_DEFAULT,
@@ -37,7 +45,11 @@ import {
 } from '../bajarRiesgo'
 import { useRotaciones } from './useRotaciones'
 
-export function useBajarRiesgo(posicionesActuales: PosicionConPeso[], perfil: NombreDePerfil) {
+export function useBajarRiesgo(
+  posicionesActuales: PosicionConPeso[],
+  perfil: NombreDePerfil,
+  excluir?: ReadonlySet<string>,
+) {
   const [ejePrimario, setEjePrimario] = useState<IdDeEje>(EJE_PRIMARIO_DEFAULT)
   const noMedible = EJES_NO_MEDIBLES_COMO_PRIMARIO.has(ejePrimario)
 
@@ -52,11 +64,20 @@ export function useBajarRiesgo(posicionesActuales: PosicionConPeso[], perfil: No
     [posicionesActuales, porTicker, concentracionActual.data],
   )
 
+  const { vigentes: candidatasVigentes, excluidas: excluidasPorDecision } = useMemo((): {
+    vigentes: Candidata[]
+    excluidas: number
+  } => {
+    if (!rotaciones.data) return { vigentes: [], excluidas: 0 }
+    if (!excluir) return { vigentes: rotaciones.data.candidatas, excluidas: 0 }
+    return separarYaDecididas(rotaciones.data.candidatas, excluir)
+  }, [rotaciones.data, excluir])
+
   const sobrevivientesLocal = useMemo(() => {
     if (noMedible || !rotaciones.data) return []
-    return evaluarEtapaLocal(rotaciones.data.candidatas, ejePrimario, vectorActual, posicionesActuales, porTicker)
+    return evaluarEtapaLocal(candidatasVigentes, ejePrimario, vectorActual, posicionesActuales, porTicker)
       .sobrevivientes
-  }, [noMedible, rotaciones.data, ejePrimario, vectorActual, posicionesActuales, porTicker])
+  }, [noMedible, rotaciones.data, candidatasVigentes, ejePrimario, vectorActual, posicionesActuales, porTicker])
 
   const consultasConcentracion = useQueries({
     queries: sobrevivientesLocal.map((candidata) => {
@@ -93,7 +114,7 @@ export function useBajarRiesgo(posicionesActuales: PosicionConPeso[], perfil: No
     resultado = resultadoNoMedible(ejePrimario)
   } else if (rotaciones.data && !cargandoConcentracion) {
     resultado = evaluarBajarRiesgo(
-      rotaciones.data.candidatas,
+      candidatasVigentes,
       ejePrimario,
       vectorActual,
       posicionesActuales,
@@ -112,5 +133,6 @@ export function useBajarRiesgo(posicionesActuales: PosicionConPeso[], perfil: No
       (!noMedible && cargandoConcentracion),
     error: especiesUniverso.error ?? concentracionActual.error ?? rotaciones.error ?? errorConcentracion,
     resultado,
+    excluidasPorDecision,
   }
 }

@@ -37,7 +37,9 @@ export interface EfectoCalendario {
   mesesQueCambian: number
 }
 
-function noCalculable(motivo: string): EfectoCalendario {
+/** Exportada para `useEfectoCalendario`: el caso de moneda no convertible (`montosAcumulados`) es
+ *  otro motivo de no-calculable, no un cuarto estado que la UI tenga que distinguir. */
+export function efectoNoCalculable(motivo: string): EfectoCalendario {
   return { calculable: false, motivoNoCalculable: motivo, seLlenan: [], seVacian: [], mesesQueCambian: 0 }
 }
 
@@ -70,7 +72,7 @@ export function diffCalendario(
 ): EfectoCalendario {
   const sinCalendarioSimulado = ticketsSinCalendarioCalculable(simulado.alertas)
   if (sinCalendarioSimulado.has(candidata.destino.ticker)) {
-    return noCalculable(
+    return efectoNoCalculable(
       `El efecto sobre el calendario no se puede afirmar: ${candidata.destino.ticker} no tiene ` +
         'cronograma calculable hoy.',
     )
@@ -78,19 +80,19 @@ export function diffCalendario(
 
   const sinCalendarioActual = ticketsSinCalendarioCalculable(actual.alertas)
   if (sinCalendarioActual.has(candidata.origen.ticker)) {
-    return noCalculable(
+    return efectoNoCalculable(
       `El efecto sobre el calendario no se puede afirmar: ${candidata.origen.ticker} no tiene ` +
         'cronograma calculable hoy en la cartera actual.',
     )
   }
 
   if (!actual.resumen.con_montos || !simulado.resumen.con_montos) {
-    return noCalculable('El calendario no trae montos: no se puede calcular el efecto.')
+    return efectoNoCalculable('El calendario no trae montos: no se puede calcular el efecto.')
   }
 
   const mesesSimulado = new Map(simulado.meses.map((m) => [m.etiqueta, m]))
   if (actual.meses.length !== simulado.meses.length || actual.meses.some((m) => !mesesSimulado.has(m.etiqueta))) {
-    return noCalculable('Las ventanas de doce meses no coinciden entre el calendario actual y el propuesto.')
+    return efectoNoCalculable('Las ventanas de doce meses no coinciden entre el calendario actual y el propuesto.')
   }
 
   const monedas = new Set([...actual.resumen.monedas, ...simulado.resumen.monedas])

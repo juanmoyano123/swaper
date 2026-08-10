@@ -9,6 +9,9 @@
  * `useMapaRiesgo`), `useConcentracion` de la cartera real, y `useRotaciones` con la misma firma de
  * pesos y perfil. Las concentraciones simuladas se piden con `useQueries` bajo la misma clave que
  * usa F-033, así que una cartera simulada que el otro modo ya pidió no vuelve a viajar.
+ *
+ * **`excluir` — F-036.** Mismo criterio que en `useBajarRiesgo`: claves descartadas o inversas de
+ * una aceptada se filtran antes de evaluar y no entran a `descartes`.
  */
 
 import { useMemo } from 'react'
@@ -24,10 +27,16 @@ import { useMapaRiesgo } from '@/lib/cartera/hooks/useMapaRiesgo'
 import { vectorDeRiesgo } from '@/lib/cartera/riesgo'
 
 import { carteraSimuladaDeCandidata, claveCandidata } from '../ejes'
+import type { Candidata } from '../esquemaRotaciones'
+import { separarYaDecididas } from '../plan'
 import { evaluarEtapaLocalSubirTir, evaluarSubirTir, type ResultadoSubirTir } from '../subirTir'
 import { useRotaciones } from './useRotaciones'
 
-export function useSubirTir(posicionesActuales: PosicionConPeso[], perfil: NombreDePerfil) {
+export function useSubirTir(
+  posicionesActuales: PosicionConPeso[],
+  perfil: NombreDePerfil,
+  excluir?: ReadonlySet<string>,
+) {
   const universo = useMapaRiesgo()
   const concentracionActual = useConcentracion(posicionesActuales, perfil)
   const rotaciones = useRotaciones(posicionesActuales, perfil)
@@ -39,11 +48,19 @@ export function useSubirTir(posicionesActuales: PosicionConPeso[], perfil: Nombr
     [posicionesActuales, porTicker, concentracionActual.data],
   )
 
+  const { vigentes: candidatasVigentes, excluidas: excluidasPorDecision } = useMemo((): {
+    vigentes: Candidata[]
+    excluidas: number
+  } => {
+    if (!rotaciones.data) return { vigentes: [], excluidas: 0 }
+    if (!excluir) return { vigentes: rotaciones.data.candidatas, excluidas: 0 }
+    return separarYaDecididas(rotaciones.data.candidatas, excluir)
+  }, [rotaciones.data, excluir])
+
   const sobrevivientesLocal = useMemo(() => {
     if (!rotaciones.data) return []
-    return evaluarEtapaLocalSubirTir(rotaciones.data.candidatas, vectorActual, posicionesActuales, porTicker)
-      .sobrevivientes
-  }, [rotaciones.data, vectorActual, posicionesActuales, porTicker])
+    return evaluarEtapaLocalSubirTir(candidatasVigentes, vectorActual, posicionesActuales, porTicker).sobrevivientes
+  }, [rotaciones.data, candidatasVigentes, vectorActual, posicionesActuales, porTicker])
 
   const consultasConcentracion = useQueries({
     queries: sobrevivientesLocal.map((candidata) => {
@@ -76,18 +93,13 @@ export function useSubirTir(posicionesActuales: PosicionConPeso[], perfil: Nombr
 
   let resultado: ResultadoSubirTir | null = null
   if (rotaciones.data && !cargandoConcentracion) {
-    resultado = evaluarSubirTir(
-      rotaciones.data.candidatas,
-      vectorActual,
-      posicionesActuales,
-      porTicker,
-      concentracionesSimuladas,
-    )
+    resultado = evaluarSubirTir(candidatasVigentes, vectorActual, posicionesActuales, porTicker, concentracionesSimuladas)
   }
 
   return {
     cargando: universo.isPending || concentracionActual.isPending || rotaciones.isPending || cargandoConcentracion,
     error: universo.error ?? concentracionActual.error ?? rotaciones.error ?? errorConcentracion,
     resultado,
+    excluidasPorDecision,
   }
 }
