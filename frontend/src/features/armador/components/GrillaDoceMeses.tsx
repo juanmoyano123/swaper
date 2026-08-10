@@ -20,7 +20,15 @@ import { useArmador, useArmadorAcciones } from '../store/carteraStore'
 
 import { TarjetaPapel } from './TarjetaPapel'
 
-export function GrillaDoceMeses({ meses }: { meses: MesDelCalendario[] }) {
+export function GrillaDoceMeses({
+  meses,
+  calificacionPorTicker,
+}: {
+  meses: MesDelCalendario[]
+  /** Calificación declarada por ticker, del cruce contra el universo — `undefined` si el ticker
+   *  no cruzó, `null` si cruzó pero la fuente no la informó. Se muestra siempre, filtre o no. */
+  calificacionPorTicker: Map<string, string | null>
+}) {
   const { selMes } = useArmador()
   const { alternarMes } = useArmadorAcciones()
 
@@ -39,6 +47,7 @@ export function GrillaDoceMeses({ meses }: { meses: MesDelCalendario[] }) {
           mes={mes}
           seleccionado={selMes === indice}
           onSeleccionar={() => alternarMes(indice)}
+          calificacionPorTicker={calificacionPorTicker}
         />
       ))}
     </div>
@@ -49,10 +58,12 @@ function PanelMes({
   mes,
   seleccionado,
   onSeleccionar,
+  calificacionPorTicker,
 }: {
   mes: MesDelCalendario
   seleccionado: boolean
   onSeleccionar: () => void
+  calificacionPorTicker: Map<string, string | null>
 }) {
   return (
     <div
@@ -93,7 +104,11 @@ function PanelMes({
       </button>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {mes.instrumentos.map((instrumento) => (
-          <TarjetaPapel key={instrumento.ticker} instrumento={instrumento} />
+          <TarjetaPapel
+            key={instrumento.ticker}
+            instrumento={instrumento}
+            calificacion={calificacionPorTicker.get(instrumento.ticker)}
+          />
         ))}
       </div>
     </div>

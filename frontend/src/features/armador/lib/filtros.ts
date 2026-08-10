@@ -28,6 +28,10 @@ export interface FiltrosArmador {
   emisor: string | null
   /** Clave de ley del universo, o LEY_NO_INFORMADA. null = sin filtro. */
   ley: string | null
+  /** Multiselect de valores literales de `calificacion` (texto libre de la calificadora, sin
+   *  escala común — nunca se ordena por riesgo, sólo se filtra por coincidencia exacta), más
+   *  CALIFICACION_NO_INFORMADA. Array vacío = sin filtro. */
+  calificaciones: string[]
   /** Cantidad exacta de meses con pago de renta en la ventana; '' = sin filtro. */
   pagos: string
   /** TIR mínima, en puntos porcentuales ('6' = 6%); '' = sin filtro. Sólo se evalúa contra
@@ -40,6 +44,7 @@ export interface FiltrosArmador {
 }
 
 export const LEY_NO_INFORMADA = 'ley_no_informada'
+export const CALIFICACION_NO_INFORMADA = 'calificacion_no_informada'
 
 /** Las únicas naturalezas donde "TIR" es la unidad — ver `UNIDAD_NATURALEZA` en
  *  `@/components/SelectorSegmento`. `tasa_real_cer` y `tna_nominal_ars` no tienen TIR: con
@@ -53,6 +58,7 @@ export const FILTROS_ARMADOR_VACIOS: FiltrosArmador = {
   sector: null,
   emisor: null,
   ley: null,
+  calificaciones: [],
   pagos: '',
   tirMin: '',
   soloConCupones: false,
@@ -76,6 +82,7 @@ export function hayFiltrosActivos(filtros: FiltrosArmador): boolean {
     filtros.sector !== null ||
     filtros.emisor !== null ||
     filtros.ley !== null ||
+    filtros.calificaciones.length > 0 ||
     filtros.pagos !== '' ||
     filtros.tirMin !== '' ||
     filtros.soloConCupones
@@ -189,7 +196,8 @@ export function pasaFiltros(
     filtros.liquidezMin !== '' ||
     filtros.sector !== null ||
     filtros.emisor !== null ||
-    filtros.ley !== null
+    filtros.ley !== null ||
+    filtros.calificaciones.length > 0
 
   if (especie === undefined) {
     if (dependeDelUniverso) return false
@@ -216,6 +224,14 @@ export function pasaFiltros(
     if (filtros.ley === LEY_NO_INFORMADA) {
       if (especie.ley !== null) return false
     } else if (especie.ley !== filtros.ley) {
+      return false
+    }
+  }
+
+  if (filtros.calificaciones.length > 0) {
+    if (especie.calificacion === null) {
+      if (!filtros.calificaciones.includes(CALIFICACION_NO_INFORMADA)) return false
+    } else if (!filtros.calificaciones.includes(especie.calificacion)) {
       return false
     }
   }

@@ -372,6 +372,90 @@ describe('cero sobrevivientes', () => {
   })
 })
 
+// --- Etapa 5 del rediseño del armador: filtro de calificación, literal y sin ordenar ------------------
+
+describe('filtro de calificación', () => {
+  function responderConCalificaciones() {
+    const fetchMock = vi.fn((entrada: RequestInfo | URL) => {
+      const url = typeof entrada === 'string' ? entrada : entrada.toString()
+      if (url.includes('/emisiones/especies')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                { ...especieAl30(), calificacion: 'AAA(arg) (FIX)' },
+                especieTzx26(), // calificacion: null, del fixture base
+              ],
+              next_cursor: null,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        )
+      }
+      if (url.includes('/calendario/universo')) {
+        return Promise.resolve(
+          new Response(JSON.stringify(calendarioUniverso()), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      throw new Error(`fetch no mockeado en este test: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+  }
+
+  it('la tarjeta muestra la calificación, incluida "sin calif." cuando falta', async () => {
+    responderConCalificaciones()
+    renderizar()
+    await grillaSinFiltroDeFabrica()
+
+    expect(screen.getAllByRole('button', { name: /^AL30/ })[0]).toHaveTextContent('AAA(arg) (FIX)')
+    expect(screen.getByRole('button', { name: /^TZX26/ })).toHaveTextContent('sin calif.')
+  })
+
+  it('deja sólo el papel con la calificación elegida', async () => {
+    responderConCalificaciones()
+    renderizar()
+    await grillaSinFiltroDeFabrica()
+
+    await userEvent.click(screen.getByText('todas'))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'AAA(arg) (FIX)' }))
+
+    expect(await screen.findByText('1 de 2 papeles pasan los filtros')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /^AL30/ }).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: /^TZX26/ })).not.toBeInTheDocument()
+  })
+
+  it('"sin calificación" deja sólo los que no la tienen informada, nunca los que sí', async () => {
+    responderConCalificaciones()
+    renderizar()
+    await grillaSinFiltroDeFabrica()
+
+    await userEvent.click(screen.getByText('todas'))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'sin calificación' }))
+
+    expect(await screen.findByText('1 de 2 papeles pasan los filtros')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^TZX26/ })).toBeInTheDocument()
+    expect(screen.queryAllByRole('button', { name: /^AL30/ })).toHaveLength(0)
+  })
+
+  it('limpiar filtros también vacía la selección de calificación', async () => {
+    responderConCalificaciones()
+    renderizar()
+    await grillaSinFiltroDeFabrica()
+
+    await userEvent.click(screen.getByText('todas'))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'AAA(arg) (FIX)' }))
+    await screen.findByText('1 de 2 papeles pasan los filtros')
+
+    await userEvent.click(screen.getByRole('button', { name: 'limpiar filtros' }))
+
+    expect(await screen.findByText('2 de 2 papeles pasan los filtros')).toBeInTheDocument()
+    expect(screen.getByText('todas')).toBeInTheDocument()
+  })
+})
+
 // --- Universo caído: la grilla se muestra sin filtrar, la barra se declara no disponible --------------
 
 describe('universo caído', () => {

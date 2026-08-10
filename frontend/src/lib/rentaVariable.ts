@@ -32,6 +32,17 @@ export const esquemaEspecieRentaVariable = z.object({
   // tiene TIR (regla 2) y este contrato no le hace lugar.
   /** Experimento data912: de dónde salió `precio`. Ver `features/monitor/lib/schema.ts`. */
   fuente: z.string().nullable(),
+
+  // Perfil de empresa (Etapa 4 del rediseño del armador): `null` hasta que el job de
+  // enriquecimiento pase por este ticker (`app/renta_variable/enriquecimiento.py`, backend). De
+  // Yahoo Finance, tal como la fuente los declara — nunca se traducen (regla 11).
+  nombre_corto: z.string().nullable(),
+  nombre_largo: z.string().nullable(),
+  sector: z.string().nullable(),
+  industria: z.string().nullable(),
+  pais: z.string().nullable(),
+  perfil_fuente: z.string().nullable(),
+  perfil_capturado_en: z.string().nullable(),
 })
 
 export type EspecieRentaVariable = z.infer<typeof esquemaEspecieRentaVariable>

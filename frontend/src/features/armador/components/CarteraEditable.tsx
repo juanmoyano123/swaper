@@ -377,6 +377,12 @@ function FilaCartera({
               <InputLamina ticker={posicion.ticker} />
             </>
           )}
+          {posicion.clase !== 'fci' && (
+            <>
+              {' · calif. '}
+              {especie?.calificacion ?? 'sin calif.'}
+            </>
+          )}
         </div>
       </div>
 

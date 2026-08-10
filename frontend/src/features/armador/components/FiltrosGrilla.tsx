@@ -15,7 +15,7 @@ import type { ReactNode } from 'react'
 
 import { unidadDeNaturaleza, SelectorSegmento } from '@/components/SelectorSegmento'
 
-import { LEY_NO_INFORMADA, type FiltrosArmador } from '../lib/filtros'
+import { CALIFICACION_NO_INFORMADA, LEY_NO_INFORMADA, type FiltrosArmador } from '../lib/filtros'
 import { useArmador, useArmadorAcciones } from '../store/carteraStore'
 
 export function FiltrosGrilla({
@@ -31,6 +31,10 @@ export function FiltrosGrilla({
     leyes: string[]
     /** true si hay especies del cruce con `ley: null` — habilita la opción "ley no informada". */
     tieneLeyNoInformada: boolean
+    /** Valores literales distintos, ya ordenados alfabéticamente (orden de presentación, no de
+     *  riesgo — ver `CALIFICACION_NO_INFORMADA` en `lib/filtros.ts`). */
+    calificaciones: string[]
+    tieneCalificacionNoInformada: boolean
     pagos: number[]
   }
   conteo: { visibles: number; total: number; sinCruce: number }
@@ -46,6 +50,15 @@ export function FiltrosGrilla({
 
   function cambiar(parcial: Partial<FiltrosArmador>) {
     fijarFiltros({ ...filtros, ...parcial })
+  }
+
+  function alternarCalificacion(valor: string) {
+    const activa = filtros.calificaciones.includes(valor)
+    cambiar({
+      calificaciones: activa
+        ? filtros.calificaciones.filter((c) => c !== valor)
+        : [...filtros.calificaciones, valor],
+    })
   }
 
   return (
@@ -161,6 +174,77 @@ export function FiltrosGrilla({
             )}
           </select>
         </Campo>
+
+        {/* No usa `Campo`: su `<label>` envolvería el `<details>` entero y le rompería el nombre
+            accesible a cada checkbox de adentro (un `<label>` implícito se asocia con TODOS los
+            controles que envuelve, no sólo el primero). El rótulo va en el `<summary>` como texto
+            visible más `aria-label` propio, sin envolver nada. */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, color: 'var(--dim)' }}>
+          Calificación
+          <details style={{ position: 'relative' }}>
+            <summary
+              aria-label="Calificación"
+              style={{
+                ...estiloInput,
+                display: 'inline-block',
+                cursor: deshabilitado ? 'default' : 'pointer',
+                listStyle: 'none',
+              }}
+            >
+              {filtros.calificaciones.length === 0
+                ? 'todas'
+                : `${filtros.calificaciones.length} elegida${filtros.calificaciones.length === 1 ? '' : 's'}`}
+            </summary>
+            <div
+              role="group"
+              aria-label="Calificación"
+              style={{
+                position: 'absolute',
+                zIndex: 1,
+                top: '100%',
+                marginTop: 4,
+                display: 'grid',
+                gap: 4,
+                maxHeight: 220,
+                overflowY: 'auto',
+                padding: 8,
+                background: 'var(--pan)',
+                border: '1px solid var(--lin)',
+                borderRadius: 4,
+                minWidth: 200,
+              }}
+            >
+              {opciones.calificaciones.map((calificacion) => (
+                <label
+                  key={calificacion}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--tx)' }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={filtros.calificaciones.includes(calificacion)}
+                    disabled={deshabilitado}
+                    onChange={() => alternarCalificacion(calificacion)}
+                  />
+                  {calificacion}
+                </label>
+              ))}
+              {opciones.tieneCalificacionNoInformada && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--dim)' }}>
+                  <input
+                    type="checkbox"
+                    checked={filtros.calificaciones.includes(CALIFICACION_NO_INFORMADA)}
+                    disabled={deshabilitado}
+                    onChange={() => alternarCalificacion(CALIFICACION_NO_INFORMADA)}
+                  />
+                  sin calificación
+                </label>
+              )}
+              {opciones.calificaciones.length === 0 && !opciones.tieneCalificacionNoInformada && (
+                <span style={{ fontSize: 11.5, color: 'var(--dim)' }}>sin especies en la ventana</span>
+              )}
+            </div>
+          </details>
+        </div>
 
         <Campo etiqueta="Pagos de renta (ventana 12 m)">
           <select

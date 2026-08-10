@@ -56,12 +56,37 @@ export function GrillaFiltrada({ meses }: { meses: MesDelCalendario[] }) {
       ...new Set(especiesDelCruce.map((e) => e.ley).filter((l): l is string => l !== null)),
     ]
     const tieneLeyNoInformada = especiesDelCruce.some((e) => e.ley === null)
+    // Orden alfabético declarado como orden de presentación, nunca como escala de riesgo — la
+    // calificación es texto libre de cuatro calificadoras distintas, sin equivalencia entre sí.
+    const calificaciones = [
+      ...new Set(
+        especiesDelCruce.map((e) => e.calificacion).filter((c): c is string => c !== null),
+      ),
+    ].sort()
+    const tieneCalificacionNoInformada = especiesDelCruce.some((e) => e.calificacion === null)
     const pagosPorTicker = contarPagosPorTicker(meses)
     const pagos = [
       ...new Set(especiesDelCruce.map((e) => pagosPorTicker.get(e.ticker) ?? 0)),
     ]
-    return { segmentos, sectores, emisores, leyes, tieneLeyNoInformada, pagos }
+    return {
+      segmentos,
+      sectores,
+      emisores,
+      leyes,
+      tieneLeyNoInformada,
+      calificaciones,
+      tieneCalificacionNoInformada,
+      pagos,
+    }
   }, [cruce, meses])
+
+  // Calificación visible en cada tarjeta de la grilla, aunque no haya filtro activo — declarar el
+  // dato es distinto de filtrar por él (GrillaDoceMeses → TarjetaPapel).
+  const calificacionPorTicker = useMemo(() => {
+    const mapa = new Map<string, string | null>()
+    for (const especie of cruce.values()) mapa.set(especie.ticker, especie.calificacion)
+    return mapa
+  }, [cruce])
 
   const filtrado = useMemo(() => {
     if (!universoDisponible) {
@@ -88,7 +113,7 @@ export function GrillaFiltrada({ meses }: { meses: MesDelCalendario[] }) {
           &quot;limpiar filtros&quot; en la barra de arriba.
         </p>
       ) : (
-        <GrillaDoceMeses meses={filtrado.meses} />
+        <GrillaDoceMeses meses={filtrado.meses} calificacionPorTicker={calificacionPorTicker} />
       )}
     </>
   )

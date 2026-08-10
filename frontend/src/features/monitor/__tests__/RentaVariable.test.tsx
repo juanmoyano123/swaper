@@ -78,6 +78,13 @@ function especieRV(extra: Partial<EspecieRentaVariable> = {}): EspecieRentaVaria
     px_ask: 1005.0,
     operaciones: 50,
     fuente: null,
+    nombre_corto: null,
+    nombre_largo: null,
+    sector: null,
+    industria: null,
+    pais: null,
+    perfil_fuente: null,
+    perfil_capturado_en: null,
     ...extra,
   }
 }

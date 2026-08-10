@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  CALIFICACION_NO_INFORMADA,
   FILTROS_ARMADOR_INICIALES,
   FILTROS_ARMADOR_VACIOS,
   LEY_NO_INFORMADA,
@@ -106,6 +107,9 @@ describe('hayFiltrosActivos', () => {
     expect(hayFiltrosActivos({ ...FILTROS_ARMADOR_VACIOS, ley: 'ARG' })).toBe(true)
     expect(hayFiltrosActivos({ ...FILTROS_ARMADOR_VACIOS, tirMin: '6' })).toBe(true)
     expect(hayFiltrosActivos({ ...FILTROS_ARMADOR_VACIOS, soloConCupones: true })).toBe(true)
+    expect(
+      hayFiltrosActivos({ ...FILTROS_ARMADOR_VACIOS, calificaciones: ['AAA(arg) (FIX)'] }),
+    ).toBe(true)
   })
 
   it('es verdadero con el default de fábrica (TIR ≥ 6% y cupones)', () => {
@@ -248,6 +252,42 @@ describe('pasaFiltros', () => {
         ley: LEY_NO_INFORMADA,
       }),
     ).toBe(false)
+  })
+
+  it('calificaciones: multiselect por valor literal, sin ordenar ni traducir', () => {
+    const filtros = { ...FILTROS_ARMADOR_VACIOS, calificaciones: ['AAA(arg) (FIX)', 'AA(arg) (FIX)'] }
+
+    expect(
+      pasaFiltros(datoBase({ especie: especie({ calificacion: 'AAA(arg) (FIX)' }) }), filtros),
+    ).toBe(true)
+    expect(
+      pasaFiltros(datoBase({ especie: especie({ calificacion: 'B2 (Moodys)' }) }), filtros),
+    ).toBe(false)
+  })
+
+  it('calificaciones: CALIFICACION_NO_INFORMADA matchea sólo calificacion: null', () => {
+    const sinCalificacion = especie({ calificacion: null })
+    const filtroSinInformada = { ...FILTROS_ARMADOR_VACIOS, calificaciones: [CALIFICACION_NO_INFORMADA] }
+
+    expect(pasaFiltros(datoBase({ especie: sinCalificacion }), filtroSinInformada)).toBe(true)
+    expect(
+      pasaFiltros(
+        datoBase({ especie: especie({ calificacion: 'AAA(arg) (FIX)' }) }),
+        filtroSinInformada,
+      ),
+    ).toBe(false)
+    expect(
+      pasaFiltros(datoBase({ especie: sinCalificacion }), {
+        ...FILTROS_ARMADOR_VACIOS,
+        calificaciones: ['AAA(arg) (FIX)'],
+      }),
+    ).toBe(false)
+  })
+
+  it('calificaciones: array vacío no filtra nada', () => {
+    expect(
+      pasaFiltros(datoBase({ especie: especie({ calificacion: null }) }), FILTROS_ARMADOR_VACIOS),
+    ).toBe(true)
   })
 
   it('pagos: exige coincidencia exacta con la cantidad observada', () => {

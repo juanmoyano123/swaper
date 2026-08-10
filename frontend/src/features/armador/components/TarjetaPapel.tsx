@@ -10,6 +10,12 @@
  *
  * Sin moneda ni badge de tipo de liquidación (Cable/MEP): no hay un dato real que distinga eso —
  * la última letra del ticker no alcanza (regla 11 del dominio, ver `CLAUDE.md`) y no se traduce.
+ *
+ * **Calificación (Etapa 5 del rediseño del armador)**: literal, tal como la declaró la
+ * calificadora — nunca se ordena ni se compara contra otra (texto libre de cuatro fuentes
+ * distintas, sin escala común). `undefined` (sin cruce con el universo) y `null` (cruzó, sin
+ * calificación informada) se muestran igual, "sin calif.": la distinción entre las dos no le sirve
+ * a quien mira la tarjeta.
  */
 
 import { unidadDeNaturaleza } from '@/components/SelectorSegmento'
@@ -18,7 +24,15 @@ import { fmtPct, SIN_DATO } from '@/lib/fmt'
 import type { InstrumentoDelMes } from '../lib/schema'
 import { useArmador, useArmadorAcciones } from '../store/carteraStore'
 
-export function TarjetaPapel({ instrumento }: { instrumento: InstrumentoDelMes }) {
+export function TarjetaPapel({
+  instrumento,
+  calificacion,
+}: {
+  instrumento: InstrumentoDelMes
+  /** `undefined` = el ticker no cruzó contra el universo; `null` = cruzó pero sin calificación
+   *  informada por la fuente. Los dos se muestran como "sin calif.", nunca se ocultan (regla 11). */
+  calificacion?: string | null
+}) {
   const { pos } = useArmador()
   const { alternarPapel } = useArmadorAcciones()
   const seleccionado = pos.some((p) => p.ticker === instrumento.ticker)
@@ -68,6 +82,7 @@ export function TarjetaPapel({ instrumento }: { instrumento: InstrumentoDelMes }
             : `${fmtPct(instrumento.rendimiento * 100)} ${unidadDeNaturaleza(instrumento.naturaleza)}`}
         </span>
         <Campo rotulo="Vto" valor={anioVencimiento ?? SIN_DATO} color="var(--sd)" />
+        <Campo rotulo="Calif." valor={calificacion ?? 'sin calif.'} color="var(--sd)" />
       </div>
     </button>
   )

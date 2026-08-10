@@ -38,6 +38,13 @@ function accion(extra: Partial<EspecieRentaVariable> = {}): EspecieRentaVariable
     px_ask: 30.1,
     operaciones: 12,
     fuente: null,
+    nombre_corto: null,
+    nombre_largo: null,
+    sector: null,
+    industria: null,
+    pais: null,
+    perfil_fuente: null,
+    perfil_capturado_en: null,
     ...extra,
   }
 }
@@ -56,6 +63,13 @@ function cedear(extra: Partial<EspecieRentaVariable> = {}): EspecieRentaVariable
     px_ask: 50.5,
     operaciones: 3,
     fuente: null,
+    nombre_corto: null,
+    nombre_largo: null,
+    sector: null,
+    industria: null,
+    pais: null,
+    perfil_fuente: null,
+    perfil_capturado_en: null,
     ...extra,
   }
 }
@@ -364,5 +378,81 @@ describe('el buscador de acciones y CEDEARs', () => {
 
     expect(await screen.findByRole('button', { name: 'AAPL' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'GGAL' })).not.toBeInTheDocument()
+  })
+
+  // --- Etapa 5 del rediseño del armador: sector, rubro y búsqueda por nombre --------------------
+
+  it('busca por nombre además de por ticker', async () => {
+    responderCon({
+      acciones: [
+        accion({ nombre_corto: 'GRUPO FINANCIERO GALICIA', nombre_largo: 'Grupo Financiero Galicia S.A.' }),
+        accion({ ticker: 'PAMP', nombre_corto: 'PAMPA ENERGIA' }),
+      ],
+    })
+    renderizar()
+    await screen.findAllByRole('listitem')
+
+    await userEvent.type(screen.getByRole('textbox', { name: /Buscar acción o CEDEAR/i }), 'galicia')
+
+    expect(screen.getByRole('button', { name: 'GGAL' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'PAMP' })).not.toBeInTheDocument()
+  })
+
+  it('filtra por sector, sólo con las especies de esa clase que lo declaran', async () => {
+    responderCon({
+      acciones: [
+        accion({ sector: 'Financial Services' }),
+        accion({ ticker: 'PAMP', sector: 'Energy' }),
+      ],
+    })
+    renderizar()
+    await screen.findAllByRole('listitem')
+
+    await userEvent.selectOptions(screen.getByLabelText('Sector (empresa)'), 'Financial Services')
+
+    expect(screen.getByRole('button', { name: 'GGAL' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'PAMP' })).not.toBeInTheDocument()
+  })
+
+  it('filtra por rubro (industria)', async () => {
+    responderCon({
+      acciones: [
+        accion({ industria: 'Banks - Regional' }),
+        accion({ ticker: 'PAMP', industria: 'Oil & Gas E&P' }),
+      ],
+    })
+    renderizar()
+    await screen.findAllByRole('listitem')
+
+    await userEvent.selectOptions(screen.getByLabelText('Rubro (empresa)'), 'Oil & Gas E&P')
+
+    expect(screen.getByRole('button', { name: 'PAMP' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'GGAL' })).not.toBeInTheDocument()
+  })
+
+  it('sin perfil de empresa todavía, sector y rubro sólo ofrecen "todos" — no rompe la búsqueda', async () => {
+    responderCon({ acciones: [accion(), accion({ ticker: 'PAMP' })] })
+    renderizar()
+    await screen.findAllByRole('listitem')
+
+    expect(screen.getByLabelText('Sector (empresa)')).toHaveValue('')
+    expect(screen.getByLabelText('Sector (empresa)').children).toHaveLength(1) // sólo "todos"
+    expect(screen.getByRole('button', { name: 'GGAL' })).toBeInTheDocument()
+  })
+
+  it('cambiar de clase limpia sector y rubro elegidos', async () => {
+    responderCon({
+      acciones: [accion({ sector: 'Financial Services' })],
+      cedears: [cedear({ sector: 'Technology' })],
+    })
+    renderizar()
+    await screen.findAllByRole('listitem')
+
+    await userEvent.selectOptions(screen.getByLabelText('Sector (empresa)'), 'Financial Services')
+    expect(screen.getByLabelText('Sector (empresa)')).toHaveValue('Financial Services')
+
+    await userEvent.click(screen.getByRole('radio', { name: 'CEDEARs' }))
+
+    expect(screen.getByLabelText('Sector (empresa)')).toHaveValue('')
   })
 })

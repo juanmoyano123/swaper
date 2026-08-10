@@ -46,7 +46,7 @@
 import { type ReactNode, useMemo, useState } from 'react'
 
 import { useAbrirInstrumento } from '@/features/instrumento/useAbrirInstrumento'
-import { fmtMonto, fmtPct, SIN_DATO } from '@/lib/fmt'
+import { fmtFecha, fmtMonto, fmtPct, SIN_DATO } from '@/lib/fmt'
 import { type EspecieRentaVariable, useRentaVariable } from '@/lib/rentaVariable'
 
 import { useCarteraResuelta } from '../hooks/useCarteraResuelta'
@@ -69,6 +69,17 @@ const CLASES: { clave: 'accion' | 'cedear'; etiqueta: string }[] = [
   { clave: 'cedear', etiqueta: 'CEDEARs' },
 ]
 
+const estiloSelectPicker = {
+  minWidth: 140,
+  font: 'inherit',
+  fontSize: 12,
+  padding: '4px 8px',
+  borderRadius: 3,
+  border: '1px solid var(--lin)',
+  background: 'var(--pan2)',
+  color: 'var(--tx)',
+} as const
+
 export function BloqueRentaVariable() {
   const { pos, montoTotal } = useArmador()
   const { alternarRentaVariable, fijarPeso } = useArmadorAcciones()
@@ -82,8 +93,19 @@ export function BloqueRentaVariable() {
   // nada de renta fija.
   const { totalInvertidoUsd: subtotalRfUsd, hayAlgunaResuelta: hayRfResuelta } = useCarteraResuelta()
 
-  const [clasePicker, setClasePicker] = useState<'accion' | 'cedear'>('accion')
+  const [clasePicker, setClasePickerCrudo] = useState<'accion' | 'cedear'>('accion')
   const [busqueda, setBusqueda] = useState('')
+  const [sectorFiltro, setSectorFiltro] = useState<string | null>(null)
+  const [industriaFiltro, setIndustriaFiltro] = useState<string | null>(null)
+
+  // Sector y rubro son del perfil de empresa (Etapa 5): las opciones de una clase no tienen por
+  // qué existir en la otra, así que cambiar de Acciones a CEDEARs limpia la selección en vez de
+  // dejar un filtro activo que no matchea nada sin que se entienda por qué.
+  function setClasePicker(clase: 'accion' | 'cedear') {
+    setClasePickerCrudo(clase)
+    setSectorFiltro(null)
+    setIndustriaFiltro(null)
+  }
 
   const porTicker = useMemo(() => {
     const mapa = new Map<string, EspecieRentaVariable>()
@@ -132,10 +154,28 @@ export function BloqueRentaVariable() {
   const listaPicker = (clasePicker === 'accion' ? acciones.data : cedears.data) ?? []
   const cargandoPicker = clasePicker === 'accion' ? acciones.isPending : cedears.isPending
   const erroresPicker = clasePicker === 'accion' ? acciones.isError : cedears.isError
-  const filtradaPicker =
-    busqueda.trim() === ''
-      ? listaPicker
-      : listaPicker.filter((e) => e.ticker.toLowerCase().includes(busqueda.trim().toLowerCase()))
+
+  // Opciones del filtro: sólo las que de verdad aparecen en esta clase, ordenadas alfabéticamente
+  // (orden de presentación — sector/rubro no tienen jerarquía propia que ordenar por otro criterio).
+  const sectoresPicker = [
+    ...new Set(listaPicker.map((e) => e.sector).filter((s): s is string => s !== null)),
+  ].sort()
+  const industriasPicker = [
+    ...new Set(listaPicker.map((e) => e.industria).filter((i): i is string => i !== null)),
+  ].sort()
+
+  const busquedaNormalizada = busqueda.trim().toLowerCase()
+  const filtradaPicker = listaPicker.filter((e) => {
+    if (sectorFiltro !== null && e.sector !== sectorFiltro) return false
+    if (industriaFiltro !== null && e.industria !== industriaFiltro) return false
+    if (busquedaNormalizada === '') return true
+    // Ticker o nombre (corto o largo, de Yahoo) — sin perfil todavía, sólo matchea por ticker.
+    return (
+      e.ticker.toLowerCase().includes(busquedaNormalizada) ||
+      (e.nombre_corto?.toLowerCase().includes(busquedaNormalizada) ?? false) ||
+      (e.nombre_largo?.toLowerCase().includes(busquedaNormalizada) ?? false)
+    )
+  })
 
   return (
     <div>
@@ -219,8 +259,8 @@ export function BloqueRentaVariable() {
           type="text"
           value={busqueda}
           onChange={(evento) => setBusqueda(evento.target.value)}
-          placeholder="Buscar ticker…"
-          aria-label="Buscar acción o CEDEAR por ticker"
+          placeholder="Buscar ticker o nombre…"
+          aria-label="Buscar acción o CEDEAR por ticker o nombre"
           className="mono"
           style={{
             marginLeft: 8,
@@ -234,6 +274,46 @@ export function BloqueRentaVariable() {
             padding: '4px 8px',
           }}
         />
+      </div>
+
+      {/* Sector y rubro: del perfil de empresa (Etapa 5), vacíos hasta que el job de
+          enriquecimiento pase por estos tickers. Sin especies con el dato todavía, los selects
+          quedan con la única opción "todos" y no estorban. */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+        {/* "(empresa)" en la etiqueta visible, no sólo en el aria-label: el filtro de sector de la
+            grilla de renta fija (más arriba en la misma página) ya se llama "Sector" a secas —
+            dos selects con el mismo texto visible confundirían tanto a la vista como a un lector
+            de pantalla. */}
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, color: 'var(--dim)' }}>
+          Sector (empresa)
+          <select
+            value={sectorFiltro ?? ''}
+            onChange={(evento) => setSectorFiltro(evento.target.value === '' ? null : evento.target.value)}
+            style={estiloSelectPicker}
+          >
+            <option value="">todos</option>
+            {sectoresPicker.map((sector) => (
+              <option key={sector} value={sector}>
+                {sector}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, color: 'var(--dim)' }}>
+          Rubro (empresa)
+          <select
+            value={industriaFiltro ?? ''}
+            onChange={(evento) => setIndustriaFiltro(evento.target.value === '' ? null : evento.target.value)}
+            style={estiloSelectPicker}
+          >
+            <option value="">todos</option>
+            {industriasPicker.map((industria) => (
+              <option key={industria} value={industria}>
+                {industria}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {cargandoPicker && <p style={{ fontSize: 11.5, color: 'var(--dim)' }}>Cargando especies…</p>}
@@ -318,6 +398,21 @@ function FilaPicker({
       >
         {especie.ticker}
       </button>
+      {especie.nombre_corto && (
+        <span
+          style={{
+            fontSize: 11,
+            color: 'var(--dim)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            minWidth: 0,
+          }}
+          title={especie.nombre_largo ?? especie.nombre_corto}
+        >
+          {especie.nombre_corto}
+        </span>
+      )}
       <span className="mono" style={{ fontSize: 11.5, color: 'var(--dim)', marginLeft: 'auto' }}>
         {especie.precio !== null ? especie.precio : SIN_DATO}
       </span>
@@ -394,9 +489,30 @@ function TarjetaRentaVariable({
         >
           {ticker}
         </button>
-        <span style={{ fontSize: 10.5, color: 'var(--dim)' }}>
-          {/* Sin emisor en el dato (ver comentario del módulo): la clase es lo único descriptivo. */}
-          {especie ? (especie.clase_activo === 'accion' ? 'Acción' : 'CEDEAR') : SIN_DATO}
+        <span
+          style={{
+            fontSize: 10.5,
+            color: 'var(--dim)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            minWidth: 0,
+          }}
+          title={
+            especie?.nombre_corto
+              ? `Empresa según Yahoo Finance · capturado ${fmtFecha(especie.perfil_capturado_en)}`
+              : undefined
+          }
+        >
+          {/* Con perfil de empresa (Etapa 5): nombre + clase. Sin él, sólo la clase — es lo único
+              descriptivo que hay hasta que el job de enriquecimiento pase por este ticker. */}
+          {especie?.nombre_corto
+            ? `${especie.nombre_corto} · ${especie.clase_activo === 'accion' ? 'Acción' : 'CEDEAR'}`
+            : especie
+              ? especie.clase_activo === 'accion'
+                ? 'Acción'
+                : 'CEDEAR'
+              : SIN_DATO}
         </span>
         <span className="mono" style={{ marginLeft: 'auto', fontSize: 12, color: colorVariacion }}>
           {textoVariacion}
