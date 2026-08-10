@@ -26,7 +26,13 @@ export type Database = {
           creado_en: string
           descripcion: string | null
           id: string
+          moneda_referencia: string
+          monto: number
           nombre: string
+          origen: string
+          resumen: string
+          snapshot: Json
+          snapshot_en: string
           user_id: string
         }
         Insert: {
@@ -34,15 +40,27 @@ export type Database = {
           creado_en?: string
           descripcion?: string | null
           id?: string
+          moneda_referencia: string
+          monto: number
           nombre: string
-          user_id: string
+          origen: string
+          resumen: string
+          snapshot: Json
+          snapshot_en: string
+          user_id?: string
         }
         Update: {
           actualizado_en?: string
           creado_en?: string
           descripcion?: string | null
           id?: string
+          moneda_referencia?: string
+          monto?: number
           nombre?: string
+          origen?: string
+          resumen?: string
+          snapshot?: Json
+          snapshot_en?: string
           user_id?: string
         }
         Relationships: []
@@ -152,6 +170,42 @@ export type Database = {
         }
         Relationships: []
       }
+      corridas_ingesta: {
+        Row: {
+          alertas: Json
+          creado_en: string
+          duracion_ms: number
+          estado: string
+          filas_por_fuente: Json
+          finalizado_en: string
+          id: number
+          iniciado_en: string
+          tipo: string
+        }
+        Insert: {
+          alertas?: Json
+          creado_en?: string
+          duracion_ms: number
+          estado: string
+          filas_por_fuente?: Json
+          finalizado_en: string
+          id?: never
+          iniciado_en: string
+          tipo: string
+        }
+        Update: {
+          alertas?: Json
+          creado_en?: string
+          duracion_ms?: number
+          estado?: string
+          filas_por_fuente?: Json
+          finalizado_en?: string
+          id?: never
+          iniciado_en?: string
+          tipo?: string
+        }
+        Relationships: []
+      }
       instrumentos: {
         Row: {
           actualizado_en: string
@@ -160,9 +214,12 @@ export type Database = {
           clase_activo: string
           coupon_currency: string | null
           duplicado: boolean
+          estructura_cupon: string | null
           lamina: number | null
           law: string | null
           maturity: string | null
+          moneda_cotizacion: string | null
+          plazo_liquidacion: string | null
           revisar: boolean
           sector: string | null
           subtipo: string | null
@@ -177,9 +234,12 @@ export type Database = {
           clase_activo: string
           coupon_currency?: string | null
           duplicado?: boolean
+          estructura_cupon?: string | null
           lamina?: number | null
           law?: string | null
           maturity?: string | null
+          moneda_cotizacion?: string | null
+          plazo_liquidacion?: string | null
           revisar?: boolean
           sector?: string | null
           subtipo?: string | null
@@ -194,9 +254,12 @@ export type Database = {
           clase_activo?: string
           coupon_currency?: string | null
           duplicado?: boolean
+          estructura_cupon?: string | null
           lamina?: number | null
           law?: string | null
           maturity?: string | null
+          moneda_cotizacion?: string | null
+          plazo_liquidacion?: string | null
           revisar?: boolean
           sector?: string | null
           subtipo?: string | null
@@ -205,6 +268,54 @@ export type Database = {
           underlying?: string | null
         }
         Relationships: []
+      }
+      perfil_renta_variable: {
+        Row: {
+          capturado_en: string
+          fuente: string
+          industria: string | null
+          nombre_corto: string | null
+          nombre_largo: string | null
+          pais: string | null
+          sector: string | null
+          ticker: string
+        }
+        Insert: {
+          capturado_en: string
+          fuente: string
+          industria?: string | null
+          nombre_corto?: string | null
+          nombre_largo?: string | null
+          pais?: string | null
+          sector?: string | null
+          ticker: string
+        }
+        Update: {
+          capturado_en?: string
+          fuente?: string
+          industria?: string | null
+          nombre_corto?: string | null
+          nombre_largo?: string | null
+          pais?: string | null
+          sector?: string | null
+          ticker?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "perfil_renta_variable_ticker_fkey"
+            columns: ["ticker"]
+            isOneToOne: true
+            referencedRelation: "instrumentos"
+            referencedColumns: ["ticker"]
+          },
+          {
+            foreignKeyName: "perfil_renta_variable_ticker_fkey"
+            columns: ["ticker"]
+            isOneToOne: true
+            referencedRelation: "resumen"
+            referencedColumns: ["ticker"]
+          },
+        ]
       }
       posiciones: {
         Row: {
@@ -264,8 +375,11 @@ export type Database = {
       precios: {
         Row: {
           capturado_en: string
+          cierre_anterior: number | null
+          convexidad: number | null
           duration: number | null
           effective_volume: number | null
+          fecha_metricas: string | null
           fuente: string | null
           last_price: number | null
           paridad: number | null
@@ -276,8 +390,11 @@ export type Database = {
         }
         Insert: {
           capturado_en: string
+          cierre_anterior?: number | null
+          convexidad?: number | null
           duration?: number | null
           effective_volume?: number | null
+          fecha_metricas?: string | null
           fuente?: string | null
           last_price?: number | null
           paridad?: number | null
@@ -288,8 +405,11 @@ export type Database = {
         }
         Update: {
           capturado_en?: string
+          cierre_anterior?: number | null
+          convexidad?: number | null
           duration?: number | null
           effective_volume?: number | null
+          fecha_metricas?: string | null
           fuente?: string | null
           last_price?: number | null
           paridad?: number | null
@@ -383,11 +503,13 @@ export type Database = {
         Row: {
           archivo_origen: string | null
           calificacion: string | null
+          cierre_anterior: number | null
           clase_activo: string | null
           couponCurrency: string | null
           duplicado: boolean | null
           duration: number | null
           effectiveVolume: number | null
+          fuente: string | null
           lamina: number | null
           lastPrice: number | null
           law: string | null

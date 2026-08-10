@@ -23,6 +23,10 @@ export const TIEMPOS = {
   referencia: { staleTime: Infinity },
   /** Salud del backend: siempre se quiere el estado de ahora. */
   salud: { staleTime: 0, refetchInterval: MINUTO },
+  /** Carteras guardadas (F-041): no cambian por paso del tiempo ni por refresh de precios —sólo
+   *  por guardar/borrar, que invalidan `claves.carteras` a mano—, así que nunca quedan "viejas"
+   *  solas. Por eso viven fuera de `mercado` en `queryKeys.ts`. */
+  carteras: { staleTime: Infinity },
 } as const
 
 export function crearQueryClient(): QueryClient {
