@@ -6,9 +6,12 @@ macro humana, no un swap, y el motor no lo propone (spec de la ficha). Trabaja s
 de especies (`saneado.especies`, sin deduplicar) porque los swaps de perfil rotan entre especies de
 la misma emisión (MEP → Cable, ej. TLCWO → TLCMO).
 
-No se porta el bloque de costo/spread/payback (D8 del plan de la tanda: llega con F-035, tanda 13).
-Toda respuesta trae en cambio la alerta `costo_rotacion_no_calculado` (la agrega `servicio.py`), y
-ninguna `Candidata` tiene un campo de costo real.
+Trae el bloque de costo real de rotar (arancel + spread bid/ask de las dos patas) — F-035, tanda 13
+— pero no lo calcula: `Candidata.costo` viaja vacío desde acá y lo completa `servicio.py` después de
+`detectar()`, porque leer las puntas es I/O y este módulo es puro. Divergencia deliberada contra
+`tools/detectar_swaps.py`: el CLI cuenta un spread faltante como cero (costo "piso"); acá, sin dos
+puntas vivas en alguna pata, el costo entero es `None` y la candidata queda `verificable=False` — no
+se asume un spread por defecto (regla 1/11 del dominio). El detalle vive en `app/rotaciones/costos.py`.
 """
 
 import math
@@ -34,6 +37,7 @@ from app.rotaciones.constantes import (
     ParametrosRotacion,
     es_extranjera,
 )
+from app.rotaciones.costos import CostoRotacion
 from app.rotaciones.frecuencia import MESES_DESCONOCIDO, proximo_cupon
 from app.universo.segmentacion import EspecieUniverso
 
@@ -99,6 +103,12 @@ class Candidata:
     especies enteras: es más simple resolverlo acá, una vez, que threadear el mapeo de
     frecuencias hasta la serialización."""
     frecuencia_destino: str | None
+    costo: CostoRotacion | None = None
+    """El costo real de rotar. Vacío al salir de `evaluar_par`/`detectar` (motor puro, sin I/O);
+    lo completa `servicio.py` después de leer las puntas de mercado."""
+    cupon_fecha: date | None = None
+    """La fecha del próximo cupón que cobra el origen, si tiene uno futuro con renta > 0 — la
+    misma condición que ya habilita `cupon_dias`/`cupon_pct`, ver `evaluar_par`."""
 
     def como_dict(self) -> dict[str, object]:
         return {
@@ -124,10 +134,16 @@ class Candidata:
             ),
             "riesgo_nota": self.riesgo_nota,
             "cupon": (
-                {"dias": self.cupon_dias, "pct": self.cupon_pct, "nota": self.cupon_nota}
+                {
+                    "dias": self.cupon_dias,
+                    "pct": self.cupon_pct,
+                    "fecha": self.cupon_fecha.isoformat() if self.cupon_fecha is not None else None,
+                    "nota": self.cupon_nota,
+                }
                 if self.cupon_dias is not None
                 else None
             ),
+            "costo": self.costo.como_dict() if self.costo is not None else None,
         }
 
 
@@ -235,10 +251,12 @@ def evaluar_par(
     cupon_nota: str | None = None
     cupon_dias: int | None = None
     cupon_pct: float | None = None
+    cupon_fecha: date | None = None
     prox = proximo_cupon(flujos, origen.ticker, hoy)
     if prox is not None:
         cupon_dias = int(prox["dias"])  # type: ignore[arg-type]
         cupon_pct = float(prox["pct_renta"])  # type: ignore[arg-type]
+        cupon_fecha = prox["fecha"]  # type: ignore[assignment]
         if cupon_dias <= DIAS_CUPON:
             fecha = prox["fecha"]
             cupon_nota = (
@@ -270,6 +288,7 @@ def evaluar_par(
         cupon_nota=cupon_nota,
         frecuencia_origen=frecuencia_origen,
         frecuencia_destino=frecuencia_destino,
+        cupon_fecha=cupon_fecha,
     )
 
 

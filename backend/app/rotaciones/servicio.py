@@ -5,7 +5,7 @@ endpoint: la conexión se resuelve acá, y `detectar()` (`app/rotaciones/motor.p
 """
 
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import Any
 
@@ -20,6 +20,7 @@ from app.calendario.metricas import retorno_por_tir
 from app.concentracion.riesgo import derivar_riesgo
 from app.ingesta.alertas import Alerta, Severidad
 from app.rotaciones.constantes import (
+    ARANCEL_POR_PATA,
     ESCENARIOS_TIR,
     FACTOR_VOLUMEN,
     MAX_MAS_DURACION,
@@ -30,13 +31,15 @@ from app.rotaciones.constantes import (
     NombreDePerfil,
     ParametrosRotacion,
 )
+from app.rotaciones.costos import calcular_costo, spread_pct
 from app.rotaciones.emisores import clave_emisor_swap, nombre_emisor
 from app.rotaciones.frecuencia import frecuencia_por_raiz
 from app.rotaciones.legislacion import ParDeLey, premio_por_legislacion
 from app.rotaciones.motor import Candidata, detectar
+from app.rotaciones.puntas import leer_puntas
 from app.universo.servicio import sanear_universo
 
-CODIGO_COSTO_NO_CALCULADO = "costo_rotacion_no_calculado"
+CODIGO_COSTO_NO_VERIFICABLE = "costo_no_verificable"
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +69,7 @@ class ResultadoRotaciones:
                 "top_n": TOP_N,
                 "min_rend": MIN_REND,
                 "factor_volumen": FACTOR_VOLUMEN,
+                "arancel_pct_por_pata": round(ARANCEL_POR_PATA * 100, 2),
             },
             "candidatas": [c.como_dict() for c in self.candidatas],
             "origenes_evaluados": list(self.origenes_evaluados),
@@ -80,18 +84,21 @@ class ResultadoRotaciones:
         }
 
 
-def _alerta_costo_no_calculado() -> Alerta:
-    """D8 del plan de la tanda: el costo real de rotar todavía no se calcula (llega con F-035,
-    tanda 13). Viaja SIEMPRE, en toda respuesta, para que nadie lea una candidata como neta de
-    costo."""
+def _alerta_costo_no_verificable(pares: Sequence[tuple[str, str]]) -> Alerta:
+    """Alguna candidata quedó sin costo verificable: le falta punta viva en alguna pata. No se
+    asume un spread por defecto (regla 1/11 del dominio), así que se avisa con los pares afectados
+    en vez de completar el hueco."""
+    detalle_pares = [f"{origen}→{destino}" for origen, destino in pares]
     return Alerta(
-        codigo=CODIGO_COSTO_NO_CALCULADO,
+        codigo=CODIGO_COSTO_NO_VERIFICABLE,
         mensaje=(
-            "El costo real de rotar (arancel y spread bid/ask de las dos patas) todavía no se "
-            "calcula: llega con el costo real de rotar (tanda 13). Estas candidatas son sólo la "
-            "mejora de rendimiento y de perfil, sin descontar lo que cuesta ejecutarlas."
+            f"{len(pares)} rotación(es) candidata(s) sin dos puntas vivas en alguna pata: el "
+            "costo real de rotar no se puede verificar y no se calcula "
+            f"({', '.join(detalle_pares)})."
         ),
-        severidad=Severidad.INFO,
+        severidad=Severidad.ADVERTENCIA,
+        accion_requerida=None,
+        detalle={"pares": detalle_pares},
     )
 
 
@@ -174,6 +181,25 @@ async def detectar_rotaciones(
         params=params,
     )
 
+    tickers_puntas = sorted({t for c in candidatas for t in (c.origen.ticker, c.destino.ticker)})
+    puntas = await leer_puntas(conn, tickers_puntas)
+
+    candidatas_con_costo: list[Candidata] = []
+    no_verificables: list[tuple[str, str]] = []
+    for candidata in candidatas:
+        bid_o, ask_o = puntas.get(candidata.origen.ticker, (None, None))
+        bid_d, ask_d = puntas.get(candidata.destino.ticker, (None, None))
+        costo = calcular_costo(
+            spread_pct(bid_o, ask_o), spread_pct(bid_d, ask_d), candidata.d_rend_pp
+        )
+        if not costo.verificable:
+            no_verificables.append((candidata.origen.ticker, candidata.destino.ticker))
+        candidatas_con_costo.append(replace(candidata, costo=costo))
+    candidatas = candidatas_con_costo
+
+    if no_verificables:
+        alertas.append(_alerta_costo_no_verificable(no_verificables))
+
     sensibilidad = _sensibilidad(candidatas, cronograma, hoy)
 
     return ResultadoRotaciones(
@@ -185,5 +211,5 @@ async def detectar_rotaciones(
         sin_rendimiento=sin_rendimiento,
         premio_legislacion=premio,
         sensibilidad=sensibilidad,
-        alertas=[*alertas, _alerta_costo_no_calculado()],
+        alertas=alertas,
     )

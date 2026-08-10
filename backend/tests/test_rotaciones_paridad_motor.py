@@ -22,9 +22,11 @@ abajo (que ya tienen su propio test de paridad).
 
 ## Divergencias deliberadas, declaradas
 
-- **Costo/spread/payback no se comparan.** F-035 (tanda 13) no existe todavía; se corre el motor
-  con `--sin-spread` (`spread_pct` en `NaN`) para que el costo no entre en la comparación, y el
-  backend directamente no tiene esos campos (D8 del plan de la tanda).
+- **Costo/spread/payback no se comparan.** Este test llama a `detectar()` (`app/rotaciones/motor.py`)
+  directo, y el motor es puro: `Candidata.costo` sale `None` de ahí siempre, lo completa `servicio.py`
+  después leyendo las puntas de mercado (F-035, fuera de este archivo). Se corre el CLI con
+  `--sin-spread` (`spread_pct` en `NaN`) por el mismo motivo, para que tampoco calcule costo de su
+  lado.
 - **El flag `revisar` de `filtrar_operables` del CLI no existe en `saneado.operables()`.** Acá no
   se pasa por `saneado.operables()` (ver arriba), así que el corte de "operable" para los destinos
   se aplica **explícito** con el mismo criterio del motor (`rendimiento`, `lastPrice`, `dato_sano`,

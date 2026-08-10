@@ -26,6 +26,12 @@ MIN_REND = 0.0  # CLI --min-rend default
 DIAS_CUPON = 45  # CLI --dias-cupon default
 ESCENARIOS_TIR: tuple[float, ...] = (-0.05, -0.04, -0.03, -0.02, -0.01, 0.0, 0.01, 0.02)
 
+# Costo real de rotar — F-035.
+ARANCEL_POR_PATA = 0.0075  # 0,75% en fracción — CLI --arancel default (0.75/100)
+UMBRAL_COSTO_ELEVADO = 0.05  # 5% — GWT-2 de F-035: por encima de esto, la propuesta queda marcada
+MAX_RELACION_PUNTAS = 3.0  # ver tools/mercado.py: bid/ask con esta relación son escalas distintas,
+# no un spread real (caso observado: bid 125 / ask 127.000)
+
 TOPE_DISTRESS_DEFAULT: dict[str, float] = {"usd_hard": 0.15}
 
 # La fuente publica dos leyes: Argentina y N.Y. En el archivo cargado a mano sobreviven cuatro

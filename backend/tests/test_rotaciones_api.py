@@ -58,25 +58,30 @@ FILAS_UNIVERSO: list[dict[str, Any]] = [
 
 
 class FakeConexionRotaciones:
-    """Conexión falsa con las tres consultas que hace el servicio: universo, cashflow y
-    paridades. Sin cashflow ni paridad el motor sigue andando (frecuencia/cupón quedan vacíos),
-    así que por defecto las dos vienen vacías y sólo el universo trae filas."""
+    """Conexión falsa con las cuatro consultas que hace el servicio: universo, cashflow,
+    paridades y puntas. Sin cashflow ni paridad el motor sigue andando (frecuencia/cupón quedan
+    vacíos), y sin puntas ninguna candidata tiene costo verificable — por defecto las tres vienen
+    vacías y sólo el universo trae filas."""
 
     def __init__(
         self,
         universo: list[dict[str, Any]] | None = None,
         cashflow: list[dict[str, Any]] | None = None,
         paridades: list[dict[str, Any]] | None = None,
+        puntas: list[dict[str, Any]] | None = None,
     ) -> None:
         self.universo = FILAS_UNIVERSO if universo is None else universo
         self.cashflow = cashflow or []
         self.paridades = paridades or []
+        self.puntas = puntas or []
         self.consultas: list[str] = []
 
     async def fetch(self, query: str, *_: Any) -> list[dict[str, Any]]:
         self.consultas.append(query)
         if "public.cashflow" in query:
             return self.cashflow
+        if "public.puntas" in query:
+            return self.puntas
         # La query de paridades pide sólo dos columnas ("SELECT ticker, paridad FROM ..."); la
         # del universo también toca `public.resumen` pero con la lista completa de columnas
         # entrecomilladas (`u."paridad"` entre otras), así que "SELECT ticker, paridad" alcanza
@@ -126,20 +131,69 @@ async def test_devuelve_200_incluso_sin_candidatas(app_con_universo) -> None:
     assert respuesta.json()["candidatas"] == []
 
 
-async def test_costo_rotacion_no_calculado_viaja_siempre(app_con_universo) -> None:
+async def test_la_alerta_vieja_de_costo_no_calculado_ya_no_aparece_nunca(app_con_universo) -> None:
+    """F-035 cierra el pendiente que dejaba F-032: ya no hay una candidata sin bloque de costo."""
     async with cliente(app_con_universo()) as http:
         con_candidatas = (await http.post(RUTA, json=cuerpo_con("TLCWO"))).json()
         sin_candidatas = (await http.post(RUTA, json=cuerpo_con("GD30"))).json()
 
     for cuerpo in (con_candidatas, sin_candidatas):
         codigos = {a["codigo"] for a in cuerpo["alertas"]}
-        assert "costo_rotacion_no_calculado" in codigos
+        assert "costo_rotacion_no_calculado" not in codigos
 
-    # Ninguna candidata trae un campo de costo real: ver el docstring de `motor.py` (D8).
     for candidata in con_candidatas["candidatas"]:
-        assert "costo" not in candidata
-        assert "spread" not in candidata
-        assert "payback" not in candidata
+        assert "costo" in candidata
+
+
+async def test_candidata_con_puntas_en_las_dos_patas_trae_costo_verificable(
+    app_con_universo,
+) -> None:
+    # Puntas para las tres especies del universo: TLCWO también puede rotar hacia GD30 (mismo
+    # segmento usd_hard, distinta categoría de crédito), y esa candidata no debe quedar sin punta.
+    puntas = [
+        {"ticker": "TLCWO", "px_bid": 79.0, "px_ask": 81.0, "fuente": "byma"},
+        {"ticker": "TLCMO", "px_bid": 78.0, "px_ask": 80.0, "fuente": "byma"},
+        {"ticker": "GD30", "px_bid": 69.0, "px_ask": 71.0, "fuente": "byma"},
+    ]
+    async with cliente(app_con_universo(puntas=puntas)) as http:
+        cuerpo = (await http.post(RUTA, json=cuerpo_con("TLCWO"))).json()
+
+    candidata = next(c for c in cuerpo["candidatas"] if c["destino"]["ticker"] == "TLCMO")
+    costo = candidata["costo"]
+    assert costo["verificable"] is True
+    assert costo["total_pct"] is not None
+    assert costo["spread_origen_pct"] is not None
+    assert costo["spread_destino_pct"] is not None
+
+    codigos = {a["codigo"] for a in cuerpo["alertas"]}
+    assert "costo_no_verificable" not in codigos
+
+
+async def test_candidata_sin_puntas_queda_no_verificable_con_alerta(app_con_universo) -> None:
+    async with cliente(app_con_universo(puntas=[])) as http:
+        cuerpo = (await http.post(RUTA, json=cuerpo_con("TLCWO"))).json()
+
+    candidata = next(c for c in cuerpo["candidatas"] if c["destino"]["ticker"] == "TLCMO")
+    costo = candidata["costo"]
+    assert costo["verificable"] is False
+    assert costo["total_pct"] is None
+    assert costo["elevado"] is None
+    assert costo["payback_meses"] is None
+
+    codigos = {a["codigo"] for a in cuerpo["alertas"]}
+    assert "costo_no_verificable" in codigos
+
+
+async def test_puntas_de_arrastre_se_tratan_como_sin_punta(app_con_universo) -> None:
+    puntas = [
+        {"ticker": "TLCWO", "px_bid": 79.0, "px_ask": 81.0, "fuente": "byma-arrastre"},
+        {"ticker": "TLCMO", "px_bid": 78.0, "px_ask": 80.0, "fuente": "byma"},
+    ]
+    async with cliente(app_con_universo(puntas=puntas)) as http:
+        cuerpo = (await http.post(RUTA, json=cuerpo_con("TLCWO"))).json()
+
+    candidata = next(c for c in cuerpo["candidatas"] if c["destino"]["ticker"] == "TLCMO")
+    assert candidata["costo"]["verificable"] is False
 
 
 async def test_un_perfil_inventado_se_rechaza_en_la_validacion(app_con_universo) -> None:
@@ -213,6 +267,16 @@ async def test_la_forma_del_contrato_trae_todas_las_claves_documentadas(app_con_
         "premio_ley",
         "riesgo_nota",
         "cupon",
+        "costo",
+    }
+    assert set(candidata["costo"]) == {
+        "arancel_pct_por_pata",
+        "spread_origen_pct",
+        "spread_destino_pct",
+        "total_pct",
+        "verificable",
+        "elevado",
+        "payback_meses",
     }
     assert set(candidata["origen"]) == {
         "ticker",

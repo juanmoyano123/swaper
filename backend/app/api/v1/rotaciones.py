@@ -56,8 +56,9 @@ async def rotaciones(
     válido (una cartera ya óptima, o sin alternativas dentro de su segmento), no un error del
     pedido. El único 422 es un perfil inventado o una cartera vacía.
 
-    Ninguna candidata trae costo real de rotar (arancel, spread, payback): la alerta
-    `costo_rotacion_no_calculado` viaja siempre para dejarlo explícito (F-035, tanda 13).
+    Cada candidata trae el costo real de rotar (arancel + spread bid/ask de las dos patas,
+    F-035). Sin dos puntas vivas en alguna pata el costo no se calcula y la candidata queda
+    `verificable=false`; la alerta `costo_no_verificable` avisa cuáles.
     """
     tickers = [p.ticker for p in entrada.posiciones]
     resultado = await detectar_rotaciones(conn, tickers, perfil)

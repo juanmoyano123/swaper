@@ -7,7 +7,7 @@ criterio de aceptación (GWT-2), vive en `test_rotaciones_paridad_motor.py`.
 
 from datetime import date
 
-from app.calendario.cupones import Flujos
+from app.calendario.cupones import FlujoPorPeso, Flujos
 from app.concentracion.riesgo import derivar_riesgo
 from app.rotaciones.constantes import MAX_MAS_DURACION, MIN_DTIR, TOP_N, ParametrosRotacion
 from app.rotaciones.emisores import clave_emisor_swap, nombre_emisor
@@ -379,6 +379,47 @@ def test_top_n_corta_por_tipo_no_en_conjunto() -> None:
 
     assert por_tipo["mejora_rendimiento"] == TOP_N
     assert por_tipo["mejora_perfil"] == TOP_N
+
+
+# --- Costo real de rotar (F-035): el motor puro lo deja vacío, `servicio.py` lo completa --------
+
+
+def test_costo_es_none_al_salir_del_motor_puro() -> None:
+    origen = _especie("AAA1O", rendimiento=0.05, duracion=2.0)
+    destino = _especie("AAA2O", rendimiento=0.08, duracion=2.0)
+
+    candidata = _evaluar(origen, destino)
+
+    assert candidata is not None
+    assert candidata.costo is None
+    assert candidata.como_dict()["costo"] is None
+
+
+# --- `cupon_fecha`: viaja en la candidata y en el dict, junto con dias/pct -----------------------
+
+
+def test_cupon_fecha_viaja_en_la_candidata_y_en_el_dict() -> None:
+    origen = _especie("AAA1O", rendimiento=0.05, duracion=2.0)
+    destino = _especie("AAA2O", rendimiento=0.08, duracion=2.0)
+    fecha_pago = date(2026, 8, 20)  # dentro de DIAS_CUPON desde HOY (2026-08-07)
+    flujos = Flujos(
+        flujos=[
+            FlujoPorPeso(
+                ticker="AAA1O",
+                fecha=fecha_pago,
+                pct_renta=0.05,
+                pct_amortizacion=0.0,
+                pct_total=0.05,
+            )
+        ]
+    )
+
+    candidata = _evaluar(origen, destino, flujos=flujos)
+
+    assert candidata is not None
+    assert candidata.cupon_fecha == fecha_pago
+    assert candidata.cupon_nota is not None
+    assert candidata.como_dict()["cupon"]["fecha"] == fecha_pago.isoformat()
 
 
 # --- Origen sin rendimiento: se salta, con alerta, sin frenar el resto -------------------------
