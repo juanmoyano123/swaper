@@ -66,7 +66,7 @@ desde `/build-feature` a medida que cada una se implementa.
 | F-033 | Modo bajar riesgo | Stage 1 | 57,6 | **completada** |
 | F-034 | Modo subir TIR con contrapartida | Stage 1 | 86,4 | **completada** |
 | F-036 | Aceptación rotación por rotación | Stage 1 | 57,6 | **completada** |
-| F-037 | Comparación original contra propuesta | Stage 1 | 72,0 | pendiente |
+| F-037 | Comparación original contra propuesta | Stage 1 | 72,0 | **completada** |
 | F-038 | Monitor de mercado | Stage 1 | 106,7 | completada |
 | F-039 | Ficha de instrumento | Stage 1 | 112,0 | completada |
 | F-040 | Sensibilidad por repricing completo | Stage 1 | 66,7 | **completada** |
@@ -655,9 +655,44 @@ frontend, como F-033/F-034: los tres endpoints que necesitaba (`/rotaciones`, `/
   implementación. Los seis ejes de la propuesta reusan `SeccionRiesgo` (F-031) directo, sin
   reimplementar nada de riesgo.
 
-Siguiente paso: la **tanda 16 — F-037 (comparación original contra propuesta), sola**. Consume
-F-036: lee `posicionesOriginales`, `posicionesAcumuladas` y `aceptadas` (con su `costo`) del mismo
-`PlanRotacionProvider`, montado en el mismo árbol.
+**F-037 — comparación original contra propuesta (tanda 16, sola) — completada 10/08/2026.** También
+100 % frontend: ningún endpoint nuevo, sólo un consumidor más de lo que F-036 ya pedía. Verificado
+en vivo contra el backend real: AL30D solo, aceptar AL30D→BGC4D, deshacer, con los seis ejes y las
+cuatro naturalezas leyéndose en las dos columnas.
+
+- **"Misma vara" es consecuencia de la implementación, no una promesa**: las dos columnas de
+  `ComparacionCarteras` llaman a las mismas funciones puras (`rendimientosPorNaturaleza`,
+  `vectorDeRiesgo`, `calcularRentaAnualPorMoneda`) con las posiciones de cada lado — no hay una
+  segunda fórmula que pueda divergir de la primera. Visto en pantalla: "TIR en dólares (hard
+  dollar): 7,67% → 10,32%" con las cuatro naturalezas y los seis ejes presentes en las dos columnas,
+  cada eje con su delta ("Duración: 1,9 años → 0,2 años (Δ -1,7)"; "Crédito: s/d → s/d" para los
+  ejes compositivos, sin inventar un valor donde no hay).
+- **El costo total se lleva a plata, nunca se suman porcentajes.** `costoAcumulado` toma el
+  `total_pct` (F-035) de cada pata y lo aplica sobre el monto **encadenado** de esa pata —no el
+  monto original—, normalizado a USD con el tipo de cambio implícito (regla 3). Lo no verificable o
+  no convertible se declara con el par nombrado y sale del total, nunca se omite en silencio.
+  Visto en producción: "Costo total de rotación acumulado: US$ 152,87".
+- **El delta de los seis ejes no lleva color de mejora/empeora**, a diferencia de la renta y el
+  rendimiento: "menor duración" o "mayor liquidez" no son universalmente mejores o peores (el
+  percentil de liquidez, por ejemplo, es mejor cuanto más alto; la concentración, cuanto más bajo),
+  así que pintarlo en verde/rojo habría inventado un juicio que la regla 7 prohíbe. El delta se
+  declara en su unidad, neutro.
+- **El diff de calendario mes a mes (GWT-2) reusa el núcleo de F-036** (`diffMesAMes`, extraído de
+  `diffCalendario` sin cambiar su comportamiento) en una variante nueva, `diffCalendarioCarteras`,
+  que compara la cartera original completa contra la propuesta en vez de una cartera contra la
+  simulación de una sola candidata. Los meses se marcan en la cordillera propuesta, moneda por
+  moneda, con `Cordillera`'s nueva prop opcional `marcas`. Visto en producción: "▲ 11/2026",
+  "▼ 01/2027", "▼ 07/2027" en la cordillera, más la frase "Meses que cambian de cobertura: se llena
+  Noviembre 2026 (USD) · se vacía Enero 2027 (USD) · se vacía Julio 2027 (USD)."
+- **`PlanDeRotacion` se podó a su identidad real** — la lista de aceptadas, el costo por rotación y
+  Deshacer—: el calendario y los seis ejes de la propuesta que mostraba en F-036 pasaron enteros a
+  `ComparacionCarteras`, donde conviven con los de la cartera original medidos con la misma vara.
+  Mostrarlos en los dos lugares habría sido el mismo dato dos veces.
+- **Deshacer sigue devolviendo todo exacto**, ahora incluida la comparación: deshacer la única
+  aceptada hizo desaparecer `ComparacionCarteras` entera y devolvió las tres propuestas originales
+  (incluida la que se acababa de aceptar) a la lista de "Subir la TIR".
+
+Siguiente paso: la **tanda 17 — F-041 (guardar/reabrir carteras), sola**. Consume F-018 y F-037.
 
 ### Lo que F-013 puso a la vista, y la decisión que dejó abierta
 
