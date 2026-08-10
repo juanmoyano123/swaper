@@ -381,6 +381,9 @@ Medido el 08/08: 4 snapshots pesan 1776 kB, o sea **~444 kB cada uno**. Con refr
 de 11:00 a 17:00 son ~25 snapshots por día hábil, ~11 MB diarios. **Hay que decidir una política de
 retención antes de que la base se llene**; hoy no existe ninguna y nada borra un snapshot viejo.
 
+> **Resuelto el 10/08/2026** — ver "La serie histórica se apaga" más abajo. La decisión fue no
+> guardar serie: queda una fila por ticker.
+
 ## 08/08/2026 — data912 pasa a ser la fuente primaria de precios, BYMA de respaldo
 
 El mismo día del punto anterior, mirando la pantalla en vivo, el usuario preguntó por qué el
@@ -418,3 +421,68 @@ revertir la migración a mano) hereda el límite de `CREATE OR REPLACE VIEW` de 
 columna del medio — está documentado en el propio archivo del rollback. Y la barra de estado ahora
 declara la demora de BYMA como peor caso conocido, porque data912 no publica la suya; sigue sin
 haber una demora **por fila** cuando un precio viene arrastrado de una fecha desconocida.
+
+## 10/08/2026 — La serie histórica se apaga: la base deja de crecer sola
+
+Con el scheduler prendido desde el 08/08, la pregunta del usuario fue por qué la base sube todo el
+tiempo. La respuesta es la que este documento ya había anotado como pendiente sin dueño: `precios` y
+`puntas` tienen PK `(ticker, capturado_en)` y el INSERT es plano, así que **cada corrida agregaba una
+tanda entera en vez de pisar la anterior**. Medido: ~2.900 filas cada 15 minutos, ~72.500 filas y
+~11 MB por día hábil, creciendo para siempre.
+
+**La decisión fue no guardar serie.** No es una optimización: es que nadie la usaba. La herramienta
+sirve para armar carteras —consultar un precio, mirar la TIR, decidir si conviene comprar— y no para
+hacer seguimiento; el usuario lo dijo con todas las letras. El único dato histórico que el producto
+necesita es el precio al que se armó una cartera, y ese ya tiene su lugar desde la migración
+inicial: `posiciones.precio_compra` y `posiciones.fecha_compra`.
+
+Verificado antes de tocar nada: **nada en el sistema lee más de un snapshot**. La vista `resumen`
+usa `LEFT JOIN LATERAL … ORDER BY capturado_en DESC LIMIT 1`, las dos lecturas de `puntas` hacen lo
+mismo, `health.py` pide un `MAX`, y la variación diaria del monitor sale de la columna
+`cierre_anterior` que trae BYMA —no de comparar snapshots—. La única serie temporal del producto es
+la sparkline de la ficha de renta variable, que se alimenta de Yahoo en vivo.
+
+### La trampa: la poda es POR TICKER, y esto no es negociable
+
+`DELETE FROM precios WHERE capturado_en < (SELECT max(capturado_en) FROM precios)` parece la forma
+obvia y **rompe el producto**. BYMA sólo publica lo que operó, así que una especie que no cotizó en
+la última corrida tiene su fila más nueva días atrás. Medido sobre la base real ese día: de **3.176
+tickers, 291 estaban en esa situación y 28 de ellos con precio**. Ese DELETE los dejaría sin ninguna
+fila y, como `resumen` los toma con LEFT JOIN LATERAL, saldrían publicados con precio, TIR, paridad
+y volumen en NULL.
+
+La forma correcta —`sql_poda()` en `app/ingesta/consolidacion/persistencia.py`— correlaciona por
+ticker: `WHERE p.capturado_en < (SELECT max(q.capturado_en) FROM … q WHERE q.ticker = p.ticker)`.
+Hay un test que lo fija (`test_la_poda_se_correlaciona_por_ticker_y_no_contra_el_maximo_global`)
+justamente para que nadie lo "simplifique" después.
+
+Otras dos propiedades del bloque de poda, ambas testeadas: **va después de escribir** (podar primero
+dejaría a la base sin foto si la corrida fallara a mitad de camino) y **en su propia transacción**
+(un fallo borrando no puede tirar abajo una escritura que salió bien; se reporta como advertencia).
+
+### El flag, y qué NO es
+
+`SERIE_HISTORICA_HABILITADA`, default `False`. En `True` vuelve el comportamiento anterior bit por
+bit: el código de la serie quedó implementado y testeado a pedido del usuario, porque a futuro puede
+servir.
+
+**No confundir con `INGESTA_HABILITADA`.** Los precios se siguen actualizando cada 15 minutos; lo
+que se apaga es la acumulación, no la ingesta. Apagar la otra variable dejaría el universo congelado.
+
+### Resultado medido
+
+| | Antes | Después |
+|---|---|---|
+| Filas en `precios` | 33.882 (12 snapshots) | 3.176 (una por ticker) |
+| Filas en `puntas` | 39.520 (13 snapshots) | 3.683 |
+| Tamaño de las dos tablas | 6.176 kB + 6.152 kB | 504 kB + 480 kB |
+| Base entera | 25 MB | 17 MB |
+| Crecimiento diario | ~11 MB | ~0 |
+
+Los `DELETE` los ejecutó la propia corrida siguiente, no una limpieza a mano: el backend corría con
+`--reload`, tomó el código nuevo y podó solo. El espacio se recuperó con `VACUUM FULL` sobre las dos
+tablas —un `VACUUM` normal libera las filas para reuso pero no devuelve el archivo al sistema—.
+
+Control post-borrado: los tickers que conservan cotización vieja (AXIA y BF47O del 08/08, BU3S6 y
+D10Y7 del 10/08 a las 14:30, entre otros) **siguen publicando su precio en `resumen`**, y el
+monitor mantiene los mismos 1.324 precios y 428 TIR que antes de podar.

@@ -603,6 +603,26 @@ Stage 1**; quedan F-027 (fuera de tanda) y el camino crítico 15–18.
   así que la fila de propuesta nunca se había renderizado en una suite y el parseo del contrato no
   estaba ejercitado desde la pantalla. Un test verde no dice nada sobre el camino que no recorre.
 
+**La serie histórica de precios se apagó el 10/08/2026 — trabajo suelto entre tandas, un commit.**
+No es una feature de `plan.md`: salió de que el usuario preguntó por qué la base crecía sola.
+`precios` y `puntas` acumulaban ~2.900 filas cada 15 minutos y nada las borraba (~11 MB por día
+hábil). Se verificó que **nada del producto lee más de un snapshot** —la vista `resumen` y las dos
+lecturas de puntas piden la fila más reciente por ticker, y la variación diaria sale de la columna
+`cierre_anterior` de BYMA— así que lo acumulado no lo usaba nadie.
+
+- **La decisión fue de producto, no de infraestructura**: la herramienta sirve para armar carteras,
+  no para hacer seguimiento. El único histórico que el producto necesita es el precio al que se armó
+  una cartera, y ya tiene su lugar en `posiciones.precio_compra` desde la migración inicial.
+- **El flag `SERIE_HISTORICA_HABILITADA` (default false) deja el código de la serie utilizable**, a
+  pedido del usuario. En true vuelve el comportamiento anterior bit por bit, con test que lo fija.
+- **La poda es por ticker y eso es la feature entera.** El DELETE contra el máximo global de la tabla
+  parece equivalente y rompe el producto: 291 de 3.176 tickers tenían su última cotización en un
+  snapshot anterior (28 con precio), y habrían quedado publicados con precio y TIR en NULL. Hay un
+  test que impide reintroducirlo.
+- Resultado: `precios` de 33.882 filas a 3.176, la base de 25 MB a 17 MB, crecimiento diario a cero.
+  Los DELETE los ejecutó la propia corrida siguiente —el backend corría con `--reload` y tomó el
+  código—, y el espacio se recuperó con `VACUUM FULL`. Detalle completo en `docs/ESTADO.md`.
+
 Siguiente paso: la **tanda 15 — F-036 (aceptación rotación por rotación), sola**. Consume F-033,
 F-034 y F-035, que ahora comparten vocabulario de ejes y bloque de costo.
 
