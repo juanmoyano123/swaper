@@ -348,7 +348,10 @@ function ejeLiquidez(filas: FilaRiesgo[], porTicker: ReadonlyMap<string, Especie
     }))
 
   const notas = notaFueraDelUniverso(filas)
-  notas.push('spread bid/ask: la tabla existe pero no viaja por el API todavía — llega con F-035')
+  // El spread ya existe y se mide (F-035), pero por rotación y no por especie: viaja dentro del
+  // costo de cada candidata de `POST /rotaciones`, no en la vista viva del universo. Este percentil
+  // sigue siendo de volumen puro, y decirlo evita leerlo como si incluyera el costo de salida.
+  notas.push('spread bid/ask: no entra en este percentil — se mide por rotación, dentro del costo de rotar (F-035)')
 
   return {
     id: 'liquidez',

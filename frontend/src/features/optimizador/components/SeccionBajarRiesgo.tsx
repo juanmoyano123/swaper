@@ -4,19 +4,18 @@
  * dentro de la banda de rendimiento de ±0,5pp. La lib pura vive en `@/lib/rotaciones/bajarRiesgo`;
  * este componente sólo la conecta con `useBajarRiesgo` y la dibuja.
  *
- * **Alcance de esta tanda, declarado a propósito**: esto es sólo la propuesta. No hay botón de
- * aceptar, no toca el calendario de cupones ni ninguna otra pantalla, y no descuenta costo de
- * rotar (arancel, spread) — el motor de F-032 ya declara esa alerta en toda respuesta, y el costo
- * real llega recién en F-036 (tanda 15). Mostrar una rotación como "gratis" acá sería la regla 8
- * del dominio rota: toda mejora que se propone nombra qué se resigna, y "no sabemos el costo
- * todavía" es parte de esa nominación.
+ * **Alcance de esta sección, declarado a propósito**: esto es sólo la propuesta. No hay botón de
+ * aceptar (llega con F-036) y no toca el calendario de cupones ni ninguna otra pantalla. Lo que sí
+ * cambió desde F-034: **cada fila declara el costo real de rotar** (arancel y spread de las dos
+ * patas, F-035), o dice que no es verificable cuando falta una punta. Mostrar una rotación como
+ * "gratis" sería la regla 8 del dominio rota: toda mejora que se propone nombra qué se resigna.
  */
 
 import { EstadoCarga } from '@/components/EstadoCarga'
 import { EstadoError } from '@/components/EstadoError'
 import type { NombreDePerfil } from '@/lib/cartera/esquemaConcentracion'
 import type { PosicionConPeso } from '@/lib/cartera/hooks/useConcentracion'
-import { fmtNumero, fmtPct, SIN_DATO } from '@/lib/fmt'
+import { fmtPct } from '@/lib/fmt'
 import { useBajarRiesgo } from '@/lib/rotaciones/hooks/useBajarRiesgo'
 import {
   BANDA_RENDIMIENTO_PP,
@@ -25,14 +24,9 @@ import {
   type DescarteCandidata,
   type PropuestaBajarRiesgo,
 } from '@/lib/rotaciones/bajarRiesgo'
-import type { EjeDeRiesgo, IdDeEje } from '@/lib/cartera/riesgo'
+import type { IdDeEje } from '@/lib/cartera/riesgo'
 
-const MOTIVO_LABEL: Record<DescarteCandidata['motivo'], string> = {
-  empeora: 'empeora este eje',
-  sin_dato: 'sin dato para medirlo',
-  sin_criterio_medible: 'sin criterio medible (distinto emisor)',
-  fuera_de_banda: `el rendimiento se mueve más de ${fmtPct(BANDA_RENDIMIENTO_PP, 1)}`,
-}
+import { formatoValor, NotaCosto, ResumenDescartes } from './compartidos'
 
 export function SeccionBajarRiesgo({
   posiciones,
@@ -71,10 +65,9 @@ export function SeccionBajarRiesgo({
       </header>
 
       <p style={{ margin: '0 0 10px', fontSize: 11, color: 'var(--dim)', textWrap: 'pretty' }}>
-        Sólo propuesta: no hay botón de aceptar, no toca el calendario ni ninguna otra pantalla. El
-        costo real de rotar (arancel y spread de las dos patas) todavía no se calcula — llega en
-        una tanda posterior — así que estas ideas son la mejora de rendimiento y de perfil, sin
-        descontar lo que cuesta ejecutarlas.
+        Sólo propuesta: no hay botón de aceptar, no toca el calendario ni ninguna otra pantalla.
+        Cada fila declara el costo real de rotar —arancel y spread de las dos patas— o avisa cuando
+        no es verificable porque falta una punta de mercado.
       </p>
 
       {cargando && <EstadoCarga que="las rotaciones candidatas" />}
@@ -147,43 +140,11 @@ function FilaPropuesta({ propuesta }: { propuesta: PropuestaBajarRiesgo }) {
       <p className="mono" style={{ margin: 0, fontSize: 10.5, color: 'var(--sd)' }}>
         Δ rendimiento {fmtPct(candidata.delta.rendimiento_pp, 2)}
       </p>
+      <NotaCosto costo={candidata.costo} />
     </li>
   )
 }
 
-function formatoValor(valor: number | null, unidad: EjeDeRiesgo['unidad']): string {
-  if (valor === null) return SIN_DATO
-  if (unidad === 'años') return `${fmtNumero(valor, 1)} años`
-  if (unidad === 'percentil') return `p${fmtNumero(valor, 0)}`
-  return fmtPct(valor, 1)
-}
-
 function formatoDelta(propuesta: PropuestaBajarRiesgo): string {
   return `${formatoValor(propuesta.valorActual, propuesta.unidad)} → ${formatoValor(propuesta.valorSimulado, propuesta.unidad)}`
-}
-
-function ResumenDescartes({ descartes }: { descartes: DescarteCandidata[] }) {
-  if (descartes.length === 0) return null
-
-  const porMotivo = new Map<string, number>()
-  for (const d of descartes) {
-    const clave = `${NOMBRES_EJE[d.eje]} — ${MOTIVO_LABEL[d.motivo]}`
-    porMotivo.set(clave, (porMotivo.get(clave) ?? 0) + 1)
-  }
-
-  return (
-    <div style={{ display: 'grid', gap: 4 }}>
-      <p style={{ margin: 0, fontSize: 10.5, color: 'var(--dim)' }}>
-        {descartes.length} candidata{descartes.length === 1 ? '' : 's'} descartada
-        {descartes.length === 1 ? '' : 's'}:
-      </p>
-      <ul style={{ margin: 0, padding: '0 0 0 16px', fontSize: 10.5, color: 'var(--dim)' }}>
-        {[...porMotivo.entries()].map(([clave, cantidad]) => (
-          <li key={clave}>
-            {cantidad} por {clave.toLowerCase()}
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
 }

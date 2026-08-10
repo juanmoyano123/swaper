@@ -162,3 +162,69 @@ describe('sin candidatas de rotación', () => {
     expect(screen.getByText(/±0,5%/)).toBeInTheDocument()
   })
 })
+
+// El costo de rotar (F-035) empieza a mostrarse en la fila con F-034: hasta entonces el dato
+// llegaba del backend y el esquema lo descartaba. Estos dos casos fijan la distinción que hace a
+// la feature — un costo medido no se lee igual que uno que no se pudo verificar.
+describe('costo de rotar en la fila', () => {
+  function candidataQueSobrevive(costo: unknown) {
+    // Baja la duración (3,5 → 2,5) sin mover nada más: pasa el filtro con duración como primario.
+    return {
+      tipo: 'mejora_perfil',
+      segmento: 'usd_hard',
+      origen: { ticker: 'AL30D', emisor: 'República Argentina', rendimiento: 0.11, duracion: 3.5, moneda_cupon: 'USD', ley: 'Ley N.Y.', calificacion: null, lamina: 1, frecuencia_cupon: 'semestral', volumen_usd: 100_000 },
+      destino: { ticker: 'GD30D', emisor: 'República Argentina', rendimiento: 0.112, duracion: 2.5, moneda_cupon: 'USD', ley: 'Ley N.Y.', calificacion: null, lamina: 1, frecuencia_cupon: 'semestral', volumen_usd: 300_000 },
+      delta: { rendimiento_pp: 0.2, duracion: -1 },
+      flags: { mismo_emisor: true, pasa_a_cable: false, mejora_ley: false, empeora_ley: false, mejora_volumen: true, posible_distress: false },
+      premio_ley: null,
+      riesgo_nota: 'mismo emisor — mismo riesgo crediticio',
+      costo,
+    }
+  }
+
+  const ESPECIES = [especie(), especie({ ticker: 'GD30D', emision: 'GD30', duracion: 2.5, volumen_usd: 300_000 })]
+
+  it('muestra el costo medido y en cuánto lo paga la mejora', async () => {
+    responderCon({
+      especies: ESPECIES,
+      rotaciones: resultadoRotaciones([
+        candidataQueSobrevive({
+          arancel_pct_por_pata: 0.75,
+          spread_origen_pct: 1.2,
+          spread_destino_pct: 0.8,
+          total_pct: 2.5,
+          verificable: true,
+          elevado: false,
+          payback_meses: 16.7,
+        }),
+      ]),
+    })
+    renderizar()
+
+    expect(await screen.findByText(/Costo de rotar 2,50%/)).toBeInTheDocument()
+    expect(screen.getByText(/lo paga en 16,7 meses/)).toBeInTheDocument()
+  })
+
+  it('sin punta en una pata declara que no es verificable, sin inventar un costo', async () => {
+    responderCon({
+      especies: ESPECIES,
+      rotaciones: resultadoRotaciones([
+        candidataQueSobrevive({
+          arancel_pct_por_pata: 0.75,
+          spread_origen_pct: 1.2,
+          spread_destino_pct: null,
+          total_pct: null,
+          verificable: false,
+          elevado: null,
+          payback_meses: null,
+        }),
+      ]),
+    })
+    renderizar()
+
+    const nota = await screen.findByText(/no verificable/)
+    expect(nota).toHaveTextContent(/falta punta de mercado/)
+    // El único número que aparece es el arancel, declarado como piso: nunca un total supuesto.
+    expect(nota).toHaveTextContent(/arancel 0,75% por pata/)
+  })
+})

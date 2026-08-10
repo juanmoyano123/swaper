@@ -154,7 +154,7 @@ describe('notas de cobertura', () => {
         posiciones: 0,
         pesoConDato: 0,
         pesoTotal: 0,
-        notas: ['spread bid/ask: la tabla existe pero no viaja por el API todavía — llega con F-035'],
+        notas: ['spread bid/ask: no entra en este percentil — se mide por rotación, dentro del costo de rotar (F-035)'],
       },
     })
 
