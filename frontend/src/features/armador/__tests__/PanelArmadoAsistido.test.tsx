@@ -59,13 +59,14 @@ function renderizar() {
 
 const RESULTADO_OK = {
   posiciones: [
-    { ticker: 'GD35', pct_cartera: 70, monto: 70000 },
-    { ticker: 'AL30', pct_cartera: 30, monto: 30000 },
+    { ticker: 'GD35', pct_cartera: 70, monto: 70000, clase: 'renta_fija' },
+    { ticker: 'AL30', pct_cartera: 30, monto: 30000, clase: 'renta_fija' },
   ],
   mix_aplicado: { usd_hard: 100 },
   origen_mix: 'cobertura devaluacion',
   perfil: 'moderado',
   sectores: { presentes: 2, minimo: 3, suficiente: false },
+  pct_rv_aplicado: 0,
   alertas: [
     {
       codigo: 'diversificacion_sectorial_insuficiente',
@@ -78,7 +79,7 @@ const RESULTADO_OK = {
 }
 
 describe('PanelArmadoAsistido', () => {
-  it('envía los cinco parámetros del mandato al pedir el armado', async () => {
+  it('envía los parámetros del mandato al pedir el armado', async () => {
     const fetchMock = mockFetch(200, RESULTADO_OK)
     renderizar()
 
@@ -98,7 +99,51 @@ describe('PanelArmadoAsistido', () => {
       cobertura: 'devaluacion',
       perfil: 'conservador',
       horizonte: 'largo',
+      // El perfil conservador no lleva renta variable, como la cartera conservadora del Excel.
+      pct_rv: 0,
+      sector_rv: null,
     })
+  })
+
+  it('el % de renta variable se precarga con el default del perfil', async () => {
+    renderizar()
+
+    const campo = screen.getByLabelText('% renta variable')
+    // Moderado, el perfil inicial: un cuarto en acciones.
+    expect(campo).toHaveValue(25)
+
+    await userEvent.selectOptions(screen.getByLabelText('Perfil'), 'agresivo')
+    expect(campo).toHaveValue(60)
+
+    await userEvent.selectOptions(screen.getByLabelText('Perfil'), 'conservador')
+    expect(campo).toHaveValue(0)
+  })
+
+  it('el % de renta variable se puede editar después de elegir el perfil', async () => {
+    const fetchMock = mockFetch(200, RESULTADO_OK)
+    renderizar()
+
+    await userEvent.type(screen.getByLabelText('Monto a invertir (USD)'), '100000')
+    await userEvent.clear(screen.getByLabelText('% renta variable'))
+    await userEvent.type(screen.getByLabelText('% renta variable'), '40')
+    await userEvent.click(screen.getByRole('button', { name: 'Armar cartera asistida' }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    const [, init] = fetchMock.mock.calls[0]
+    expect(JSON.parse(init?.body as string).pct_rv).toBe(40)
+  })
+
+  it('la temática elegida viaja como el sector literal de Yahoo', async () => {
+    const fetchMock = mockFetch(200, RESULTADO_OK)
+    renderizar()
+
+    await userEvent.type(screen.getByLabelText('Monto a invertir (USD)'), '100000')
+    await userEvent.selectOptions(screen.getByLabelText('Temática (acciones)'), 'tecnologicas')
+    await userEvent.click(screen.getByRole('button', { name: 'Armar cartera asistida' }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    const [, init] = fetchMock.mock.calls[0]
+    expect(JSON.parse(init?.body as string).sector_rv).toBe('Technology')
   })
 
   it('en éxito, precarga la cartera y muestra las alertas de la respuesta', async () => {

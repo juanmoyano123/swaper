@@ -26,6 +26,9 @@ export const esquemaPosicionArmada = z.object({
   /** En puntos porcentuales, post-reponderación. */
   pct_cartera: z.number(),
   monto: z.number(),
+  /** Qué lado de la cartera armó esta posición (Tanda 13). El motor sigue eligiendo sólo bonos;
+   *  las acciones las elige el endpoint aparte, por liquidez y diversificación sectorial. */
+  clase: z.enum(['renta_fija', 'renta_variable']),
 })
 
 export const esquemaResultadoArmado = z.object({
@@ -38,6 +41,10 @@ export const esquemaResultadoArmado = z.object({
     minimo: z.number(),
     suficiente: z.boolean(),
   }),
+  /** Cuánto del 100% terminó en renta variable. Puede ser menor al pedido —hasta 0— si no hubo
+   *  candidatos; en ese caso la alerta `rv_sin_candidatos` lo explica y la renta fija queda
+   *  ocupando la cartera entera, sin reescalar. */
+  pct_rv_aplicado: z.number(),
   alertas: z.array(esquemaAlertaArmado),
 })
 
@@ -55,4 +62,23 @@ export interface ParametrosArmadoAsistido {
   cobertura: 'devaluacion' | 'inflacion' | 'tasa-pesos' | 'mixta'
   perfil: 'conservador' | 'moderado' | 'agresivo'
   horizonte: 'corto' | 'medio' | 'largo'
+  /** Qué porcentaje del total va a acciones y CEDEARs. Omitirlo deja que el backend use el
+   *  default del perfil (`PCT_RV_PERFIL`). */
+  pct_rv?: number
+  /** Sector de Yahoo para acotar la renta variable a una temática. */
+  sector_rv?: string | null
+}
+
+/**
+ * El default de renta variable por perfil, espejo de `PCT_RV_PERFIL` del backend.
+ *
+ * Sale del Excel de carteras sugeridas de la mesa: la conservadora no lleva renta variable, la
+ * moderada un cuarto, y la audaz la mayor parte. Está acá duplicado —y no pedido al backend— para
+ * poder precargar el input antes de que el asesor apriete el botón; el backend sigue siendo el que
+ * decide si el campo llega vacío.
+ */
+export const PCT_RV_PERFIL: Record<ParametrosArmadoAsistido['perfil'], number> = {
+  conservador: 0,
+  moderado: 25,
+  agresivo: 60,
 }

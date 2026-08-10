@@ -33,11 +33,14 @@ export function useArmadoAsistido() {
         body: JSON.stringify(parametros),
       }),
     onSuccess: (resultado) => {
+      // La clase la decide el backend (Tanda 13): antes se forzaba `renta_fija` en todas porque el
+      // armado sólo elegía bonos, y ahora también elige acciones. Forzarla acá haría que una acción
+      // entrara al resolver de bonos y saliera con nominales sin sentido.
       cargarCartera(
         resultado.posiciones.map((posicion) => ({
           ticker: posicion.ticker,
           peso: posicion.pct_cartera,
-          clase: 'renta_fija' as const,
+          clase: posicion.clase,
         })),
       )
     },

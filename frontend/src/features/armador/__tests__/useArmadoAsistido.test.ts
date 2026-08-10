@@ -46,13 +46,14 @@ function envolver(cliente: ReturnType<typeof crearQueryClient>) {
 
 const RESULTADO_OK = {
   posiciones: [
-    { ticker: 'GD35', pct_cartera: 60, monto: 60000 },
-    { ticker: 'AL30', pct_cartera: 40, monto: 40000 },
+    { ticker: 'GD35', pct_cartera: 60, monto: 60000, clase: 'renta_fija' },
+    { ticker: 'AL30', pct_cartera: 40, monto: 40000, clase: 'renta_fija' },
   ],
   mix_aplicado: { usd_hard: 100 },
   origen_mix: 'cobertura devaluacion',
   perfil: 'moderado',
   sectores: { presentes: 2, minimo: 3, suficiente: false },
+  pct_rv_aplicado: 0,
   alertas: [
     {
       codigo: 'diversificacion_sectorial_insuficiente',
@@ -138,5 +139,41 @@ describe('useArmadoAsistido', () => {
     // apenas la promesa se asienta.
     await waitFor(() => expect(result.current.mutacion.isError).toBe(true))
     expect(result.current.armador.pos).toEqual([])
+  })
+
+  it('respeta la clase que manda el backend: una acción no entra como bono', async () => {
+    // Tanda 13: el armado asistido también elige acciones. Antes se forzaba `renta_fija` en todas,
+    // y una acción marcada así habría entrado al resolver de bonos y salido con nominales sin
+    // sentido — se compra por unidad entera, no por lámina.
+    mockFetch(200, {
+      ...RESULTADO_OK,
+      posiciones: [
+        { ticker: 'GD35', pct_cartera: 75, monto: 75000, clase: 'renta_fija' },
+        { ticker: 'GGAL', pct_cartera: 25, monto: 25000, clase: 'renta_variable' },
+      ],
+      pct_rv_aplicado: 25,
+    })
+    const cliente = crearQueryClient()
+
+    const { result } = renderHook(
+      () => ({ mutacion: useArmadoAsistido(), armador: useArmador() }),
+      { wrapper: envolver(cliente) },
+    )
+
+    await act(async () => {
+      await result.current.mutacion.mutateAsync({
+        monto: 100_000,
+        moneda: 'usd',
+        cobertura: 'mixta',
+        perfil: 'moderado',
+        horizonte: 'medio',
+        pct_rv: 25,
+      })
+    })
+
+    expect(result.current.armador.pos).toEqual([
+      { ticker: 'GD35', peso: 75, clase: 'renta_fija' },
+      { ticker: 'GGAL', peso: 25, clase: 'renta_variable' },
+    ])
   })
 })
