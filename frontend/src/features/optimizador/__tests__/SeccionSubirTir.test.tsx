@@ -166,11 +166,24 @@ describe('GWT-2: sin deltas calculables no se muestra, pero se cuenta', () => {
     responderCon({ rotaciones: resultadoRotaciones([candidata({ deltaDuracion: null })]) })
     renderizar()
 
-    expect(await screen.findByText(/1 sin mostrar/)).toBeInTheDocument()
+    expect(await screen.findByText(/1 rotación que sube el rendimiento/)).toBeInTheDocument()
+    expect(screen.getByText(/1 sin mostrar/)).toBeInTheDocument()
     expect(screen.getByText(/duración — sin dato para medirlo/i)).toBeInTheDocument()
     // La lista de propuestas no existe. Se busca por su nombre accesible y no por `listitem`
     // suelto: el resumen de descartes también es una lista, y contarlo sería un falso negativo.
     expect(screen.queryByRole('list', { name: 'Rotaciones que suben el rendimiento' })).not.toBeInTheDocument()
+  })
+})
+
+describe('el recuento de lo evaluado', () => {
+  it('pluraliza sin romper la acentuación: "rotaciones", no "rotaciónes"', async () => {
+    responderCon({
+      rotaciones: resultadoRotaciones([candidata(), candidata({ destino: { ticker: 'AL35D' }, deltaDuracion: null })]),
+    })
+    renderizar()
+
+    expect(await screen.findByText(/2 rotaciones que suben el rendimiento/)).toBeInTheDocument()
+    expect(screen.queryByText(/rotaciónes/)).not.toBeInTheDocument()
   })
 })
 

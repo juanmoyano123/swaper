@@ -84,12 +84,21 @@ function Veredicto({ resultado }: { resultado: ResultadoSubirTir }) {
           contrapartida completa.
         </p>
       )}
-      <ResumenDescartes
-        descartes={resultado.descartes}
-        encabezado={`${resultado.evaluadas} rotación${resultado.evaluadas === 1 ? '' : 'es'} que sube${resultado.evaluadas === 1 ? '' : 'n'} el rendimiento; ${resultado.propuestas.length} mostrada${resultado.propuestas.length === 1 ? '' : 's'}, ${resultado.descartes.length} sin mostrar:`}
-      />
+      <ResumenDescartes descartes={resultado.descartes} encabezado={encabezadoDescartes(resultado)} />
     </div>
   )
+}
+
+/**
+ * El recuento de lo evaluado contra lo mostrado. Los plurales van escritos enteros y no como un
+ * sufijo concatenado: "rotación" + "es" da *rotaciónes*, que está mal acentuado — el plural pierde
+ * la tilde porque la palabra pasa de aguda a grave.
+ */
+function encabezadoDescartes(resultado: ResultadoSubirTir): string {
+  const { evaluadas, propuestas, descartes } = resultado
+  const rotaciones = evaluadas === 1 ? '1 rotación que sube' : `${evaluadas} rotaciones que suben`
+  const mostradas = propuestas.length === 1 ? '1 mostrada' : `${propuestas.length} mostradas`
+  return `${rotaciones} el rendimiento; ${mostradas}, ${descartes.length} sin mostrar:`
 }
 
 function FilaSubirTir({ propuesta }: { propuesta: PropuestaSubirTir }) {
