@@ -49,7 +49,11 @@ export interface DescarteCandidata {
   motivo: MotivoDescarte
 }
 
-export type EstadoEje = 'mejora' | 'no_empeora' | 'empeora' | 'sin_dato'
+/** El resultado de comparar dos valores del mismo eje: siempre concluyente, porque hay dos números. */
+export type EstadoComparado = 'mejora' | 'no_empeora' | 'empeora'
+
+/** Lo anterior más el caso en que no hubo con qué comparar. */
+export type EstadoEje = EstadoComparado | 'sin_dato'
 
 /** Identifica una candidata por su par de tickers, para cachear/mapear su concentración simulada. */
 export function claveCandidata(candidata: Candidata): string {
@@ -90,7 +94,7 @@ export function indexarPorId(ejes: EjeDeRiesgo[]): Record<IdDeEje, EjeDeRiesgo> 
  * `backend/app/rotaciones/motor.py`: pasar de ley local a extranjera es la mejora, no al revés).
  * Liquidez: más percentil es mejor. Concentración: menos peso máximo por crédito es mejor.
  */
-export function estadoPorValor(eje: EjeMedible, actual: number, simulado: number): EstadoEje {
+export function estadoPorValor(eje: EjeMedible, actual: number, simulado: number): EstadoComparado {
   const mejorSiMenor = eje === 'duracion' || eje === 'concentracion'
   if (simulado === actual) return 'no_empeora'
   const mejora = mejorSiMenor ? simulado < actual : simulado > actual
