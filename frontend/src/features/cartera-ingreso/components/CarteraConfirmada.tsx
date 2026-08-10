@@ -22,6 +22,10 @@
  * `key={firmaDePesos(...)}` — confirmar otra cartera desmonta el plan de rotaciones de la anterior y
  * arranca uno vacío. `BloqueOptimizador` lee el plan y pasa a las dos secciones la cartera
  * acumulada, las claves ya decididas en la sesión y los montos de la cartera propuesta.
+ *
+ * **Tanda 16 (F-037):** `BloqueOptimizador` suma `ComparacionCarteras` debajo de `PlanDeRotacion`,
+ * con los mismos `montosOriginales`/`propuesta` que ya calculaba para las otras dos secciones — no
+ * agrega ningún pedido nuevo al backend, sólo un consumidor más de lo que ya está en caché.
  */
 
 import { useState } from 'react'
@@ -35,6 +39,7 @@ import type { PosicionConMonto } from '@/lib/rotaciones/plan'
 
 import type { PosicionCruda } from '../types'
 
+import { ComparacionCarteras } from '@/features/optimizador/components/ComparacionCarteras'
 import { PlanDeRotacion } from '@/features/optimizador/components/PlanDeRotacion'
 import { SeccionBajarRiesgo } from '@/features/optimizador/components/SeccionBajarRiesgo'
 import { SeccionSubirTir } from '@/features/optimizador/components/SeccionSubirTir'
@@ -69,7 +74,14 @@ function BloqueOptimizador({ montosOriginales, perfil }: { montosOriginales: Pos
           noConvertibles={propuesta.noConvertibles}
         />
       </div>
-      <PlanDeRotacion montos={propuesta.montos} perfil={perfil} />
+      <PlanDeRotacion />
+      <ComparacionCarteras
+        montosOriginales={montosOriginales}
+        montos={propuesta.montos}
+        monedaDe={propuesta.monedaDe}
+        tipoDeCambio={propuesta.tipoDeCambio}
+        perfil={perfil}
+      />
     </>
   )
 }
