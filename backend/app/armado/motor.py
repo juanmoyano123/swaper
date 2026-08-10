@@ -217,6 +217,11 @@ class PosicionArmada:
     ticker: str
     pct_cartera: float
     monto: float
+    clase: str = "renta_fija"
+    """`renta_fija` para todo lo que arma este módulo; `renta_variable` para lo que compone el
+    endpoint desde `app.armado.renta_variable`. Default `renta_fija` para que el motor -- que no
+    sabe nada de renta variable y no tiene por qué saberlo -- siga construyendo posiciones sin
+    tener que nombrar la clase en cada uno de sus `PosicionArmada(...)`."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -235,10 +240,21 @@ class ResultadoArmado:
     sectores_presentes: int
     min_sectores: int
 
+    pct_rv_aplicado: float = 0.0
+    """El % de la cartera que terminó en renta variable. `armar()` no lo conoce -- igual que
+    `origen_mix`, lo completa `app/api/v1/armado.py` con `dataclasses.replace` una vez que compone
+    el bloque de renta variable (`app.armado.renta_variable`). `0.0` es el valor de un armado
+    solo-renta-fija, que es lo que produce este módulo por su cuenta."""
+
     def como_dict(self) -> dict[str, object]:
         return {
             "posiciones": [
-                {"ticker": p.ticker, "pct_cartera": p.pct_cartera, "monto": p.monto}
+                {
+                    "ticker": p.ticker,
+                    "pct_cartera": p.pct_cartera,
+                    "monto": p.monto,
+                    "clase": p.clase,
+                }
                 for p in self.posiciones
             ],
             "mix_aplicado": self.mix_aplicado,
@@ -249,6 +265,7 @@ class ResultadoArmado:
                 "minimo": self.min_sectores,
                 "suficiente": self.sectores_presentes >= self.min_sectores,
             },
+            "pct_rv_aplicado": self.pct_rv_aplicado,
             "alertas": [a.como_dict() for a in self.alertas],
         }
 

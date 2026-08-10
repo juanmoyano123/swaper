@@ -31,6 +31,16 @@ class ParametrosArmado(BaseModel):
     min_rend: float = 0.0
     pago_mensual: bool = True
 
+    pct_rv: float | None = Field(default=None, ge=0, le=100)
+    """Qué porción de la cartera va a renta variable. `None` usa el default del perfil
+    (`app.armado.renta_variable.PCT_RV_PERFIL`) -- no hay forma de pedir "el default" con un
+    número, así que la ausencia es la señal."""
+
+    sector_rv: str | None = None
+    """Temática sectorial dentro de renta variable, como valor exacto de `sector` (Yahoo, sin
+    traducir -- regla 11 del dominio). `None` es sin temática: participa todo el universo de
+    renta variable, no sólo un sector."""
+
     @model_validator(mode="after")
     def _validar_mix(self) -> "ParametrosArmado":
         """Equivalente al `sys.exit` del CLI ante un segmento desconocido, acá un 422."""
