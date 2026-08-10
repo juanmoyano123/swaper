@@ -8,9 +8,16 @@ falta traer más que eso.
 
 Una fila con `fuente` terminada en `-arrastre` (F-007: la fecha del libro consolidado es incierta)
 se trata como sin punta viva: una punta de fecha desconocida no es una punta viva.
+
+**Las puntas se convierten a `float` acá, en el borde.** `public.puntas` las guarda como `numeric`,
+que asyncpg entrega como `Decimal`, y `calcular_costo` las mezcla con constantes que son `float`
+(el arancel) — sumar los dos tipos revienta con `TypeError` en runtime. La firma de este módulo
+siempre declaró `float | None`: convertir donde el tipo se promete es lo que evita que el resto del
+paquete tenga que saber de qué tipo las trajo el driver.
 """
 
 from collections.abc import Sequence
+from decimal import Decimal
 from typing import Any
 
 TABLA_PUNTAS = "public.puntas"
@@ -25,6 +32,11 @@ SQL_PUNTAS = (
 )
 
 SUFIJO_ARRASTRE = "-arrastre"
+
+
+def _como_float(valor: Any) -> float | None:
+    """`numeric` de Postgres llega como `Decimal`; el resto del paquete trabaja en `float`."""
+    return None if valor is None else float(valor)
 
 
 async def leer_puntas(
@@ -45,5 +57,5 @@ async def leer_puntas(
         if fuente is not None and str(fuente).endswith(SUFIJO_ARRASTRE):
             resultado[ticker] = (None, None)
         else:
-            resultado[ticker] = (fila["px_bid"], fila["px_ask"])
+            resultado[ticker] = (_como_float(fila["px_bid"]), _como_float(fila["px_ask"]))
     return resultado
