@@ -65,7 +65,7 @@ desde `/build-feature` a medida que cada una se implementa.
 |---|---|---|---|---|
 | F-033 | Modo bajar riesgo | Stage 1 | 57,6 | **completada** |
 | F-034 | Modo subir TIR con contrapartida | Stage 1 | 86,4 | **completada** |
-| F-036 | Aceptación rotación por rotación | Stage 1 | 57,6 | pendiente |
+| F-036 | Aceptación rotación por rotación | Stage 1 | 57,6 | **completada** |
 | F-037 | Comparación original contra propuesta | Stage 1 | 72,0 | pendiente |
 | F-038 | Monitor de mercado | Stage 1 | 106,7 | completada |
 | F-039 | Ficha de instrumento | Stage 1 | 112,0 | completada |
@@ -623,8 +623,41 @@ lecturas de puntas piden la fila más reciente por ticker, y la variación diari
   Los DELETE los ejecutó la propia corrida siguiente —el backend corría con `--reload` y tomó el
   código—, y el espacio se recuperó con `VACUUM FULL`. Detalle completo en `docs/ESTADO.md`.
 
-Siguiente paso: la **tanda 15 — F-036 (aceptación rotación por rotación), sola**. Consume F-033,
-F-034 y F-035, que ahora comparten vocabulario de ejes y bloque de costo.
+**F-036 — aceptación rotación por rotación (tanda 15, sola) — completada 10/08/2026.** Salió 100 %
+frontend, como F-033/F-034: los tres endpoints que necesitaba (`/rotaciones`, `/concentracion`,
+`/calendario/cartera`) ya existían. Verificado en vivo contra el backend real, no sólo con tests.
+
+- **El estado guarda decisiones, nunca carteras derivadas.** `PlanRotacionProvider` (Context +
+  `useReducer`, mismo patrón que `carteraStore.tsx` del armador) sólo persiste la pila de
+  `Candidata` aceptadas y el set de claves descartadas; la cartera acumulada, los montos y las
+  claves excluidas se recalculan siempre desde ahí. Por eso **deshacer** es sacar el último elemento
+  de la pila y todo vuelve exacto — sin snapshot que pueda desincronizarse. Verificado en pantalla:
+  aceptar AL30D→CP38O y deshacer devolvió la TIR, la duración y las tres propuestas originales bit
+  por bit.
+- **Deshacer es LIFO puro**, a propósito: las aceptaciones se encadenan (el destino de una puede ser
+  el origen de la siguiente), así que deshacer una del medio dejaría a las posteriores con un origen
+  que ya no está en la cartera. Sólo la última aceptada tiene botón.
+- **El efecto de calendario (GWT-1) se calcula por fila**, comparando el calendario de la cartera
+  actual contra el simulado de esa candidata, mes por mes y **moneda por moneda por separado** —
+  nunca se suma entre monedas para decidir qué mes "se llena" (regla 3). Visto en producción: "Si se
+  acepta: se llena Noviembre 2026 (USD) · se llena Mayo 2027 (USD) · se vacía Enero 2027 (USD) · se
+  vacía Julio 2027 (USD)".
+- **Aceptar recalcula sobre la cartera resultante de verdad**, no en apariencia: al aceptar
+  AL30D→CP38O, las propuestas restantes pasaron a partir de `CP38O→...` (nuevo origen), y las que
+  partían de AL30D desaparecieron porque ese ticker ya no está en la cartera.
+- **La rotación inversa y lo descartado no vuelven a proponerse en la sesión** (GWT-3/GWT-4):
+  `clavesExcluidas = descartadas ∪ inversas de aceptadas` se pasa a `useBajarRiesgo`/`useSubirTir`,
+  que las filtra **antes** de evaluar y las cuenta aparte de los descartes por eje — mezclarlas
+  habría hecho mentir a `ResumenDescartes` (un "descarte" por decisión del asesor no es un descarte
+  por no cumplir un criterio).
+- **`Cordillera` (el gráfico de barras del calendario) se extrajo** de `DiagnosticoCartera.tsx` a
+  `components/Cordillera.tsx` para que el panel de cartera propuesta la reuse tal cual — una sola
+  implementación. Los seis ejes de la propuesta reusan `SeccionRiesgo` (F-031) directo, sin
+  reimplementar nada de riesgo.
+
+Siguiente paso: la **tanda 16 — F-037 (comparación original contra propuesta), sola**. Consume
+F-036: lee `posicionesOriginales`, `posicionesAcumuladas` y `aceptadas` (con su `costo`) del mismo
+`PlanRotacionProvider`, montado en el mismo árbol.
 
 ### Lo que F-013 puso a la vista, y la decisión que dejó abierta
 
