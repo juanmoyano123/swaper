@@ -111,6 +111,11 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     environment: str = "development"
 
+    # CORS: el frontend en Netlify y el navegador local son orígenes distintos del backend
+    # (Render, u otro host), así que sin esto el browser bloquea toda request antes de que
+    # llegue acá. Lista separada por comas — se sobreescribe por env si el dominio cambia.
+    cors_origins: str = "http://localhost:5173,https://swappt.netlify.app"
+
 
 def _missing_variable_names(exc: ValidationError) -> list[str]:
     """Nombres de las variables de entorno que provocaron el fallo, como se escriben en .env."""
