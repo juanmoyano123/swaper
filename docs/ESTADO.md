@@ -260,3 +260,229 @@ El monitor de mesa del usuario (`mesaifa.netlify.app`) sirvió como banco de pru
 - El refactor de segmentación se verificó en dos pasos: primero mover el código sin cambiar comportamiento (**15/15 carteras idénticas hoja por hoja**, incluida la hoja de Alertas), y recién después aplicar los cambios de fondo.
 - Los cambios en las carteras tras arreglar el volumen están acotados y son explicables: la cantidad de posiciones no cambia en ningún caso, se sustituyen 1-2 por cartera, y las posiciones que liquidan en dólares pasan de 9 a 27 sobre los 15 casos — exactamente el sesgo que el bug producía.
 - El swaper: TLCWO→TLCMO sigue saliendo con los mismos flags; aparecen 47 propuestas Tamar y 1 Badlar donde antes había cero; dos corridas consecutivas dan resultados idénticos.
+
+### Qué declara BYMA y qué inferimos nosotros (08/08/2026)
+
+Revisar el monitor en pantalla destapó que estábamos presentando una inferencia como si fuera dato:
+`denominationCcy` toma tres valores y BYMA sólo documenta dos. `EXT` no es ISO 4217 y la fuente no
+publica qué denota; lo que nosotros habíamos medido —su cociente contra la hermana en pesos da
+≈1576 contra ≈1521 de la `USD`— sugiere el cable, pero estaba escrito en el código en modo
+indicativo, como si lo hubiera dicho la fuente.
+
+De ahí salió la **regla 11** de `CLAUDE.md`: no se supone ni se infiere nada en la representación de
+datos; un código propietario de la fuente no se traduce; si no sabemos interpretarlo, el espacio va
+en blanco y el faltante se declara.
+
+El detalle completo —incluido el trío X/Y/Z, que son 419 de los 535 "sin segmento", y la pregunta
+abierta sobre si estamos mezclando plazos de liquidación— está en
+`docs/historial/2026-08-08-lo-que-byma-declara-y-lo-que-inferimos.md`.
+
+Sacar la inferencia **no costó cobertura**: el tipo de cambio implícito conserva sus 462 pares y
+sigue dando 1.521,53, porque cero emisiones tienen su único par por `EXT`. Lo que sí cambió es que
+el volumen de 214 especies de renta fija y 341 de renta variable dejó de convertirse a dólares, y
+que 63 de las 276 especies hard-dollar calculables dejaron de tener TIR propia. En pantalla el hueco
+se resolvió **repartiendo en vez de rellenando**: el monitor elige una moneda por vez, y con una
+sola moneda a la vista el volumen se muestra crudo sin convertir nada.
+
+En la misma revisión se encontró que la ley y el emisor de la tabla curada no llegaban a ninguna
+pantalla: la vista `resumen` los lee de `instrumentos`, donde IAMC sólo cargó lo que publica.
+Cruzarlos subió la ley de 592 a 724 y el emisor de 720 a 823 sobre las 942 especies segmentadas.
+Cuatro emisiones (PLC4, PN38, RC1C, YM39) tienen ley contradictoria entre las dos fuentes: **quedan
+vacías y alertadas**, porque elegir ganador sin ir al prospecto sería inventar el eje de riesgo más
+caro de equivocar.
+
+## 08/08/2026 — Tanda 9: el armador dice cuánto cobra, qué concentra y qué no es renta fija
+
+Cuatro features en paralelo (F-020 concentración, F-021 panel de renta, F-026 bloque de renta
+variable, F-053 ficha del activo con Yahoo). 911 tests en el backend y 337 en el frontend; van 30
+de 45 features de Stage 1.
+
+**Antes de eso hubo que arreglar la rueda.** `en_ventana_de_rueda` sólo miraba la hora, así que un
+sábado a las 14:00 pasaba el chequeo igual que un martes — y una corrida disparada a mano ese
+sábado escribió 466 filas **sin un solo precio ni una sola TIR**, dejando el indicador de frescura
+declarando el sábado sobre datos del miércoles. Las filas se borraron por su `capturado_en` exacto.
+El scheduler habría repetido eso solo todos los fines de semana apenas se habilitara: `proxima_matinal`
+y `proximo_refresh` desde el viernes también devolvían el sábado. Las tres funciones saltean ahora
+al próximo día hábil, y `/consolidar` fuera de rueda exige `forzar=true`.
+
+**Los feriados bursátiles no se modelan, y está escrito en el código.** No hay fuente programática
+confiable del calendario de BYMA, y hardcodear una lista sería exactamente lo que la regla 1
+prohíbe: un dato inventado que además se desactualiza en silencio. Un feriado entre semana sigue
+produciendo una respuesta parcial, y ese caso pide un guardia de "la respuesta vino anormalmente
+chica" que **queda anotado y sin construir**.
+
+**La divergencia deliberada de F-020 contra el motor, medida de frente.** El motor propaga el sector
+por moda dentro del grupo de emisor —prefijo de 3 letras del ticker— y así le asigna sector a 487
+especies que la fuente no informa. El backend no lo hace. Medido sobre el universo real: de 1.509
+especies de renta fija, 780 tienen sector, y **cero de las 729 restantes se recuperan por emisor
+curado**; la única vía sería el prefijo, que es inferir del ticker. El prefijo resulta empíricamente
+limpio (159 grupos con sector, **cero con sector contradictorio**), pero "no observamos
+contradicciones entre los que conocemos" es la misma forma de evidencia que ya costó revertir 121
+tickers. El costo es real —el tope sectorial mide sobre poco más de la mitad del universo— y **está
+declarado en pantalla**: el panel dice qué porcentaje de la cartera no informa sector y no cuenta
+para el mínimo. **El arreglo de verdad no es inferirlo: es curar `condiciones_emision`.**
+
+**F-053 trae dato de Yahoo Finance, con dos límites escritos en el código.** No se muestran
+recomendación de analistas, precio objetivo ni consenso: es opinión de terceros y la regla 6 mantiene
+el análisis determinístico. Y la exclusión se hizo **no pidiendo el módulo** `financialData` en vez
+de filtrarle campos, porque Yahoo mezcla ahí los márgenes y el ROE —dato duro— con el precio
+objetivo; pedirlo y descartar después deja el juicio ajeno adentro del proceso aunque no se muestre.
+Verificado en vivo que `MSFT.BA` en Yahoo **es el CEDEAR** y su perfil es el de la empresa
+subyacente, así que la consulta es siempre `TICKER.BA` con el ticker que ya tenemos: no se deriva ni
+se mapea nada. La respuesta se acepta sólo si declara bolsa `BUE` y el símbolo pedido.
+
+Los endpoints de Yahoo **no son contractuales** —el de perfil exige un cookie+crumb no documentado
+que Yahoo ya endureció una vez— y el diseño degrada: si la fuente externa falla, la ficha muestra lo
+de BYMA y lo declara. Ninguna pantalla nuestra depende de que Yahoo esté vivo.
+
+## 08/08/2026 — El scheduler queda prendido, y por qué recién ahora
+
+Una pregunta del usuario destapó el agujero: la curva soberana entera mostraba `s/d` en TIR,
+duración y paridad, incluidos AL30D y GD30D, que operan todos los días.
+
+**No fallaba el cálculo: fallaba la frescura.** El último snapshot era del miércoles 06/08 19:24 y
+F-051 —la feature que calcula las métricas propias— se mergeó el jueves 07/08 17:37. Ninguna
+consolidación corrió entre medio, así que en la base había **cero métricas propias**: las 240 TIR
+visibles venían todas de IAMC (`fuente = byma+iamc`), que sólo publica ONs. De ahí que los 112
+soberanos tuvieran 107 precios y ni una sola TIR.
+
+Verificado contra el motor real, con el cronograma que la base ya tenía: **AL30D a 56,53 da TIR
+7,5181 %, duración 1,93 y paridad 88,28 %**. El cálculo andaba; el dato no estaba escrito.
+
+Medido cuánto se llena en la próxima corrida, aplicando en SQL las mismas tres condiciones que
+`fuente_de_metricas` evalúa: **221 especies calculables con la celda hoy vacía**. El resto queda
+vacío por razones que ya están decididas — 498 por moneda cruzada (regla 3), 169 por naturaleza
+fuera del cálculo (CER, dollar-linked, badlar, tamar), 54 porque no operaron ese día, y 535 sin
+tipo de tasa, de las cuales **sólo 18 tienen precio**: el hueco real es mucho más chico de lo que
+el número grande sugiere.
+
+**La lección no es el snapshot viejo, es que no se veía.** Una feature de métricas estuvo mergeada
+24 horas, con 911 tests en verde, y la pantalla siguió mostrando lo de antes sin nada que dijera
+"estás viendo una corrida anterior a este cálculo". La barra de estado declara la fecha del
+snapshot, pero no que el motor cambió después. **Una corrida vieja no se distingue en pantalla de
+una corrida sin resultado.** Queda anotado como pendiente de diseño.
+
+**Por qué se prende ahora y no antes.** `ingesta_habilitada` estaba en `False` desde F-008. Encender
+el scheduler antes del guardia de día hábil habría reproducido el snapshot degradado del sábado
+—466 filas sin un solo precio— **todos los fines de semana, solo**. Con el guardia puesto el 08/08,
+encenderlo es seguro: verificado que un sábado a las 17:00 `en_ventana_de_rueda` da `False` y tanto
+`proxima_matinal` como `proximo_refresh` saltan al lunes 10/08.
+
+**Se prende por `.env` (`INGESTA_HABILITADA=true`) y no cambiando el default de `Settings`**, que
+sigue en `False` a propósito: si el default fuera `True`, cada corrida de pytest y cada `uvicorn
+--reload` local arrancaría un job de fondo escribiendo en la base.
+
+Contraste empírico del día, que es lo que justificó no forzar la corrida el sábado: BYMA devolvió
+**4 filas, todas con precio 0** contra las ~2.900 de un día hábil.
+
+### Pendiente que abre esto: retención de snapshots
+
+Medido el 08/08: 4 snapshots pesan 1776 kB, o sea **~444 kB cada uno**. Con refresh cada 15 minutos
+de 11:00 a 17:00 son ~25 snapshots por día hábil, ~11 MB diarios. **Hay que decidir una política de
+retención antes de que la base se llene**; hoy no existe ninguna y nada borra un snapshot viejo.
+
+> **Resuelto el 10/08/2026** — ver "La serie histórica se apaga" más abajo. La decisión fue no
+> guardar serie: queda una fila por ticker.
+
+## 08/08/2026 — data912 pasa a ser la fuente primaria de precios, BYMA de respaldo
+
+El mismo día del punto anterior, mirando la pantalla en vivo, el usuario preguntó por qué el
+monitor mostraba `s/d` masivo con el mercado cerrado en vez del último precio operado. La causa no
+era la frescura de arriba: **BYMA sólo publica lo que operó ese día**, y la vista `resumen` toma la
+fila más nueva por ticker — un papel que no operó ayer queda vacío hoy, aunque haya cotizado el
+viernes. Es un problema de memoria, no de fecha.
+
+`data912.com` —la misma API pública que usa el monitor de mesa (su API, no su base; la regla 10
+sigue intacta)— arrastra el último cierre conocido de cada especie aunque no haya operado. Medido
+en vivo un sábado: devuelve las 827 especies de renta fija con precio, contra las 609 que BYMA
+tenía frescas de la última rueda.
+
+**Se probó en una rama aparte (`experimento/data912`) antes de tocar `develop`**, con la condición
+explícita del usuario: "si me convence lo mergeamos, si no la borramos". Diseño: `data912` primero
+por ticker, **BYMA de respaldo** — nadie desaparece de la pantalla, porque data912 solo cubre datos
+de renta fija y variable en Argentina y no todo lo que BYMA publica (AEC2D, por ejemplo, no existe
+en ninguna de sus cinco tramos). Cada precio queda rotulado con su procedencia real en la columna
+`fuente`, ahora expuesta en la vista `resumen`: `data912` (operó en la sesión), `data912-arrastre`
+(precio de una sesión anterior, de fecha que la fuente no declara — regla 11, se rotula y no se
+oculta) o `byma` (respaldo), compuesto con `+calculo`/`+iamc` como ya hacía la columna. La moneda de
+cotización **nunca sale de data912** —no la declara— sino de la que BYMA ya persistió para ese
+ticker alguna vez; sin eso, un ticker nuevo-para-data912 quedaría sin poder calcular nada.
+
+**Validado con una corrida forzada real contra la base**, no sólo con tests: la renta fija con
+precio subió de 609 a 790 (41 % → 52 %) y con TIR calculada de 240 a 494 — más del doble, y de esas,
+435 son precios arrastrados que antes eran `s/d` puro. De paso la corrida detectó que **el token de
+Docta está vencido**, sin relación con este cambio — quedó registrado en el snapshot de esa corrida.
+
+Revisión visual del usuario en desarrollo, aprobada. Mergeado a `develop` con 954 tests backend /
+337 frontend en verde, `ruff` y `tsc` limpios.
+
+**Pendiente que este cambio no resuelve:** el rollback de la vista `resumen` (por si hiciera falta
+revertir la migración a mano) hereda el límite de `CREATE OR REPLACE VIEW` de no poder quitar una
+columna del medio — está documentado en el propio archivo del rollback. Y la barra de estado ahora
+declara la demora de BYMA como peor caso conocido, porque data912 no publica la suya; sigue sin
+haber una demora **por fila** cuando un precio viene arrastrado de una fecha desconocida.
+
+## 10/08/2026 — La serie histórica se apaga: la base deja de crecer sola
+
+Con el scheduler prendido desde el 08/08, la pregunta del usuario fue por qué la base sube todo el
+tiempo. La respuesta es la que este documento ya había anotado como pendiente sin dueño: `precios` y
+`puntas` tienen PK `(ticker, capturado_en)` y el INSERT es plano, así que **cada corrida agregaba una
+tanda entera en vez de pisar la anterior**. Medido: ~2.900 filas cada 15 minutos, ~72.500 filas y
+~11 MB por día hábil, creciendo para siempre.
+
+**La decisión fue no guardar serie.** No es una optimización: es que nadie la usaba. La herramienta
+sirve para armar carteras —consultar un precio, mirar la TIR, decidir si conviene comprar— y no para
+hacer seguimiento; el usuario lo dijo con todas las letras. El único dato histórico que el producto
+necesita es el precio al que se armó una cartera, y ese ya tiene su lugar desde la migración
+inicial: `posiciones.precio_compra` y `posiciones.fecha_compra`.
+
+Verificado antes de tocar nada: **nada en el sistema lee más de un snapshot**. La vista `resumen`
+usa `LEFT JOIN LATERAL … ORDER BY capturado_en DESC LIMIT 1`, las dos lecturas de `puntas` hacen lo
+mismo, `health.py` pide un `MAX`, y la variación diaria del monitor sale de la columna
+`cierre_anterior` que trae BYMA —no de comparar snapshots—. La única serie temporal del producto es
+la sparkline de la ficha de renta variable, que se alimenta de Yahoo en vivo.
+
+### La trampa: la poda es POR TICKER, y esto no es negociable
+
+`DELETE FROM precios WHERE capturado_en < (SELECT max(capturado_en) FROM precios)` parece la forma
+obvia y **rompe el producto**. BYMA sólo publica lo que operó, así que una especie que no cotizó en
+la última corrida tiene su fila más nueva días atrás. Medido sobre la base real ese día: de **3.176
+tickers, 291 estaban en esa situación y 28 de ellos con precio**. Ese DELETE los dejaría sin ninguna
+fila y, como `resumen` los toma con LEFT JOIN LATERAL, saldrían publicados con precio, TIR, paridad
+y volumen en NULL.
+
+La forma correcta —`sql_poda()` en `app/ingesta/consolidacion/persistencia.py`— correlaciona por
+ticker: `WHERE p.capturado_en < (SELECT max(q.capturado_en) FROM … q WHERE q.ticker = p.ticker)`.
+Hay un test que lo fija (`test_la_poda_se_correlaciona_por_ticker_y_no_contra_el_maximo_global`)
+justamente para que nadie lo "simplifique" después.
+
+Otras dos propiedades del bloque de poda, ambas testeadas: **va después de escribir** (podar primero
+dejaría a la base sin foto si la corrida fallara a mitad de camino) y **en su propia transacción**
+(un fallo borrando no puede tirar abajo una escritura que salió bien; se reporta como advertencia).
+
+### El flag, y qué NO es
+
+`SERIE_HISTORICA_HABILITADA`, default `False`. En `True` vuelve el comportamiento anterior bit por
+bit: el código de la serie quedó implementado y testeado a pedido del usuario, porque a futuro puede
+servir.
+
+**No confundir con `INGESTA_HABILITADA`.** Los precios se siguen actualizando cada 15 minutos; lo
+que se apaga es la acumulación, no la ingesta. Apagar la otra variable dejaría el universo congelado.
+
+### Resultado medido
+
+| | Antes | Después |
+|---|---|---|
+| Filas en `precios` | 33.882 (12 snapshots) | 3.176 (una por ticker) |
+| Filas en `puntas` | 39.520 (13 snapshots) | 3.683 |
+| Tamaño de las dos tablas | 6.176 kB + 6.152 kB | 504 kB + 480 kB |
+| Base entera | 25 MB | 17 MB |
+| Crecimiento diario | ~11 MB | ~0 |
+
+Los `DELETE` los ejecutó la propia corrida siguiente, no una limpieza a mano: el backend corría con
+`--reload`, tomó el código nuevo y podó solo. El espacio se recuperó con `VACUUM FULL` sobre las dos
+tablas —un `VACUUM` normal libera las filas para reuso pero no devuelve el archivo al sistema—.
+
+Control post-borrado: los tickers que conservan cotización vieja (AXIA y BF47O del 08/08, BU3S6 y
+D10Y7 del 10/08 a las 14:30, entre otros) **siguen publicando su precio en `resumen`**, y el
+monitor mantiene los mismos 1.324 precios y 428 TIR que antes de podar.

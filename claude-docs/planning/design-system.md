@@ -53,7 +53,11 @@ La aplicación tiene **una sola ruta** con dos secciones conmutadas por un toggl
 
 Estructura vertical dentro de un contenedor de padding 14/18 px:
 
-**A1. Mandato del cliente** (panel colapsable, ancho completo)
+**A1. Mandato del cliente** (panel colapsable, ancho completo) — **no implementado.** Es alcance
+de producto nuevo sin feature en `plan.md` (modelo de mandato, guardado, validación contra
+cartera). El patrón de plegado de la Etapa 2 del rediseño del armador (09/08/2026,
+`SeccionDeArmador`) es el mismo que pide este panel — implementarlo es la base ya lista, falta el
+resto.
 - Cabecera clickeable: rótulo "MANDATO DEL CLIENTE" 10 px mayúsculas `letter-spacing: 0.13em` en `--ac`; resumen en una línea (`nombre · perfil · horizonte · piso US$ X/mes · cubrir …`) 12,5 px; a la derecha "guardado dd/mm hh:mm" o "sin guardar" en mono 11 px `--dim`; chevron ▲/▼.
 - Cuerpo abierto: grilla `1.3fr 1fr 1fr`, `gap: 20px`.
   - Columna 1: textarea "Qué busca" (2 filas, 12,5 px, `line-height: 1.5`), input "Piso mensual (US$)" (mono 14 px, texto `--ac`, 96 px), selects "Horizonte" (2/5/8 años) y "Perfil" (Conservador / Moderado / Agresivo declarado).
@@ -110,6 +114,17 @@ Estructura vertical dentro de un contenedor de padding 14/18 px:
 - Cuatro KPIs en grilla 2×2: Meses cubiertos (n/12), Parejo (%), TIR ponderada USD (sólo dólar hard), Duración + mix RF/RV.
 - "Lo que falta": lista de avisos accionables (mes bajo el piso → abre ese mes; renta variable por debajo del rango → abre el segmento).
 - Flujo mes por mes en mono 10,5 px, total anual y botón "Descargar propuesta".
+
+**Implementado en la Etapa 6 del rediseño del armador (`ColumnaKpis.tsx`, 09/08/2026)**: la
+tarjeta de renta anual y los cuatro KPIs, tal como los describe esta sección (número en `--pos`,
+no `--ac` — ver la disciplina `--ac`/`--pos` de la Etapa 1). "Lo que falta" sólo trae avisos
+derivables de datos existentes (meses sin cobertura, posiciones sin resolver): "mes bajo el piso"
+y "renta variable por debajo del rango" necesitan A1 (mandato), que no existe todavía.
+
+**Flujo mes por mes y "Descargar propuesta" cerrados en F-042 (10/08/2026)**: una tabla por
+moneda de cobro (nunca una fila que sume monedas distintas), reusando `calcularRentaAnualPorMoneda`
+sin recalcular nada — mismos números que la tarjeta de renta anual. El botón exporta a Excel y
+PDF vía `useSnapshotArmador()`, el mismo hook que arma el snapshot al guardar la cartera.
 
 ### Sección B — Seguimiento
 
@@ -250,6 +265,110 @@ resolver(posiciones, monto, monedaOperación):
 `--bg #f2f4f7` · `--pan #ffffff` · `--pan2 #eef1f5` · `--lin #d5dce4` · `--tx #182430` · `--dim #61717f` · `--ac #0e8a55` · `--ac2 #a86a06` · `--neg #c0392b` · `--pos #0e8a55` · `--sd #94a4b4`
 
 Fondos de selección: oscuro `rgba(94,227,154,.07–.10)`, claro `rgba(14,138,85,.06–.08)`.
+
+### Desviación aprobada — paleta categórica (Etapa 1 del rediseño del armador, 09/08/2026)
+
+Esta spec no define una paleta para distinguir tramos entre sí dentro de una misma distribución
+(sector, clase, calificación...): en la implementación original todos compartían `--ac`, y con
+seis-más distribuciones en pantalla el verde dejó de significar nada. Se agregaron seis tokens
+más, sin tocar la semántica de los once de arriba:
+
+| Token | Oscuro | Claro | Uso |
+|---|---|---|---|
+| `--cat1` | `#5c9de5` | `#2e6db4` | Distribución categórica, tramo 1 (azul) |
+| `--cat2` | `#46c2b4` | `#0e8177` | tramo 2 (teal) |
+| `--cat3` | `#a08df0` | `#6d4fc4` | tramo 3 (violeta) |
+| `--cat4` | `#7e93a8` | `#566b7e` | tramo 4 (acero) |
+| `--cat5` | `#7379e8` | `#4550b4` | tramo 5 (índigo) |
+| `--cat6` | `#b98bd6` | `#8a4fa8` | tramo 6 (malva) |
+| `--medida` | `= --cat1` | `= --cat1` | Barra que mide contra una escala (no reparte una composición) — duración, percentiles, topes |
+
+`--ac`/`--pos` quedan reservados a renta, positivo y selección/interacción; `--ac2` a advertencia;
+`--neg` a excedido/prohibición. `.rotulo` pasó de `--ac` a `--dim` — el rótulo de un panel no es
+ninguna de las cuatro cosas de arriba, y con acento en cada título el verde no distinguía nada.
+
+### Desviación aprobada — flujo renta fija / renta variable (10/08/2026)
+
+Esta spec describe la renta variable como un **panel aparte** (A4) y la cartera (A8) como una tabla
+de bonos en orden de incorporación. El rediseño del flujo RF/RV cambió las dos cosas: la cartera es
+una sola y se lee entera. Tres agregados, sin tocar la semántica de los tokens de arriba.
+
+**Badges de clase de activo.** Sigla de dos o tres letras al lado del ticker, en la grilla, en la
+cartera y en el bloque de renta variable. Mono 9 px, `letter-spacing: .04em`, padding 1×4 px, radio
+2 px, borde 1 px y texto **del mismo color**, fondo transparente. El `title` trae la descripción
+larga: nadie tiene por qué saber que SUB es subsoberano.
+
+| Sigla | Clase de activo | Color |
+|---|---|---|
+| `SOB` | Bono soberano | `--cat1` |
+| `SUB` | Bono subsoberano | `--cat1` |
+| `ON` | Obligación negociable | `--cat2` |
+| `ACC` | Acción | `--cat3` |
+| `CEDEAR` | CEDEAR | `--cat3` |
+
+Soberano y subsoberano comparten `--cat1` porque son el mismo eje (deuda pública, distinto emisor);
+acción y CEDEAR comparten `--cat3` por lo mismo. **Una clase que no está en esta tabla se muestra
+con su código crudo y en `--dim`, sin color**: `clase_activo` es vocabulario curado del proyecto,
+así que traducir los cinco valores conocidos es leer lo que la fuente declara, pero un sexto valor
+no se mete a la fuerza en la categoría más parecida (regla 11 del dominio). Sin dato de clase no se
+renderiza nada — un "s/d" al lado de cada ticker es ruido sin información.
+
+**Chips temáticos.** Píldoras arriba de la barra de filtros de Cordillera que precargan de un clic
+los filtros de renta fija y el sector de renta variable a la vez. Mismo molde que los chips de
+mandato (A1): radio 12 px, padding 4×11 px, 11,5 px. Activo: fondo `--ac`, texto `--bg`, borde
+`--ac`. Inactivo: fondo transparente, texto `--dim`, borde `--lin`. Rótulo "TEMÁTICAS" 10 px
+mayúsculas `letter-spacing: .06em` en `--dim` a la izquierda del grupo; el `title` de cada chip
+declara qué precarga y qué deja sin filtrar.
+
+El chip se apaga solo cuando los filtros dejan de coincidir con los que dejó puesto, pero **no
+deshace nada**: seguir prendido sobre una grilla que ya muestra otra cosa sería mentir sobre el
+estado. Un preset no puede referirse a un sector que no existe en el universo, y cuando la temática
+no tiene contraparte en una de las dos clases lo declara en vez de aproximar (no hay renta fija
+tecnológica, y ninguna acción ajusta por inflación por contrato).
+
+**Cartera agrupada por bloques.** A8 pasa de lista plana a **cinco bloques en orden fijo** —
+Soberanos y subsoberanos · Corporativos · Fondos comunes · Sin clasificar · Renta variable —, que es
+el orden del Excel de la mesa. Un bloque sin posiciones no se muestra.
+
+- Cabecera de bloque: `flex` con `justify-content: space-between`, padding 8/2/2 px. Rótulo 10 px
+  peso 600 mayúsculas `letter-spacing: .07em` en `--dim`; a la derecha el **subtotal de ponderación
+  pedida** del bloque, mono 11,5 px `--tx`.
+- **No lleva `role="row"`**: la tabla se navega por filas de posición, y contar separadores como
+  filas rompe la lectura por lector de pantalla.
+- **El "% real" de cada fila se mide contra la cartera entera, no contra su bloque.** Cada bloque
+  resuelve su invertido con una aritmética distinta (lámina y precio cada 100 VN en renta fija,
+  unidades enteras en renta variable); apilar las dos bases bajo la misma columna daría porcentajes
+  que no suman a nada.
+- En la fila de renta variable, la columna del emisor lleva la **denominación de la empresa**, la
+  cantidad va en unidades enteras (no hay valor nominal) y el mini-calendario dice **"no aplica"**,
+  no `s/d` — una acción no tiene cronograma: el dato no falta, no existe (regla 4 de esta spec).
+
+### Desviación aprobada — la fila de propuesta del optimizador (10/08/2026)
+
+Esta spec no describe los dos modos del optimizador como secciones separadas. F-033 y F-034
+conviven **apiladas** en la cartera confirmada, sin toggle: parten de las mismas candidatas y las
+particionan sin solaparse, así que mostrar una no implica esconder la otra.
+
+**La línea de contrapartida (F-034) siempre se dibuja.** Es la regla 8 del dominio sostenida en el
+render: o enumera los ejes que empeoran —cada uno en su unidad, separados por `·`— o dice con todas
+las letras que ninguno empeora. Nunca queda un espacio en blanco donde debería estar lo que se
+resigna. Dos precisiones de copy que son de dominio y no de estilo:
+
+- El delta se rotula **"Δ rendimiento"**, nunca "TIR": el modo se llama así en la ficha, pero una
+  tasa real sobre CER o una TNA en pesos no son una TIR en dólares (regla 2).
+- El eje legislación se nombra por lo que mide —**"peso bajo ley extranjera 100% → 0%"**— y no como
+  algo que "sube" o "baja", que se leería como un puntaje (regla 7). El cambio de ley va al lado
+  entre paréntesis, con los literales de la fuente (`Ley N.Y. → Ley Argentina`, regla 11).
+
+**Nota de costo de rotar**, al pie de cada fila de los dos modos, mono 10,5 px:
+
+| Estado | Qué se muestra | Color |
+|---|---|---|
+| verificable | total, arancel por pata y en cuántos meses lo paga la mejora | `--sd`, o `--neg` si es elevado |
+| no verificable | "falta punta de mercado en alguna pata" + el arancel como piso conocido | `--sd` |
+| sin bloque de costo | `Costo de rotar: s/d` | `--sd` |
+
+Un spread ausente **nunca** se cuenta como cero: haría leer una rotación cara como barata (regla 1).
 
 ### Tipografía
 

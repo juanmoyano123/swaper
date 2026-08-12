@@ -199,7 +199,10 @@ Los límites de concentración se muestran y se advierten en vivo, con el criter
 tope por emisor corporativo, **tope separado para el riesgo soberano** (el Tesoro emite bajo
 muchos prefijos —GD, AE, DIC, TZX, TY3— y todos son el mismo crédito; sin esta separación una
 cartera 100% soberana pasaba como diversificada) y tope por sector, con Soberano y Subsoberano
-exentos porque ya los acota el tope soberano.
+exentos porque ya los acota el tope soberano. El armado asistido además **reparte**: cada perfil
+declara un mínimo de sectores distintos y la selección prefiere sectores aún no representados,
+de forma determinística; junto a los topes se muestra la distribución por sector, por legislación
+y por naturaleza de tasa, y si el universo no alcanza para diversificar se declara, no se rellena.
 
 *Por qué Stage 1:* el calendario selecciona, pero sin ponderación editable no hay cartera; y el
 armado asistido es lógica que ya está escrita y verificada con 15 casos de regresión.
@@ -262,6 +265,11 @@ frontera ya vive en un solo lugar del motor (`cargar_universo()` devuelve renta 
 la renta variable se pide aparte y a propósito), y la interfaz la replica: el bloque de renta
 variable es una sección separada con su propio total, que suma al monto de la cartera pero no al
 cálculo de renta ni a los rendimientos ponderados.
+
+Cada acción y CEDEAR lleva **país de la empresa o índice de referencia**, como dato recopilado
+con origen y fecha declarados (si falta, queda vacío y se alerta — no se infiere del ticker), y
+el bloque muestra su propia distribución por país y por rubro: es donde la diversificación
+geográfica sí tiene universo.
 
 *Por qué Stage 1:* decisión ya tomada por el usuario, y la cartera estándar del cliente es
 60-70/30-40. Una propuesta que sólo cubre la renta fija no es la propuesta que el asesor lleva a

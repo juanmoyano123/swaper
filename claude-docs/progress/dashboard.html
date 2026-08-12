@@ -4,30 +4,147 @@
 <meta charset="utf-8">
 <title>10-Swaper — Progreso</title>
 <style>
-  body { font-family: ui-sans-serif, system-ui, sans-serif; background:#0a0e13; color:#dce6f0; margin:0; padding:32px; }
+  body { font-family: ui-sans-serif, system-ui, sans-serif; background:#0a0e13; color:#dce6f0; margin:0; padding:32px; max-width:1100px; }
   h1 { font-size:20px; margin:0 0 4px; }
+  h2 { font-size:14px; margin:28px 0 8px; color:#a8bccf; }
   p.sub { color:#7e91a5; font-size:13px; margin:0 0 24px; }
-  table { border-collapse: collapse; width:100%; margin-bottom:28px; }
+  table { border-collapse: collapse; width:100%; margin-bottom:20px; }
   th, td { text-align:left; padding:6px 10px; border-bottom:1px solid #1d2833; font-size:12.5px; }
   th { color:#7e91a5; text-transform:uppercase; font-size:10px; letter-spacing:0.08em; }
   .num { font-family: ui-monospace, monospace; text-align:right; }
   .pendiente { color:#7e91a5; }
+  .completada { color:#4ade80; font-weight:600; }
+  .cards { display:flex; gap:16px; margin-bottom:8px; flex-wrap:wrap; }
+  .card { background:#111823; border:1px solid #1d2833; border-radius:8px; padding:14px 18px; min-width:150px; }
+  .card .v { font-size:22px; font-family: ui-monospace, monospace; }
+  .card .l { font-size:11px; color:#7e91a5; text-transform:uppercase; letter-spacing:0.06em; margin-top:2px; }
+  .bar { background:#1d2833; border-radius:4px; height:8px; margin:16px 0 24px; overflow:hidden; }
+  .bar > div { background:#4ade80; height:100%; width:16.7%; }
+  code { color:#a8bccf; }
+  .nota { font-size:12px; color:#7e91a5; }
 </style>
 </head>
 <body>
   <h1>10-Swaper — Progreso de features</h1>
-  <p class="sub">Este dashboard es estático. El estado real vive en <code>claude-docs/progress/PROGRESS.md</code>; actualizar ese archivo a mano o desde <code>/build-feature</code>.</p>
+  <p class="sub">Actualizado al <strong>07/08/2026</strong> (Tanda 7 cerrada). Este dashboard es estático: el estado
+  real vive en <code>claude-docs/progress/PROGRESS.md</code> y el orden de ejecución en
+  <code>claude-docs/planning/plan-ejecucion-tandas.md</code>.</p>
+
+  <div class="cards">
+    <div class="card"><div class="v completada">21 / 42</div><div class="l">Features Stage 1</div></div>
+    <div class="card"><div class="v">93 / 185</div><div class="l">Person-days</div></div>
+    <div class="card"><div class="v">Sí</div><div class="l">Flujo de armado, punta a punta</div></div>
+    <div class="card"><div class="v">692 + 97</div><div class="l">Tests offline + integración</div></div>
+  </div>
+  <div class="bar"><div style="width:50.3%"></div></div>
+
+  <h2>Ciclo 1 — Cimientos e ingesta · 12 de 12 · <span class="completada">completo</span></h2>
   <table>
-    <thead><tr><th>Ciclo</th><th class="num">Features</th><th class="num">Person-days</th><th class="num">Semanas (est.)</th></tr></thead>
+    <thead><tr><th>ID</th><th>Feature</th><th class="num">RICE</th><th>Estado</th></tr></thead>
     <tbody>
-      <tr><td>1 — Cimientos e ingesta</td><td class="num">12</td><td class="num">47</td><td class="num">~9,5</td></tr>
-      <tr><td>2 — Armador completo</td><td class="num">12</td><td class="num">55</td><td class="num">~11</td></tr>
-      <tr><td>3 — RV, carga y diagnóstico</td><td class="num">9</td><td class="num">41</td><td class="num">~8</td></tr>
-      <tr><td>4 — Optimizador y persistencia</td><td class="num">9</td><td class="num">42</td><td class="num">~8,5</td></tr>
-      <tr><td><strong>Stage 1 (total)</strong></td><td class="num"><strong>42</strong></td><td class="num"><strong>185</strong></td><td class="num"><strong>~37</strong></td></tr>
-      <tr><td>Stage 2</td><td class="num">8</td><td class="num">72</td><td class="num">~14,5</td></tr>
+      <tr><td>F-001</td><td>Esqueleto de servicio backend</td><td class="num">400,0</td><td class="completada">completada</td></tr>
+      <tr><td>F-002</td><td>Esquema de datos y migraciones</td><td class="num">300,0</td><td class="completada">completada</td></tr>
+      <tr><td>F-003</td><td>Esqueleto de aplicación frontend</td><td class="num">400,0</td><td class="completada">completada</td></tr>
+      <tr><td>F-004</td><td>Cliente de la API abierta de BYMA</td><td class="num">300,0</td><td class="completada">completada</td></tr>
+      <tr><td>F-005</td><td>Parser del informe diario de IAMC</td><td class="num">50,0</td><td class="completada">completada</td></tr>
+      <tr><td>F-006</td><td>Cliente del feed de cashflow de Docta</td><td class="num">240,0</td><td class="completada">completada</td></tr>
+      <tr><td>F-007</td><td>Consolidador multi-fuente</td><td class="num">160,0</td><td class="completada">completada</td></tr>
+      <tr><td>F-008</td><td>Job programado de ingesta</td><td class="num">266,7</td><td class="completada">completada</td></tr>
+      <tr><td>F-009</td><td>condiciones_emision: semilla y herencia</td><td class="num">200,0</td><td class="completada">completada</td></tr>
+      <tr><td>F-010</td><td>Sanidad del dato en dos capas</td><td class="num">400,0</td><td class="completada">completada</td></tr>
+      <tr><td>F-011</td><td>Deduplicación de especies</td><td class="num">400,0</td><td class="completada">completada</td></tr>
+      <tr><td>F-012</td><td>Tipo de cambio implícito y normalización</td><td class="num">266,7</td><td class="completada">completada</td></tr>
     </tbody>
   </table>
-  <p class="pendiente">Ver <code>PROGRESS.md</code> para el detalle de las 50 features. Siguiente paso: <code>/build-feature F-001</code>.</p>
+  <p class="nota">La base está poblada: F-007 corrió contra Supabase el 06/08/2026 y dejó 2.894
+  instrumentos, 3.344 puntas y 6.150 filas de cronograma, con el motor Python leyendo la vista
+  <code>resumen</code> sin modificarse (GWT-4 verificado).</p>
+
+  <h2>Avance por ciclo</h2>
+  <p class="nota">Las tandas agrupan por ausencia de solape, no por milestone, así que adelantan
+  features de ciclos posteriores: F-014 (ciclo 2) y F-028 (ciclo 3) entraron en la Tanda 1.</p>
+  <table>
+    <thead><tr><th>Ciclo</th><th class="num">Features</th><th class="num">Person-days</th><th class="num">Semanas (est.)</th><th>Estado</th></tr></thead>
+    <tbody>
+      <tr><td>1 — Cimientos e ingesta</td><td class="num">12</td><td class="num">47</td><td class="num">~9,5</td><td><span class="completada">12 completadas</span> — milestone 1 cerrado</td></tr>
+      <tr><td>2 — Armador completo</td><td class="num">12</td><td class="num">55</td><td class="num">~11</td><td><span class="completada">5 completadas</span> (F-013, F-014, F-015, F-016, F-018), 7 pendientes</td></tr>
+      <tr><td>3 — RV, carga y diagnóstico</td><td class="num">9</td><td class="num">41</td><td class="num">~8</td><td><span class="completada">2 completadas</span> (F-028, F-029), 7 pendientes</td></tr>
+      <tr><td>4 — Optimizador y persistencia</td><td class="num">9</td><td class="num">42</td><td class="num">~8,5</td><td><span class="completada">2 completadas</span> (F-038, F-039, adelantadas), 7 pendientes</td></tr>
+      <tr><td><strong>Stage 1 (total)</strong></td><td class="num"><strong>42</strong></td><td class="num"><strong>185</strong></td><td class="num"><strong>~37</strong></td><td class="num"><strong>50 %</strong></td></tr>
+      <tr><td>Stage 2</td><td class="num">8</td><td class="num">72</td><td class="num">~14,5</td><td class="pendiente">pendiente</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Próximo paso</h2>
+  <p class="nota"><strong>Tanda 7 cerrada el 07/08/2026</strong> — F-018 (cartera editable) ∥ F-039
+  (ficha de instrumento). <strong>El flujo de armado queda usable de punta a punta</strong>: elegir
+  de la grilla, ajustar pesos, ver el peso real, y abrir la ficha de cualquier papel. Las puntas de
+  compra/venta van <code>s/d</code> porque no existen en la fuente hoy — no se simulan. Segunda
+  tanda con el ruteo Fable-planifica/Sonnet-ejecuta; la verificación de cierre encontró un error de
+  tipos real que sólo aparecía con el proyecto completo compilando junto (cada agente había
+  verificado sólo su propia carpeta). Sigue la <strong>Tanda 8: F-017 (filtros) ∥ F-024 (redondeo
+  por lámina) ∥ F-040 (sensibilidad)</strong> — F-024 es la que le da a F-018 el dato de lámina que
+  hoy le falta. El orden completo está en <code>claude-docs/planning/plan-ejecucion-tandas.md</code>.</p>
+
+  <h2>Decisión pendiente del usuario</h2>
+  <p class="nota"><strong>No hay alerta de «el dato está viejo», y es a propósito.</strong> Sería la
+  alerta más obvia de la barra de F-013. Declararlo exige un umbral, y fijar ese umbral es decidir
+  cuánta desactualización es aceptable para operar — depende de si la rueda está abierta, de qué
+  instrumento se mire y de para qué. <strong>Nadie tomó esa decisión</strong>, así que
+  <code>antiguedad_minutos</code> va crudo, con la hora del snapshot y la demora declarada de la
+  fuente al lado. Es criterio de dominio, no de código: hay que preguntárselo al usuario.</p>
+
+  <h2>Deuda declarada</h2>
+  <ul class="nota">
+    <li><strong>El dato de la base no tiene traza de origen.</strong> <code>corridas_ingesta</code>
+    está vacía: todo lo que hay entró por corridas manuales del endpoint de F-007, y el job
+    programado de F-008 nunca corrió de verdad. La barra lo declara con
+    <code>sin_corrida_registrada</code>. Se destraba solo la primera vez que corra la ingesta de las
+    11:30.</li>
+    <li><strong>El calendario cubre 70 de las 431 emisiones (16 %).</strong> 360 quedan afuera por no
+    declarar paridad, y sin paridad el cupón no se puede expresar como fracción del monto invertido
+    sin traer un tipo de cambio de afuera. <strong>Es la cuarta manifestación de la misma causa
+    raíz</strong>: IAMC publica paridad y métricas sólo para el ticker exacto que su informe nombra.
+    La alerta <code>cobertura_del_calendario</code> lo declara y apunta la decisión a F-011 — qué
+    especie representa a una emisión. Los doce meses igual quedan cubiertos con esos 70, así que
+    <strong>F-016 no está bloqueada</strong>; lo limitado es de cuántos papeles se puede elegir.</li>
+    <li><strong>El GWT-4 de F-015 quedó sin verificar, a propósito y por escrito.</strong> Pide
+    reproducir RUCED, SBC2D, CS47D y LOC5D contra el Excel real de la mesa, que no está en el
+    repositorio. Se verificó lo otro —que el backend reproduce al motor sobre el mismo input
+    versionado—, que es una cadena de dos eslabones donde el primero no se re-verificó.</li>
+    <li><strong>146 de las 431 emisiones quedan sin rendimiento en la vista colapsada.</strong>
+    Con el volumen normalizado de F-012 enganchado en el desempate bajaron de 199 a 146, pero no
+    alcanzó, y <strong>no se inventó un criterio para tapar el resto</strong>. Queda por decidir si
+    hace falta uno que prefiera a la especie que publica rendimiento — con la contra de que sesgaría
+    el representante hacia lo que IAMC elige reportar, que no es la más líquida. El dato sigue entero
+    en la vista viva y la corrida lo alerta.</li>
+    <li><strong>Una sola causa raíz deja inertes tres controles.</strong> F-007 asigna las métricas
+    por ticker sólo al ticker exacto que IAMC reporta — 240 instrumentos con TIR y duración sobre
+    2.894—, y por eso no pueden dispararse la capa 1 de la sanidad de F-010, el chequeo del 5 % de
+    duración de F-011 ni el desempate por rendimiento. Los tres están portados y testeados: lo que
+    falta es dato, no código.</li>
+    <li><strong>El dato curado no llega todavía al universo.</strong> F-009 puebla
+    <code>condiciones_emision</code> (823 especies), pero la vista <code>resumen</code> no la cruza y
+    F-009 no escribe <code>instrumentos</code>. <strong>F-020</strong> (concentración por sector y
+    ley) y <strong>F-024</strong> (redondeo por lámina) lo necesitan: hay que decidir si se extiende
+    la vista o si la corrida de F-007 propaga.</li>
+    <li><strong>535 instrumentos quedan sin segmento</strong> y entre ellos están los tres
+    rendimientos más altos del universo — VE32P (614 %), CAC4O (316 %), PQCKO (228 %) —, que por lo
+    tanto no pasan por ningún tope de sanidad. El hueco es de la cobertura de <code>tipo_tasa</code>,
+    que viene del <code>type</code> de Docta.</li>
+    <li>El pool del backend se conecta con un rol que <strong>saltea RLS</strong>. Hoy no se
+    materializa porque ningún endpoint sirve tablas de usuario, pero F-041 no puede exponer carteras
+    por <code>/api/v1/</code> sin resolverlo antes.</li>
+    <li><code>tna</code> sigue vacía en todo el universo, y la lámina de los bonos del Tesoro también:
+    el artefacto curado no la trae para ningún soberano.</li>
+    <li><strong>La cartera editable de F-018 todavía no redondea por lámina.</strong> El motor de
+    cálculo ya lo sabe hacer y está testeado, pero el dato de lámina por ticker recién lo cablea
+    F-024 (Tanda 8) desde <code>condiciones_emision</code>. Hasta entonces toda posición muestra
+    "lámina s/d" y el nominal no se pisa a ningún múltiplo.</li>
+    <li><strong>Las puntas de compra y venta no existen en ninguna vista del API.</strong> Se
+    persisten en la tabla <code>puntas</code> pero ninguna consulta las expone todavía. La ficha de
+    instrumento (F-039) las muestra <code>s/d</code> con el motivo declarado en vez de simular un
+    spread, que es lo que hacía el prototipo de diseño original.</li>
+  </ul>
 </body>
 </html>

@@ -1,0 +1,116 @@
+"""Los dos endpoints del universo saneado: el resumen de la corrida y el listado auditable.
+
+Lo que se prueba acá es el contrato HTTP —qué viaja, cómo se pagina y qué pasa sin base—; el
+veredicto de las dos capas ya está probado sin levantar nada en `test_universo_sanidad.py`.
+"""
+
+from typing import Any
+
+import pytest
+
+from app.universo import servicio
+from tests.conftest import cliente
+from tests.test_universo_servicio import UNIVERSO, FakeConexionLectura
+
+SANIDAD = "/api/v1/universo/sanidad"
+DESCARTES = "/api/v1/universo/sanidad/descartes"
+
+
+@pytest.fixture(autouse=True)
+def sin_byma(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`/sanidad` es uno de los dos endpoints que piden el índice de contraste, y sin esto la suite
+    offline saldría a Internet: un test que dependiera de que la API abierta esté arriba fallaría
+    los días que BYMA falla, y con los reintentos del cliente tardaría 30 s en hacerlo.
+
+    Que devuelva vacío no debilita lo que se prueba acá —el contrato HTTP del resumen—: el implícito
+    se deriva del propio universo y el contraste es un control, no una fuente.
+    """
+
+    async def _vacio() -> list:
+        return []
+
+    monkeypatch.setattr(servicio, "leer_indices", _vacio)
+
+
+@pytest.fixture
+def app_con_universo(crear_app):
+    def _crear(filas: list[dict[str, Any]] | None = None):
+        return crear_app(FakeConexionLectura(UNIVERSO if filas is None else filas))
+
+    return _crear
+
+
+async def test_el_resumen_declara_los_descartes_y_sus_alertas(app_con_universo) -> None:
+    """Las alertas del universo son las de la sanidad **y** las del tipo de cambio.
+
+    Las de F-012 aparecen acá porque van a la misma lista: la barra de estado del dato tiene una
+    sola, y un universo cuya liquidez no se puede comparar está tan incompleto como uno con
+    instrumentos descartados. Sobre este universo de prueba las dos que salen son las esperables —
+    seis especies y ningún par en dólares, y ninguna con la moneda declarada.
+    """
+    async with cliente(app_con_universo()) as http:
+        respuesta = await http.get(SANIDAD)
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["resumen"]["descartados"] == 2
+    assert cuerpo["resumen"]["por_capa"]["especie_incoherente"] == 1
+    codigos = {a["codigo"] for a in cuerpo["alertas"]}
+    # `moneda_de_cotizacion_asumida` se renombró a `..._sin_declarar` el 08/08/2026: el hecho que
+    # reporta se invirtió. Antes decía "no la declaró, la dedujimos del sufijo"; ahora dice "no la
+    # declaró y por eso no se convierte" — la regla 11 sacó la deducción.
+    assert codigos == {
+        "especie_incoherente",
+        "rendimiento_fuera_de_rango",
+        "tipo_de_cambio_sin_pares",
+        "moneda_de_cotizacion_sin_declarar",
+    }
+
+
+async def test_el_listado_dice_ticker_motivo_y_el_valor_que_lo_disparo(app_con_universo) -> None:
+    async with cliente(app_con_universo()) as http:
+        respuesta = await http.get(DESCARTES)
+
+    items = respuesta.json()["items"]
+    por_ticker = {i["ticker"]: i for i in items}
+    assert set(por_ticker) == {"VSCQD", "TXCER"}
+    assert por_ticker["VSCQD"]["motivo"] == "especie_incoherente"
+    assert por_ticker["VSCQD"]["ticker_referencia"] == "VSCQO"
+    assert por_ticker["TXCER"]["motivo"] == "rendimiento_fuera_de_rango"
+    assert por_ticker["TXCER"]["umbral"] == 1.0
+
+
+async def test_el_listado_se_puede_filtrar_por_capa(app_con_universo) -> None:
+    async with cliente(app_con_universo()) as http:
+        respuesta = await http.get(DESCARTES, params={"motivo": "especie_incoherente"})
+
+    assert [i["ticker"] for i in respuesta.json()["items"]] == ["VSCQD"]
+
+
+async def test_un_motivo_que_no_existe_se_rechaza_con_422(app_con_universo) -> None:
+    async with cliente(app_con_universo()) as http:
+        respuesta = await http.get(DESCARTES, params={"motivo": "porque-si"})
+
+    assert respuesta.status_code == 422
+
+
+async def test_el_cursor_avanza_sin_repetir_ni_saltear(app_con_universo) -> None:
+    async with cliente(app_con_universo()) as http:
+        primera = (await http.get(DESCARTES, params={"limit": 1})).json()
+        assert [i["ticker"] for i in primera["items"]] == ["TXCER"]
+        assert primera["next_cursor"]
+
+        segunda = (
+            await http.get(DESCARTES, params={"limit": 1, "cursor": primera["next_cursor"]})
+        ).json()
+
+    assert [i["ticker"] for i in segunda["items"]] == ["VSCQD"]
+    assert segunda["next_cursor"] is None
+
+
+async def test_sin_base_de_datos_responde_503(crear_app) -> None:
+    """Un universo que no se puede leer no es un universo sano: no se contesta cero descartes."""
+    async with cliente(crear_app(None)) as http:
+        respuesta = await http.get(SANIDAD)
+
+    assert respuesta.status_code == 503

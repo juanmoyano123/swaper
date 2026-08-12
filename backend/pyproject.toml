@@ -1,0 +1,24 @@
+[project]
+name = "swaper-backend"
+version = "0.1.0"
+description = "Backend de 10-Swaper: armado y optimizacion de carteras de renta fija y variable"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "integration: requiere una base de datos real accesible via DATABASE_URL",
+]
+addopts = "-m 'not integration'"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011"]

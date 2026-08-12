@@ -1,10 +1,21 @@
 <!doctype html>
-<html lang="en">
+<html lang="es" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>10-Swaper</title>
+    <script>
+      // Corre antes del bundle y antes de la primera pintura: cualquier solución dentro de React
+      // llegaría un frame tarde y el usuario vería un destello del tema anterior.
+      // El default es oscuro por decisión de producto, no por preferencia del sistema operativo.
+      try {
+        var t = localStorage.getItem('swaper-tema')
+        document.documentElement.dataset.theme = t === 'light' ? 'light' : 'dark'
+      } catch (_) {
+        /* localStorage bloqueado: queda el data-theme="dark" del atributo estático */
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

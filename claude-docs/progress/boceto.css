@@ -1,0 +1,229 @@
+/*
+  Boceto del producto 10-Swaper — Fase 5, artefacto de comunicación.
+
+  Los tokens salen de `claude-docs/planning/design-system.md` (Fase 3, diseño "Cordillera v2") y
+  están copiados de `frontend/src/index.css`, que ya los implementó. No se inventa ninguno: si el
+  boceto y la app divergen en un color, el que manda es el design system.
+
+  Sin CDN, sin fuentes externas, sin imágenes. El archivo tiene que abrir con doble clic y sin red.
+  Los iconos son caracteres (☾ ☀ ✓ ✗ ● Σ ×) y los rombos son cuadrados rotados 45°.
+*/
+
+:root {
+  --bg: #0a0e13;
+  --pan: #111820;
+  --pan2: #0d141b;
+  --lin: #1d2833;
+  --tx: #dce6f0;
+  --dim: #7e91a5;
+  --ac: #5ee39a;
+  --ac2: #f2b13c;
+  --neg: #ff6b6b;
+  --pos: #5ee39a;
+  --sd: #516373;
+  --sel: rgba(94, 227, 154, 0.1);
+
+  color-scheme: dark;
+  font: 13.5px/1.45 ui-sans-serif, system-ui, "Helvetica Neue", sans-serif;
+  color: var(--tx);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+:root[data-theme="light"] {
+  --bg: #f2f4f7;
+  --pan: #ffffff;
+  --pan2: #eef1f5;
+  --lin: #d5dce4;
+  --tx: #182430;
+  --dim: #61717f;
+  --ac: #0e8a55;
+  --ac2: #a86a06;
+  --neg: #c0392b;
+  --pos: #0e8a55;
+  --sd: #94a4b4;
+  --sel: rgba(14, 138, 85, 0.08);
+
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+
+/* Todo dato numérico va en mono y alineado a la derecha: es lo que hace legible una tabla densa.
+   `tabular-nums` mantiene el ancho de los dígitos para que las columnas no bailen al refrescar. */
+.mono {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.rotulo {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--ac);
+}
+
+@keyframes pulso { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+
+/* ---------------------------------------------------------------- barra superior (52 px) */
+
+.barra {
+  position: sticky; top: 0; z-index: 40;
+  display: flex; align-items: center; gap: 16px;
+  height: 52px; padding: 0 18px;
+  background: var(--pan); border-bottom: 1px solid var(--lin);
+}
+.marca { font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
+.marca span { font-size: 10px; font-weight: 600; letter-spacing: .1em; color: var(--dim); margin-left: 6px; }
+
+.nav { display: flex; gap: 6px; }
+.nav button {
+  font: inherit; font-size: 12px; padding: 6px 14px; border-radius: 3px; cursor: pointer;
+  background: transparent; color: var(--dim); border: 1px solid var(--lin);
+}
+.nav button[aria-current="page"] { background: var(--ac); color: var(--bg); border-color: var(--ac); font-weight: 600; }
+
+.vivo {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11px; color: var(--dim);
+  padding: 4px 10px; border: 1px solid var(--lin); border-radius: 3px;
+}
+.punto { width: 6px; height: 6px; border-radius: 50%; background: var(--pos); animation: pulso 1.6s infinite; }
+
+.derecha { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.tema { width: 28px; height: 26px; border-radius: 3px; background: transparent; color: var(--dim);
+        border: 1px solid var(--lin); cursor: pointer; font-size: 13px; }
+
+/* ---------------------------------------------------------------- barra de estado del dato (F-013) */
+
+.estado {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px;
+  padding: 7px 18px; background: var(--pan2); border-bottom: 1px solid var(--lin);
+  font-size: 11px; color: var(--dim);
+}
+.estado b { color: var(--tx); font-weight: 600; }
+.estado .aviso { color: var(--ac2); }
+
+/* ---------------------------------------------------------------- estructura */
+
+.pantalla { padding: 14px 18px 40px; }
+.pantalla[hidden] { display: none; }
+.pantalla > h1 { font-size: 17px; font-weight: 600; margin: 0 0 3px; }
+.pantalla > .bajada { font-size: 12.5px; color: var(--dim); margin: 0 0 14px; max-width: 76ch; text-wrap: pretty; }
+
+.panel { background: var(--pan); border: 1px solid var(--lin); border-radius: 4px; padding: 12px 16px; margin-bottom: 12px; }
+.panel.destacado { border-left: 3px solid var(--ac); }
+.panel > header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+.panel > header h2 { font-size: 15px; font-weight: 600; margin: 0; }
+.panel > header .meta { margin-left: auto; font-size: 11px; color: var(--dim); }
+.nota { font-size: 11px; color: var(--dim); margin: 8px 0 0; text-wrap: pretty; }
+
+.cols { display: grid; gap: 12px; align-items: start; }
+.cols-armador { grid-template-columns: minmax(0, 1fr) 252px; }
+.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.fija { position: sticky; top: 66px; }
+
+/* Marca de qué feature construye cada panel: el boceto es un mapa de ruta, no algo que ya existe. */
+.ficha-feature {
+  display: inline-block; font-size: 9px; font-weight: 600; letter-spacing: .08em;
+  padding: 2px 6px; border-radius: 2px; border: 1px solid var(--lin); color: var(--dim);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* ---------------------------------------------------------------- tablas */
+
+.tabla-scroll { overflow-x: auto; }
+table.t { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+table.t th {
+  text-align: left; font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--dim); padding: 7px 13px; background: var(--pan2); border-bottom: 1px solid var(--lin);
+  white-space: nowrap;
+}
+table.t td { padding: 6px 13px; border-bottom: 1px solid var(--lin); white-space: nowrap; }
+table.t td.n, table.t th.n { text-align: right; }
+table.t tbody tr:hover { background: var(--sel); cursor: pointer; }
+.sub { display: block; font-size: 10.5px; color: var(--dim); }
+.sd { color: var(--dim); font-style: italic; }
+.pos { color: var(--pos); }
+.neg { color: var(--neg); }
+.at { color: var(--ac2); }
+
+/* ---------------------------------------------------------------- cordillera de 12 meses */
+
+.cordillera { display: flex; gap: 8px; align-items: flex-end; height: 290px; position: relative; padding-top: 18px; }
+.cordillera.pesos { height: 118px; }
+.mes { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; position: relative; cursor: pointer; }
+.mes .monto { font-size: 11.5px; text-align: center; margin-bottom: 4px; }
+.mes .barra-mes { display: flex; flex-direction: column-reverse; border-radius: 4px 4px 0 0; overflow: hidden; }
+.mes .tramo { background: var(--ac); border-top: 1px solid rgba(0,0,0,.35); }
+.cordillera.pesos .tramo { background: var(--ac2); }
+.mes.sel { background: var(--sel); }
+.mes.sel .etiqueta { color: var(--ac); font-weight: 700; border-top: 2px solid var(--ac); }
+.piso { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--ac2); }
+.piso span { position: absolute; right: 0; top: -14px; font-size: 10.5px; color: var(--ac2); background: var(--pan); padding: 0 4px; }
+
+.meses { display: flex; gap: 8px; margin-top: 6px; }
+.meses > div { flex: 1; text-align: center; font-size: 12.5px; padding-top: 3px; }
+.rombo { display: inline-block; width: 7px; height: 7px; transform: rotate(45deg); margin: 4px 2px 0; }
+.rombo.amort { background: var(--ac2); }
+.rombo.bal { background: var(--sd); }
+.leyenda { display: flex; gap: 14px; margin-top: 8px; font-size: 10.5px; color: var(--dim); flex-wrap: wrap; }
+
+/* ---------------------------------------------------------------- KPIs y renta */
+
+.renta-grande { font-size: 36px; color: var(--ac); line-height: 1.05; }
+.kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.kpi { background: var(--pan2); border: 1px solid var(--lin); border-radius: 3px; padding: 8px 10px; }
+.kpi .v { font-size: 21px; }
+.kpi .l { font-size: 9px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); margin-top: 2px; }
+
+/* ---------------------------------------------------------------- chips, barras, ejes */
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 11.5px; padding: 5px 11px; border-radius: 12px; border: 1px solid var(--lin); color: var(--dim); }
+.chip.on { border-color: var(--ac); color: var(--ac); background: var(--sel); }
+.chip.no { border-color: var(--neg); color: var(--neg); }
+
+.barra-dist { display: flex; height: 10px; border-radius: 2px; overflow: hidden; background: var(--pan2); margin: 5px 0; }
+.barra-dist > i { display: block; height: 100%; }
+
+.eje { display: grid; grid-template-columns: 118px 1fr 150px; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--lin); }
+.eje .nom { font-size: 12px; }
+.eje .pista { height: 8px; background: var(--pan2); border-radius: 2px; overflow: hidden; }
+.eje .pista > i { display: block; height: 100%; background: var(--ac); }
+.eje .cob { font-size: 10.5px; color: var(--dim); text-align: right; }
+
+/* ---------------------------------------------------------------- drawer de ficha (F-039) */
+
+.drawer {
+  position: fixed; top: 52px; right: 0; bottom: 0; width: 430px; z-index: 50;
+  background: var(--pan); border-left: 1px solid var(--ac);
+  box-shadow: -16px 0 40px rgba(0,0,0,.35);
+  overflow-y: auto; padding: 0 16px 24px;
+}
+.drawer[hidden] { display: none; }
+.drawer header {
+  position: sticky; top: 0; background: var(--pan); padding: 14px 0 10px;
+  border-bottom: 1px solid var(--lin); display: flex; align-items: baseline; gap: 10px;
+}
+.drawer header .tk { font-size: 20px; }
+.drawer header button { margin-left: auto; background: transparent; border: 0; color: var(--dim); font-size: 16px; cursor: pointer; }
+.monedas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
+.moneda { background: var(--pan2); border: 1px solid var(--lin); border-radius: 3px; padding: 8px; }
+.moneda.act { border-color: var(--ac); }
+.moneda .l { font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+.campos { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 12px; font-size: 12px; }
+.campos div { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--lin); }
+.campos span:first-child { color: var(--dim); }
+
+@media (max-width: 1280px) {
+  .cols-armador { grid-template-columns: minmax(0, 1fr); }
+  .fija { position: static; }
+  .drawer { width: 100%; }
+}
