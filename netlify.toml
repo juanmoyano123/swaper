@@ -1,0 +1,11 @@
+[build]
+  base = "frontend"
+  command = "npm run build"
+  publish = "dist"
+
+# SPA de React Router: cualquier ruta que no sea un archivo real cae en index.html,
+# para que refrescar o entrar directo a una URL interna no de 404 de Netlify.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
