@@ -52,10 +52,10 @@ export type PosicionArmada = z.infer<typeof esquemaPosicionArmada>
 export type ResultadoArmado = z.infer<typeof esquemaResultadoArmado>
 export type AlertaArmado = z.infer<typeof esquemaAlertaArmado>
 
-/** Los cinco campos del mandato del cliente que pide la ficha de F-019 -- monto, moneda de
- *  referencia, objetivo de cobertura, perfil y horizonte. Espejo de `ParametrosArmado` del
- *  backend, recortado a lo que el formulario expone (sin `mix` manual, `n_total`, `min_rend` ni
- *  `pago_mensual`: la ficha no los menciona como parte del input de esta feature). */
+/** El mandato del cliente. Espejo de `ParametrosArmado` del backend, recortado a lo que el
+ *  formulario expone: sin `mix` manual ni `n_total`, y sin `pago_mensual` —que el backend declara
+ *  pero su motor todavía no consume (ver `app/armado/motor.py`: "el desempate por calendario no se
+ *  portó"), así que exponerlo prometería un efecto que no ocurre. */
 export interface ParametrosArmadoAsistido {
   monto: number
   moneda: 'usd' | 'ars' | 'todas'
@@ -67,6 +67,14 @@ export interface ParametrosArmadoAsistido {
   pct_rv?: number
   /** Sector de Yahoo para acotar la renta variable a una temática. */
   sector_rv?: string | null
+  /** Rendimiento mínimo exigido a la renta fija, en puntos porcentuales (`8` = 8%). Va al
+   *  `min_rend` del backend, que el motor sí consume como piso al elegir candidatos. Omitirlo es
+   *  no exigir piso.
+   *
+   *  Es el mismo número que `filtros.tirMin` de la grilla, y se mantienen sincronizados a
+   *  propósito: que el armado automático proponga un papel que la grilla de al lado esconde por no
+   *  llegar al piso sería la pantalla contradiciéndose sola. */
+  min_rend?: number
 }
 
 /**

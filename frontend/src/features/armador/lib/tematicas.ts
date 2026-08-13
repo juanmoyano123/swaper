@@ -12,8 +12,15 @@
  * preset no puede referirse a un sector que no está en esa lista: sería filtrar por una categoría
  * inventada y devolver cero sin explicar por qué.
  *
- * **No hay renta fija tecnológica en el universo**, y por eso el preset de tecnológicas declara que
- * arma sólo renta variable en vez de aproximar con Telecomunicaciones, que es otra cosa.
+ * **No hay renta fija tecnológica ni de salud en el universo**, y por eso esos dos presets declaran
+ * que arman sólo renta variable en vez de aproximar con Telecomunicaciones o con Servicios, que son
+ * otra cosa. Al revés pasa lo mismo: Agro y Energias Renovables existen en renta fija pero Yahoo no
+ * les da un sector propio, así que esos presets no filtran renta variable en vez de elegir por la
+ * fuente cuál de sus categorías "es" el rubro (regla 11).
+ *
+ * **Petróleo y renovables van separados a propósito.** El universo de renta fija las clasifica
+ * distinto (`O&G` contra `Energias Renovables`) y juntarlas bajo una etiqueta "Energía" haría que
+ * un preset devuelva emisiones de un rubro que el asesor no pidió.
  *
  * **Los sectores de renta variable son los de Yahoo Finance**, que llegan por el job de
  * enriquecimiento (`POST /api/v1/jobs/perfiles-renta-variable`). Al 10/08/2026 ese job todavía no
@@ -38,18 +45,30 @@ export interface PresetTematico {
 
 export const PRESETS_TEMATICOS: PresetTematico[] = [
   {
-    id: 'energia',
-    etiqueta: 'Energía',
-    filtrosRf: { sector: 'O&G' },
-    sectorRv: 'Energy',
-    nota: 'Renta fija del sector O&G y renta variable del sector Energy de Yahoo.',
-  },
-  {
     id: 'financieras',
     etiqueta: 'Financieras',
     filtrosRf: { sector: 'Financiera' },
     sectorRv: 'Financial Services',
     nota: 'Renta fija del sector Financiera y renta variable del sector Financial Services de Yahoo.',
+  },
+  {
+    id: 'petroleo-gas',
+    etiqueta: 'Petróleo y gas',
+    filtrosRf: { sector: 'O&G' },
+    sectorRv: 'Energy',
+    nota:
+      'Renta fija del sector O&G —que es literalmente Oil & Gas— y renta variable del sector ' +
+      'Energy de Yahoo. Las renovables van aparte: el universo las clasifica por separado.',
+  },
+  {
+    id: 'energias-renovables',
+    etiqueta: 'Energías renovables',
+    filtrosRf: { sector: 'Energias Renovables' },
+    sectorRv: null,
+    nota:
+      'Renta fija del sector Energias Renovables (9 emisiones). No filtra la renta variable: ' +
+      'Yahoo no tiene un sector de renovables — las reparte entre Energy y Utilities según la ' +
+      'empresa, y elegir una de las dos sería decidir por la fuente.',
   },
   {
     id: 'tecnologicas',
@@ -59,6 +78,35 @@ export const PRESETS_TEMATICOS: PresetTematico[] = [
     nota:
       'Sólo renta variable: el universo de renta fija no tiene emisores tecnológicos, y ' +
       'Telecomunicaciones no es lo mismo. La grilla de bonos queda sin filtrar.',
+  },
+  {
+    id: 'consumo-masivo',
+    etiqueta: 'Consumo masivo',
+    filtrosRf: { sector: 'Alimentos y Consumo' },
+    sectorRv: 'Consumer Defensive',
+    nota:
+      'Renta fija del sector Alimentos y Consumo (8 emisiones) y renta variable del sector ' +
+      'Consumer Defensive de Yahoo, que es el consumo no cíclico. Consumer Cyclical queda ' +
+      'afuera: es consumo discrecional, otra cosa.',
+  },
+  {
+    id: 'medicina',
+    etiqueta: 'Medicina y salud',
+    filtrosRf: null,
+    sectorRv: 'Healthcare',
+    nota:
+      'Sólo renta variable: no hay ningún emisor de salud en el universo de renta fija — ' +
+      'Servicios agrupa otra cosa y usarlo sería filtrar por una categoría que no dice salud. ' +
+      'La grilla de bonos queda sin filtrar.',
+  },
+  {
+    id: 'agro',
+    etiqueta: 'Agro',
+    filtrosRf: { sector: 'Agro' },
+    sectorRv: null,
+    nota:
+      'Renta fija del sector Agro (26 emisiones). No filtra la renta variable: Yahoo reparte el ' +
+      'agro entre Consumer Defensive y Basic Materials, sin un sector propio.',
   },
   {
     id: 'cobertura-inflacion',

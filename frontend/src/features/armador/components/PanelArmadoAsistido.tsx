@@ -17,10 +17,12 @@
  * hacía nada visible más abajo, y cargarlo en los dos lugares se leía como el doble de plata.
  */
 
-import { useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 
 import { AlertasCalendario } from './AlertasCalendario'
 import { useArmadoAsistido } from '../hooks/useArmadoAsistido'
+import { useEspeciesUniverso } from '../hooks/useEspeciesUniverso'
+import { CALIFICACION_NO_INFORMADA } from '../lib/filtros'
 import { PCT_RV_PERFIL, type ParametrosArmadoAsistido } from '../lib/schemaArmado'
 import { PRESETS_TEMATICOS, presetPorId } from '../lib/tematicas'
 import { useArmador, useArmadorAcciones } from '../store/carteraStore'
@@ -54,8 +56,8 @@ export function PanelArmadoAsistido() {
   // El monto vive en el store y no acá: es el mismo capital que reparte `CarteraEditable`, y
   // tenerlo duplicado hacía que cargar 10.000 en el asistido y 10.000 en la cartera se leyera como
   // 20.000 sin que nada lo dijera. Los dos campos son ahora dos vistas del mismo número.
-  const { montoTotal, objetivoRv } = useArmador()
-  const { fijarMontoTotal, fijarObjetivoRv } = useArmadorAcciones()
+  const { montoTotal, objetivoRv, filtros } = useArmador()
+  const { fijarMontoTotal, fijarObjetivoRv, fijarFiltros } = useArmadorAcciones()
 
   const [moneda, setMoneda] = useState<ParametrosArmadoAsistido['moneda']>('todas')
   const [cobertura, setCobertura] = useState<ParametrosArmadoAsistido['cobertura']>('mixta')
@@ -80,6 +82,30 @@ export function PanelArmadoAsistido() {
 
   const mutacion = useArmadoAsistido()
 
+  // Misma consulta que la grilla: React Query la comparte por clave, así que esto no agrega un
+  // pedido. Orden alfabético como orden de presentación, **nunca** como escala de riesgo — la
+  // calificación es texto libre de calificadoras distintas y no hay equivalencia entre sus escalas
+  // (mismo criterio que `FiltrosGrilla` y que el docstring de `filtros.ts`).
+  const consultaUniverso = useEspeciesUniverso()
+  const calificacionesDisponibles = useMemo(() => {
+    const especies = consultaUniverso.data ?? []
+    const valores = [
+      ...new Set(especies.map((e) => e.calificacion).filter((c): c is string => c !== null)),
+    ].sort()
+    const hayNoInformada = especies.some((e) => e.calificacion === null)
+    return { valores, hayNoInformada }
+  }, [consultaUniverso.data])
+
+  function alternarCalificacion(valor: string) {
+    const activa = filtros.calificaciones.includes(valor)
+    fijarFiltros({
+      ...filtros,
+      calificaciones: activa
+        ? filtros.calificaciones.filter((c) => c !== valor)
+        : [...filtros.calificaciones, valor],
+    })
+  }
+
   const montoValido = Number.isFinite(montoTotal) && montoTotal > 0
 
   function armar() {
@@ -92,6 +118,9 @@ export function PanelArmadoAsistido() {
       horizonte,
       pct_rv: pctRv,
       sector_rv: presetPorId(tematica === '' ? null : tematica)?.sectorRv ?? null,
+      // El piso de la grilla es el piso del armado: se manda el mismo número, y sin piso no se
+      // manda el campo (el backend ya trata la ausencia como 0).
+      ...(filtros.tirMin === '' ? {} : { min_rend: Number(filtros.tirMin) }),
     })
   }
 
@@ -178,6 +207,47 @@ export function PanelArmadoAsistido() {
           />
         </Campo>
 
+        {/* El complemento del anterior, en modo lectura: son el mismo número visto de los dos
+            lados, y tener los dos editables obligaría a decidir cuál gana cuando no suman 100. */}
+        <Campo etiqueta="% renta fija">
+          <span
+            className="mono"
+            style={{ ...estiloInput, minWidth: 76, display: 'inline-block', color: 'var(--dim)' }}
+          >
+            {100 - pctRv}
+          </span>
+        </Campo>
+
+        {/* Es el mismo `filtros.tirMin` que la barra de la grilla, escrito desde acá: el armado
+            automático y la oferta que el asesor ve al lado no pueden contradecirse. Rotulado
+            distinto a propósito ("rendimiento mínimo" acá, "TIR mín." en la barra) porque son dos
+            accesos al mismo número en la misma pantalla, y dos etiquetas idénticas se leerían como
+            dos filtros que se pisan. */}
+        <Campo etiqueta="Rendimiento mínimo RF (%)">
+          <input
+            type="number"
+            inputMode="decimal"
+            step={0.5}
+            value={filtros.tirMin}
+            onChange={(e) => fijarFiltros({ ...filtros, tirMin: e.target.value })}
+            placeholder="sin piso"
+            style={{ ...estiloInput, minWidth: 76 }}
+          />
+        </Campo>
+
+        <Campo etiqueta="Plazo máx. RF (años)">
+          <input
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step={1}
+            value={filtros.vencimientoMax}
+            onChange={(e) => fijarFiltros({ ...filtros, vencimientoMax: e.target.value })}
+            placeholder="sin tope"
+            style={{ ...estiloInput, minWidth: 76 }}
+          />
+        </Campo>
+
         <Campo etiqueta="Temática (acciones)">
           <select
             value={tematica}
@@ -209,6 +279,35 @@ export function PanelArmadoAsistido() {
         </p>
       </div>
 
+      {/* La calificación se filtra por coincidencia exacta y nunca se ordena por riesgo: son
+          escalas de calificadoras distintas, sin equivalencia entre sí (regla 7 — el riesgo es un
+          vector, no un número). Sin ninguna marcada, no filtra. */}
+      {calificacionesDisponibles.valores.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 6 }}>
+          <span
+            className="rotulo"
+            style={{ fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', marginRight: 2 }}
+          >
+            Calificación RF
+          </span>
+          {calificacionesDisponibles.valores.map((valor) => (
+            <BotonCalificacion
+              key={valor}
+              etiqueta={valor}
+              activa={filtros.calificaciones.includes(valor)}
+              onClick={() => alternarCalificacion(valor)}
+            />
+          ))}
+          {calificacionesDisponibles.hayNoInformada && (
+            <BotonCalificacion
+              etiqueta="sin calificar"
+              activa={filtros.calificaciones.includes(CALIFICACION_NO_INFORMADA)}
+              onClick={() => alternarCalificacion(CALIFICACION_NO_INFORMADA)}
+            />
+          )}
+        </div>
+      )}
+
       {mutacion.isError && (
         <p style={{ margin: 0, fontSize: 11.5, color: 'var(--neg)' }}>
           {mutacion.error.message}
@@ -239,6 +338,38 @@ export function PanelArmadoAsistido() {
 
       {mutacion.isSuccess && <AlertasCalendario alertas={mutacion.data.alertas} />}
     </div>
+  )
+}
+
+/** Un valor de calificación como toggle. `aria-pressed` y no un checkbox porque el conjunto es
+ *  un filtro de la vista, no un formulario que se envía. */
+function BotonCalificacion({
+  etiqueta,
+  activa,
+  onClick,
+}: {
+  etiqueta: string
+  activa: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={activa}
+      style={{
+        font: 'inherit',
+        fontSize: 11,
+        padding: '3px 8px',
+        borderRadius: 3,
+        border: `1px solid ${activa ? 'var(--ac)' : 'var(--lin)'}`,
+        background: activa ? 'var(--sel)' : 'transparent',
+        color: activa ? 'var(--tx)' : 'var(--dim)',
+        cursor: 'pointer',
+      }}
+    >
+      {etiqueta}
+    </button>
   )
 }
 

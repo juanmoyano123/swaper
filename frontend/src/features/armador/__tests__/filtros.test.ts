@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  aniosHastaVencimiento,
   CALIFICACION_NO_INFORMADA,
   FILTROS_ARMADOR_INICIALES,
   FILTROS_ARMADOR_VACIOS,
@@ -200,6 +201,47 @@ describe('pasaFiltros', () => {
   it('sin filtros activos, cualquier dato con cruce pasa', () => {
     const pasa = pasaFiltros(datoBase(), FILTROS_ARMADOR_VACIOS)
     expect(pasa).toBe(true)
+  })
+
+  // --- Plazo (vencimientoMax) -------------------------------------------------------------
+  //
+  // El reloj entra por parámetro para que el filtro sea determinístico: sin eso, un test que
+  // pasa hoy empieza a fallar solo cuando el vencimiento de prueba queda atrás.
+  const HOY = new Date('2026-08-13T00:00:00Z')
+
+  it('plazo: deja pasar lo que vence dentro del tope y descarta lo que vence después', () => {
+    const filtros = { ...FILTROS_ARMADOR_VACIOS, vencimientoMax: '5' }
+    const cerca = especie({ vencimiento: '2029-08-13' })
+    const lejos = especie({ vencimiento: '2038-01-09' })
+
+    expect(pasaFiltros(datoBase({ especie: cerca }), filtros, HOY)).toBe(true)
+    expect(pasaFiltros(datoBase({ especie: lejos }), filtros, HOY)).toBe(false)
+  })
+
+  it('plazo: una especie sin vencimiento declarado no pasa el filtro activo, pero sin filtro sí', () => {
+    const sinVencimiento = especie({ vencimiento: null })
+    const filtros = { ...FILTROS_ARMADOR_VACIOS, vencimientoMax: '5' }
+
+    expect(pasaFiltros(datoBase({ especie: sinVencimiento }), filtros, HOY)).toBe(false)
+    expect(pasaFiltros(datoBase({ especie: sinVencimiento }), FILTROS_ARMADOR_VACIOS, HOY)).toBe(true)
+  })
+
+  it('plazo: es independiente de la duración — un amortizing largo con duración corta se filtra por fecha', () => {
+    // Duración 2 años (cupones grandes al principio) pero vence en 2038: quien pide "nada más
+    // allá de 5 años" está hablando de la fecha, no de la sensibilidad al precio.
+    const amortizing = especie({ duracion: 2, vencimiento: '2038-01-09' })
+
+    expect(
+      pasaFiltros(datoBase({ especie: amortizing }), { ...FILTROS_ARMADOR_VACIOS, duracionMax: '5' }, HOY),
+    ).toBe(true)
+    expect(
+      pasaFiltros(datoBase({ especie: amortizing }), { ...FILTROS_ARMADOR_VACIOS, vencimientoMax: '5' }, HOY),
+    ).toBe(false)
+  })
+
+  it('plazo: un ticker sin cruce en el universo no pasa, porque el filtro depende del universo', () => {
+    const filtros = { ...FILTROS_ARMADOR_VACIOS, vencimientoMax: '5' }
+    expect(pasaFiltros(datoBase({ especie: undefined }), filtros, HOY)).toBe(false)
   })
 
   it('duración: especie sin dato no pasa un filtro activo, pero sin filtro se muestra igual', () => {
@@ -466,5 +508,25 @@ describe('filtrarMeses', () => {
     expect(resultado.meses[0].instrumentos.map((i) => i.ticker)).toEqual(['ALTA'])
     expect(resultado.visibles).toBe(1)
     expect(resultado.total).toBe(4)
+  })
+})
+
+describe('aniosHastaVencimiento', () => {
+  const HOY = new Date('2026-08-13T00:00:00Z')
+
+  it('cuenta los años que faltan', () => {
+    expect(aniosHastaVencimiento('2031-08-13', HOY)).toBeCloseTo(5, 1)
+  })
+
+  it('sin vencimiento declarado devuelve null: no se supone un plazo', () => {
+    expect(aniosHastaVencimiento(null, HOY)).toBeNull()
+  })
+
+  it('una fecha ilegible devuelve null en vez de un número inventado', () => {
+    expect(aniosHastaVencimiento('no es una fecha', HOY)).toBeNull()
+  })
+
+  it('un vencimiento ya pasado da negativo, no cero: el dato roto se ve', () => {
+    expect(aniosHastaVencimiento('2020-01-01', HOY)).toBeLessThan(0)
   })
 })

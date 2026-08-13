@@ -78,6 +78,19 @@ const RESULTADO_OK = {
   ],
 }
 
+/** La llamada a `/api/v1/armado`, esperando a que ocurra. El panel también consulta el universo
+ *  —para poder ofrecer las calificaciones del filtro—, así que la del armado no es la primera. */
+async function esperarLlamadaDeArmado(fetchMock: ReturnType<typeof mockFetch>) {
+  let llamada: [string, RequestInit | undefined] | undefined
+  await waitFor(() => {
+    llamada = fetchMock.mock.calls.find(([url]) => String(url).includes('/api/v1/armado')) as
+      | [string, RequestInit | undefined]
+      | undefined
+    expect(llamada).toBeDefined()
+  })
+  return llamada!
+}
+
 describe('PanelArmadoAsistido', () => {
   it('envía los parámetros del mandato al pedir el armado', async () => {
     const fetchMock = mockFetch(200, RESULTADO_OK)
@@ -90,9 +103,7 @@ describe('PanelArmadoAsistido', () => {
     await userEvent.selectOptions(screen.getByLabelText('Horizonte'), 'largo')
     await userEvent.click(screen.getByRole('button', { name: 'Armar cartera asistida' }))
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
-    const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toContain('/api/v1/armado')
+    const [, init] = await esperarLlamadaDeArmado(fetchMock)
     expect(JSON.parse(init?.body as string)).toEqual({
       monto: 100000,
       moneda: 'usd',
@@ -102,6 +113,8 @@ describe('PanelArmadoAsistido', () => {
       // El perfil conservador no lleva renta variable, como la cartera conservadora del Excel.
       pct_rv: 0,
       sector_rv: null,
+      // El piso de la grilla viaja como piso del armado: `FILTROS_ARMADOR_INICIALES` arranca en 6%.
+      min_rend: 6,
     })
   })
 
@@ -128,8 +141,7 @@ describe('PanelArmadoAsistido', () => {
     await userEvent.type(screen.getByLabelText('% renta variable'), '40')
     await userEvent.click(screen.getByRole('button', { name: 'Armar cartera asistida' }))
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
-    const [, init] = fetchMock.mock.calls[0]
+    const [, init] = await esperarLlamadaDeArmado(fetchMock)
     expect(JSON.parse(init?.body as string).pct_rv).toBe(40)
   })
 
@@ -141,8 +153,7 @@ describe('PanelArmadoAsistido', () => {
     await userEvent.selectOptions(screen.getByLabelText('Temática (acciones)'), 'tecnologicas')
     await userEvent.click(screen.getByRole('button', { name: 'Armar cartera asistida' }))
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
-    const [, init] = fetchMock.mock.calls[0]
+    const [, init] = await esperarLlamadaDeArmado(fetchMock)
     expect(JSON.parse(init?.body as string).sector_rv).toBe('Technology')
   })
 

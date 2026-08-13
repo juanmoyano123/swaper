@@ -39,10 +39,10 @@ describe('ChipsTematicos', () => {
   it('aplicar una temática precarga sus filtros de renta fija', async () => {
     renderizar()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Energía' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Petróleo y gas' }))
 
     expect(screen.getByTestId('sector')).toHaveTextContent('O&G')
-    expect(screen.getByTestId('tematica')).toHaveTextContent('energia')
+    expect(screen.getByTestId('tematica')).toHaveTextContent('petroleo-gas')
   })
 
   it('limpia los filtros que había antes, para que el atajo dé siempre lo mismo', async () => {
@@ -51,7 +51,7 @@ describe('ChipsTematicos', () => {
     // El default de fábrica trae TIR ≥ 6%: aplicar un preset parte de cero, no acumula.
     expect(screen.getByTestId('tirMin')).toHaveTextContent('6')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Energía' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Petróleo y gas' }))
 
     expect(screen.getByTestId('tirMin')).toHaveTextContent('sin tir')
   })
@@ -77,7 +77,7 @@ describe('ChipsTematicos', () => {
   it('volver a clickear el chip prendido limpia los filtros', async () => {
     renderizar()
 
-    const chip = screen.getByRole('button', { name: 'Energía' })
+    const chip = screen.getByRole('button', { name: 'Petróleo y gas' })
     await userEvent.click(chip)
     await userEvent.click(chip)
 
@@ -88,13 +88,13 @@ describe('ChipsTematicos', () => {
   it('el chip se apaga si se toca un filtro a mano, sin deshacer lo que dejó puesto', async () => {
     renderizar()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Energía' }))
-    expect(screen.getByRole('button', { name: 'Energía' })).toHaveAttribute('aria-pressed', 'true')
+    await userEvent.click(screen.getByRole('button', { name: 'Petróleo y gas' }))
+    expect(screen.getByRole('button', { name: 'Petróleo y gas' })).toHaveAttribute('aria-pressed', 'true')
 
     await userEvent.click(screen.getByRole('button', { name: 'tocar un filtro a mano' }))
 
     // Apagado, porque la grilla ya no muestra sólo lo que el preset pedía…
-    expect(screen.getByRole('button', { name: 'Energía' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'Petróleo y gas' })).toHaveAttribute('aria-pressed', 'false')
     // …pero el sector que había dejado sigue puesto: apagar el chip no revierte nada.
     expect(screen.getByTestId('sector')).toHaveTextContent('O&G')
   })
@@ -102,11 +102,11 @@ describe('ChipsTematicos', () => {
   it('cambiar de temática reemplaza la anterior', async () => {
     renderizar()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Energía' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Petróleo y gas' }))
     await userEvent.click(screen.getByRole('button', { name: 'Financieras' }))
 
     expect(screen.getByTestId('sector')).toHaveTextContent('Financiera')
-    expect(screen.getByRole('button', { name: 'Energía' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'Petróleo y gas' })).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('cada chip explica en su tooltip qué precarga', () => {

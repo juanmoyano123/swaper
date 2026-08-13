@@ -69,8 +69,8 @@ describe('los presets sólo referencian datos que existen', () => {
 
 describe('filtrosDelPreset', () => {
   it('parte de todo limpio, para que el resultado no dependa de lo que estaba activo antes', () => {
-    const energia = presetPorId('energia')!
-    const filtros = filtrosDelPreset(energia)
+    const petroleoGas = presetPorId('petroleo-gas')!
+    const filtros = filtrosDelPreset(petroleoGas)
 
     expect(filtros.sector).toBe('O&G')
     expect(filtros.tirMin).toBe('')
@@ -86,23 +86,23 @@ describe('filtrosDelPreset', () => {
 
 describe('coincideConPreset', () => {
   it('reconoce los filtros que el preset acaba de dejar', () => {
-    const energia = presetPorId('energia')!
+    const petroleoGas = presetPorId('petroleo-gas')!
 
-    expect(coincideConPreset(filtrosDelPreset(energia), energia)).toBe(true)
+    expect(coincideConPreset(filtrosDelPreset(petroleoGas), petroleoGas)).toBe(true)
   })
 
   it('deja de coincidir apenas se toca un filtro a mano', () => {
-    const energia = presetPorId('energia')!
-    const tocado = { ...filtrosDelPreset(energia), tirMin: '8' }
+    const petroleoGas = presetPorId('petroleo-gas')!
+    const tocado = { ...filtrosDelPreset(petroleoGas), tirMin: '8' }
 
-    expect(coincideConPreset(tocado, energia)).toBe(false)
+    expect(coincideConPreset(tocado, petroleoGas)).toBe(false)
   })
 
   it('no coincide con los filtros de otro preset', () => {
-    const energia = presetPorId('energia')!
+    const petroleoGas = presetPorId('petroleo-gas')!
     const financieras = presetPorId('financieras')!
 
-    expect(coincideConPreset(filtrosDelPreset(financieras), energia)).toBe(false)
+    expect(coincideConPreset(filtrosDelPreset(financieras), petroleoGas)).toBe(false)
   })
 })
 

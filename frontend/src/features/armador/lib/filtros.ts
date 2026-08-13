@@ -22,6 +22,14 @@ export interface FiltrosArmador {
   segmento: string | null
   /** Input controlado en años; '' = sin filtro. */
   duracionMax: string
+  /** Plazo máximo, en años hasta el vencimiento; '' = sin filtro.
+   *
+   *  **No reemplaza a `duracionMax`, lo complementa**, porque miden cosas distintas: la duración
+   *  es sensibilidad al precio y pesa los cupones intermedios, mientras que el plazo es la fecha
+   *  en que el asesor recupera el capital. Un amortizing a 2038 con cupones grandes tiene
+   *  duración corta y plazo largo, y un cliente que dice "no quiero nada más allá de 5 años"
+   *  está hablando del segundo. */
+  vencimientoMax: string
   /** Percentil mínimo de volumen_usd; '' = sin filtro. */
   liquidezMin: '' | '25' | '50' | '75'
   sector: string | null
@@ -54,6 +62,7 @@ export const NATURALEZAS_CON_TIR = ['tir_usd', 'tir_dolar_linked'] as const
 export const FILTROS_ARMADOR_VACIOS: FiltrosArmador = {
   segmento: null,
   duracionMax: '',
+  vencimientoMax: '',
   liquidezMin: '',
   sector: null,
   emisor: null,
@@ -78,6 +87,7 @@ export function hayFiltrosActivos(filtros: FiltrosArmador): boolean {
   return (
     filtros.segmento !== null ||
     filtros.duracionMax !== '' ||
+    filtros.vencimientoMax !== '' ||
     filtros.liquidezMin !== '' ||
     filtros.sector !== null ||
     filtros.emisor !== null ||
@@ -155,6 +165,24 @@ function pasaFiltroPagos(pagos: number, filtroPagos: string): boolean {
   return pagos === Number(filtroPagos)
 }
 
+/** Días de un año, para pasar de la diferencia de fechas a años. 365,25 y no 365: sobre plazos de
+ *  diez años los bisiestos ya corren la cuenta más de un mes. */
+const DIAS_POR_ANIO = 365.25
+
+/**
+ * Años que faltan hasta el vencimiento. `null` cuando la especie no declara vencimiento o cuando
+ * la fecha no se puede leer: no se supone un plazo (regla 1), la especie queda fuera del filtro.
+ *
+ * Un vencimiento ya pasado da negativo, y eso pasa cualquier tope: es correcto — si sigue en el
+ * universo con fecha vencida, el problema es del dato, no del filtro, y taparlo acá lo escondería.
+ */
+export function aniosHastaVencimiento(vencimiento: string | null, hoy: Date): number | null {
+  if (vencimiento === null) return null
+  const fecha = new Date(vencimiento)
+  if (Number.isNaN(fecha.getTime())) return null
+  return (fecha.getTime() - hoy.getTime()) / (DIAS_POR_ANIO * 24 * 60 * 60 * 1000)
+}
+
 /**
  * Si un instrumento pasa los filtros activos.
  *
@@ -179,6 +207,10 @@ export function pasaFiltros(
     tieneCupon: boolean
   },
   filtros: FiltrosArmador,
+  /** Contra qué fecha se mide el plazo. Parámetro y no `new Date()` adentro para que el filtro
+   *  siga siendo determinístico y testeable — mismo criterio que el reloj afuera del armado del
+   *  universo en el backend. */
+  hoy: Date = new Date(),
 ): boolean {
   const { especie } = dato
 
@@ -193,6 +225,7 @@ export function pasaFiltros(
   const dependeDelUniverso =
     filtros.segmento !== null ||
     filtros.duracionMax !== '' ||
+    filtros.vencimientoMax !== '' ||
     filtros.liquidezMin !== '' ||
     filtros.sector !== null ||
     filtros.emisor !== null ||
@@ -209,6 +242,12 @@ export function pasaFiltros(
   if (filtros.duracionMax !== '') {
     if (especie.duracion === null) return false
     if (especie.duracion > Number(filtros.duracionMax)) return false
+  }
+
+  if (filtros.vencimientoMax !== '') {
+    const anios = aniosHastaVencimiento(especie.vencimiento, hoy)
+    if (anios === null) return false
+    if (anios > Number(filtros.vencimientoMax)) return false
   }
 
   if (filtros.liquidezMin !== '') {
