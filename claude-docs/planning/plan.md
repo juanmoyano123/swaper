@@ -10,10 +10,10 @@ Output que consume: `/init-project` (Fase 4) y `/build-feature` (Fase 5).
 
 | | |
 |---|---|
-| Features totales | 50 (F-001 … F-050) |
-| Stage 1 | 39 |
+| Features totales | 54 (F-001 … F-054) |
+| Stage 1 | 42 |
 | Foundation (obligatorias en Stage 1) | 3 |
-| Stage 2 | 8 |
+| Stage 2 | 9 |
 | Esfuerzo Stage 1 | 185 person-days *(estimación)* |
 | Esfuerzo Stage 2 | 72 person-days *(estimación)* |
 | Ciclos de Stage 1 | 4 |
@@ -2306,6 +2306,72 @@ THEN declara la demora real de la nueva fuente, no la de 20 minutos de la anteri
 
 ---
 
+#### F-054 — Información pública del emisor desde CNV y SEC
+
+**Etiqueta:** Stage 2 · **Traza a:** "Fuera del MVP"
+
+**Descripción.** Al seleccionar un ticker se abre un modal con los números duros del último balance
+del emisor, extraídos del regulador que le corresponde: **CNV** para emisores argentinos (ONs y
+acciones locales), **SEC** para CEDEARs y emisores extranjeros. Cuatro magnitudes: resultado del
+ejercicio, patrimonio neto, deuda financiera / EBITDA y liquidez corriente.
+
+**Complementa el eje crédito** del vector de seis ejes: se muestra al lado de la calificación, con su
+propia fuente y su propia fecha, y **no se combina en un score compuesto** (regla 7). Es el insumo
+para nombrar el riesgo que se asume al mejorar una TIR (regla 8).
+
+La investigación de fuentes está cerrada y verificada en vivo:
+**`claude-docs/planning/investigacion-cnv-sec.md`**. Lo esencial:
+
+- Las páginas de CNV son **HTML servido** — `curl` plano alcanza, no hace falta navegador headless.
+- El balance viene como **XML embebido** con el plan de cuentas estandarizado de la CNV, y los códigos
+  `8000000–8000029` traen **los ratios ya calculados y declarados por el emisor** (EBITDA, LIQUIDEZ,
+  DEUDA FINANCIERA/EBITDA, SOLVENCIA, ROE, ROA). Se toman como los publica la fuente (regla 11).
+- La SEC expone **XBRL gratis y sin clave** (`data.sec.gov/api/xbrl/companyfacts/`), pero hay que leer
+  **`us-gaap` y `ifrs-full`**: los foreign private issuers reportan bajo IFRS y con sólo `us-gaap`
+  aparecen falsamente vacíos.
+- El puente ticker → emisor sale de las **tablas de valuación de Bienes Personales de AFIP/ARCA**
+  (ticker, denominación, CUIT, clase). BYMA no sirve —`securityDesc` viene vacío— y derivar la clase
+  del número del ticker **se descartó por medición**: funciona para Cresud y no para IRSA.
+- **Cero IA en runtime**: `httpx` + parsers determinísticos, punta a punta (regla 6).
+
+**Input:** ticker del monitor, del armador o de la ficha; tabla de valuación AFIP/ARCA.
+**Output:** modal con los números del emisor, cada uno con fuente, fecha y —cuando corresponde— la
+aclaración de si lo declaró el emisor o lo derivamos nosotros.
+**Depende de:** F-039 (el drawer y su navegación), F-031 (el eje crédito al que acompaña)
+**Habilita:** —
+
+**RICE:** R = 300 · I = 2 · C = 80 % · E = 8 → **Score 60**
+*Confidence 80 %: las dos fuentes están verificadas en vivo; queda abierto el 503 de
+`blob.cnv.gov.ar` para los prospectos y el 14 % de emisiones sin nombre de emisor.*
+
+**Ejecución.** En esta fase corre **estrictamente a pedido**. La tarea programada diaria es Stage 2.
+Antes de implementar se hace un paso a paso conjunto con links reales —un emisor de CNV y uno de la
+SEC— para validar el flujo contra la fuente.
+
+```
+GIVEN una ON de un emisor argentino con ficha en CNV
+WHEN se abre el modal del ticker
+THEN los cuatro números salen del último balance publicado, cada uno con su fecha de presentación
+
+GIVEN un emisor cuyo balance declara los ratios en los códigos 8000000-8000029
+WHEN se muestra deuda financiera / EBITDA y liquidez corriente
+THEN se muestra el valor tal como lo declaró el emisor, sin recalcularlo
+
+GIVEN un CEDEAR de un foreign private issuer que reporta bajo IFRS
+WHEN se consulta companyfacts de la SEC
+THEN se leen las etiquetas de ifrs-full y el emisor no aparece como sin datos
+
+GIVEN un banco, que no publica balance clasificado por naturaleza
+WHEN se muestra liquidez corriente
+THEN dice "no aplica" y no un faltante
+
+GIVEN un ticker cuya emisión no tiene nombre de emisor en condiciones_emision.csv
+WHEN se abre el modal
+THEN el espacio va vacío y el faltante se declara con nombre y apellido; no se infiere el emisor
+```
+
+---
+
 ## 4. Tabla de RICE ordenada
 
 | # | ID | Feature | Etiqueta | R | I | C | E | Score |
@@ -2350,19 +2416,20 @@ THEN declara la demora real de la nueva fuente, no la de 20 minutos de la anteri
 | 38 | F-050 | API Market Data oficial de BYMA | Stage 2 | 400 | 2 | 50 % | 5 | 80,0 |
 | 39 | F-037 | Comparación original contra propuesta | Stage 1 | 180 | 2 | 80 % | 4 | 72,0 |
 | 40 | F-040 | Sensibilidad por repricing completo | Stage 1 | 200 | 1 | 100 % | 3 | 66,7 |
-| 41 | F-033 | Modo bajar riesgo | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
-| 42 | F-036 | Aceptación rotación por rotación | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
-| 43 | F-025 | Carga asistida de lámina | Stage 1 | 200 | 1 | 80 % | 3 | 53,3 |
-| 44 | F-005 | Parser del informe diario de IAMC | Stage 1 | 400 | 2 | 50 % | 8 | 50,0 |
-| 45 | F-023 | Composición y curva TIR/duración | Stage 1 | 300 | 1 | 80 % | 5 | 48,0 |
-| 46 | F-048 | Alertas y notificaciones | Stage 2 | 300 | 1 | 80 % | 6 | 40,0 |
-| 47 | F-049 | Comparación de carteras entre sí | Stage 2 | 200 | 1 | 80 % | 4 | 40,0 |
-| 48 | F-044 | Historial de propuestas | Stage 2 | 250 | 2 | 50 % | 10 | 25,0 |
-| 49 | F-043 | Gestión de clientes y CRM | Stage 2 | 300 | 2 | 50 % | 15 | 20,0 |
-| 50 | F-027 | Calendario de balances | Stage 1 | 200 | 1 | 50 % | 6 | 16,7 |
-| 51 | F-045 | Colocaciones primarias | Stage 2 | 150 | 2 | 50 % | 10 | 15,0 |
-| 52 | F-046 | FCI con fuente | Stage 2 | 200 | 2 | 25 % | 12 | 8,3 |
-| 53 | F-047 | Opciones | Stage 2 | 80 | 1 | 50 % | 10 | 4,0 |
+| 41 | F-054 | Info pública del emisor (CNV y SEC) | Stage 2 | 300 | 2 | 80 % | 8 | 60,0 |
+| 42 | F-033 | Modo bajar riesgo | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
+| 43 | F-036 | Aceptación rotación por rotación | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
+| 44 | F-025 | Carga asistida de lámina | Stage 1 | 200 | 1 | 80 % | 3 | 53,3 |
+| 45 | F-005 | Parser del informe diario de IAMC | Stage 1 | 400 | 2 | 50 % | 8 | 50,0 |
+| 46 | F-023 | Composición y curva TIR/duración | Stage 1 | 300 | 1 | 80 % | 5 | 48,0 |
+| 47 | F-048 | Alertas y notificaciones | Stage 2 | 300 | 1 | 80 % | 6 | 40,0 |
+| 48 | F-049 | Comparación de carteras entre sí | Stage 2 | 200 | 1 | 80 % | 4 | 40,0 |
+| 49 | F-044 | Historial de propuestas | Stage 2 | 250 | 2 | 50 % | 10 | 25,0 |
+| 50 | F-043 | Gestión de clientes y CRM | Stage 2 | 300 | 2 | 50 % | 15 | 20,0 |
+| 51 | F-027 | Calendario de balances | Stage 1 | 200 | 1 | 50 % | 6 | 16,7 |
+| 52 | F-045 | Colocaciones primarias | Stage 2 | 150 | 2 | 50 % | 10 | 15,0 |
+| 53 | F-046 | FCI con fuente | Stage 2 | 200 | 2 | 25 % | 12 | 8,3 |
+| 54 | F-047 | Opciones | Stage 2 | 80 | 1 | 50 % | 10 | 4,0 |
 
 **Cómo se lee esta tabla.** El RICE ordena por eficiencia, no por secuencia. Las features de más
 score son las Foundation y las de ingesta: mucho alcance sobre poco esfuerzo, porque reusan lógica ya
