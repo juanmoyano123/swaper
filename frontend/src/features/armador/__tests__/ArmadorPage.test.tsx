@@ -343,3 +343,84 @@ describe('plegar una sección', () => {
     )
   })
 })
+
+
+describe('ordenar las secciones', () => {
+  /** Los rótulos de las secciones en el orden en que están en el DOM.
+   *
+   *  Se leen de los `<section>` que monta `SeccionDeArmador`, y no de los botones filtrados por
+   *  `expanded`: ese filtro lanza cuando ninguna sección está en el estado buscado, que es
+   *  exactamente lo que pasa al remontar con todo plegado. */
+  function ordenEnPantalla(): string[] {
+    return [...document.querySelectorAll('section')]
+      .map((s) => ROTULOS_DE_SECCION.find((r) => s.textContent?.trimStart().startsWith(r)))
+      .filter((r): r is string => r !== undefined)
+  }
+
+  it('arranca en el orden de fábrica, con renta variable última', async () => {
+    responderCon(respuesta())
+    renderizar()
+    await grillaCargada()
+
+    expect(ordenEnPantalla()).toEqual(ROTULOS_DE_SECCION)
+  })
+
+  it('subir renta variable la mueve un lugar y la persiste al remontar', async () => {
+    responderCon(respuesta())
+    const { unmount } = renderizar()
+    await grillaCargada()
+
+    await userEvent.click(screen.getByRole('button', { name: /Ordenar secciones/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Subir Renta variable' }))
+
+    // De última pasa a anteúltima: queda antes de Análisis.
+    expect(ordenEnPantalla().at(-2)).toBe('Renta variable')
+
+    unmount()
+    renderizar()
+    await grillaCargada()
+    expect(ordenEnPantalla().at(-2)).toBe('Renta variable')
+  })
+
+  it('restaurar el orden original la devuelve al final', async () => {
+    responderCon(respuesta())
+    renderizar()
+    await grillaCargada()
+
+    await userEvent.click(screen.getByRole('button', { name: /Ordenar secciones/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Subir Renta variable' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Restaurar orden original' }))
+
+    expect(ordenEnPantalla()).toEqual(ROTULOS_DE_SECCION)
+  })
+
+  it('la sección conserva su color de identidad al moverse', async () => {
+    // El acento viaja con la sección: si dependiera de la posición, mover Renta variable arriba le
+    // cambiaría el color y el asesor perdería la referencia visual que venía usando.
+    responderCon(respuesta())
+    renderizar()
+    await grillaCargada()
+
+    const colorDe = (rotulo: string) =>
+      screen
+        .getByRole('button', { name: new RegExp(`^${rotulo}`) })
+        .closest('section')
+        ?.style.getPropertyValue('border-left-color')
+
+    const antes = colorDe('Renta variable')
+    await userEvent.click(screen.getByRole('button', { name: /Ordenar secciones/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Subir Renta variable' }))
+
+    expect(colorDe('Renta variable')).toBe(antes)
+  })
+})
+
+/** En el orden de fábrica, que es contra el que se comparan los movimientos. */
+const ROTULOS_DE_SECCION = [
+  'Cordillera',
+  'Armador de cartera',
+  'Cartera',
+  'Calendario de pagos',
+  'Análisis',
+  'Renta variable',
+]

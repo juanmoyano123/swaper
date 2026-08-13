@@ -3,29 +3,14 @@ import { EstadoError } from '@/components/EstadoError'
 import { Pantalla } from '@/components/Pantalla'
 import { Panel } from '@/components/Panel'
 
-import { AlertasCalendario } from './components/AlertasCalendario'
-import { CarteraEditable } from './components/CarteraEditable'
 import { ColumnaKpis } from './components/ColumnaKpis'
-import { CoberturaSeleccion } from './components/CoberturaSeleccion'
-import { GrillaFiltrada } from './components/GrillaFiltrada'
 import { GuardarCarteraArmador } from './components/GuardarCarteraArmador'
 import { HidratarDesdeCarteraGuardada } from './components/HidratarDesdeCarteraGuardada'
-import { PanelArmadoAsistido } from './components/PanelArmadoAsistido'
-import { PanelComposicion } from './components/PanelComposicion'
-import {
-  BloqueRentaVariable,
-  PanelConcentracion,
-  PanelRenta,
-} from './components/PanelesDeLaCartera'
-import { PanelRendimientos } from './components/PanelRendimientos'
-import { PanelRiesgo } from './components/PanelRiesgo'
-import {
-  ResumenCartera,
-  ResumenCordillera,
-  ResumenRentaVariable,
-} from './components/ResumenesDeSeccion'
+import { OrdenDeSecciones } from './components/OrdenDeSecciones'
 import { SeccionDeArmador } from './components/SeccionDeArmador'
 import { useCalendarioUniverso } from './hooks/useCalendarioUniverso'
+import { useOrdenSecciones } from './hooks/useOrdenSecciones'
+import { SECCION_POR_ID } from './lib/secciones'
 import { ArmadorProvider } from './store/carteraStore'
 
 /**
@@ -52,7 +37,13 @@ import { ArmadorProvider } from './store/carteraStore'
  * **Etapa 2 del rediseño**: cada sección es plegable (`SeccionDeArmador` guarda el estado en
  * `localStorage`, ver `lib/plegado.ts`) y tiene su propio color de identidad (borde izquierdo de
  * 3px, un `--catN` de la paleta categórica) — es la separación visual entre bloques que antes sólo
- * daba el `gap`. El orden de acentos sigue el orden vertical: cat1 a cat6, sin repetir.
+ * daba el `gap`.
+ *
+ * **El orden lo decide quien arma, no este archivo.** Las seis secciones dejaron de ser JSX literal
+ * y viven en `lib/secciones.tsx`; acá se mapean en el orden que devuelve `useOrdenSecciones`, que
+ * lo persiste en `localStorage` con el mismo criterio que el plegado. El acento ya no se asigna por
+ * posición sino que **viaja con la sección**: si el color dependiera del lugar, mover Renta
+ * variable arriba se lo cambiaría y el asesor perdería la referencia visual que venía usando.
  *
  * **Etapa 3**: las `bajada` de cada sección se reescribieron para declarar el flujo RF/RV en vez
  * de sólo describir el contenido — en particular, que Cordillera/Armado asistido/Cartera arman la
@@ -76,6 +67,7 @@ import { ArmadorProvider } from './store/carteraStore'
  */
 export function ArmadorPage() {
   const consulta = useCalendarioUniverso()
+  const { orden } = useOrdenSecciones()
 
   return (
     <Pantalla
@@ -91,82 +83,33 @@ export function ArmadorPage() {
           <HidratarDesdeCarteraGuardada />
           <div className="layout-armador">
             <div style={{ display: 'grid', gap: 28, minWidth: 0 }}>
-              <SeccionDeArmador
-                id="cordillera"
-                rotulo="Cordillera"
-                bajada="Camino manual: elegí bonos por mes de cobro. Los atajos temáticos filtran de un clic los dos lados de la cartera —bonos acá y acciones en Renta variable— y después afinás con los filtros."
-                acento="var(--cat1)"
-                resumen={<ResumenCordillera meses={consulta.data.meses} />}
-              >
-                <Panel>
-                  <CoberturaSeleccion meses={consulta.data.meses} />
-                  <GrillaFiltrada meses={consulta.data.meses} />
-                  <AlertasCalendario alertas={consulta.data.alertas} />
-                </Panel>
-              </SeccionDeArmador>
+              <OrdenDeSecciones />
 
-              <SeccionDeArmador
-                id="asistido"
-                rotulo="Armado asistido"
-                bajada="Camino asistido: con el mandato del cliente arma una cartera entera de arranque y la carga en Cartera, donde se edita posición por posición. Reemplaza lo que hubiera cargado."
-                acento="var(--cat2)"
-              >
-                <Panel>
-                  <PanelArmadoAsistido />
-                </Panel>
-              </SeccionDeArmador>
+              {/* Las secciones salen del registro (`lib/secciones.tsx`) y se apilan en el orden
+                  que el asesor eligió (`useOrdenSecciones`), no en el del JSX. Un id guardado que
+                  ya no existe se ignora y una sección nueva entra al final: ver
+                  `reconciliarOrden`. */}
+              {orden.map((id) => {
+                const seccion = SECCION_POR_ID.get(id)
+                if (seccion === undefined) return null
+                const ctx = { meses: consulta.data.meses, alertas: consulta.data.alertas }
+                return (
+                  <SeccionDeArmador
+                    key={seccion.id}
+                    id={seccion.id}
+                    rotulo={seccion.rotulo}
+                    bajada={seccion.bajada}
+                    acento={seccion.acento}
+                    resumen={seccion.resumen?.(ctx)}
+                  >
+                    {seccion.contenido(ctx)}
+                  </SeccionDeArmador>
+                )
+              })}
 
-              <SeccionDeArmador
-                id="cartera"
-                rotulo="Cartera"
-                bajada="La cartera entera, agrupada por clase de activo y con subtotal por bloque: soberanos, corporativos, fondos y acciones sobre el mismo 100%. El % pedido se edita acá; agregar o sacar una posición reparte el resto pro-rata."
-                acento="var(--cat3)"
-                resumen={<ResumenCartera />}
-              >
-                <Panel>
-                  <CarteraEditable />
-                </Panel>
-              </SeccionDeArmador>
-
-              <SeccionDeArmador
-                id="calendario"
-                rotulo="Calendario de pagos"
-                bajada="Cómo cae la renta mes a mes, sólo de la parte de renta fija — una acción no tiene cupón que calendarizar."
-                acento="var(--cat4)"
-              >
-                <PanelRenta />
-              </SeccionDeArmador>
-
-              <SeccionDeArmador
-                id="analisis"
-                rotulo="Análisis"
-                bajada="Rendimientos, composición, concentración y riesgo de la cartera armada hasta acá — incluye lo pedido en Cartera y en Renta variable."
-                acento="var(--cat5)"
-              >
-                <div style={{ display: 'grid', gap: 16 }}>
-                  <PanelRendimientos />
-                  <PanelComposicion />
-                  <PanelConcentracion />
-                  <PanelRiesgo />
-                </div>
-              </SeccionDeArmador>
-
-              <SeccionDeArmador
-                id="rv"
-                rotulo="Renta variable"
-                bajada="El buscador para sumar acciones y CEDEARs a la cartera. Ya cargadas se editan también desde Cartera, arriba. No suman a la renta ni a los rendimientos: una acción no tiene cupón ni TIR (regla 2)."
-                acento="var(--cat6)"
-                resumen={<ResumenRentaVariable />}
-              >
-                <Panel>
-                  <BloqueRentaVariable />
-                </Panel>
-              </SeccionDeArmador>
-
-              {/* No es `SeccionDeArmador`: es una acción de cierre, no un tramo de armado, y la
-                  paleta categórica (`--cat1`..`--cat6`) ya está agotada por las seis secciones de
-                  arriba — agregar un séptimo color de identidad es una decisión de diseño que
-                  excede esta feature (F-041). */}
+              {/* No es `SeccionDeArmador` y no se reordena: es una acción de cierre, no un tramo de
+                  armado, y la paleta categórica (`--cat1`..`--cat6`) ya está agotada por las seis
+                  secciones — agregar un séptimo color de identidad excede esta feature (F-041). */}
               <Panel rotulo="Guardar cartera" ariaLabel="Guardar esta cartera">
                 <GuardarCarteraArmador />
               </Panel>
