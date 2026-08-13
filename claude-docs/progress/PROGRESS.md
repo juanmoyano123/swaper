@@ -735,6 +735,47 @@ una cartera de cada origen. Consumió F-018 y F-037.
   la cartera guardada en el navegador dio exactamente `{origen, version, resueltas, posiciones,
   tipoDeCambio, montoTotalUsd, totalInvertidoUsd}` — la whitelist declarada, nada más.
 
+### Tanda 19 cerrada el 13/08/2026 — rediseño del flujo del armador (sin ficha de plan.md)
+
+No es una feature del PRD: sale de un pedido directo del dueño del producto sobre el flujo de
+armado. Verificado en el navegador contra el backend local y el proyecto real de Supabase.
+
+- **El objetivo RF/RV dejó de ser estado local del panel y pasó al store** (`objetivoRv`). Era un
+  `useState` que se perdía al plegar la sección, pero es el mandato del cliente: la cartera se
+  sigue comparando contra él mientras el asesor edita pesos a mano. `null` (sin objetivo) y `0`
+  (pidió cero acciones) son cosas distintas, igual que en `pct_rv` del backend. El desvío se
+  muestra en `ColumnaKpis` con tolerancia de medio punto — el ruido de redondear a un decimal.
+- **La sección "Armador de cartera" concentra el mandato completo**: monto, % RF/RV, rendimiento
+  mínimo, plazo máximo, periodicidad de cupón, calificación y temática. Verificado en vivo: el
+  rendimiento mínimo escribe el mismo `filtros.tirMin` que la barra de la grilla (los dos en 6) y
+  además viaja como `min_rend` al `POST /armado` — que el backend aceptaba desde F-019 y el
+  frontend nunca había expuesto.
+- **`vencimientoMax` es un filtro nuevo y no reemplaza a `duracionMax`**: un amortizing a 2038 con
+  cupones grandes tiene duración corta y plazo largo. Medido en vivo: plazo ≤ 3 años deja 26 de
+  133 papeles donde sin él pasaban 51.
+- **La periodicidad de cupón sale del cronograma contractual**, no de la ventana de doce meses
+  —`filtros.ts` ya documentaba por qué eso último no alcanza—. Se expone `frecuencia_por_raiz`
+  (F-032) en `/universo/emisiones/especies`. Medido sobre 969 especies: 542 semestral, 172
+  trimestral, 111 al vencimiento, 11 mensual, 7 anual, 1 bimestral, 125 sin cronograma. En vivo,
+  filtrar "mensual" deja 1 de 133 papeles.
+- **El orden de las secciones lo decide quien arma.** Las seis salieron del JSX a un registro
+  (`lib/secciones.tsx`) y se apilan según `useOrdenSecciones`, persistido en `localStorage` con el
+  mismo criterio que el plegado. Verificado en vivo: subir Renta variable dos lugares y recargar
+  la página la deja donde se la dejó. **El acento de color viaja con la sección, no con la
+  posición** — si dependiera del lugar, mover una le cambiaría el color y se perdería la
+  referencia visual.
+- **Reemplazar una sugerencia de renta variable**: la tarjeta suma "cambiar", que saca la posición
+  y deja el buscador enfocado y pre-filtrado por su sector. Sin perfil de empresa cargado no
+  filtra nada, en vez de inventar una equivalencia.
+
+**Lo que esta tanda NO logró:** el job de perfiles de empresa (`POST /jobs/perfiles-renta-variable`)
+**no pudo correr**: Yahoo devolvió HTTP 429 desde el primer pedido en las 8 tandas que se
+intentaron, con 0 tickers procesados sobre 1.641 pendientes. El filtro temático de renta variable
+sigue sin datos y la UI lo sigue declarando (`SIN_PERFILES_DE_EMPRESA`). Es la misma deuda de
+antes, no una nueva.
+
+---
+
 ### Tanda 18 cerrada el 10/08/2026 — F-042 (exportación a Excel y PDF), sola
 
 Cierra el Ciclo 4 entero y el camino crítico del plan. Consumió F-041. Verificado en el
