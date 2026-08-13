@@ -168,7 +168,7 @@ async def armado_asistido(
             pct_rv=pct_rv_efectivo,
             n_rv=n_rv,
             monto_total=entrada.monto,
-            sector_rv=entrada.sector_rv,
+            rubro_rv=entrada.rubro_rv,
         )
 
     # Sin candidatos de renta variable la cartera queda sumando 100% con lo que armó armar() --

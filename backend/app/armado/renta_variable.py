@@ -23,17 +23,29 @@ es una guía, no una regla del dominio.
 1. `pct_rv <= 0` o `n_rv <= 0`: no hay bloque de renta variable que armar.
 2. Se descartan las especies sin `volumen_usd` medible — sin liquidez comparable no hay con qué
    rankear, y no se le asume cero: es la regla 1 del dominio, no se completa un dato que falta.
-3. Con temática activa (`sector_rv`), se filtra por **igualdad exacta** contra `sector`, el valor
-   que declaró Yahoo tal cual (regla 11: no se traduce ni se normaliza un código propietario de la
-   fuente). Una especie sin sector conocido no puede afirmarse que pertenece a la temática, así que
+3. Con temática activa (`rubro_rv`), se filtra por **igualdad exacta** contra `sic_oficina`, el
+   rubro tal como lo nombra la SEC (regla 11: no se traduce ni se normaliza el nombre de la
+   fuente). Una especie sin rubro conocido no puede afirmarse que pertenece a la temática, así que
    con temática activa queda afuera — sin temática, en cambio, sí participa del ranking general.
 4. Orden determinístico: `volumen_usd` descendente, empate por `ticker` ascendente.
-5. Selección greedy en dos pasadas: la primera reparte por sector todavía no representado (un
-   sector `None` nunca cuenta como sector nuevo), la segunda completa con lo que quede en el mismo
+5. Selección greedy en dos pasadas: la primera reparte por rubro todavía no representado (un
+   rubro `None` nunca cuenta como rubro nuevo), la segunda completa con lo que quede en el mismo
    orden. Si no alcanza para `n_rv`, se arma con lo que hay — no se rellena con otra naturaleza.
-6. Si terminó eligiendo especies y **ninguna** tiene sector informado (el job de enriquecimiento
-   contra Yahoo, `app.renta_variable.enriquecimiento`, nunca corrió sobre este universo), se
-   declara que no se pudo diversificar por sector.
+6. Si terminó eligiendo especies y **ninguna** tiene rubro informado, se declara que no se pudo
+   diversificar por rubro.
+
+## Por qué el rubro es el de la SEC y no el de Yahoo
+
+Hasta el 13/08/2026 esto filtraba y diversificaba por `sector`, el campo de Yahoo Finance. Yahoo
+bloqueó el endpoint de perfil (429 sostenido) y `perfil_renta_variable` quedó con **cero** sectores
+cargados: con temática activa el bloque devolvía siempre cero candidatos, y sin temática la alerta
+de "no se pudo diversificar" saltaba en todas las corridas. La fuente pasó a ser la SEC, que sí
+responde y cubre 870 especies.
+
+**Los dos campos no se mezclan.** Son taxonomías distintas —`Financial Services` de Yahoo no es
+`Office of Finance` de la SEC, aunque se parezcan— y caer de una a la otra cuando falta la primera
+haría que dos papeles del mismo rubro cuenten como rubros distintos según qué fuente los alcanzó.
+`sector` sigue en el modelo por si Yahoo se destraba; acá no se usa.
 7. Si no quedó ningún candidato tras los filtros, se declara y el bloque vuelve vacío.
 8. Equiponderación dentro del bloque: cada posición pesa `pct_rv / len(elegidas)` del total de la
    cartera, y su monto sale de aplicar ese peso a `monto_total` — mismo patrón que usa `armar()` en
@@ -55,6 +67,8 @@ PCT_RV_PERFIL: dict[str, float] = {
 
 CODIGO_RV_SIN_VOLUMEN_USD = "rv_sin_volumen_usd"
 CODIGO_RV_SIN_PERFIL_SECTORIAL = "rv_sin_perfil_sectorial"
+"""Se mantiene el código aunque el rubro ya no salga de Yahoo: es la llave con la que el frontend
+reconoce la alerta y renombrarla la rompería sin cambiar lo que significa."""
 CODIGO_RV_SIN_CANDIDATOS = "rv_sin_candidatos"
 
 
@@ -75,10 +89,10 @@ def armar_renta_variable(
     pct_rv: float,
     n_rv: int,
     monto_total: float,
-    sector_rv: str | None = None,
+    rubro_rv: str | None = None,
 ) -> tuple[list[PosicionArmada], list[Alerta]]:
     """El bloque de renta variable de la cartera, seleccionado por liquidez y diversificado por
-    sector cuando el dato está. Ver el docstring del módulo por el algoritmo completo."""
+    rubro cuando el dato está. Ver el docstring del módulo por el algoritmo completo."""
     if pct_rv <= 0 or n_rv <= 0:
         return [], []
 
@@ -97,18 +111,18 @@ def armar_renta_variable(
         )
 
     universo = con_volumen
-    if sector_rv is not None:
-        universo = [e for e in universo if e.sector == sector_rv]
+    if rubro_rv is not None:
+        universo = [e for e in universo if e.sic_oficina == rubro_rv]
 
     if not universo:
         alertas.append(
             _alerta(
                 CODIGO_RV_SIN_CANDIDATOS,
                 f"No hay especies de renta variable candidatas para el bloque de {pct_rv:g}%"
-                + (f" en el sector {sector_rv}" if sector_rv is not None else "")
+                + (f" en el rubro {rubro_rv}" if rubro_rv is not None else "")
                 + ": la cartera queda sin renta variable.",
                 pct_rv=pct_rv,
-                sector_rv=sector_rv,
+                rubro_rv=rubro_rv,
             )
         )
         return [], alertas
@@ -116,13 +130,13 @@ def armar_renta_variable(
     ordenadas = sorted(universo, key=lambda e: (-(e.volumen_usd or 0.0), e.ticker))
 
     elegidas: list[EspecieRentaVariable] = []
-    sectores_presentes: set[str] = set()
+    rubros_presentes: set[str] = set()
     for especie in ordenadas:
         if len(elegidas) >= n_rv:
             break
-        if especie.sector is not None and especie.sector not in sectores_presentes:
+        if especie.sic_oficina is not None and especie.sic_oficina not in rubros_presentes:
             elegidas.append(especie)
-            sectores_presentes.add(especie.sector)
+            rubros_presentes.add(especie.sic_oficina)
 
     if len(elegidas) < n_rv:
         elegidas_tk = {e.ticker for e in elegidas}
@@ -134,12 +148,12 @@ def armar_renta_variable(
             elegidas.append(especie)
             elegidas_tk.add(especie.ticker)
 
-    if all(e.sector is None for e in elegidas):
+    if all(e.sic_oficina is None for e in elegidas):
         alertas.append(
             _alerta(
                 CODIGO_RV_SIN_PERFIL_SECTORIAL,
-                "Ninguna de las especies elegidas para renta variable tiene sector informado: "
-                "no se pudo diversificar por sector dentro del bloque.",
+                "Ninguna de las especies elegidas para renta variable tiene rubro informado: "
+                "no se pudo diversificar por rubro dentro del bloque.",
                 cantidad=len(elegidas),
             )
         )

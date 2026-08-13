@@ -14,19 +14,28 @@
  *
  * **No hay renta fija tecnológica ni de salud en el universo**, y por eso esos dos presets declaran
  * que arman sólo renta variable en vez de aproximar con Telecomunicaciones o con Servicios, que son
- * otra cosa. Al revés pasa lo mismo: Agro y Energias Renovables existen en renta fija pero Yahoo no
- * les da un sector propio, así que esos presets no filtran renta variable en vez de elegir por la
- * fuente cuál de sus categorías "es" el rubro (regla 11).
+ * otra cosa. Al revés pasa lo mismo: Agro y Energias Renovables existen en renta fija pero la
+ * fuente de renta variable no les da un rubro propio, así que esos presets no filtran renta
+ * variable en vez de elegir por la fuente cuál de sus categorías "es" el rubro (regla 11).
  *
  * **Petróleo y renovables van separados a propósito.** El universo de renta fija las clasifica
  * distinto (`O&G` contra `Energias Renovables`) y juntarlas bajo una etiqueta "Energía" haría que
  * un preset devuelva emisiones de un rubro que el asesor no pidió.
  *
- * **Los sectores de renta variable son los de Yahoo Finance**, que llegan por el job de
- * enriquecimiento (`POST /api/v1/jobs/perfiles-renta-variable`). Al 10/08/2026 ese job todavía no
- * corrió y `perfil_renta_variable` está vacía, así que estos filtros no van a encontrar nada hasta
- * que corra: la UI declara ese estado (`SIN_PERFILES_DE_EMPRESA`) en vez de mostrar una lista vacía
- * que se lea como "no hay papeles de este rubro".
+ * **Los rubros de renta variable son los de la SEC** (`sic_oficina`), que llegan por la
+ * clasificación (`app/renta_variable/clasificacion.py`) y cubren 870 especies al 13/08/2026.
+ *
+ * Hasta esa fecha eran los sectores de Yahoo Finance. Yahoo bloqueó el endpoint de perfil y la
+ * tabla quedó con **cero** sectores cargados: cada preset temático filtraba contra un campo vacío y
+ * devolvía cero papeles sin que se entendiera por qué. Las dos taxonomías no se mezclan — ver el
+ * docstring de `app/armado/renta_variable.py`.
+ *
+ * **Dos presets perdieron su filtro de renta variable en el cambio, y es a propósito.** La SEC
+ * agrupa por oficina, y ninguna de sus oficinas dice "petróleo" ni "consumo masivo":
+ * `Office of Energy & Transportation` mezcla petroleras (41 especies) con mineras de oro (46),
+ * eléctricas (22) y aerolíneas (25) — medido el 13/08/2026 —, y `Office of Trade & Services` es
+ * comercio minorista de todo tipo. Filtrar "Petróleo y gas" por esa oficina traería Barrick Gold y
+ * American Airlines, que es exactamente lo que un preset temático no puede hacer.
  */
 
 import { FILTROS_ARMADOR_VACIOS, type FiltrosArmador } from './filtros'
@@ -36,9 +45,9 @@ export interface PresetTematico {
   etiqueta: string
   /** Qué filtros de la grilla de renta fija precarga. `null` = ninguno aplica, y la nota dice por qué. */
   filtrosRf: Partial<FiltrosArmador> | null
-  /** Sector de Yahoo, literal y sin normalizar, para el bloque de renta variable. `null` = el
-   *  preset no filtra la renta variable. */
-  sectorRv: string | null
+  /** Rubro de la SEC (`sic_oficina`), literal y sin normalizar, para el bloque de renta variable.
+   *  `null` = el preset no filtra la renta variable, y la nota dice por qué. */
+  rubroRv: string | null
   /** Qué hace y qué no. Se muestra como tooltip: un atajo que no explica qué precargó es magia. */
   nota: string
 }
@@ -48,80 +57,88 @@ export const PRESETS_TEMATICOS: PresetTematico[] = [
     id: 'financieras',
     etiqueta: 'Financieras',
     filtrosRf: { sector: 'Financiera' },
-    sectorRv: 'Financial Services',
-    nota: 'Renta fija del sector Financiera y renta variable del sector Financial Services de Yahoo.',
+    rubroRv: 'Office of Finance',
+    nota:
+      'Renta fija del sector Financiera y renta variable del rubro Office of Finance, que es ' +
+      'como la SEC agrupa bancos, seguros y servicios financieros.',
   },
   {
     id: 'petroleo-gas',
     etiqueta: 'Petróleo y gas',
     filtrosRf: { sector: 'O&G' },
-    sectorRv: 'Energy',
+    rubroRv: null,
     nota:
-      'Renta fija del sector O&G —que es literalmente Oil & Gas— y renta variable del sector ' +
-      'Energy de Yahoo. Las renovables van aparte: el universo las clasifica por separado.',
+      'Renta fija del sector O&G —que es literalmente Oil & Gas—. No filtra la renta variable: ' +
+      'la SEC mete petroleras, mineras de oro, eléctricas y aerolíneas en la misma oficina ' +
+      '(Energy & Transportation), y filtrar por ahí traería Barrick Gold y American Airlines.',
   },
   {
     id: 'energias-renovables',
     etiqueta: 'Energías renovables',
     filtrosRf: { sector: 'Energias Renovables' },
-    sectorRv: null,
+    rubroRv: null,
     nota:
       'Renta fija del sector Energias Renovables (9 emisiones). No filtra la renta variable: ' +
-      'Yahoo no tiene un sector de renovables — las reparte entre Energy y Utilities según la ' +
-      'empresa, y elegir una de las dos sería decidir por la fuente.',
+      'la SEC no tiene un rubro de renovables — las reparte según la actividad de cada empresa, ' +
+      'y elegir uno de sus rubros sería decidir por la fuente.',
   },
   {
     id: 'tecnologicas',
     etiqueta: 'Tecnológicas',
     filtrosRf: null,
-    sectorRv: 'Technology',
+    rubroRv: 'Office of Technology',
     nota:
-      'Sólo renta variable: el universo de renta fija no tiene emisores tecnológicos, y ' +
-      'Telecomunicaciones no es lo mismo. La grilla de bonos queda sin filtrar.',
+      'Sólo renta variable, del rubro Office of Technology de la SEC: el universo de renta fija ' +
+      'no tiene emisores tecnológicos, y Telecomunicaciones no es lo mismo. La grilla de bonos ' +
+      'queda sin filtrar.',
   },
   {
     id: 'consumo-masivo',
     etiqueta: 'Consumo masivo',
     filtrosRf: { sector: 'Alimentos y Consumo' },
-    sectorRv: 'Consumer Defensive',
+    rubroRv: null,
     nota:
-      'Renta fija del sector Alimentos y Consumo (8 emisiones) y renta variable del sector ' +
-      'Consumer Defensive de Yahoo, que es el consumo no cíclico. Consumer Cyclical queda ' +
-      'afuera: es consumo discrecional, otra cosa.',
+      'Renta fija del sector Alimentos y Consumo (8 emisiones). No filtra la renta variable: la ' +
+      'SEC no separa el consumo masivo del resto del comercio — su oficina de Trade & Services ' +
+      'junta supermercados, ropa, restaurantes y alquiler de autos.',
   },
   {
     id: 'medicina',
     etiqueta: 'Medicina y salud',
     filtrosRf: null,
-    sectorRv: 'Healthcare',
+    rubroRv: 'Office of Life Sciences',
     nota:
-      'Sólo renta variable: no hay ningún emisor de salud en el universo de renta fija — ' +
-      'Servicios agrupa otra cosa y usarlo sería filtrar por una categoría que no dice salud. ' +
-      'La grilla de bonos queda sin filtrar.',
+      'Sólo renta variable, del rubro Office of Life Sciences de la SEC: no hay ningún emisor ' +
+      'de salud en el universo de renta fija — Servicios agrupa otra cosa y usarlo sería filtrar ' +
+      'por una categoría que no dice salud. La grilla de bonos queda sin filtrar.',
   },
   {
     id: 'agro',
     etiqueta: 'Agro',
     filtrosRf: { sector: 'Agro' },
-    sectorRv: null,
+    rubroRv: null,
     nota:
-      'Renta fija del sector Agro (26 emisiones). No filtra la renta variable: Yahoo reparte el ' +
-      'agro entre Consumer Defensive y Basic Materials, sin un sector propio.',
+      'Renta fija del sector Agro (26 emisiones). No filtra la renta variable: la SEC reparte el ' +
+      'agro entre manufactura de alimentos y comercio, sin un rubro propio.',
   },
   {
     id: 'cobertura-inflacion',
     etiqueta: 'Cobertura inflación',
     filtrosRf: { segmento: 'cer' },
-    sectorRv: null,
+    rubroRv: null,
     nota:
       'Renta fija ajustada por CER. No filtra la renta variable: una acción no ajusta por ' +
       'inflación por contrato, así que no hay un sector que cubra eso.',
   },
 ]
 
-/** El aviso cuando el universo de renta variable todavía no tiene perfiles de empresa cargados. */
+/** El aviso cuando ninguno de los papeles de esta clase tiene rubro conocido.
+ *
+ * Es el estado normal de las acciones argentinas: la SEC sólo lista las que tienen ADR (21 de 245),
+ * y las demás esperan a la CNV (F-054). Decirlo evita que una lista vacía se lea como "no hay
+ * papeles de este rubro" cuando lo que falta es el dato (regla 1). */
 export const SIN_PERFILES_DE_EMPRESA =
-  'sin perfiles de empresa cargados todavía: el filtro por rubro no va a encontrar nada hasta que corra el job de enriquecimiento'
+  'sin rubro conocido para estos papeles: la SEC sólo clasifica las que tienen ADR, y el resto espera a la CNV'
 
 export function presetPorId(id: string | null): PresetTematico | null {
   if (id === null) return null

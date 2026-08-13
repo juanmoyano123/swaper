@@ -53,6 +53,13 @@ function accion(extra: Partial<EspecieRentaVariable> = {}): EspecieRentaVariable
     pais: null,
     perfil_fuente: null,
     perfil_capturado_en: null,
+    sic_codigo: null,
+    sic_titulo: null,
+    sic_oficina: null,
+    division_cadena: null,
+    estrategia_etf: null,
+    ratio_conversion: null,
+    mercado_origen: null,
     ...extra,
   }
 }
@@ -83,6 +90,13 @@ function cedear(extra: Partial<EspecieRentaVariable> = {}): EspecieRentaVariable
     pais: null,
     perfil_fuente: null,
     perfil_capturado_en: null,
+    sic_codigo: null,
+    sic_titulo: null,
+    sic_oficina: null,
+    division_cadena: null,
+    estrategia_etf: null,
+    ratio_conversion: null,
+    mercado_origen: null,
     ...extra,
   }
 }
@@ -414,69 +428,70 @@ describe('el buscador de acciones y CEDEARs', () => {
     expect(screen.queryByRole('button', { name: 'PAMP' })).not.toBeInTheDocument()
   })
 
-  it('filtra por sector, sólo con las especies de esa clase que lo declaran', async () => {
+  it('filtra por rubro, sólo con las especies de esa clase que lo declaran', async () => {
     responderCon({
       acciones: [
-        accion({ sector: 'Financial Services' }),
-        accion({ ticker: 'PAMP', sector: 'Energy' }),
+        accion({ sic_oficina: 'Office of Finance' }),
+        accion({ ticker: 'PAMP', sic_oficina: 'Office of Energy & Transportation' }),
       ],
     })
     renderizar()
     await screen.findAllByRole('listitem')
 
-    await userEvent.selectOptions(screen.getByLabelText('Sector (empresa)'), 'Financial Services')
+    await userEvent.selectOptions(screen.getByLabelText('Rubro (SEC)'), 'Office of Finance')
 
     expect(screen.getByRole('button', { name: 'GGAL' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'PAMP' })).not.toBeInTheDocument()
   })
 
-  it('filtra por rubro (industria)', async () => {
+  it('filtra por eslabón productivo, que es la división del SIC y no una lectura nuestra', async () => {
     responderCon({
       acciones: [
-        accion({ industria: 'Banks - Regional' }),
-        accion({ ticker: 'PAMP', industria: 'Oil & Gas E&P' }),
+        accion({ division_cadena: 'Finanzas y seguros' }),
+        accion({ ticker: 'PAMP', division_cadena: 'Extracción' }),
       ],
     })
     renderizar()
     await screen.findAllByRole('listitem')
 
-    await userEvent.selectOptions(screen.getByLabelText('Rubro (empresa)'), 'Oil & Gas E&P')
+    await userEvent.selectOptions(screen.getByLabelText('Eslabón productivo'), 'Extracción')
 
     expect(screen.getByRole('button', { name: 'PAMP' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'GGAL' })).not.toBeInTheDocument()
   })
 
-  it('sin perfil de empresa todavía, sector y rubro sólo ofrecen "todos" — no rompe la búsqueda', async () => {
+  it('sin clasificar todavía, rubro y eslabón sólo ofrecen "todos" — no rompe la búsqueda', async () => {
+    // El caso normal de las acciones argentinas: la SEC clasifica 21 de 245.
     responderCon({ acciones: [accion(), accion({ ticker: 'PAMP' })] })
     renderizar()
     await screen.findAllByRole('listitem')
 
-    expect(screen.getByLabelText('Sector (empresa)')).toHaveValue('')
-    expect(screen.getByLabelText('Sector (empresa)').children).toHaveLength(1) // sólo "todos"
+    expect(screen.getByLabelText('Rubro (SEC)')).toHaveValue('')
+    expect(screen.getByLabelText('Rubro (SEC)').children).toHaveLength(1) // sólo "todos"
     expect(screen.getByRole('button', { name: 'GGAL' })).toBeInTheDocument()
   })
 
-  it('cambiar de clase limpia sector y rubro elegidos', async () => {
+  it('cambiar de clase limpia rubro y eslabón elegidos', async () => {
     responderCon({
-      acciones: [accion({ sector: 'Financial Services' })],
-      cedears: [cedear({ sector: 'Technology' })],
+      acciones: [accion({ sic_oficina: 'Office of Finance' })],
+      cedears: [cedear({ sic_oficina: 'Office of Technology' })],
     })
     renderizar()
     await screen.findAllByRole('listitem')
 
-    await userEvent.selectOptions(screen.getByLabelText('Sector (empresa)'), 'Financial Services')
-    expect(screen.getByLabelText('Sector (empresa)')).toHaveValue('Financial Services')
+    await userEvent.selectOptions(screen.getByLabelText('Rubro (SEC)'), 'Office of Finance')
+    expect(screen.getByLabelText('Rubro (SEC)')).toHaveValue('Office of Finance')
 
     await userEvent.click(screen.getByRole('radio', { name: 'CEDEARs' }))
 
-    expect(screen.getByLabelText('Sector (empresa)')).toHaveValue('')
+    expect(screen.getByLabelText('Rubro (SEC)')).toHaveValue('')
   })
 })
 
 
 describe('reemplazar una sugerencia', () => {
   it('saca la posición y deja el buscador enfocado para elegir otra', async () => {
-    responderCon({ acciones: [accion({ sector: 'Financial Services' })] })
+    responderCon({ acciones: [accion({ sic_oficina: 'Office of Finance' })] })
     renderizar()
     await screen.findAllByRole('listitem')
 
@@ -492,11 +507,11 @@ describe('reemplazar una sugerencia', () => {
     expect(screen.getByLabelText('Buscar acción o CEDEAR por ticker o nombre')).toHaveFocus()
   })
 
-  it('pre-filtra por el sector de la que se saca: "otro banco, no este"', async () => {
+  it('pre-filtra por el rubro de la que se saca: "otro banco, no este"', async () => {
     responderCon({
       acciones: [
-        accion({ sector: 'Financial Services' }),
-        accion({ ticker: 'PAMP', sector: 'Energy' }),
+        accion({ sic_oficina: 'Office of Finance' }),
+        accion({ ticker: 'PAMP', sic_oficina: 'Office of Energy & Transportation' }),
       ],
     })
     renderizar()
@@ -505,13 +520,16 @@ describe('reemplazar una sugerencia', () => {
     await userEvent.click(screen.getByRole('button', { name: 'agregar GGAL directo' }))
     await userEvent.click(screen.getByRole('button', { name: 'reemplazar GGAL por otro activo' }))
 
-    expect(screen.getByLabelText('Sector (empresa)')).toHaveValue('Financial Services')
+    expect(screen.getByLabelText('Rubro (SEC)')).toHaveValue('Office of Finance')
     expect(screen.queryByRole('button', { name: 'PAMP' })).not.toBeInTheDocument()
   })
 
-  it('sin sector declarado no inventa un filtro: la búsqueda queda abierta', async () => {
+  it('sin rubro declarado no inventa un filtro: la búsqueda queda abierta', async () => {
     responderCon({
-      acciones: [accion({ sector: null }), accion({ ticker: 'PAMP', sector: 'Energy' })],
+      acciones: [
+        accion({ sic_oficina: null }),
+        accion({ ticker: 'PAMP', sic_oficina: 'Office of Energy & Transportation' }),
+      ],
     })
     renderizar()
     await screen.findAllByRole('listitem')
@@ -519,7 +537,7 @@ describe('reemplazar una sugerencia', () => {
     await userEvent.click(screen.getByRole('button', { name: 'agregar GGAL directo' }))
     await userEvent.click(screen.getByRole('button', { name: 'reemplazar GGAL por otro activo' }))
 
-    expect(screen.getByLabelText('Sector (empresa)')).toHaveValue('')
+    expect(screen.getByLabelText('Rubro (SEC)')).toHaveValue('')
     expect(screen.getByRole('button', { name: 'PAMP' })).toBeInTheDocument()
   })
 })
@@ -593,5 +611,52 @@ describe('un papel con sus monedas de liquidación', () => {
 
     const lista = await screen.findByRole('list', { name: /Resultados de CEDEARs/ })
     expect(within(lista).getByText('n/n')).toBeInTheDocument()
+  })
+})
+
+
+describe('qué es cada papel', () => {
+  it('muestra nombre, actividad y eslabón de la cadena', async () => {
+    responderCon({
+      cedears: [
+        cedear({
+          ticker: 'AAPL',
+          nombre_largo: 'Apple Inc.',
+          sic_codigo: '3571',
+          sic_titulo: 'Electronic Computers',
+          division_cadena: 'Manufactura',
+        }),
+      ],
+    })
+    renderizar()
+    await userEvent.click(screen.getByRole('radio', { name: 'CEDEARs' }))
+
+    const lista = await screen.findByRole('list', { name: /Resultados de CEDEARs/ })
+    expect(within(lista).getByText('Apple Inc.')).toBeInTheDocument()
+    expect(within(lista).getByText(/Electronic Computers · Manufactura/)).toBeInTheDocument()
+  })
+
+  it('un fondo muestra su estrategia en vez de una actividad', async () => {
+    responderCon({
+      cedears: [
+        cedear({ ticker: 'GLD', nombre_largo: 'ETF SPDR GOLD TRUST', estrategia_etf: 'activo_fisico' }),
+      ],
+    })
+    renderizar()
+    await userEvent.click(screen.getByRole('radio', { name: 'CEDEARs' }))
+
+    const lista = await screen.findByRole('list', { name: /Resultados de CEDEARs/ })
+    expect(within(lista).getByText(/fondo · activo físico/)).toBeInTheDocument()
+  })
+
+  it('un papel sin clasificar no muestra el sector de otro', async () => {
+    // Las acciones argentinas: la SEC cubre el 9 %. Vacío declarado, nunca completado por analogía.
+    responderCon({ cedears: [cedear({ ticker: 'GGAL', nombre_largo: null, sic_titulo: null })] })
+    renderizar()
+    await userEvent.click(screen.getByRole('radio', { name: 'CEDEARs' }))
+
+    const lista = await screen.findByRole('list', { name: /Resultados de CEDEARs/ })
+    expect(within(lista).getByRole('button', { name: 'GGAL' })).toBeInTheDocument()
+    expect(within(lista).queryByText(/Manufactura|Electronic/)).not.toBeInTheDocument()
   })
 })

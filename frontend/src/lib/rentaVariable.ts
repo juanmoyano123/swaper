@@ -46,6 +46,25 @@ export const esquemaEspecieRentaVariable = z.object({
    *  declarada, en vez de esconderla o de inventarle una categoría. */
   no_identificado: z.boolean().default(false),
 
+  // Clasificación de la SEC y de la tabla de CEDEARs de BYMA (13/08/2026). Todas pueden faltar: la
+  // SEC cubre el 74 % de los CEDEARs y el 9 % de las acciones argentinas, y lo que no está se
+  // declara en pantalla — nunca se completa por analogía con otra empresa.
+  /** Código de actividad de la SEC, sin normalizar: es la llave de auditoría. */
+  sic_codigo: z.string().nullable().default(null),
+  /** A qué se dedica, en las palabras de la fuente: `Electronic Computers`. */
+  sic_titulo: z.string().nullable().default(null),
+  /** El rubro, según cómo agrupa la propia SEC: `Office of Energy & Transportation`. */
+  sic_oficina: z.string().nullable().default(null),
+  /** En qué eslabón de la cadena productiva está: `Extracción`, `Manufactura`, `Servicios`…
+   *  Sale de la división del SIC Manual, no de una interpretación nuestra. */
+  division_cadena: z.string().nullable().default(null),
+  /** Qué idea arma el portafolio si es un fondo. `null` = no es un fondo. */
+  estrategia_etf: z.string().nullable().default(null),
+  /** Cuántos CEDEARs equivalen a una acción del subyacente, como razón (`20:1`). */
+  ratio_conversion: z.string().nullable().default(null),
+  /** En qué mercado cotiza el subyacente: `NASDAQ`, `NYSE`, `B3`. */
+  mercado_origen: z.string().nullable().default(null),
+
   // Perfil de empresa (Etapa 4 del rediseño del armador): `null` hasta que el job de
   // enriquecimiento pase por este ticker (`app/renta_variable/enriquecimiento.py`, backend). De
   // Yahoo Finance, tal como la fuente los declara — nunca se traducen (regla 11).

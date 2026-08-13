@@ -294,11 +294,11 @@ async def test_un_pct_rv_fuera_de_rango_se_rechaza(app_con_universo) -> None:
 # --- El estado real de hoy: `public.perfil_renta_variable` vacía --------------------------------
 #
 # Verificado contra producción (08/2026): la tabla tiene 0 filas mientras `instrumentos` tiene 434
-# acciones y 1205 CEDEARs -- el job de enriquecimiento de Yahoo (`app.renta_variable.
-# enriquecimiento`) nunca corrió. Consecuencia real, no hipotética: HOY toda especie de renta
-# variable llega con `sector=None` (el LEFT JOIN sin fila del lado de `perfil_renta_variable`).
-# Sin la clave "sector" en la fila cruda, `EspecieRentaVariable.sector` sale `None` -- mismo
-# camino que toma la lectura real, no un atajo del fixture.
+# acciones y 1205 CEDEARs. Desde el 13/08/2026 la clasificación contra la SEC llena la tabla,
+# pero cubre el 74 % de los CEDEARs y el 9 % de las acciones argentinas: un papel sin rubro sigue
+# siendo el caso normal, no un borde. Sin la clave "sic_oficina" en la fila cruda,
+# `EspecieRentaVariable.sic_oficina` sale `None` -- mismo camino que toma la lectura real, no un
+# atajo del fixture.
 FILAS_RENTA_VARIABLE_SIN_PERFIL: list[dict[str, Any]] = [
     {
         "ticker": "GGAL",
@@ -327,10 +327,10 @@ FILAS_RENTA_VARIABLE_SIN_PERFIL: list[dict[str, Any]] = [
 async def test_sin_perfiles_de_renta_variable_la_cartera_sigue_siendo_usable(
     app_con_universo,
 ) -> None:
-    """El caso de hoy, no un borde raro: sin un sólo `sector` informado en todo el universo de
-    renta variable, `pct_rv > 0` igual devuelve un bloque de renta variable elegido por liquidez
-    pura, la cartera sigue sumando 100% y la alerta declara por qué no se pudo diversificar por
-    sector -- no se rompe nada, no se inventa un sector para poder diversificar."""
+    """El caso de las acciones argentinas, que son el 91 % sin clasificar: sin un sólo rubro
+    informado, `pct_rv > 0` igual devuelve un bloque de renta variable elegido por liquidez pura,
+    la cartera sigue sumando 100% y la alerta declara por qué no se pudo diversificar por rubro --
+    no se rompe nada, no se inventa un rubro para poder diversificar."""
     async with cliente(app_con_universo(renta_variable=FILAS_RENTA_VARIABLE_SIN_PERFIL)) as http:
         cuerpo = (await http.post(RUTA, json={"monto": 100_000, "perfil": "moderado"})).json()
 
@@ -344,7 +344,7 @@ async def test_sin_perfiles_de_renta_variable_la_cartera_sigue_siendo_usable(
 
 
 async def test_sin_perfiles_y_con_tematica_activa_no_hay_ningun_match(app_con_universo) -> None:
-    """Mismo estado real, pero pidiendo una temática sectorial explícita: sin un sólo sector
+    """Mismo estado real, pero pidiendo una temática explícita: sin un sólo rubro
     informado, ninguna especie puede afirmarse que pertenece a esa temática (regla 1 del dominio,
     no se completa el dato que falta), así que el bloque de renta variable queda vacío,
     `rv_sin_candidatos` lo declara, y la renta fija no se reescala -- queda sumando 100% con lo
@@ -352,7 +352,7 @@ async def test_sin_perfiles_y_con_tematica_activa_no_hay_ningun_match(app_con_un
     async with cliente(app_con_universo(renta_variable=FILAS_RENTA_VARIABLE_SIN_PERFIL)) as http:
         cuerpo = (
             await http.post(
-                RUTA, json={"monto": 100_000, "perfil": "moderado", "sector_rv": "Bancos"}
+                RUTA, json={"monto": 100_000, "perfil": "moderado", "rubro_rv": "Office of Finance"}
             )
         ).json()
 

@@ -36,10 +36,14 @@ class ParametrosArmado(BaseModel):
     (`app.armado.renta_variable.PCT_RV_PERFIL`) -- no hay forma de pedir "el default" con un
     número, así que la ausencia es la señal."""
 
-    sector_rv: str | None = None
-    """Temática sectorial dentro de renta variable, como valor exacto de `sector` (Yahoo, sin
-    traducir -- regla 11 del dominio). `None` es sin temática: participa todo el universo de
-    renta variable, no sólo un sector."""
+    rubro_rv: str | None = None
+    """Temática dentro de renta variable, como valor exacto de `sic_oficina` -- el rubro tal como
+    lo nombra la SEC, sin traducir (regla 11 del dominio). `None` es sin temática: participa todo
+    el universo de renta variable, no sólo un rubro.
+
+    Se llamaba `sector_rv` y apuntaba al sector de Yahoo hasta el 13/08/2026; Yahoo dejó de
+    responder y la tabla quedó con cero sectores, así que el campo pasó a la SEC. Ver el docstring
+    de `app.armado.renta_variable` por qué las dos taxonomías no se mezclan."""
 
     @model_validator(mode="after")
     def _validar_mix(self) -> "ParametrosArmado":

@@ -18,7 +18,7 @@ def _especie(
     ticker: str,
     *,
     volumen_usd: float | None,
-    sector: str | None = None,
+    rubro: str | None = None,
     clase_activo: str = "accion",
 ) -> EspecieRentaVariable:
     """Una especie mínima: sólo lo que le importa a `armar_renta_variable` -- el resto de los
@@ -35,7 +35,7 @@ def _especie(
         px_bid=None,
         px_ask=None,
         operaciones=None,
-        sector=sector,
+        sic_oficina=rubro,
     )
 
 
@@ -60,8 +60,8 @@ def test_n_rv_no_positivo_no_arma_nada() -> None:
 def test_es_deterministico_y_desempata_por_ticker_alfabetico() -> None:
     """Dos especies con el mismo `volumen_usd` desempatan por ticker ascendente, siempre."""
     especies = [
-        _especie("ZETA", volumen_usd=500.0, sector="Sector A"),
-        _especie("ALFA", volumen_usd=500.0, sector="Sector B"),
+        _especie("ZETA", volumen_usd=500.0, rubro="Sector A"),
+        _especie("ALFA", volumen_usd=500.0, rubro="Sector B"),
     ]
     primera = armar_renta_variable(especies, pct_rv=20.0, n_rv=2, monto_total=100_000)
     segunda = armar_renta_variable(
@@ -75,8 +75,8 @@ def test_es_deterministico_y_desempata_por_ticker_alfabetico() -> None:
 
 def test_descarta_especies_sin_volumen_usd_y_alerta() -> None:
     especies = [
-        _especie("GGAL", volumen_usd=1000.0, sector="Bancos"),
-        _especie("SINVOL", volumen_usd=None, sector="Bancos"),
+        _especie("GGAL", volumen_usd=1000.0, rubro="Bancos"),
+        _especie("SINVOL", volumen_usd=None, rubro="Bancos"),
     ]
     posiciones, alertas = armar_renta_variable(
         especies, pct_rv=20.0, n_rv=5, monto_total=100_000
@@ -92,47 +92,47 @@ def test_descarta_especies_sin_volumen_usd_y_alerta() -> None:
 
 
 def test_sin_especies_descartadas_no_hay_alerta_de_volumen() -> None:
-    especies = [_especie("GGAL", volumen_usd=1000.0, sector="Bancos")]
+    especies = [_especie("GGAL", volumen_usd=1000.0, rubro="Bancos")]
     _, alertas = armar_renta_variable(especies, pct_rv=20.0, n_rv=1, monto_total=100_000)
     assert all(a.codigo != CODIGO_RV_SIN_VOLUMEN_USD for a in alertas)
 
 
-def test_tematica_filtra_por_igualdad_exacta_de_sector() -> None:
+def test_tematica_filtra_por_igualdad_exacta_de_rubro() -> None:
     especies = [
-        _especie("GGAL", volumen_usd=1000.0, sector="Bancos"),
-        _especie("YPFD", volumen_usd=900.0, sector="O&G"),
-        _especie("PAMP", volumen_usd=800.0, sector="Energía"),
+        _especie("GGAL", volumen_usd=1000.0, rubro="Bancos"),
+        _especie("YPFD", volumen_usd=900.0, rubro="O&G"),
+        _especie("PAMP", volumen_usd=800.0, rubro="Energía"),
     ]
     posiciones, _ = armar_renta_variable(
-        especies, pct_rv=20.0, n_rv=5, sector_rv="O&G", monto_total=100_000
+        especies, pct_rv=20.0, n_rv=5, rubro_rv="O&G", monto_total=100_000
     )
     assert {p.ticker for p in posiciones} == {"YPFD"}
 
 
 def test_tematica_sin_matches_da_rv_sin_candidatos() -> None:
-    especies = [_especie("GGAL", volumen_usd=1000.0, sector="Bancos")]
+    especies = [_especie("GGAL", volumen_usd=1000.0, rubro="Bancos")]
     posiciones, alertas = armar_renta_variable(
-        especies, pct_rv=20.0, n_rv=5, sector_rv="Inexistente", monto_total=100_000
+        especies, pct_rv=20.0, n_rv=5, rubro_rv="Inexistente", monto_total=100_000
     )
     assert posiciones == []
     assert [a.codigo for a in alertas] == [CODIGO_RV_SIN_CANDIDATOS]
 
 
-def test_sector_none_queda_afuera_con_tematica_activa() -> None:
+def test_rubro_none_queda_afuera_con_tematica_activa() -> None:
     especies = [
-        _especie("GGAL", volumen_usd=1000.0, sector=None),
-        _especie("YPFD", volumen_usd=900.0, sector="O&G"),
+        _especie("GGAL", volumen_usd=1000.0, rubro=None),
+        _especie("YPFD", volumen_usd=900.0, rubro="O&G"),
     ]
     posiciones, _ = armar_renta_variable(
-        especies, pct_rv=20.0, n_rv=5, sector_rv="O&G", monto_total=100_000
+        especies, pct_rv=20.0, n_rv=5, rubro_rv="O&G", monto_total=100_000
     )
     assert {p.ticker for p in posiciones} == {"YPFD"}
 
 
-def test_sector_none_se_admite_sin_tematica() -> None:
+def test_rubro_none_se_admite_sin_tematica() -> None:
     especies = [
-        _especie("GGAL", volumen_usd=1000.0, sector=None),
-        _especie("YPFD", volumen_usd=900.0, sector="O&G"),
+        _especie("GGAL", volumen_usd=1000.0, rubro=None),
+        _especie("YPFD", volumen_usd=900.0, rubro="O&G"),
     ]
     posiciones, _ = armar_renta_variable(especies, pct_rv=20.0, n_rv=5, monto_total=100_000)
     assert {p.ticker for p in posiciones} == {"GGAL", "YPFD"}
@@ -140,49 +140,49 @@ def test_sector_none_se_admite_sin_tematica() -> None:
 
 def test_universo_real_sin_perfiles_arma_igual_por_liquidez_pura() -> None:
     """El estado real de hoy: `public.perfil_renta_variable` está vacía (0 filas, el job de
-    Yahoo nunca corrió), así que TODAS las especies de renta variable llegan con `sector=None`.
+    Yahoo nunca corrió), así que TODAS las especies de renta variable llegan con `rubro=None`.
     No es un caso borde raro -- es el camino que se ejecuta en cada corrida hasta que el job
-    corra. La primera pasada (sector nuevo) queda vacía siempre y todo se decide en la segunda,
+    corra. La primera pasada (rubro nuevo) queda vacía siempre y todo se decide en la segunda,
     por orden de liquidez pura, sin romper nada."""
     especies = [
-        _especie("GGAL", volumen_usd=1000.0, sector=None),
-        _especie("YPFD", volumen_usd=900.0, sector=None),
-        _especie("PAMP", volumen_usd=800.0, sector=None),
-        _especie("AAPL", volumen_usd=700.0, sector=None, clase_activo="cedear"),
-        _especie("TSLA", volumen_usd=600.0, sector=None, clase_activo="cedear"),
+        _especie("GGAL", volumen_usd=1000.0, rubro=None),
+        _especie("YPFD", volumen_usd=900.0, rubro=None),
+        _especie("PAMP", volumen_usd=800.0, rubro=None),
+        _especie("AAPL", volumen_usd=700.0, rubro=None, clase_activo="cedear"),
+        _especie("TSLA", volumen_usd=600.0, rubro=None, clase_activo="cedear"),
     ]
     posiciones, alertas = armar_renta_variable(especies, pct_rv=25.0, n_rv=3, monto_total=100_000)
 
-    # Se eligen las tres de mayor liquidez, ni una de sector distinto entra antes que una de
-    # más volumen: sin dato de sector no hay "sector nuevo" que preferir.
+    # Se eligen las tres de mayor liquidez, ni una de rubro distinto entra antes que una de
+    # más volumen: sin dato de rubro no hay "rubro nuevo" que preferir.
     assert [p.ticker for p in posiciones] == ["GGAL", "YPFD", "PAMP"]
     assert sum(p.pct_cartera for p in posiciones) == pytest.approx(25.0)
     assert [a.codigo for a in alertas] == [CODIGO_RV_SIN_PERFIL_SECTORIAL]
 
 
 def test_universo_real_sin_perfiles_con_tematica_activa_no_tiene_ningun_match() -> None:
-    """Mismo estado real, pero con `sector_rv` explícito: sin un solo sector informado, ninguna
+    """Mismo estado real, pero con `rubro_rv` explícito: sin un solo rubro informado, ninguna
     especie puede afirmarse que pertenece a la temática (regla 1), así que el bloque de renta
     variable queda vacío y declarado -- no hay ningún candidato que armar_renta_variable pueda
     inventar para llenarlo."""
     especies = [
-        _especie("GGAL", volumen_usd=1000.0, sector=None),
-        _especie("YPFD", volumen_usd=900.0, sector=None),
+        _especie("GGAL", volumen_usd=1000.0, rubro=None),
+        _especie("YPFD", volumen_usd=900.0, rubro=None),
     ]
     posiciones, alertas = armar_renta_variable(
-        especies, pct_rv=25.0, n_rv=3, sector_rv="Bancos", monto_total=100_000
+        especies, pct_rv=25.0, n_rv=3, rubro_rv="Bancos", monto_total=100_000
     )
     assert posiciones == []
     assert [a.codigo for a in alertas] == [CODIGO_RV_SIN_CANDIDATOS]
 
 
-def test_diversifica_por_sector_en_la_primera_pasada() -> None:
-    """Con más candidatos que `n_rv`, la primera pasada prioriza un sector nuevo por sobre el
-    mejor volumen dentro de un sector ya representado."""
+def test_diversifica_por_rubro_en_la_primera_pasada() -> None:
+    """Con más candidatos que `n_rv`, la primera pasada prioriza un rubro nuevo por sobre el
+    mejor volumen dentro de un rubro ya representado."""
     especies = [
-        _especie("BANCO_A", volumen_usd=1000.0, sector="Bancos"),
-        _especie("BANCO_B", volumen_usd=900.0, sector="Bancos"),
-        _especie("ENERGIA_A", volumen_usd=500.0, sector="Energía"),
+        _especie("BANCO_A", volumen_usd=1000.0, rubro="Bancos"),
+        _especie("BANCO_B", volumen_usd=900.0, rubro="Bancos"),
+        _especie("ENERGIA_A", volumen_usd=500.0, rubro="Energía"),
     ]
     posiciones, _ = armar_renta_variable(especies, pct_rv=20.0, n_rv=2, monto_total=100_000)
 
@@ -190,13 +190,13 @@ def test_diversifica_por_sector_en_la_primera_pasada() -> None:
     assert tickers == {"BANCO_A", "ENERGIA_A"}
 
 
-def test_segunda_pasada_completa_cuando_no_alcanzan_los_sectores_nuevos() -> None:
-    """Sólo dos sectores disponibles pero se piden tres posiciones: la segunda pasada completa
+def test_segunda_pasada_completa_cuando_no_alcanzan_los_rubros_nuevos() -> None:
+    """Sólo dos rubros disponibles pero se piden tres posiciones: la segunda pasada completa
     con lo que quedó, en el mismo orden de liquidez."""
     especies = [
-        _especie("BANCO_A", volumen_usd=1000.0, sector="Bancos"),
-        _especie("BANCO_B", volumen_usd=900.0, sector="Bancos"),
-        _especie("ENERGIA_A", volumen_usd=500.0, sector="Energía"),
+        _especie("BANCO_A", volumen_usd=1000.0, rubro="Bancos"),
+        _especie("BANCO_B", volumen_usd=900.0, rubro="Bancos"),
+        _especie("ENERGIA_A", volumen_usd=500.0, rubro="Energía"),
     ]
     posiciones, _ = armar_renta_variable(especies, pct_rv=30.0, n_rv=3, monto_total=100_000)
 
@@ -204,15 +204,15 @@ def test_segunda_pasada_completa_cuando_no_alcanzan_los_sectores_nuevos() -> Non
 
 
 def test_menos_candidatos_que_n_rv_arma_con_lo_que_hay() -> None:
-    especies = [_especie("GGAL", volumen_usd=1000.0, sector="Bancos")]
+    especies = [_especie("GGAL", volumen_usd=1000.0, rubro="Bancos")]
     posiciones, _ = armar_renta_variable(especies, pct_rv=20.0, n_rv=5, monto_total=100_000)
     assert len(posiciones) == 1
 
 
-def test_todas_sin_sector_da_alerta_de_perfil_sectorial() -> None:
+def test_todas_sin_rubro_da_alerta_de_perfil_sectorial() -> None:
     especies = [
-        _especie("GGAL", volumen_usd=1000.0, sector=None),
-        _especie("YPFD", volumen_usd=900.0, sector=None),
+        _especie("GGAL", volumen_usd=1000.0, rubro=None),
+        _especie("YPFD", volumen_usd=900.0, rubro=None),
     ]
     posiciones, alertas = armar_renta_variable(especies, pct_rv=20.0, n_rv=2, monto_total=100_000)
 
@@ -221,8 +221,8 @@ def test_todas_sin_sector_da_alerta_de_perfil_sectorial() -> None:
     assert CODIGO_RV_SIN_PERFIL_SECTORIAL in codigos
 
 
-def test_con_algun_sector_conocido_no_hay_alerta_de_perfil_sectorial() -> None:
-    especies = [_especie("GGAL", volumen_usd=1000.0, sector="Bancos")]
+def test_con_algun_rubro_conocido_no_hay_alerta_de_perfil_sectorial() -> None:
+    especies = [_especie("GGAL", volumen_usd=1000.0, rubro="Bancos")]
     _, alertas = armar_renta_variable(especies, pct_rv=20.0, n_rv=1, monto_total=100_000)
     assert all(a.codigo != CODIGO_RV_SIN_PERFIL_SECTORIAL for a in alertas)
 
@@ -235,9 +235,9 @@ def test_universo_vacio_da_rv_sin_candidatos() -> None:
 
 def test_equiponderacion_exacta_dentro_del_bloque() -> None:
     especies = [
-        _especie("GGAL", volumen_usd=1000.0, sector="Bancos"),
-        _especie("YPFD", volumen_usd=900.0, sector="O&G"),
-        _especie("PAMP", volumen_usd=800.0, sector="Energía"),
+        _especie("GGAL", volumen_usd=1000.0, rubro="Bancos"),
+        _especie("YPFD", volumen_usd=900.0, rubro="O&G"),
+        _especie("PAMP", volumen_usd=800.0, rubro="Energía"),
     ]
     posiciones, _ = armar_renta_variable(
         especies, pct_rv=30.0, n_rv=3, monto_total=100_000

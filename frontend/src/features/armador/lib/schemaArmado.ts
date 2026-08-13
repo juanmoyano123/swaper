@@ -65,8 +65,8 @@ export interface ParametrosArmadoAsistido {
   /** Qué porcentaje del total va a acciones y CEDEARs. Omitirlo deja que el backend use el
    *  default del perfil (`PCT_RV_PERFIL`). */
   pct_rv?: number
-  /** Sector de Yahoo para acotar la renta variable a una temática. */
-  sector_rv?: string | null
+  /** Rubro de la SEC (`sic_oficina`) para acotar la renta variable a una temática. */
+  rubro_rv?: string | null
   /** Rendimiento mínimo exigido a la renta fija, en puntos porcentuales (`8` = 8%). Va al
    *  `min_rend` del backend, que el motor sí consume como piso al elegir candidatos. Omitirlo es
    *  no exigir piso.

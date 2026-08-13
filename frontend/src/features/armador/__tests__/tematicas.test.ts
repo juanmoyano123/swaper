@@ -58,12 +58,12 @@ describe('los presets sólo referencian datos que existen', () => {
     // No hay emisores tecnológicos en el universo de bonos: mapearlo a Telecomunicaciones sería
     // presentar una aproximación como si fuera el dato pedido.
     expect(tecnologicas?.filtrosRf).toBeNull()
-    expect(tecnologicas?.sectorRv).toBe('Technology')
+    expect(tecnologicas?.rubroRv).toBe('Office of Technology')
     expect(tecnologicas?.nota).toMatch(/Sólo renta variable/)
   })
 
   it('cobertura inflación no filtra renta variable: una acción no ajusta por CER', () => {
-    expect(presetPorId('cobertura-inflacion')?.sectorRv).toBeNull()
+    expect(presetPorId('cobertura-inflacion')?.rubroRv).toBeNull()
   })
 })
 

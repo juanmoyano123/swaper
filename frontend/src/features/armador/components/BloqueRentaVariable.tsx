@@ -99,26 +99,29 @@ export function BloqueRentaVariable() {
   // Para que "reemplazar" deje el cursor donde se elige el sustituto: sacar la posición y dejar al
   // asesor buscando dónde estaba el scroll sería la mitad del trabajo.
   const refBuscador = useRef<HTMLInputElement>(null)
-  const [sectorFiltro, setSectorFiltro] = useState<string | null>(null)
-  const [industriaFiltro, setIndustriaFiltro] = useState<string | null>(null)
+  // Rubro y eslabón salen de la clasificación de la SEC (13/08/2026), no del perfil de Yahoo: ese
+  // job quedó bloqueado y la tabla nunca tuvo un solo sector cargado, así que los dos selects
+  // estaban siempre vacíos. Ver `app/renta_variable/clasificacion.py`.
+  const [rubroFiltro, setRubroFiltro] = useState<string | null>(null)
+  const [eslabonFiltro, setEslabonFiltro] = useState<string | null>(null)
 
   // Un preset temático (Tanda 13) filtra los dos lados a la vez: la grilla de bonos por su sector
-  // y este bloque por el rubro equivalente de Yahoo. El sector del preset se aplica al cambiar de
+  // y este bloque por el rubro equivalente de la SEC. El rubro del preset se aplica al cambiar de
   // temática y después queda editable — el chip es un punto de partida, no un modo.
   const [tematicaAplicada, setTematicaAplicada] = useState<string | null>(null)
   if (tematicaId !== tematicaAplicada) {
     setTematicaAplicada(tematicaId)
-    setSectorFiltro(presetPorId(tematicaId)?.sectorRv ?? null)
-    setIndustriaFiltro(null)
+    setRubroFiltro(presetPorId(tematicaId)?.rubroRv ?? null)
+    setEslabonFiltro(null)
   }
 
-  // Sector y rubro son del perfil de empresa (Etapa 5): las opciones de una clase no tienen por
-  // qué existir en la otra, así que cambiar de Acciones a CEDEARs limpia la selección en vez de
-  // dejar un filtro activo que no matchea nada sin que se entienda por qué.
+  // Las opciones de una clase no tienen por qué existir en la otra, así que cambiar de Acciones a
+  // CEDEARs limpia la selección en vez de dejar un filtro activo que no matchea nada sin que se
+  // entienda por qué.
   function setClasePicker(clase: 'accion' | 'cedear') {
     setClasePickerCrudo(clase)
-    setSectorFiltro(null)
-    setIndustriaFiltro(null)
+    setRubroFiltro(null)
+    setEslabonFiltro(null)
   }
 
   // El cruce contra el universo y la resolución a unidades enteras viven en el hook desde la
@@ -155,12 +158,15 @@ export function BloqueRentaVariable() {
   const erroresPicker = clasePicker === 'accion' ? acciones.isError : cedears.isError
 
   // Opciones del filtro: sólo las que de verdad aparecen en esta clase, ordenadas alfabéticamente
-  // (orden de presentación — sector/rubro no tienen jerarquía propia que ordenar por otro criterio).
-  const sectoresPicker = [
-    ...new Set(listaPicker.map((e) => e.sector).filter((s): s is string => s !== null)),
+  // (orden de presentación — rubro y eslabón no tienen jerarquía propia que ordenar por otro
+  // criterio). Los nombres van tal como los publica la fuente: `Office of Finance` no se traduce
+  // (regla 11), y la SEC hasta publica rubros ambiguos como `Office of Finance or Office of Crypto
+  // Assets`, que se muestran así porque así vienen.
+  const rubrosPicker = [
+    ...new Set(listaPicker.map((e) => e.sic_oficina).filter((s): s is string => s !== null)),
   ].sort()
-  const industriasPicker = [
-    ...new Set(listaPicker.map((e) => e.industria).filter((i): i is string => i !== null)),
+  const eslabonesPicker = [
+    ...new Set(listaPicker.map((e) => e.division_cadena).filter((d): d is string => d !== null)),
   ].sort()
 
   /**
@@ -168,14 +174,14 @@ export function BloqueRentaVariable() {
    *
    * Es composición de lo que ya existe —quitar la posición y usar el buscador—, no un flujo nuevo:
    * el reemplazo no es una operación atómica del dominio, es "esta no me sirve, dame otra". Se
-   * pre-filtra por el sector de la que se saca cuando el dato existe, que es el caso de uso real
-   * ("otro banco, no este"); sin perfil de empresa cargado no se filtra nada en vez de inventar
-   * una equivalencia.
+   * pre-filtra por el rubro de la que se saca cuando el dato existe, que es el caso de uso real
+   * ("otro banco, no este"); sin clasificación no se filtra nada en vez de inventar una
+   * equivalencia.
    */
   function reemplazar(ticker: string) {
-    const sector = porTicker.get(ticker)?.sector ?? null
+    const rubro = porTicker.get(ticker)?.sic_oficina ?? null
     alternarRentaVariable(ticker)
-    if (sector !== null) setSectorFiltro(sector)
+    if (rubro !== null) setRubroFiltro(rubro)
     setBusqueda('')
     refBuscador.current?.focus()
   }
@@ -185,13 +191,13 @@ export function BloqueRentaVariable() {
   // de memoria. El agrupamiento viene del backend, ya contrastado contra el tipo de cambio del
   // universo (`app/renta_variable/agrupamiento.py`).
   //
-  // Los filtros de sector y rubro se aplican **antes** de agrupar, sobre cada especie: son
+  // Los filtros de rubro y eslabón se aplican **antes** de agrupar, sobre cada especie: son
   // atributos de la empresa, así que las hermanas los comparten y filtrar antes o después da lo
-  // mismo — salvo que una hermana no tenga el perfil cargado, y en ese caso lo correcto es que no
-  // arrastre al papel entero.
+  // mismo — salvo que una hermana no tenga la clasificación cargada, y en ese caso lo correcto es
+  // que no arrastre al papel entero.
   const filtradaPicker = listaPicker.filter((e) => {
-    if (sectorFiltro !== null && e.sector !== sectorFiltro) return false
-    if (industriaFiltro !== null && e.industria !== industriaFiltro) return false
+    if (rubroFiltro !== null && e.sic_oficina !== rubroFiltro) return false
+    if (eslabonFiltro !== null && e.division_cadena !== eslabonFiltro) return false
     return true
   })
   const papelesFiltrados = agruparEnPapeles(filtradaPicker).filter((papel) =>
@@ -299,50 +305,52 @@ export function BloqueRentaVariable() {
         />
       </div>
 
-      {/* Sector y rubro: del perfil de empresa (Etapa 5), vacíos hasta que el job de
-          enriquecimiento pase por estos tickers. Sin especies con el dato todavía, los selects
-          quedan con la única opción "todos" y no estorban. */}
+      {/* Rubro y eslabón: de la clasificación de la SEC. Una clase sin ningún papel clasificado
+          deja los selects con la única opción "todos" y no estorban — el aviso de abajo lo dice. */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-        {/* "(empresa)" en la etiqueta visible, no sólo en el aria-label: el filtro de sector de la
+        {/* "(SEC)" en la etiqueta visible, no sólo en el aria-label: el filtro de sector de la
             grilla de renta fija (más arriba en la misma página) ya se llama "Sector" a secas —
             dos selects con el mismo texto visible confundirían tanto a la vista como a un lector
-            de pantalla. */}
+            de pantalla. Y nombrar la fuente en la etiqueta es lo que evita que se lean como la
+            misma taxonomía, que no lo son. */}
         <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, color: 'var(--dim)' }}>
-          Sector (empresa)
+          Rubro (SEC)
           <select
-            value={sectorFiltro ?? ''}
-            onChange={(evento) => setSectorFiltro(evento.target.value === '' ? null : evento.target.value)}
+            value={rubroFiltro ?? ''}
+            onChange={(evento) => setRubroFiltro(evento.target.value === '' ? null : evento.target.value)}
             style={estiloSelectPicker}
           >
             <option value="">todos</option>
-            {sectoresPicker.map((sector) => (
-              <option key={sector} value={sector}>
-                {sector}
+            {rubrosPicker.map((rubro) => (
+              <option key={rubro} value={rubro}>
+                {rubro}
               </option>
             ))}
           </select>
         </label>
+        {/* El eslabón sale de la división del SIC Manual: en qué parte de la cadena productiva
+            está la empresa (extracción, manufactura, comercio, servicios). */}
         <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, color: 'var(--dim)' }}>
-          Rubro (empresa)
+          Eslabón productivo
           <select
-            value={industriaFiltro ?? ''}
-            onChange={(evento) => setIndustriaFiltro(evento.target.value === '' ? null : evento.target.value)}
+            value={eslabonFiltro ?? ''}
+            onChange={(evento) => setEslabonFiltro(evento.target.value === '' ? null : evento.target.value)}
             style={estiloSelectPicker}
           >
             <option value="">todos</option>
-            {industriasPicker.map((industria) => (
-              <option key={industria} value={industria}>
-                {industria}
+            {eslabonesPicker.map((eslabon) => (
+              <option key={eslabon} value={eslabon}>
+                {eslabon}
               </option>
             ))}
           </select>
         </label>
       </div>
 
-      {/* Sin perfiles cargados, los dos selects quedan con una sola opción y filtrar por rubro no
+      {/* Sin clasificación, los dos selects quedan con una sola opción y filtrar por rubro no
           devuelve nada. Decirlo evita que una lista vacía se lea como "no hay papeles de este
           rubro" cuando en realidad es que el dato todavía no se trajo (regla 1). */}
-      {!cargandoPicker && !erroresPicker && sectoresPicker.length === 0 && listaPicker.length > 0 && (
+      {!cargandoPicker && !erroresPicker && rubrosPicker.length === 0 && listaPicker.length > 0 && (
         <p style={{ margin: '0 0 8px', fontSize: 11, color: 'var(--ac2)' }}>{SIN_PERFILES_DE_EMPRESA}</p>
       )}
 
@@ -460,21 +468,7 @@ function FilaPicker({
         </span>
       )}
 
-      {representante.nombre_corto && (
-        <span
-          style={{
-            fontSize: 11,
-            color: 'var(--dim)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            minWidth: 0,
-          }}
-          title={representante.nombre_largo ?? representante.nombre_corto}
-        >
-          {representante.nombre_corto}
-        </span>
-      )}
+      <FichaDelPapel especie={representante} />
 
       <div style={{ display: 'flex', gap: 4, marginLeft: 'auto', alignItems: 'center' }}>
         {papel.especies.map(({ especie, rotulo, opera }) => {
@@ -670,4 +664,85 @@ function Metrica({ etiqueta, nota, children }: { etiqueta: string; nota?: string
       </span>
     </div>
   )
+}
+
+/**
+ * Qué es este papel, en una línea: nombre, a qué se dedica y en qué eslabón de la cadena está.
+ *
+ * Todo sale de fuente y nada se completa: la SEC cubre el 74 % de los CEDEARs y el 9 % de las
+ * acciones argentinas, así que la mayoría de los papeles locales va a mostrar sólo el ticker hasta
+ * que la CNV entre como fuente (F-054). Un papel sin clasificar **no muestra nada** en vez de
+ * mostrar el sector de otra empresa parecida.
+ *
+ * El `title` lleva el detalle largo —el código SIC, el rubro de la SEC, el ratio— porque son datos
+ * de auditoría: hacen falta cuando alguien pregunta de dónde salió, no mientras se arma.
+ */
+function FichaDelPapel({ especie }: { especie: EspecieRentaVariable }) {
+  const nombre = especie.nombre_largo ?? especie.nombre_corto
+  const esFondo = especie.estrategia_etf !== null
+
+  const detalle = [
+    especie.sic_codigo && `SIC ${especie.sic_codigo}`,
+    especie.sic_oficina,
+    especie.ratio_conversion && `ratio ${especie.ratio_conversion}`,
+    especie.mercado_origen,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
+  if (!nombre && !especie.sic_titulo && !esFondo) return null
+
+  return (
+    <span
+      style={{ display: 'flex', gap: 6, alignItems: 'baseline', minWidth: 0, overflow: 'hidden' }}
+      title={detalle || undefined}
+    >
+      {nombre && (
+        <span
+          style={{
+            fontSize: 11,
+            color: 'var(--tx)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {nombre}
+        </span>
+      )}
+      {esFondo ? (
+        <span style={{ fontSize: 9.5, color: 'var(--dim)', whiteSpace: 'nowrap' }}>
+          fondo · {ETIQUETA_ESTRATEGIA[especie.estrategia_etf ?? ''] ?? especie.estrategia_etf}
+        </span>
+      ) : (
+        especie.sic_titulo && (
+          <span
+            style={{
+              fontSize: 9.5,
+              color: 'var(--dim)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {especie.sic_titulo}
+            {especie.division_cadena && ` · ${especie.division_cadena}`}
+          </span>
+        )
+      )}
+    </span>
+  )
+}
+
+/** Cómo se lee cada estrategia en pantalla. Espejo de las claves de `app/renta_variable/etfs.py`. */
+const ETIQUETA_ESTRATEGIA: Record<string, string> = {
+  indice_amplio: 'índice amplio',
+  equiponderado: 'equiponderado',
+  factor: 'por factor',
+  geografico: 'geográfico',
+  sectorial: 'sectorial',
+  activo_fisico: 'activo físico',
+  cripto: 'cripto',
+  esg: 'ESG',
+  sin_clasificar: 'sin clasificar',
 }

@@ -154,7 +154,7 @@ export function PanelArmadoAsistido() {
       perfil,
       horizonte,
       pct_rv: pctRv,
-      sector_rv: presetPorId(tematica === '' ? null : tematica)?.sectorRv ?? null,
+      rubro_rv: presetPorId(tematica === '' ? null : tematica)?.rubroRv ?? null,
       // El piso de la grilla es el piso del armado: se manda el mismo número, y sin piso no se
       // manda el campo (el backend ya trata la ausencia como 0).
       ...(filtros.tirMin === '' ? {} : { min_rend: Number(filtros.tirMin) }),
@@ -292,7 +292,7 @@ export function PanelArmadoAsistido() {
             style={estiloInput}
           >
             <option value="">sin temática</option>
-            {PRESETS_TEMATICOS.filter((preset) => preset.sectorRv !== null).map((preset) => (
+            {PRESETS_TEMATICOS.filter((preset) => preset.rubroRv !== null).map((preset) => (
               <option key={preset.id} value={preset.id}>
                 {preset.etiqueta}
               </option>

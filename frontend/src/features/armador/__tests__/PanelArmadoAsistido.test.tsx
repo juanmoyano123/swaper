@@ -112,7 +112,7 @@ describe('PanelArmadoAsistido', () => {
       horizonte: 'largo',
       // El perfil conservador no lleva renta variable, como la cartera conservadora del Excel.
       pct_rv: 0,
-      sector_rv: null,
+      rubro_rv: null,
       // El piso de la grilla viaja como piso del armado: `FILTROS_ARMADOR_INICIALES` arranca en 6%.
       min_rend: 6,
     })
@@ -145,7 +145,7 @@ describe('PanelArmadoAsistido', () => {
     expect(JSON.parse(init?.body as string).pct_rv).toBe(40)
   })
 
-  it('la temática elegida viaja como el sector literal de Yahoo', async () => {
+  it('la temática elegida viaja como el rubro literal de la SEC', async () => {
     const fetchMock = mockFetch(200, RESULTADO_OK)
     renderizar()
 
@@ -154,7 +154,7 @@ describe('PanelArmadoAsistido', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Armar cartera asistida' }))
 
     const [, init] = await esperarLlamadaDeArmado(fetchMock)
-    expect(JSON.parse(init?.body as string).sector_rv).toBe('Technology')
+    expect(JSON.parse(init?.body as string).rubro_rv).toBe('Office of Technology')
   })
 
   it('en éxito, precarga la cartera y muestra las alertas de la respuesta', async () => {
