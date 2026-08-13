@@ -25,6 +25,9 @@ afterEach(() => {
 })
 
 function accion(extra: Partial<EspecieRentaVariable> = {}): EspecieRentaVariable {
+  // La emisión sigue al ticker salvo que el caso la fije: si quedara clavada, dos especies con
+  // tickers distintos se agruparían como el mismo papel.
+  const ticker = extra.ticker ?? 'GGAL'
   return {
     ticker: 'GGAL',
     clase_activo: 'accion',
@@ -38,6 +41,11 @@ function accion(extra: Partial<EspecieRentaVariable> = {}): EspecieRentaVariable
     px_ask: 30.1,
     operaciones: 12,
     fuente: null,
+    // El agrupamiento por papel: sin variantes, cada especie es su propia emisión.
+    emision: ticker,
+    sufijo_liquidacion: null,
+    hermanas: [],
+    no_identificado: false,
     nombre_corto: null,
     nombre_largo: null,
     sector: null,
@@ -50,6 +58,7 @@ function accion(extra: Partial<EspecieRentaVariable> = {}): EspecieRentaVariable
 }
 
 function cedear(extra: Partial<EspecieRentaVariable> = {}): EspecieRentaVariable {
+  const ticker = extra.ticker ?? 'AAPL'
   return {
     ticker: 'AAPL',
     clase_activo: 'cedear',
@@ -63,6 +72,10 @@ function cedear(extra: Partial<EspecieRentaVariable> = {}): EspecieRentaVariable
     px_ask: 50.5,
     operaciones: 3,
     fuente: null,
+    emision: ticker,
+    sufijo_liquidacion: null,
+    hermanas: [],
+    no_identificado: false,
     nombre_corto: null,
     nombre_largo: null,
     sector: null,
@@ -508,5 +521,77 @@ describe('reemplazar una sugerencia', () => {
 
     expect(screen.getByLabelText('Sector (empresa)')).toHaveValue('')
     expect(screen.getByRole('button', { name: 'PAMP' })).toBeInTheDocument()
+  })
+})
+
+
+describe('un papel con sus monedas de liquidación', () => {
+  /** Apple en pesos, MEP y cable: el mismo CEDEAR, tres especies. */
+  const APPLE = [
+    cedear({ ticker: 'AAPL', emision: 'AAPL', moneda_cotizacion: 'ARS', precio: 24050 }),
+    cedear({ ticker: 'AAPLD', emision: 'AAPL', sufijo_liquidacion: 'D', precio: 15.8 }),
+    cedear({ ticker: 'AAPLC', emision: 'AAPL', sufijo_liquidacion: 'C', precio: 15.17 }),
+  ]
+
+  it('las tres especies son una sola fila, con un botón por moneda', async () => {
+    responderCon({ cedears: APPLE })
+    renderizar()
+    await userEvent.click(screen.getByRole('radio', { name: 'CEDEARs' }))
+
+    const lista = await screen.findByRole('list', { name: /Resultados de CEDEARs/ })
+    expect(within(lista).getAllByRole('listitem')).toHaveLength(1)
+    for (const moneda of ['ARS', 'MEP', 'Cable']) {
+      expect(within(lista).getByText(moneda)).toBeInTheDocument()
+    }
+  })
+
+  it('cada moneda agrega su propia especie a la cartera', async () => {
+    responderCon({ cedears: APPLE })
+    renderizar()
+    await userEvent.click(screen.getByRole('radio', { name: 'CEDEARs' }))
+    await screen.findByRole('list', { name: /Resultados de CEDEARs/ })
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar AAPLD a la cartera' }))
+
+    expect(await screen.findByRole('article', { name: 'AAPLD' })).toBeInTheDocument()
+  })
+
+  it('buscar por el ticker de una hermana encuentra el papel', async () => {
+    responderCon({ cedears: APPLE })
+    renderizar()
+    await userEvent.click(screen.getByRole('radio', { name: 'CEDEARs' }))
+    await screen.findByRole('list', { name: /Resultados de CEDEARs/ })
+
+    await userEvent.type(
+      screen.getByLabelText('Buscar acción o CEDEAR por ticker o nombre'),
+      'AAPLC',
+    )
+
+    expect(screen.getByRole('button', { name: 'AAPL' })).toBeInTheDocument()
+  })
+
+  it('la moneda que no operó no se puede agregar: sin precio no se valúa', async () => {
+    responderCon({
+      cedears: [
+        cedear({ ticker: 'AAPL', emision: 'AAPL', moneda_cotizacion: 'ARS', precio: 24050 }),
+        cedear({ ticker: 'AAPLD', emision: 'AAPL', sufijo_liquidacion: 'D', precio: null }),
+      ],
+    })
+    renderizar()
+    await userEvent.click(screen.getByRole('radio', { name: 'CEDEARs' }))
+    await screen.findByRole('list', { name: /Resultados de CEDEARs/ })
+
+    expect(screen.getByRole('button', { name: 'agregar AAPLD a la cartera' })).toBeDisabled()
+  })
+
+  it('una especie que la fuente no explica se declara con n/n', async () => {
+    responderCon({
+      cedears: [cedear({ ticker: 'AAPLB', emision: 'n/n', no_identificado: true })],
+    })
+    renderizar()
+    await userEvent.click(screen.getByRole('radio', { name: 'CEDEARs' }))
+
+    const lista = await screen.findByRole('list', { name: /Resultados de CEDEARs/ })
+    expect(within(lista).getByText('n/n')).toBeInTheDocument()
   })
 })

@@ -33,6 +33,19 @@ export const esquemaEspecieRentaVariable = z.object({
   /** Experimento data912: de dónde salió `precio`. Ver `features/monitor/lib/schema.ts`. */
   fuente: z.string().nullable(),
 
+  // Qué papel es esta especie (13/08/2026). `AAPL`, `AAPLC` y `AAPLD` son el mismo CEDEAR de Apple
+  // en pesos, cable y MEP: comparten `emision`. El backend lo agrupa y lo contrasta contra el tipo
+  // de cambio del universo antes de afirmarlo — ver `app/renta_variable/agrupamiento.py`.
+  /** El ticker del papel. Para una especie sin variantes es su propio ticker. */
+  emision: z.string().nullable(),
+  /** `'C'` cable, `'D'` MEP, `null` la especie en pesos o sin variantes. */
+  sufijo_liquidacion: z.string().nullable(),
+  /** Las otras especies del mismo papel. */
+  hermanas: z.array(z.string()).default([]),
+  /** La fuente no explica qué es esta especie — hoy, las que terminan en `B`. Se muestra aparte,
+   *  declarada, en vez de esconderla o de inventarle una categoría. */
+  no_identificado: z.boolean().default(false),
+
   // Perfil de empresa (Etapa 4 del rediseño del armador): `null` hasta que el job de
   // enriquecimiento pase por este ticker (`app/renta_variable/enriquecimiento.py`, backend). De
   // Yahoo Finance, tal como la fuente los declara — nunca se traducen (regla 11).

@@ -50,6 +50,7 @@ import { fmtFecha, fmtMonto, fmtPct, SIN_DATO } from '@/lib/fmt'
 import { type EspecieRentaVariable, useRentaVariable } from '@/lib/rentaVariable'
 
 import { BadgeClase } from './BadgeClase'
+import { agruparEnPapeles, papelCoincide, type PapelRentaVariable } from '../lib/papelesRentaVariable'
 import { useCarteraResuelta } from '../hooks/useCarteraResuelta'
 import { useRentaVariableResuelta } from '../hooks/useRentaVariableResuelta'
 import { sumaPesos } from '../lib/mix'
@@ -179,18 +180,23 @@ export function BloqueRentaVariable() {
     refBuscador.current?.focus()
   }
 
-  const busquedaNormalizada = busqueda.trim().toLowerCase()
+  // El buscador ofrece **papeles, no especies**: AAPL, AAPLC y AAPLD son el mismo CEDEAR en
+  // pesos, cable y MEP, y listarlos como tres opciones distintas obligaba al asesor a reconocerlos
+  // de memoria. El agrupamiento viene del backend, ya contrastado contra el tipo de cambio del
+  // universo (`app/renta_variable/agrupamiento.py`).
+  //
+  // Los filtros de sector y rubro se aplican **antes** de agrupar, sobre cada especie: son
+  // atributos de la empresa, así que las hermanas los comparten y filtrar antes o después da lo
+  // mismo — salvo que una hermana no tenga el perfil cargado, y en ese caso lo correcto es que no
+  // arrastre al papel entero.
   const filtradaPicker = listaPicker.filter((e) => {
     if (sectorFiltro !== null && e.sector !== sectorFiltro) return false
     if (industriaFiltro !== null && e.industria !== industriaFiltro) return false
-    if (busquedaNormalizada === '') return true
-    // Ticker o nombre (corto o largo, de Yahoo) — sin perfil todavía, sólo matchea por ticker.
-    return (
-      e.ticker.toLowerCase().includes(busquedaNormalizada) ||
-      (e.nombre_corto?.toLowerCase().includes(busquedaNormalizada) ?? false) ||
-      (e.nombre_largo?.toLowerCase().includes(busquedaNormalizada) ?? false)
-    )
+    return true
   })
+  const papelesFiltrados = agruparEnPapeles(filtradaPicker).filter((papel) =>
+    papelCoincide(papel, busqueda),
+  )
 
   return (
     <div>
@@ -348,18 +354,18 @@ export function BloqueRentaVariable() {
           aria-label={`Resultados de ${clasePicker === 'accion' ? 'acciones' : 'CEDEARs'}`}
           style={{ maxHeight: 176, overflowY: 'auto', border: '1px solid var(--lin)', borderRadius: 4 }}
         >
-          {filtradaPicker.length === 0 ? (
+          {papelesFiltrados.length === 0 ? (
             <p style={{ margin: 0, padding: '8px 10px', fontSize: 11.5, color: 'var(--dim)' }}>
               Ningún ticker coincide con la búsqueda.
             </p>
           ) : (
-            filtradaPicker.map((especie) => (
+            papelesFiltrados.map((papel) => (
               <FilaPicker
-                key={especie.ticker}
-                especie={especie}
-                enCartera={yaEnCartera.has(especie.ticker)}
-                onAbrir={() => abrirInstrumento(especie.ticker)}
-                onAlternar={() => alternarRentaVariable(especie.ticker)}
+                key={papel.emision}
+                papel={papel}
+                enCartera={yaEnCartera}
+                onAbrir={(ticker) => abrirInstrumento(ticker)}
+                onAlternar={(ticker) => alternarRentaVariable(ticker)}
               />
             ))
           )}
@@ -382,17 +388,29 @@ function Campo({ etiqueta, children }: { etiqueta: string; children: ReactNode }
   )
 }
 
+/**
+ * Un papel en el buscador, con sus monedas de liquidación al lado.
+ *
+ * Antes había una fila por especie: `AAPL`, `AAPLC` y `AAPLD` eran tres opciones. Ahora es una
+ * fila por papel y un botón por moneda — el asesor elige Apple y después en qué dólar lo quiere,
+ * que es el orden en que lo piensa.
+ *
+ * **La moneda que no operó no se ofrece.** Sin precio no hay con qué resolver nominales
+ * (`lib/resolverRentaVariable.ts`), así que se muestra apagada y sin acción en vez de dejar
+ * agregar algo que después no se puede valuar.
+ */
 function FilaPicker({
-  especie,
+  papel,
   enCartera,
   onAbrir,
   onAlternar,
 }: {
-  especie: EspecieRentaVariable
-  enCartera: boolean
-  onAbrir: () => void
-  onAlternar: () => void
+  papel: PapelRentaVariable
+  enCartera: Set<string>
+  onAbrir: (ticker: string) => void
+  onAlternar: (ticker: string) => void
 }) {
+  const { representante } = papel
   return (
     <div
       role="listitem"
@@ -406,7 +424,7 @@ function FilaPicker({
     >
       <button
         type="button"
-        onClick={onAbrir}
+        onClick={() => onAbrir(representante.ticker)}
         className="mono"
         style={{
           font: 'inherit',
@@ -420,10 +438,29 @@ function FilaPicker({
           padding: 0,
         }}
       >
-        {especie.ticker}
+        {papel.emision}
       </button>
-      <BadgeClase claseActivo={especie.clase_activo} />
-      {especie.nombre_corto && (
+      <BadgeClase claseActivo={representante.clase_activo} />
+
+      {/* La fuente no explica qué es esta especie: se declara en vez de esconderla o de inventarle
+          una categoría (regla 1). */}
+      {papel.noIdentificado && (
+        <span
+          title="BYMA publica esta especie pero no documenta qué es; nunca registró operaciones"
+          style={{
+            fontSize: 9.5,
+            color: 'var(--ac2)',
+            border: '1px solid var(--ac2)',
+            borderRadius: 3,
+            padding: '0 4px',
+            cursor: 'help',
+          }}
+        >
+          n/n
+        </span>
+      )}
+
+      {representante.nombre_corto && (
         <span
           style={{
             fontSize: 11,
@@ -433,31 +470,48 @@ function FilaPicker({
             whiteSpace: 'nowrap',
             minWidth: 0,
           }}
-          title={especie.nombre_largo ?? especie.nombre_corto}
+          title={representante.nombre_largo ?? representante.nombre_corto}
         >
-          {especie.nombre_corto}
+          {representante.nombre_corto}
         </span>
       )}
-      <span className="mono" style={{ fontSize: 11.5, color: 'var(--dim)', marginLeft: 'auto' }}>
-        {especie.precio !== null ? especie.precio : SIN_DATO}
-      </span>
-      <button
-        type="button"
-        onClick={onAlternar}
-        aria-label={enCartera ? `sacar ${especie.ticker} de la cartera` : `agregar ${especie.ticker} a la cartera`}
-        style={{
-          font: 'inherit',
-          fontSize: 12,
-          color: enCartera ? 'var(--ac)' : 'var(--dim)',
-          background: 'transparent',
-          border: `1px solid ${enCartera ? 'var(--ac)' : 'var(--lin)'}`,
-          borderRadius: 3,
-          padding: '2px 7px',
-          cursor: 'pointer',
-        }}
-      >
-        {enCartera ? '✓' : '+'}
-      </button>
+
+      <div style={{ display: 'flex', gap: 4, marginLeft: 'auto', alignItems: 'center' }}>
+        {papel.especies.map(({ especie, rotulo, opera }) => {
+          const dentro = enCartera.has(especie.ticker)
+          return (
+            <button
+              key={especie.ticker}
+              type="button"
+              onClick={() => onAlternar(especie.ticker)}
+              disabled={!opera && !dentro}
+              title={
+                opera
+                  ? `${especie.ticker} · ${especie.precio}`
+                  : `${especie.ticker} no operó: sin precio no se puede valuar`
+              }
+              aria-label={
+                dentro
+                  ? `sacar ${especie.ticker} de la cartera`
+                  : `agregar ${especie.ticker} a la cartera`
+              }
+              style={{
+                font: 'inherit',
+                fontSize: 10.5,
+                color: dentro ? 'var(--ac)' : opera ? 'var(--tx)' : 'var(--sd)',
+                background: dentro ? 'var(--sel)' : 'transparent',
+                border: `1px solid ${dentro ? 'var(--ac)' : 'var(--lin)'}`,
+                borderRadius: 3,
+                padding: '2px 6px',
+                cursor: opera || dentro ? 'pointer' : 'default',
+              }}
+            >
+              {dentro ? '✓ ' : ''}
+              {rotulo}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
