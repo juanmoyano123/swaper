@@ -23,10 +23,11 @@ y una especie recién agregada al universo puede no tener fila todavía. `perfil
 del proyecto (regla 11): nunca se muestran sin decir su origen.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+from app.renta_variable.agrupamiento import agrupar, aplicar_contraste, hermanas, verificar
 from app.universo.cambio import MONEDA_EN_PESOS, MONEDAS_EN_DOLARES, TipoDeCambio
 from app.universo.segmentacion import a_numero
 
@@ -49,6 +50,18 @@ class EspecieRentaVariable:
     fuente: str | None = None
     """Experimento data912: de dónde salió `precio`. Ver `universo/segmentacion.py:EspecieUniverso.
     fuente` para el vocabulario completo."""
+
+    # Qué papel es esta especie (13/08/2026). Ver `agrupamiento.py` para por qué esto se puede
+    # afirmar ahora y no antes, y para los casos que quedan fuera.
+    emision: str | None = None
+    """El ticker del papel. `AAPL`, `AAPLC` y `AAPLD` comparten `emision: 'AAPL'`."""
+    sufijo_liquidacion: str | None = None
+    """`'C'` cable, `'D'` MEP, `None` la especie en pesos o sin variantes."""
+    hermanas: list[str] = field(default_factory=list)
+    """Las otras especies del mismo papel. Vacío para lo no identificado: dos especies que no
+    sabemos qué son no se pueden declarar hermanas."""
+    no_identificado: bool = False
+    """La fuente no explica qué es esta especie — hoy, las que terminan en `B`."""
 
     # Perfil de empresa (Etapa 4): todos `None` hasta que el job de enriquecimiento pase por este
     # ticker. Valores de Yahoo tal como la fuente los declara, sin traducir (regla 11).
@@ -74,6 +87,10 @@ class EspecieRentaVariable:
             "px_ask": self.px_ask,
             "operaciones": self.operaciones,
             "fuente": self.fuente,
+            "emision": self.emision,
+            "sufijo_liquidacion": self.sufijo_liquidacion,
+            "hermanas": self.hermanas,
+            "no_identificado": self.no_identificado,
             "nombre_corto": self.nombre_corto,
             "nombre_largo": self.nombre_largo,
             "sector": self.sector,
@@ -139,7 +156,23 @@ def _fecha_iso(valor: object) -> str | None:
 def armar_renta_variable(
     filas: list[dict[str, Any]], cambio: TipoDeCambio
 ) -> list[EspecieRentaVariable]:
-    """Las filas crudas de `leer_renta_variable`, convertidas en especies con variación y USD."""
+    """Las filas crudas de `leer_renta_variable`, convertidas en especies con variación y USD.
+
+    **El agrupamiento se hace sobre el universo entero de renta variable, no por clase.** Una
+    especie sólo se declara variante si su base existe, así que filtrar acciones y CEDEARs por
+    separado antes de agrupar dejaría sin base a cualquier papel cuyas especies estuvieran
+    repartidas entre las dos clases.
+    """
+    tickers = {str(f["ticker"]) for f in filas}
+    grupos = agrupar(tickers)
+    precios = {str(f["ticker"]): a_numero(f.get("lastPrice")) for f in filas}
+    monedas = {str(f["ticker"]): _texto(f.get("moneda_cotizacion")) for f in filas}
+    # El mercado tiene la última palabra: un grupo cuyo cociente no se parece a ningún tipo de
+    # cambio se desarma (`BBD` es Banco Bradesco, no Blackberry en MEP).
+    grupos, _alertados = aplicar_contraste(
+        grupos, verificar(grupos, precios, monedas, cambio.valor)
+    )
+
     especies: list[EspecieRentaVariable] = []
     for fila in filas:
         precio = a_numero(fila.get("lastPrice"))
@@ -160,6 +193,10 @@ def armar_renta_variable(
                 px_ask=a_numero(fila.get("px_ask")),
                 operaciones=_entero(fila.get("operaciones")),
                 fuente=_texto(fila.get("fuente")),
+                emision=grupos[str(fila["ticker"])].emision,
+                sufijo_liquidacion=grupos[str(fila["ticker"])].sufijo_liquidacion,
+                hermanas=hermanas(grupos, str(fila["ticker"])),
+                no_identificado=grupos[str(fila["ticker"])].no_identificado,
                 nombre_corto=_texto(fila.get("nombre_corto")),
                 nombre_largo=_texto(fila.get("nombre_largo")),
                 sector=_texto(fila.get("sector")),

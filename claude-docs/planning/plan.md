@@ -948,8 +948,10 @@ posición: ticker, emisor, sector, precio, monto, ponderación deseada, lámina,
 porcentaje real y meses en que paga. Se edita el peso por porcentaje o por monto, se quita, se
 reordena. Botones de equiponderar y vaciar. Muestra el total acumulado de ponderación y el invertido
 real al lado, **porque no coinciden**. Es el estado central del Flujo A: el calendario selecciona,
-pero sin ponderación editable no hay cartera. Los FCI, que siguen sin fuente verificada, se cargan
-acá como línea con peso y sin precio.
+pero sin ponderación editable no hay cartera. Los FCI se cargan acá como línea con peso y sin precio:
+CAFCI publica el valor de cuotaparte y desde el 13/08/2026 esa fuente está verificada (F-057), pero
+**valuarlos dentro de una cartera es F-046** y necesita además composición del fondo y un tipo de
+cambio propio, que todavía no hay. Hasta entonces, la línea sigue sin precio en Stage 1.
 
 **Input:** selecciones de F-016; precios del universo.
 **Output:** cartera en construcción, que es el input de F-020, F-021, F-022, F-023, F-024, F-041.
@@ -2216,27 +2218,64 @@ THEN aparece junto a los reales, visualmente marcado como simulado y no cotizant
 
 ---
 
-#### F-046 — Fondos comunes de inversión con fuente
+#### F-046 — Fondos comunes de inversión valuables en cartera
 
 **Etiqueta:** Stage 2 · **Traza a:** "Fuera del MVP"
 
-**Descripción.** FCI con precio y composición. **Siguen sin fuente** — verificado el 30/07/2026: no
-hay submercado FCI ni cuotapartes en las fuentes disponibles. Las carteras de la mesa los usan, así
-que en Stage 1 van como línea con peso y sin precio (F-018). Esta feature sólo se construye si aparece
-una fuente verificada; no se construye sobre un dato inventado.
+**Descripción.** FCI **valuables e integrables al cálculo de una cartera**: dejan de ser línea con
+peso y sin precio (F-018) y pasan a valuarse como cualquier otra posición.
 
-**Input:** una fuente de precios de FCI que hoy no existe.
-**Output:** FCI valuables e integrables al cálculo.
-**Depende de:** F-018
+**La fuente apareció.** Hasta el 13/08/2026 esta ficha decía "siguen sin fuente", y ese "verificado el
+30/07/2026" se había medido **contra Docta y data912** —las fuentes ya conectadas—, no contra el
+universo de fuentes posibles. CAFCI nunca se había mirado. Se verificó en vivo el 13/08/2026 y sirve:
+publica valor de cuotaparte diario por fondo y clase, sin clave. El detalle de la fuente, sus
+endpoints y sus salvedades viven en **F-057**, que es la que la ingiere.
+
+**Lo que sigue faltando, y por qué esta ficha no se cierra con F-057.** Valuar no es mostrar. Una
+posición en FCI dentro de una cartera necesita tres cosas que la planilla diaria **no** da:
+
+- **Composición del fondo.** Sin look-through, un FCI dentro de una cartera es una caja negra para los
+  límites de concentración (F-020) y para el vector de riesgo de seis ejes (F-031). Un fondo de renta
+  fija soberana argentina es, por transparencia, exposición a `SOBERANO_AR` — pero si no se ve adentro,
+  la cartera lo cuenta como una línea diversificada y la regla 4 queda burlada por omisión.
+- **Un tipo de cambio propio para los fondos no-ARS.** La columna `Reexp.Pesos` de la planilla **no
+  sirve** (ver F-057): el TC que aplica difiere entre fondos de la misma moneda. Por regla 3 el TC se
+  deriva del propio universo, y un FCI no cotiza en dos monedas, así que no hay cociente del cual
+  derivarlo. Queda por definir qué TC del universo se le aplica y declararlo.
+- **El calendario de cupones.** La regla 5 hace del cronograma criterio de armado. Un FCI no tiene
+  cronograma contractual, así que una cartera con FCI tiene un porcentaje del capital que no aporta
+  ningún mes al calendario. Eso hay que mostrarlo como hueco declarado, no como ausencia silenciosa.
+
+**Input:** valor de cuotaparte de F-057; una fuente de composición de cartera de FCI, todavía no
+identificada; el TC del universo de F-012.
+**Output:** FCI valuables e integrables al cálculo, con su opacidad declarada donde no haya
+look-through.
+**Depende de:** F-018, F-057, F-012
 **Habilita:** —
 
-**RICE:** R = 200 · I = 2 · C = 25 % · E = 12 → **Score 8,3**
-*Confidence 25 %: sin fuente conocida al 30/07/2026.*
+**RICE:** R = 200 · I = 2 · C = 60 % · E = 8 → **Score 30**
+*Confidence 60 %: el precio ya tiene fuente verificada (F-057), y el esfuerzo baja de 12 a 8 porque
+la ingesta la resuelve esa feature. Lo que sostiene el 40 % de incertidumbre es la composición del
+fondo, sin fuente identificada al 13/08/2026.*
 
 ```
-GIVEN que no se identificó una fuente verificada de precios de FCI
-WHEN se planifica el ciclo
-THEN la feature no se construye, y los FCI siguen como línea con peso y sin precio
+GIVEN un FCI en una cartera y su valor de cuotaparte del día
+WHEN se valúa la cartera
+THEN la posición se valúa con el valor de cuotaparte publicado, con su fecha declarada
+
+GIVEN un FCI sin composición conocida
+WHEN se calculan los límites de concentración y el vector de riesgo
+THEN el porcentaje que representa el FCI se declara como exposición no atribuible, y no se reparte
+     entre los emisores conocidos ni se cuenta como una línea diversificada
+
+GIVEN un FCI en moneda distinta de la de la cartera
+WHEN se lo valúa
+THEN se usa el tipo de cambio derivado del universo, nombrando el par que lo produjo, y nunca la
+     columna Reexp.Pesos de la planilla de CAFCI
+
+GIVEN una cartera con una posición en FCI
+WHEN se arma el calendario de doce meses
+THEN el capital colocado en FCI se muestra como porción sin cronograma contractual, declarada
 ```
 
 ---
@@ -2496,6 +2535,134 @@ THEN queda sin rendimiento con el motivo declarado; no se interpola ni se arrast
 
 ---
 
+#### F-057 — FCI en el monitor, con CAFCI como fuente
+
+**Etiqueta:** Stage 2 · **Traza a:** F12 (extiende F-038)
+
+**Descripción.** Los fondos comunes entran al monitor **como segmento propio**, para mirarlos — no
+para valuar carteras, que es F-046. Es la primera vez que el producto muestra un FCI con un número
+adelante.
+
+**Segmento propio, no filas nuevas en la grilla de bonos.** F-038 navega con un solo segmento activo
+por vez y la columna de rendimiento toma la unidad de ese segmento. Un FCI no tiene TIR ni duración:
+tiene **variación de cuotaparte**, que es otra naturaleza. Por regla 2 no comparte eje ni columna con
+una TIR en dólares, una tasa real CER o una TNA en pesos, y por eso entra como segmento con sus
+propias columnas en vez de sumarse a la grilla existente.
+
+**La fuente, verificada en vivo el 13/08/2026.** Sin clave, sin homologación y sin navegador headless:
+
+```
+GET https://api.pub.cafci.org.ar/pb_get
+  → 200 · application/vnd.openxmlformats-officedocument.spreadsheetml.sheet · ~946 KB
+  → content-disposition: attachment; filename="20260812_Planilla_Diaria_A.xlsx"
+```
+
+Trae **4.233 filas** (una por fondo × clase) × **47 columnas**, agrupadas en secciones por tipo de
+renta × moneda: Renta Variable, Renta Fija, Renta Mixta, PyMEs, Infraestructura, Retorno Total, ASG,
+RG900, Mercado de Dinero y Fondos Cerrados. Por fila: valor de cuotaparte actual y del día hábil
+anterior con su variación, variación acumulada al mes, al año y a doce meses, cantidad de cuotapartes,
+patrimonio, market share, plazo de liquidación, las seis comisiones y honorarios, mínimo de inversión,
+calificación, Código CAFCI, Código CNV, sociedad gerente y sociedad depositaria.
+
+**La fecha del dato viene en el nombre del archivo**, que es el problema que F-055 tuvo que resolver
+aparte para IAMC: acá `20260812_` la declara la propia fuente. La planilla del día trae el cierre del
+día hábil anterior — el valor de cuotaparte se publica al cierre, y ese desfasaje se muestra, no se
+disimula.
+
+**No hay histórico.** `pb_get` ignora todo parámetro que se le pase —se probó `?fecha=`, `?date=`,
+`?f=` y `?tipo=`, y las cuatro devuelven el mismo archivo del último día hábil—. El `?d=` que usa la
+propia web de CAFCI es cache-busting, no selector de fecha. La serie se construye acumulando
+snapshots en cada corrida, igual que ya se hace con precios; el día que la corrida falle, esa fecha
+queda como hueco declarado y no se interpola.
+
+**Las cuatro salvedades, que son las reglas del proyecto aplicadas a esta fuente.**
+
+- **`USB` no se traduce.** Las monedas vienen `ARS` (2.967 filas), `USD` (1.139) y `USB` (127). `USB`
+  no existe en ISO 4217: es un código propietario de CAFCI. Que la sección se llame "Dólar
+  Estadounidense Billete" **sugiere** qué es, pero el rótulo de una sección no es una especificación
+  publicada. Se muestra `USB` y todo número que dependa de interpretarlo va vacío — es el mismo
+  criterio que ya rige para `EXT` de BYMA (regla 11).
+- **La columna `Reexp.Pesos` no se ingiere.** Se midió su cociente contra el valor original en las
+  1.262 filas no-ARS y **el tipo de cambio implícito no es único**: 1526,68 · 1525,38 · 1491,50 según
+  el fondo. Es un TC de fuente externa, inconsistente entre filas y no auditable, y la regla 3 exige
+  derivar el TC del propio universo. Se descarta la columna entera; los fondos no-ARS se muestran en
+  su moneda de cotización, sin convertir.
+- **`Moneda` y `Moneda Fondo` son columnas distintas y no coinciden** —ARS 2.967 contra 3.149, USD
+  1.139 contra 963, USB 127 contra 121—. CAFCI no publica en qué se diferencian. Se ingieren las dos,
+  se muestra la que corresponde al eje de clasificación y la discrepancia se declara donde exista; no
+  se elige una "correcta" por criterio propio.
+- **`Plazo Liq.` trae centinelas sin documentar**: además de 0, 1, 2, 3, 5 y 10 días aparecen `999`
+  (15 filas), `9999` (5), `99999` (1) y `-1` (4). No se traducen a "no aplica" ni a "indefinido": se
+  muestra el valor tal como viene, y si no es un plazo interpretable el espacio de "días para
+  rescatar" va vacío.
+
+**Lo que la propia fuente declara sobre sí misma, y va en pantalla.** El reporte se rotula *"Planilla
+Diaria (Valores sujetos a revisión)"* y cierra con esta advertencia: *"Los rendimientos atribuidos en
+el informe a los distintos Fondos han sido calculados sin tener en consideración los pagos de
+distribución de utilidades que pudieran haber ocurrido"*. Las dos cosas se muestran junto a las
+variaciones — un fondo que distribuyó utilidades tiene la variación subestimada, y el asesor tiene que
+verlo. La calificación viene en 1.992 de 4.233 filas (47 %); el resto se marca como no informada, no
+como vacía.
+
+**Nada de esto pasa por el consolidador del universo.** Un FCI no es una especie negociable con puntas
+y volumen: no se deduplica contra tickers (F-011), no entra a la sanidad de precios de renta fija
+(F-010) ni al cálculo de TIR (F-051). Tabla propia, ingesta propia, segmento propio.
+
+**Input:** la planilla diaria pública de CAFCI.
+**Output:** segmento FCI en el monitor, con valor de cuotaparte, variaciones, patrimonio, costos y
+plazo de liquidación, cada campo con su fecha y sus salvedades declaradas.
+**Depende de:** F-038 (el monitor y su navegación por segmento), F-013 (la barra de estado del dato),
+F-008 (la corrida programada)
+**Habilita:** F-046
+
+**RICE:** R = 300 · I = 2 · C = 85 % · E = 6 → **Score 85**
+*Confidence 85 %: la fuente se descargó y se parseó punta a punta el 13/08/2026 —no sólo se verificó
+que respondiera—, y no requiere clave. El 15 % restante es el mismo riesgo que ya corre el parser de
+IAMC: que CAFCI cambie el layout del XLSX, que acá tiene encabezado en dos filas con celdas combinadas
+y filas de sección intercaladas entre los datos.*
+
+**Ejecución.** Antes de implementar conviene un paso a paso conjunto sobre la planilla real, como se
+acordó para F-054: qué columnas de las 47 entran al monitor y cuáles quedan afuera es una decisión de
+producto, no de ingesta.
+
+```
+GIVEN la corrida matinal y la planilla diaria publicada por CAFCI
+WHEN corre la ingesta
+THEN el segmento FCI del monitor queda con los valores de esa planilla, y la pantalla declara la
+     fecha que trae el nombre del archivo
+
+GIVEN CAFCI sin publicar todavía la planilla del día
+WHEN corre la ingesta
+THEN se conserva la última planilla válida y la pantalla declara de qué fecha es, con su antigüedad
+
+GIVEN el segmento FCI activo en el monitor
+WHEN se lo mira
+THEN la columna de rendimiento es variación de cuotaparte, nunca TIR, y no hay ninguna fila de renta
+     fija ni de renta variable en la misma grilla
+
+GIVEN un fondo con moneda USB
+WHEN se lo muestra
+THEN dice USB, no dice "dólar billete", y no se convierte a pesos por ninguna vía
+
+GIVEN un fondo en moneda distinta de ARS
+WHEN se muestra su valor de cuotaparte
+THEN se muestra en su moneda, y la columna Reexp.Pesos de la fuente no se usa ni se guarda
+
+GIVEN las variaciones de cuotaparte de cualquier fondo
+WHEN se las muestra
+THEN va visible la advertencia de la fuente de que no consideran distribución de utilidades
+
+GIVEN un fondo cuyo Plazo Liq. viene 999, 9999, 99999 o -1
+WHEN se muestra el plazo de rescate
+THEN el espacio va vacío y el faltante se declara; no se traduce a "no aplica" ni a "indefinido"
+
+GIVEN un fondo sin calificación en la planilla
+WHEN se abre el segmento
+THEN el campo aparece marcado como no informado, y no vacío ni inferido del tipo de renta
+```
+
+---
+
 ## 4. Tabla de RICE ordenada
 
 | # | ID | Feature | Etiqueta | R | I | C | E | Score |
@@ -2526,8 +2693,8 @@ THEN queda sin rendimiento con el motivo declarado; no se interpola ni se arrast
 | 24 | F-018 | Cartera editable y ponderación | Stage 1 | 350 | 3 | 80 % | 6 | 140,0 |
 | 25 | F-053 | Ficha del activo de renta variable | Stage 1 | 300 | 2 | 70 % | 3 | 140,0 |
 | 26 | F-016 | Grilla-selector de doce meses | Stage 1 | 380 | 3 | 80 % | 8 | 114,0 |
-| 27 | F-017 | Filtros de la grilla | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
-| 28 | F-056 | Índice CER del BCRA: tasa real | Stage 2 | 250 | 2 | 90 % | 4 | 112,5 |
+| 27 | F-056 | Índice CER del BCRA: tasa real | Stage 2 | 250 | 2 | 90 % | 4 | 112,5 |
+| 28 | F-017 | Filtros de la grilla | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
 | 29 | F-039 | Ficha de instrumento | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
 | 30 | F-029 | Resolución de tickers | Stage 1 | 200 | 2 | 80 % | 3 | 106,7 |
 | 31 | F-038 | Monitor de mercado | Stage 1 | 400 | 2 | 80 % | 6 | 106,7 |
@@ -2537,25 +2704,26 @@ THEN queda sin rendimiento con el motivo declarado; no se interpola ni se arrast
 | 35 | F-042 | Exportación a Excel y PDF | Stage 1 | 250 | 2 | 80 % | 4 | 100,0 |
 | 36 | F-028 | Ingreso de cartera por tres vías | Stage 1 | 200 | 3 | 80 % | 5 | 96,0 |
 | 37 | F-034 | Modo subir TIR con contrapartida | Stage 1 | 180 | 3 | 80 % | 5 | 86,4 |
-| 38 | F-019 | Armado asistido | Stage 1 | 250 | 2 | 100 % | 6 | 83,3 |
-| 39 | F-026 | Bloque de renta variable | Stage 1 | 300 | 2 | 80 % | 6 | 80,0 |
-| 40 | F-050 | API Market Data oficial de BYMA | Stage 2 | 400 | 2 | 50 % | 5 | 80,0 |
-| 41 | F-037 | Comparación original contra propuesta | Stage 1 | 180 | 2 | 80 % | 4 | 72,0 |
-| 42 | F-040 | Sensibilidad por repricing completo | Stage 1 | 200 | 1 | 100 % | 3 | 66,7 |
-| 43 | F-054 | Info pública del emisor (CNV y SEC) | Stage 2 | 300 | 2 | 80 % | 8 | 60,0 |
-| 44 | F-033 | Modo bajar riesgo | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
-| 45 | F-036 | Aceptación rotación por rotación | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
-| 46 | F-025 | Carga asistida de lámina | Stage 1 | 200 | 1 | 80 % | 3 | 53,3 |
-| 47 | F-005 | Parser del informe diario de IAMC | Stage 1 | 400 | 2 | 50 % | 8 | 50,0 |
-| 48 | F-023 | Composición y curva TIR/duración | Stage 1 | 300 | 1 | 80 % | 5 | 48,0 |
-| 49 | F-048 | Alertas y notificaciones | Stage 2 | 300 | 1 | 80 % | 6 | 40,0 |
-| 50 | F-049 | Comparación de carteras entre sí | Stage 2 | 200 | 1 | 80 % | 4 | 40,0 |
-| 51 | F-044 | Historial de propuestas | Stage 2 | 250 | 2 | 50 % | 10 | 25,0 |
-| 52 | F-043 | Gestión de clientes y CRM | Stage 2 | 300 | 2 | 50 % | 15 | 20,0 |
-| 53 | F-027 | Calendario de balances | Stage 1 | 200 | 1 | 50 % | 6 | 16,7 |
-| 54 | F-045 | Colocaciones primarias | Stage 2 | 150 | 2 | 50 % | 10 | 15,0 |
-| 55 | F-046 | FCI con fuente | Stage 2 | 200 | 2 | 25 % | 12 | 8,3 |
-| 56 | F-047 | Opciones | Stage 2 | 80 | 1 | 50 % | 10 | 4,0 |
+| 38 | F-057 | FCI en el monitor (CAFCI) | Stage 2 | 300 | 2 | 85 % | 6 | 85,0 |
+| 39 | F-019 | Armado asistido | Stage 1 | 250 | 2 | 100 % | 6 | 83,3 |
+| 40 | F-026 | Bloque de renta variable | Stage 1 | 300 | 2 | 80 % | 6 | 80,0 |
+| 41 | F-050 | API Market Data oficial de BYMA | Stage 2 | 400 | 2 | 50 % | 5 | 80,0 |
+| 42 | F-037 | Comparación original contra propuesta | Stage 1 | 180 | 2 | 80 % | 4 | 72,0 |
+| 43 | F-040 | Sensibilidad por repricing completo | Stage 1 | 200 | 1 | 100 % | 3 | 66,7 |
+| 44 | F-054 | Info pública del emisor (CNV y SEC) | Stage 2 | 300 | 2 | 80 % | 8 | 60,0 |
+| 45 | F-033 | Modo bajar riesgo | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
+| 46 | F-036 | Aceptación rotación por rotación | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
+| 47 | F-025 | Carga asistida de lámina | Stage 1 | 200 | 1 | 80 % | 3 | 53,3 |
+| 48 | F-005 | Parser del informe diario de IAMC | Stage 1 | 400 | 2 | 50 % | 8 | 50,0 |
+| 49 | F-023 | Composición y curva TIR/duración | Stage 1 | 300 | 1 | 80 % | 5 | 48,0 |
+| 50 | F-048 | Alertas y notificaciones | Stage 2 | 300 | 1 | 80 % | 6 | 40,0 |
+| 51 | F-049 | Comparación de carteras entre sí | Stage 2 | 200 | 1 | 80 % | 4 | 40,0 |
+| 52 | F-046 | FCI valuables en cartera | Stage 2 | 200 | 2 | 60 % | 8 | 30,0 |
+| 53 | F-044 | Historial de propuestas | Stage 2 | 250 | 2 | 50 % | 10 | 25,0 |
+| 54 | F-043 | Gestión de clientes y CRM | Stage 2 | 300 | 2 | 50 % | 15 | 20,0 |
+| 55 | F-027 | Calendario de balances | Stage 1 | 200 | 1 | 50 % | 6 | 16,7 |
+| 56 | F-045 | Colocaciones primarias | Stage 2 | 150 | 2 | 50 % | 10 | 15,0 |
+| 57 | F-047 | Opciones | Stage 2 | 80 | 1 | 50 % | 10 | 4,0 |
 
 **Cómo se lee esta tabla.** El RICE ordena por eficiencia, no por secuencia. Las features de más
 score son las Foundation y las de ingesta: mucho alcance sobre poco esfuerzo, porque reusan lógica ya
@@ -2699,6 +2867,12 @@ Fargate + RDS), **no de arquitectura**. Dos puntos de diseño de Stage 1 existen
 cierto: el `Dockerfile` de F-001, que hace que el hosting sea intercambiable, y la interfaz de fuente
 desacoplada de F-004, que hace que la migración a la API Market Data oficial (F-050) sea un cambio de
 implementación.
+
+Las fuentes que Stage 2 suma —CNV y SEC (F-054), la descarga de IAMC (F-055), el CER del BCRA
+(F-056) y CAFCI (F-057)— entran por esa misma interfaz y **ninguna toca el consolidador del
+universo**. La de CAFCI es la más separada de todas: un FCI no es una especie negociable, así que no
+se deduplica, no pasa por la sanidad de precios de renta fija ni por el cálculo de TIR. Tabla propia,
+ingesta propia, segmento propio en el monitor.
 
 ---
 
@@ -2865,7 +3039,7 @@ Al final de este ciclo **Stage 1 está completo**: los tres flujos funcionan de 
 | 3 — RV, carga y diagnóstico | 9 | 41 | ~8 | ~28,5 |
 | 4 — Optimizador y persistencia | 9 | 42 | ~8,5 | ~37 |
 | **Stage 1** | **42** | **185** | **~37 semanas** | |
-| Stage 2 (8 features) | 8 | 72 | ~14,5 | |
+| Stage 2 (12 features) | 12 | 89 | ~18 | |
 
 **~37 semanas de un desarrollador a tiempo completo para Stage 1.** El camino crítico son 73 pd de esos
 185: con un segundo desarrollador, el piso teórico de compresión es **~15 semanas**, y el cuello real
@@ -3035,8 +3209,8 @@ Cada regla de `CLAUDE.md` está materializada en features con criterios verifica
 | Regla | Features donde vive |
 |---|---|
 | 1. Nunca inventar un dato | F-005, F-007, F-009, F-017, F-023, F-024, F-027, F-029, F-035, F-039, F-040 |
-| 2. No promediar rendimientos de distinta naturaleza | F-017, F-022, F-023, F-042 |
-| 3. Nada se compara entre monedas sin normalizar | F-004, F-012, F-021 |
+| 2. No promediar rendimientos de distinta naturaleza | F-017, F-022, F-023, F-042, F-057 |
+| 3. Nada se compara entre monedas sin normalizar | F-004, F-012, F-021, F-057 |
 | 4. Riesgo soberano bajo `SOBERANO_AR` | F-020, F-031 |
 | 5. Calendario de cupones como criterio de armado | F-015, F-016, F-021, F-036 |
 | 6. Lógica determinística, sin IA | Todo el motor: F-010 … F-035 |
@@ -3044,6 +3218,7 @@ Cada regla de `CLAUDE.md` está materializada en features con criterios verifica
 | 8. Nunca mejora de TIR sin nombrar el riesgo | F-034 |
 | 9. No filtrar por disponibilidad en Balanz | Ausencia deliberada: ninguna feature introduce whitelist |
 | 10. No conectarse a `mesaifa.netlify.app` | Ausencia deliberada: ninguna fuente del pipeline lo referencia |
+| 11. No suponer nada en la representación del dato | F-039, F-054, F-057 — los códigos propietarios de cada fuente se muestran sin traducir: `EXT` de BYMA, `USB` y los centinelas de `Plazo Liq.` de CAFCI |
 
 ---
 
