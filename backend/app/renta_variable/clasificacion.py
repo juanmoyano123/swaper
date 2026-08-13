@@ -1,0 +1,198 @@
+"""Job de clasificación de renta variable contra la SEC — 13/08/2026.
+
+Hermano de `enriquecimiento.py` (el de Yahoo) y con el mismo diseño incremental: procesa hasta
+`limite` papeles por corrida, persiste uno por uno, y retoma donde quedó. Lo que cambia es de dónde
+sale el dato y qué se hace con él.
+
+## Se clasifica por papel, no por especie
+
+`AAPL`, `AAPLC` y `AAPLD` son el mismo CEDEAR de Apple en pesos, cable y MEP. Preguntarle a la SEC
+tres veces por Apple sería gastar tres pedidos para escribir tres filas idénticas. Se consulta una
+vez por **papel** —lo que el agrupamiento de `agrupamiento.py` habilitó— y la clasificación se
+escribe en las tres especies, porque el sector de una empresa no cambia con la moneda en que se
+liquida su CEDEAR.
+
+## Qué se puede clasificar y qué no
+
+La SEC cubre **315 de 427 CEDEARs (74 %)** y **21 de 245 acciones argentinas (9 %)**, medido el
+13/08/2026: sólo las argentinas con ADR tienen CIK. Las demás quedan sin clasificar y **se declaran
+así**; su fuente es la CNV y espera a F-054. No se les completa el sector por parecido con otra
+empresa del mismo nombre ni por nada.
+
+Un papel sin CIK **no es un error de la corrida**: es un papel que la SEC no lista, y el resumen lo
+cuenta aparte de los que fallaron.
+"""
+
+import asyncio
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Any
+
+import structlog
+
+from app.externos.sec import ClienteSec, EntradaSic, LimiteDeLaFuente
+from app.externos.sic import division_de
+from app.renta_variable.etfs import estrategia_de
+from app.renta_variable.perfiles import guardar_clasificacion, papeles_pendientes_sec
+
+logger = structlog.get_logger()
+
+FUENTE = "SEC EDGAR"
+
+# Cuántos papeles procesa una corrida. Más alto que el de Yahoo (50) porque la SEC no limita por
+# cuota sino por ritmo, y el cliente ya pausa entre pedidos: lo que acota acá es cuánto puede
+# tardar un solo POST, no cuánto tolera la fuente.
+LIMITE_POR_CORRIDA = 100
+
+
+@dataclass(frozen=True, slots=True)
+class ResumenClasificacion:
+    """Lo que la corrida hizo y lo que no pudo hacer, con los motivos separados."""
+
+    pendientes: int
+    procesados: int
+    clasificados: int
+    sin_cik: int
+    """Papeles que la SEC no lista. No es una falla: es un papel que esa fuente no cubre."""
+    cortado_por_limite_de_fuente: bool = False
+    motivo_corte: str | None = None
+
+    def como_dict(self) -> dict[str, object]:
+        return {
+            "pendientes": self.pendientes,
+            "procesados": self.procesados,
+            "clasificados": self.clasificados,
+            "sin_cik": self.sin_cik,
+            "cortado_por_limite_de_fuente": self.cortado_por_limite_de_fuente,
+            "motivo_corte": self.motivo_corte,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class DatosDeBymaPorPapel:
+    """Lo que la tabla oficial de CEDEARs aporta y la SEC no: nombre en castellano, ratio y mercado
+    del subyacente. Vacío para lo que BYMA no lista — que existe: `XPEV` cotiza desde 2025 y no
+    figura en el PDF de junio de 2026."""
+
+    nombre: str | None = None
+    ratio: str | None = None
+    mercado: str | None = None
+
+
+async def clasificar_renta_variable(
+    conn: Any,
+    cliente: ClienteSec,
+    *,
+    por_papel: dict[str, str],
+    datos_byma: dict[str, DatosDeBymaPorPapel] | None = None,
+    dormir: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    limite: int = LIMITE_POR_CORRIDA,
+    ahora: Callable[[], datetime] = lambda: datetime.now(UTC),
+) -> ResumenClasificacion:
+    """Clasifica hasta `limite` papeles pendientes contra la SEC.
+
+    `por_papel` mapea cada especie a su papel (`{'AAPLD': 'AAPL', ...}`) — sale del agrupamiento y
+    es lo que evita consultar tres veces por Apple.
+
+    `datos_byma` es opcional: sin él la clasificación sigue funcionando con lo que da la SEC, y lo
+    que falte queda declarado. Es dato que **aporta**, no que decide.
+    """
+    datos_byma = datos_byma or {}
+    pendientes = await papeles_pendientes_sec(conn)
+    a_procesar = pendientes[:limite]
+    if not a_procesar:
+        return ResumenClasificacion(pendientes=0, procesados=0, clasificados=0, sin_cik=0)
+
+    try:
+        mapa_cik = await cliente.mapa_de_tickers()
+        catalogo = await cliente.catalogo_sic()
+    except LimiteDeLaFuente as exc:
+        return ResumenClasificacion(
+            pendientes=len(pendientes),
+            procesados=0,
+            clasificados=0,
+            sin_cik=0,
+            cortado_por_limite_de_fuente=True,
+            motivo_corte=str(exc),
+        )
+
+    clasificados = sin_cik = 0
+    for indice, ticker in enumerate(a_procesar):
+        papel = por_papel.get(ticker, ticker).upper()
+        de_byma = datos_byma.get(papel, DatosDeBymaPorPapel())
+        # La estrategia sale del nombre de BYMA, y es `None` cuando el papel no es un fondo.
+        estrategia = estrategia_de(de_byma.nombre)
+
+        cik = mapa_cik.get(papel)
+        if cik is None:
+            # Sin CIK no hay SIC, pero si BYMA declaró el nombre igual se guarda lo que hay: un
+            # CEDEAR con nombre y ratio ya es mucho más de lo que el asesor tenía.
+            if de_byma.nombre or estrategia:
+                await _guardar(conn, ticker, None, catalogo, de_byma, estrategia, ahora())
+                clasificados += 1
+            sin_cik += 1
+            continue
+
+        try:
+            perfil = await cliente.perfil_de(cik)
+        except LimiteDeLaFuente as exc:
+            logger.info("clasificacion_sec_cortada_por_429", ticker=ticker, procesados=indice)
+            return ResumenClasificacion(
+                pendientes=len(pendientes),
+                procesados=indice,
+                clasificados=clasificados,
+                sin_cik=sin_cik,
+                cortado_por_limite_de_fuente=True,
+                motivo_corte=str(exc),
+            )
+
+        if perfil is not None:
+            await _guardar(conn, ticker, perfil, catalogo, de_byma, estrategia, ahora())
+            clasificados += 1
+
+        if indice < len(a_procesar) - 1:
+            await dormir(0)
+            await cliente.pausar()
+
+    return ResumenClasificacion(
+        pendientes=len(pendientes),
+        procesados=len(a_procesar),
+        clasificados=clasificados,
+        sin_cik=sin_cik,
+    )
+
+
+async def _guardar(
+    conn: Any,
+    ticker: str,
+    perfil: Any,
+    catalogo: dict[str, EntradaSic],
+    de_byma: DatosDeBymaPorPapel,
+    estrategia: Any,
+    capturado_en: datetime,
+) -> None:
+    """Arma la fila y la escribe. Cada campo puede quedar `None` sin que eso invalide el resto: un
+    papel del que sólo sabemos el nombre se guarda igual, declarando lo que falta."""
+    sic = perfil.sic if perfil else None
+    entrada = catalogo.get(sic) if sic else None
+    division = division_de(sic)
+
+    await guardar_clasificacion(
+        conn,
+        ticker,
+        # El nombre de BYMA gana sobre el de la SEC: está en castellano y es el que el asesor
+        # reconoce ("Ambev S.A." antes que "AMBEV S.A. /FI"). Sin él, el de la SEC sirve igual.
+        nombre_largo=de_byma.nombre or (perfil.nombre if perfil else None),
+        sic_codigo=sic,
+        # El título de la SEC viene en el mismo pedido que el código; el del catálogo es el mismo
+        # dato con otra capitalización. Se prefiere el del pedido y el catálogo completa si falta.
+        sic_titulo=(perfil.sic_titulo if perfil else None) or (entrada.titulo if entrada else None),
+        sic_oficina=entrada.oficina if entrada else None,
+        division_cadena=division.eslabon if division else None,
+        estrategia_etf=estrategia.clave if estrategia else None,
+        ratio_conversion=de_byma.ratio,
+        mercado_origen=de_byma.mercado,
+        fuente=FUENTE,
+        capturado_en=capturado_en,
+    )
