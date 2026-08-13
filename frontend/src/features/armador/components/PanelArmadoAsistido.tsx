@@ -27,6 +27,19 @@ import { PCT_RV_PERFIL, type ParametrosArmadoAsistido } from '../lib/schemaArmad
 import { PRESETS_TEMATICOS, presetPorId } from '../lib/tematicas'
 import { useArmador, useArmadorAcciones } from '../store/carteraStore'
 
+/** De la que paga más seguido a la que paga menos, con lo no medible al final. Es el orden en que
+ *  el asesor los piensa —"quiero cobrar todos los meses"— y sale de la escala del backend
+ *  (`ESCALA_FRECUENCIA` en `app/rotaciones/frecuencia.py`), no de una opinión. */
+const ORDEN_PERIODICIDAD = [
+  'mensual',
+  'bimestral',
+  'trimestral',
+  'semestral',
+  'anual',
+  'al vencimiento',
+  'irregular',
+] as const
+
 const MONEDAS: Array<{ valor: ParametrosArmadoAsistido['moneda']; etiqueta: string }> = [
   { valor: 'todas', etiqueta: 'cualquiera' },
   { valor: 'usd', etiqueta: 'dólares' },
@@ -95,6 +108,30 @@ export function PanelArmadoAsistido() {
     const hayNoInformada = especies.some((e) => e.calificacion === null)
     return { valores, hayNoInformada }
   }, [consultaUniverso.data])
+
+  // Las periodicidades que el universo tiene hoy, ordenadas de la que paga más seguido a la que
+  // paga menos: acá el orden **sí** es del dominio y no de presentación —mensual cobra antes que
+  // semestral, y eso es un hecho del cronograma, no un juicio como sí lo sería ordenar
+  // calificaciones—. Una frecuencia que no aparece en el universo no se ofrece: un botón que
+  // siempre devuelve cero no es un filtro.
+  const periodicidadesDisponibles = useMemo(() => {
+    const presentes = new Set(
+      (consultaUniverso.data ?? [])
+        .map((e) => e.periodicidad)
+        .filter((p): p is string => p !== null),
+    )
+    return ORDEN_PERIODICIDAD.filter((p) => presentes.has(p))
+  }, [consultaUniverso.data])
+
+  function alternarPeriodicidad(valor: string) {
+    const activa = filtros.periodicidades.includes(valor)
+    fijarFiltros({
+      ...filtros,
+      periodicidades: activa
+        ? filtros.periodicidades.filter((p) => p !== valor)
+        : [...filtros.periodicidades, valor],
+    })
+  }
 
   function alternarCalificacion(valor: string) {
     const activa = filtros.calificaciones.includes(valor)
@@ -279,6 +316,28 @@ export function PanelArmadoAsistido() {
         </p>
       </div>
 
+      {/* Cada cuánto cobra el cliente. Sale del cronograma contractual de cada emisión, no de
+          contar pagos en la ventana de doce meses: son dos preguntas distintas y el filtro de
+          `pagos` de la barra de la grilla sigue contestando la segunda. */}
+      {periodicidadesDisponibles.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 6 }}>
+          <span
+            className="rotulo"
+            style={{ fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', marginRight: 2 }}
+          >
+            Paga cupón
+          </span>
+          {periodicidadesDisponibles.map((valor) => (
+            <BotonDeFiltro
+              key={valor}
+              etiqueta={valor}
+              activa={filtros.periodicidades.includes(valor)}
+              onClick={() => alternarPeriodicidad(valor)}
+            />
+          ))}
+        </div>
+      )}
+
       {/* La calificación se filtra por coincidencia exacta y nunca se ordena por riesgo: son
           escalas de calificadoras distintas, sin equivalencia entre sí (regla 7 — el riesgo es un
           vector, no un número). Sin ninguna marcada, no filtra. */}
@@ -291,7 +350,7 @@ export function PanelArmadoAsistido() {
             Calificación RF
           </span>
           {calificacionesDisponibles.valores.map((valor) => (
-            <BotonCalificacion
+            <BotonDeFiltro
               key={valor}
               etiqueta={valor}
               activa={filtros.calificaciones.includes(valor)}
@@ -299,7 +358,7 @@ export function PanelArmadoAsistido() {
             />
           ))}
           {calificacionesDisponibles.hayNoInformada && (
-            <BotonCalificacion
+            <BotonDeFiltro
               etiqueta="sin calificar"
               activa={filtros.calificaciones.includes(CALIFICACION_NO_INFORMADA)}
               onClick={() => alternarCalificacion(CALIFICACION_NO_INFORMADA)}
@@ -341,9 +400,9 @@ export function PanelArmadoAsistido() {
   )
 }
 
-/** Un valor de calificación como toggle. `aria-pressed` y no un checkbox porque el conjunto es
- *  un filtro de la vista, no un formulario que se envía. */
-function BotonCalificacion({
+/** Un valor de un filtro multiselect como toggle (calificación, periodicidad). `aria-pressed` y no
+ *  un checkbox porque el conjunto filtra la vista, no es un formulario que se envía. */
+function BotonDeFiltro({
   etiqueta,
   activa,
   onClick,

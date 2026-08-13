@@ -70,14 +70,24 @@ UNIVERSO: list[dict[str, Any]] = [
 
 
 class FakeConexionLectura:
-    """Conexión falsa con un universo fijo. Guarda el SQL para poder afirmar qué se leyó."""
+    """Conexión falsa con un universo fijo. Guarda el SQL para poder afirmar qué se leyó.
 
-    def __init__(self, filas: list[dict[str, Any]]) -> None:
+    Rutea la consulta del cronograma aparte: `/emisiones/especies` lee `public.cashflow` para
+    derivar la periodicidad de cada emisión, y servirle el universo a esa consulta dejaría el campo
+    siempre nulo — el test pasaría sin ejercitar nada.
+    """
+
+    def __init__(
+        self, filas: list[dict[str, Any]], cashflow: list[dict[str, Any]] | None = None
+    ) -> None:
         self.filas = filas
+        self.cashflow = cashflow or []
         self.consultas: list[str] = []
 
     async def fetch(self, query: str, *_: Any) -> list[dict[str, Any]]:
         self.consultas.append(query)
+        if "FROM public.cashflow" in query:
+            return self.cashflow
         return self.filas
 
 

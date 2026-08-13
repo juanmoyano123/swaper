@@ -43,6 +43,20 @@ export const esquemaEspecie = z.object({
    *  entre calificadoras, así que nunca se ordena ni se usa como filtro (F-031, eje de crédito).
    *  359 de 823 tickers curados (39 %); el faltante se declara donde se muestre. */
   calificacion: z.string().nullable(),
+  /** Cada cuánto paga renta la emisión, medido sobre los pagos futuros de su cronograma
+   *  contractual (`frecuencia_por_raiz` del backend), no sobre la ventana de doce meses.
+   *
+   *  Valores observados en el universo: `semestral`, `trimestral`, `al vencimiento`, `mensual`,
+   *  `anual`, `bimestral`, y `irregular` cuando los intervalos no encajan en ninguna escala. Un
+   *  bono con un solo pago por delante es `al vencimiento` y **no** `anual`: con un pago no se
+   *  puede medir una frecuencia.
+   *
+   *  `null` = la emisión no tiene cronograma (125 especies al 13/08/2026, desde que la fuente de
+   *  cronogramas se dio de baja). Es faltante declarado, nunca `irregular`.
+   *
+   *  `.catch(null)` y no `.nullable()` a secas: las corridas anteriores a este campo no lo traen,
+   *  y una respuesta sin él no puede tumbar la pantalla entera. */
+  periodicidad: z.string().nullable().catch(null),
   dato_sano: z.boolean(),
   hermanas: z.array(z.string()),
 })

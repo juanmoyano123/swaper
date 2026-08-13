@@ -244,6 +244,45 @@ describe('pasaFiltros', () => {
     expect(pasaFiltros(datoBase({ especie: undefined }), filtros, HOY)).toBe(false)
   })
 
+  // --- Periodicidad de cupón ----------------------------------------------------------------
+
+  it('periodicidad: deja pasar sólo las frecuencias marcadas', () => {
+    const filtros = { ...FILTROS_ARMADOR_VACIOS, periodicidades: ['mensual', 'trimestral'] }
+
+    expect(pasaFiltros(datoBase({ especie: especie({ periodicidad: 'mensual' }) }), filtros)).toBe(true)
+    expect(pasaFiltros(datoBase({ especie: especie({ periodicidad: 'trimestral' }) }), filtros)).toBe(true)
+    expect(pasaFiltros(datoBase({ especie: especie({ periodicidad: 'semestral' }) }), filtros)).toBe(false)
+  })
+
+  it('periodicidad: una emisión sin cronograma no pasa el filtro activo, pero sin filtro se muestra', () => {
+    const sinCronograma = especie({ periodicidad: null })
+    const filtros = { ...FILTROS_ARMADOR_VACIOS, periodicidades: ['semestral'] }
+
+    expect(pasaFiltros(datoBase({ especie: sinCronograma }), filtros)).toBe(false)
+    expect(pasaFiltros(datoBase({ especie: sinCronograma }), FILTROS_ARMADOR_VACIOS)).toBe(true)
+  })
+
+  it('periodicidad: es independiente de `pagos`, que cuenta meses de la ventana', () => {
+    // Un semestral paga dos veces en doce meses: las dos preguntas se pueden combinar, y ninguna
+    // se deriva de la otra.
+    const semestral = especie({ periodicidad: 'semestral' })
+
+    expect(
+      pasaFiltros(datoBase({ especie: semestral, pagos: 2 }), {
+        ...FILTROS_ARMADOR_VACIOS,
+        periodicidades: ['semestral'],
+        pagos: '2',
+      }),
+    ).toBe(true)
+    expect(
+      pasaFiltros(datoBase({ especie: semestral, pagos: 2 }), {
+        ...FILTROS_ARMADOR_VACIOS,
+        periodicidades: ['semestral'],
+        pagos: '4',
+      }),
+    ).toBe(false)
+  })
+
   it('duración: especie sin dato no pasa un filtro activo, pero sin filtro se muestra igual', () => {
     const sinDuracion = especie({ duracion: null })
     const filtros = { ...FILTROS_ARMADOR_VACIOS, duracionMax: '5' }

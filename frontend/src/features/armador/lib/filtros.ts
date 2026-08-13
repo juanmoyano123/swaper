@@ -42,6 +42,15 @@ export interface FiltrosArmador {
   calificaciones: string[]
   /** Cantidad exacta de meses con pago de renta en la ventana; '' = sin filtro. */
   pagos: string
+  /** Periodicidades de cupón aceptadas, como valores literales de `especie.periodicidad`
+   *  (`'mensual'`, `'trimestral'`, `'semestral'`…). Array vacío = sin filtro.
+   *
+   *  Multiselect y no un valor único porque "quiero cobrar seguido" no es una sola frecuencia:
+   *  mensual y trimestral sirven los dos, y obligar a elegir una escondería la mitad de la oferta.
+   *
+   *  Distinto de `pagos`, que cuenta meses con pago dentro de la ventana de doce: esto es la
+   *  frecuencia contractual de la emisión, medida sobre su cronograma entero. */
+  periodicidades: string[]
   /** TIR mínima, en puntos porcentuales ('6' = 6%); '' = sin filtro. Sólo se evalúa contra
    *  naturalezas de TIR (`NATURALEZAS_CON_TIR`) — el resto queda afuera mientras esté activo:
    *  no hay eje común para comparar una TIR contra una TNA o una tasa real (regla 2). */
@@ -69,6 +78,7 @@ export const FILTROS_ARMADOR_VACIOS: FiltrosArmador = {
   ley: null,
   calificaciones: [],
   pagos: '',
+  periodicidades: [],
   tirMin: '',
   soloConCupones: false,
 }
@@ -94,6 +104,7 @@ export function hayFiltrosActivos(filtros: FiltrosArmador): boolean {
     filtros.ley !== null ||
     filtros.calificaciones.length > 0 ||
     filtros.pagos !== '' ||
+    filtros.periodicidades.length > 0 ||
     filtros.tirMin !== '' ||
     filtros.soloConCupones
   )
@@ -230,7 +241,8 @@ export function pasaFiltros(
     filtros.sector !== null ||
     filtros.emisor !== null ||
     filtros.ley !== null ||
-    filtros.calificaciones.length > 0
+    filtros.calificaciones.length > 0 ||
+    filtros.periodicidades.length > 0
 
   if (especie === undefined) {
     if (dependeDelUniverso) return false
@@ -265,6 +277,13 @@ export function pasaFiltros(
     } else if (especie.ley !== filtros.ley) {
       return false
     }
+  }
+
+  if (filtros.periodicidades.length > 0) {
+    // Sin cronograma no se puede afirmar que cumple una frecuencia: queda afuera del filtro
+    // activo, igual que cualquier otro campo nulo (regla 1).
+    if (especie.periodicidad === null) return false
+    if (!filtros.periodicidades.includes(especie.periodicidad)) return false
   }
 
   if (filtros.calificaciones.length > 0) {

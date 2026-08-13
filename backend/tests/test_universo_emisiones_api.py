@@ -6,7 +6,7 @@ colapsada tenga una fila donde la viva tiene tres, y que la pregunta del armador
 agregar ya lo tengo?"— se pueda contestar sin que el cliente corte un ticker por su cuenta.
 """
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from tests.conftest import cliente
@@ -52,8 +52,37 @@ UNIVERSO: list[dict[str, Any]] = [
 ]
 
 
-def app_con(crear_app, filas: list[dict[str, Any]] | None = None):
-    return crear_app(FakeConexionLectura(UNIVERSO if filas is None else filas))
+def app_con(
+    crear_app,
+    filas: list[dict[str, Any]] | None = None,
+    cashflow: list[dict[str, Any]] | None = None,
+):
+    return crear_app(FakeConexionLectura(UNIVERSO if filas is None else filas, cashflow))
+
+
+def pago(ticker: str, payment_date: date, *, interest_amount: float = 2.5) -> dict[str, Any]:
+    """Una fila de cronograma con lo que `indexar_cronograma` necesita para agrupar y medir."""
+    return {
+        "ticker": ticker,
+        "issue_date": date(2020, 1, 9),
+        "payment_date": payment_date,
+        "capital": 0.0,
+        "interest_amount": interest_amount,
+        "residual_value": 100.0,
+        "cash_flow": interest_amount,
+    }
+
+
+# Un semestral (dos pagos separados seis meses) y un bono al que le queda un solo pago por delante.
+# Las fechas son futuras contra el reloj real: `frecuencia_por_raiz` mide sólo pagos futuros, así
+# que fechas fijas del pasado dejarían el caso sin medir con el correr de los meses.
+def cronograma_de_prueba() -> list[dict[str, Any]]:
+    hoy = date.today()
+    return [
+        pago("MR46O", hoy.replace(year=hoy.year + 1)),
+        pago("MR46O", hoy.replace(year=hoy.year + 1, day=1) + timedelta(days=182)),
+        pago("AL30", hoy.replace(year=hoy.year + 2)),
+    ]
 
 
 # --- El resumen ----------------------------------------------------------------------------------
@@ -115,6 +144,37 @@ async def test_la_vista_viva_devuelve_las_tres_especies_con_lo_suyo(crear_app) -
     assert por_ticker["MR46C"]["sufijo_liquidacion"] == "C"
     assert por_ticker["MR46D"]["rendimiento"] == 0.13
     assert por_ticker["MR46D"]["dato_sano"] is True
+
+
+async def test_cada_especie_viva_declara_la_periodicidad_de_su_cronograma(crear_app) -> None:
+    """Sale del cronograma contractual, no de la ventana de doce meses: es la diferencia entre
+    medir la frecuencia y contar cuántas veces cayó un pago en un año arbitrario."""
+    app = app_con(crear_app, cashflow=cronograma_de_prueba())
+    async with cliente(app) as http:
+        items = (await http.get(ESPECIES)).json()["items"]
+
+    por_ticker = {i["ticker"]: i for i in items}
+    assert por_ticker["MR46O"]["periodicidad"] == "semestral"
+    # La periodicidad es de la emisión: las hermanas de liquidación la comparten, no se recalcula
+    # por especie.
+    assert por_ticker["MR46D"]["periodicidad"] == "semestral"
+
+
+async def test_un_solo_pago_por_delante_se_declara_al_vencimiento_y_no_anual(crear_app) -> None:
+    """Con un pago no se puede medir una frecuencia. Llamarlo 'anual' sería inventarla."""
+    app = app_con(crear_app, cashflow=cronograma_de_prueba())
+    async with cliente(app) as http:
+        items = (await http.get(ESPECIES)).json()["items"]
+
+    assert {i["ticker"]: i for i in items}["AL30"]["periodicidad"] == "al vencimiento"
+
+
+async def test_una_emision_sin_cronograma_no_inventa_periodicidad(crear_app) -> None:
+    """Faltante declarado, nunca 'irregular': no tener cronograma no es tener uno irregular."""
+    async with cliente(app_con(crear_app)) as http:
+        items = (await http.get(ESPECIES)).json()["items"]
+
+    assert all(i["periodicidad"] is None for i in items)
 
 
 async def test_cada_especie_viva_lleva_su_clave_de_emision_y_sus_hermanas(crear_app) -> None:

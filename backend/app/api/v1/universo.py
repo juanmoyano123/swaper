@@ -19,12 +19,17 @@ ese flag sería una decisión silenciosa sobre cuál de los dos se rompe.
 """
 
 from collections import Counter
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import get_db
+from app.calendario.cupones import indexar_cronograma
+from app.calendario.lectura import leer_cashflow
 from app.core.pagination import CursorParams, Page, build_page
+from app.ingesta.raiz import raiz_emision
+from app.rotaciones.frecuencia import frecuencia_por_raiz
 from app.universo import EspecieUniverso, MotivoDescarte, UniversoDeduplicado
 from app.universo.segmentacion import DESC_SEGMENTO, NATURALEZA_TASA, NOMBRE_NATURALEZA
 from app.universo.servicio import sanear_universo
@@ -234,6 +239,13 @@ async def vista_viva(
 
     **La punta compradora y vendedora sigue sin viajar**: no existe en la vista `resumen`, así que
     hoy no hay de dónde sacarla.
+
+    **`periodicidad` sale del cronograma contractual, no de la ventana de doce meses.** Se mide
+    sobre los pagos futuros de renta de cada emisión con `frecuencia_por_raiz` (la misma función
+    que usa el motor de rotaciones), así que un bono con un solo pago por delante se declara
+    `al vencimiento` en vez de "anual": la ventana no alcanza para afirmar una frecuencia y
+    suponerla sería inventar (regla 1). Una emisión sin cronograma no trae el campo — es faltante
+    declarado, no `irregular`.
     """
     saneado = await sanear_universo(conn)
     dedup = saneado.emisiones()
@@ -247,14 +259,24 @@ async def vista_viva(
         ultimo = str(desde.get("ticker", ""))
         listado = [e for e in listado if e.ticker > ultimo]
 
-    filas = [
-        {
-            **especie.como_dict(),
-            "dato_sano": especie.ticker not in descartados,
-            "hermanas": [h.ticker for h in dedup.hermanas(especie.ticker)],
-        }
-        for especie in listado[: params.limit + 1]
-    ]
+    # El cronograma entero por página: es la misma lectura completa que ya hace `sanear_universo`
+    # de su lado, así que no cambia el orden de magnitud del request. Si alguna vez pesa, lo que
+    # corresponde es cachear las dos, no dejar el campo afuera.
+    frecuencias = frecuencia_por_raiz(
+        indexar_cronograma(await leer_cashflow(conn)), datetime.now(UTC).date()
+    )
+
+    filas = []
+    for especie in listado[: params.limit + 1]:
+        frecuencia = frecuencias.get(raiz_emision(especie.ticker))
+        filas.append(
+            {
+                **especie.como_dict(),
+                "dato_sano": especie.ticker not in descartados,
+                "hermanas": [h.ticker for h in dedup.hermanas(especie.ticker)],
+                "periodicidad": frecuencia[0] if frecuencia else None,
+            }
+        )
     return build_page(filas, params.limit, lambda f: {"ticker": f["ticker"]})
 
 
