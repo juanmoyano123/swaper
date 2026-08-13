@@ -735,6 +735,49 @@ una cartera de cada origen. Consumió F-018 y F-037.
   la cartera guardada en el navegador dio exactamente `{origen, version, resueltas, posiciones,
   tipoDeCambio, montoTotalUsd, totalInvertidoUsd}` — la whitelist declarada, nada más.
 
+### Tanda 20 cerrada el 13/08/2026 — clasificación de la renta variable (sin ficha de plan.md)
+
+Pedido directo del dueño del producto: *"es necesario saber la acción a qué se dedica, rubro, qué
+provee, qué rol cumple en el proceso productivo, y si es un ETF cuál es la estrategia de inversión
+que respalda el armado de esos portafolios"*. Verificado contra la SEC real y en el navegador.
+
+- **La fuente pasó de Yahoo Finance a la SEC.** Yahoo bloqueó el endpoint de perfil (429 sostenido,
+  medido con `curl` puro fuera de nuestro código) y `perfil_renta_variable` tenía **cero** filas: los
+  dos selects del buscador nunca ofrecieron una opción y los presets temáticos filtraban contra un
+  campo vacío. `data.sec.gov` responde sin clave, sin bloqueo y con contrato publicado.
+- **Se clasifica por papel, no por especie.** Preguntarle a la SEC por `AAPL`, `AAPLC` y `AAPLD`
+  serían tres pedidos para escribir tres filas idénticas. Lo habilitó el agrupamiento de la tanda
+  anterior (`app/renta_variable/agrupamiento.py`).
+- **Resultado medido**: 1.641 filas escritas, 870 con código SIC, 123 fondos con estrategia, 1.074
+  con nombre de empresa y 993 con ratio de conversión.
+- **El eslabón productivo sale de la división del SIC Manual**, que es estructura oficial de la
+  taxonomía (10-14 extracción, 20-39 manufactura, 52-59 comercio minorista, 60-67 finanzas). Lo que
+  el pedido llamaba "qué rol cumple esa materia prima en el proceso productivo" **no se escribió**:
+  no tiene fuente y sería inventar.
+- **La estrategia de los ETFs sale del nombre que publica BYMA**, no de la SEC: de 25 ETFs sólo dos
+  tienen CIK, `SPY` y `QQQ` traen el SIC vacío y `GLD` trae `6221 Commodity Contracts Brokers`, que
+  describe el vehículo legal y no dice nada de qué compra el fondo.
+- **El bug que hacía que el job no avanzara**, encontrado corriéndolo: los papeles que la SEC no
+  lista no se guardaban y volvían a la cola en cada corrida. Nueve tandas de 100 bajaron los
+  pendientes de 1.539 a 1.536. La fila vacía **se escribe igual**: es el registro de que ya se
+  preguntó y no está.
+- **Un error de la fuente, declarado y no resuelto**: el PDF de BYMA publica `XLU` con dos nombres
+  distintos (ciberseguridad y Utilities). No hay forma de saber cuál es el bueno, así que el código
+  entero se descarta con alerta — mismo criterio que los conflictos del artefacto curado.
+
+**Lo que esta tanda NO logró:** las **acciones argentinas siguen sin clasificar**. La SEC lista 21
+de 245 (sólo las que tienen ADR) contra 315 de 427 CEDEARs; su fuente es la CNV y espera a F-054.
+Se declaran vacías en pantalla, no se completan por analogía.
+
+**Deuda chica, medida:** 7 de los 413 papeles del PDF de BYMA no se reconocen como fondos porque la
+fuente publica el nombre truncado y se le cae la marca — `SPDR S&P 500` (SPY), `SPDR DOW JONES
+INDUSTRIAL` (DIA), `ISHARES MSCI EMERGING MARKET` (EEM), `ISHARES MSCI BRAZIL CAP` (EWZ),
+`ARK INNOVATION` (ARKK), `VANGUARD DIVIDEND APPRECIATION` (VIG) y `iShares U.S. Aerospace & Defense`
+(ITA). Reconocerlos exigiría tratar "SPDR" o "iShares" como marca de fondo, que es conocimiento
+nuestro y no algo que la fuente declare.
+
+---
+
 ### Tanda 19 cerrada el 13/08/2026 — rediseño del flujo del armador (sin ficha de plan.md)
 
 No es una feature del PRD: sale de un pedido directo del dueño del producto sobre el flujo de
@@ -772,7 +815,8 @@ armado. Verificado en el navegador contra el backend local y el proyecto real de
 **no pudo correr**: Yahoo devolvió HTTP 429 desde el primer pedido en las 8 tandas que se
 intentaron, con 0 tickers procesados sobre 1.641 pendientes. El filtro temático de renta variable
 sigue sin datos y la UI lo sigue declarando (`SIN_PERFILES_DE_EMPRESA`). Es la misma deuda de
-antes, no una nueva.
+antes, no una nueva. **Resuelto en la tanda 20 cambiando de fuente, no destrabando Yahoo**: el
+rubro pasó a la SEC y el filtro dejó de estar vacío. El bloqueo de Yahoo sigue en pie.
 
 ---
 
