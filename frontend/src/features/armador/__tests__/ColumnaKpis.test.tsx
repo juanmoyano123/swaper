@@ -35,6 +35,7 @@ function especie(extra: Partial<Especie> = {}): Especie {
     rendimiento: 0.1123,
     duracion: 3.2,
     vencimiento: '2030-07-09',
+    periodicidad: 'semestral',
     ley: 'ARG',
     moneda_cupon: 'USD',
     emisor: 'República Argentina',

@@ -33,6 +33,7 @@ function especie(overrides: Partial<Especie>): Especie {
     rendimiento: null,
     duracion: null,
     vencimiento: null,
+    periodicidad: null,
     ley: null,
     moneda_cupon: null,
     emisor: null,

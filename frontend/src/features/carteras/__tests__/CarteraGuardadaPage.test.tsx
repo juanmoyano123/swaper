@@ -60,6 +60,7 @@ function especie(overrides: Record<string, unknown> = {}) {
     rendimiento: 0.12,
     duracion: 3.5,
     vencimiento: '2030-07-09',
+    periodicidad: 'semestral',
     ley: 'Ley N.Y.',
     moneda_cupon: 'USD',
     emisor: 'República Argentina',

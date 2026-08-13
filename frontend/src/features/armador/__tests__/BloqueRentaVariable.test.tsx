@@ -269,6 +269,7 @@ describe('composición del monto total (GWT-4)', () => {
           rendimiento: 0.1123,
           duracion: 3.2,
           vencimiento: '2030-07-09',
+          periodicidad: 'semestral',
           ley: 'ARG',
           moneda_cupon: 'USD',
           emisor: 'República Argentina',
@@ -456,5 +457,56 @@ describe('el buscador de acciones y CEDEARs', () => {
     await userEvent.click(screen.getByRole('radio', { name: 'CEDEARs' }))
 
     expect(screen.getByLabelText('Sector (empresa)')).toHaveValue('')
+  })
+})
+
+
+describe('reemplazar una sugerencia', () => {
+  it('saca la posición y deja el buscador enfocado para elegir otra', async () => {
+    responderCon({ acciones: [accion({ sector: 'Financial Services' })] })
+    renderizar()
+    await screen.findAllByRole('listitem')
+
+    // Se agrega a la cartera, que es lo que produce la tarjeta con sus acciones.
+    await userEvent.click(screen.getByRole('button', { name: 'agregar GGAL directo' }))
+    const cambiar = await screen.findByRole('button', { name: 'reemplazar GGAL por otro activo' })
+
+    await userEvent.click(cambiar)
+
+    expect(
+      screen.queryByRole('button', { name: 'reemplazar GGAL por otro activo' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Buscar acción o CEDEAR por ticker o nombre')).toHaveFocus()
+  })
+
+  it('pre-filtra por el sector de la que se saca: "otro banco, no este"', async () => {
+    responderCon({
+      acciones: [
+        accion({ sector: 'Financial Services' }),
+        accion({ ticker: 'PAMP', sector: 'Energy' }),
+      ],
+    })
+    renderizar()
+    await screen.findAllByRole('listitem')
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar GGAL directo' }))
+    await userEvent.click(screen.getByRole('button', { name: 'reemplazar GGAL por otro activo' }))
+
+    expect(screen.getByLabelText('Sector (empresa)')).toHaveValue('Financial Services')
+    expect(screen.queryByRole('button', { name: 'PAMP' })).not.toBeInTheDocument()
+  })
+
+  it('sin sector declarado no inventa un filtro: la búsqueda queda abierta', async () => {
+    responderCon({
+      acciones: [accion({ sector: null }), accion({ ticker: 'PAMP', sector: 'Energy' })],
+    })
+    renderizar()
+    await screen.findAllByRole('listitem')
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar GGAL directo' }))
+    await userEvent.click(screen.getByRole('button', { name: 'reemplazar GGAL por otro activo' }))
+
+    expect(screen.getByLabelText('Sector (empresa)')).toHaveValue('')
+    expect(screen.getByRole('button', { name: 'PAMP' })).toBeInTheDocument()
   })
 })

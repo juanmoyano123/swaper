@@ -43,7 +43,7 @@
  * efectivamente invertido) — dos cuentas distintas que pueden no coincidir, y las dos se muestran.
  */
 
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useRef, useState } from 'react'
 
 import { useAbrirInstrumento } from '@/features/instrumento/useAbrirInstrumento'
 import { fmtFecha, fmtMonto, fmtPct, SIN_DATO } from '@/lib/fmt'
@@ -95,6 +95,9 @@ export function BloqueRentaVariable() {
 
   const [clasePicker, setClasePickerCrudo] = useState<'accion' | 'cedear'>('accion')
   const [busqueda, setBusqueda] = useState('')
+  // Para que "reemplazar" deje el cursor donde se elige el sustituto: sacar la posición y dejar al
+  // asesor buscando dónde estaba el scroll sería la mitad del trabajo.
+  const refBuscador = useRef<HTMLInputElement>(null)
   const [sectorFiltro, setSectorFiltro] = useState<string | null>(null)
   const [industriaFiltro, setIndustriaFiltro] = useState<string | null>(null)
 
@@ -159,6 +162,23 @@ export function BloqueRentaVariable() {
     ...new Set(listaPicker.map((e) => e.industria).filter((i): i is string => i !== null)),
   ].sort()
 
+  /**
+   * Saca una sugerencia y deja al asesor eligiendo con qué cambiarla.
+   *
+   * Es composición de lo que ya existe —quitar la posición y usar el buscador—, no un flujo nuevo:
+   * el reemplazo no es una operación atómica del dominio, es "esta no me sirve, dame otra". Se
+   * pre-filtra por el sector de la que se saca cuando el dato existe, que es el caso de uso real
+   * ("otro banco, no este"); sin perfil de empresa cargado no se filtra nada en vez de inventar
+   * una equivalencia.
+   */
+  function reemplazar(ticker: string) {
+    const sector = porTicker.get(ticker)?.sector ?? null
+    alternarRentaVariable(ticker)
+    if (sector !== null) setSectorFiltro(sector)
+    setBusqueda('')
+    refBuscador.current?.focus()
+  }
+
   const busquedaNormalizada = busqueda.trim().toLowerCase()
   const filtradaPicker = listaPicker.filter((e) => {
     if (sectorFiltro !== null && e.sector !== sectorFiltro) return false
@@ -220,6 +240,7 @@ export function BloqueRentaVariable() {
               resuelta={resueltas.find((r) => r.ticker === posicion.ticker) ?? null}
               onAbrir={() => abrirInstrumento(posicion.ticker)}
               onQuitar={() => alternarRentaVariable(posicion.ticker)}
+              onReemplazar={() => reemplazar(posicion.ticker)}
               onFijarPeso={(peso) => fijarPeso(posicion.ticker, peso)}
             />
           ))}
@@ -251,6 +272,7 @@ export function BloqueRentaVariable() {
           )
         })}
         <input
+          ref={refBuscador}
           type="text"
           value={busqueda}
           onChange={(evento) => setBusqueda(evento.target.value)}
@@ -446,6 +468,7 @@ function TarjetaRentaVariable({
   resuelta,
   onAbrir,
   onQuitar,
+  onReemplazar,
   onFijarPeso,
 }: {
   posicion: PosicionArmador
@@ -453,6 +476,8 @@ function TarjetaRentaVariable({
   resuelta: PosicionRvResuelta | null
   onAbrir: () => void
   onQuitar: () => void
+  /** Saca esta posición y deja el buscador listo para elegir la que la reemplaza. */
+  onReemplazar: () => void
   onFijarPeso: (peso: number) => void
 }) {
   const variacionPct = especie?.variacion == null ? null : especie.variacion * 100
@@ -518,6 +543,15 @@ function TarjetaRentaVariable({
         <span className="mono" style={{ marginLeft: 'auto', fontSize: 12, color: colorVariacion }}>
           {textoVariacion}
         </span>
+        <button
+          type="button"
+          onClick={onReemplazar}
+          aria-label={`reemplazar ${ticker} por otro activo`}
+          title="sacarlo y buscar otro en su lugar"
+          style={{ font: 'inherit', fontSize: 10.5, border: '1px solid var(--lin)', borderRadius: 3, padding: '2px 6px', background: 'transparent', color: 'var(--dim)', cursor: 'pointer' }}
+        >
+          cambiar
+        </button>
         <button
           type="button"
           onClick={onQuitar}

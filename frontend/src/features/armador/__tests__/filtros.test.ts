@@ -23,6 +23,7 @@ function especie(extra: Partial<Especie> = {}): Especie {
   return {
     ticker: 'AL30',
     emision: 'AL30',
+    periodicidad: 'semestral',
     sufijo_liquidacion: null,
     clase_activo: 'ON',
     segmento: 'usd_hard',

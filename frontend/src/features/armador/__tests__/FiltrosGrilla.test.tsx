@@ -127,6 +127,7 @@ function calendarioUniverso() {
 
 function especieAl30(): Especie {
   return {
+    periodicidad: 'semestral',
     ticker: 'AL30',
     emision: 'AL30',
     sufijo_liquidacion: null,
@@ -155,6 +156,7 @@ function especieAl30(): Especie {
 
 function especieTzx26(): Especie {
   return {
+    periodicidad: 'trimestral',
     ticker: 'TZX26',
     emision: 'TZX26',
     sufijo_liquidacion: null,

@@ -12,7 +12,6 @@
 
 import { useState } from 'react'
 
-import type { SeccionId } from '../lib/plegado'
 import { SECCION_POR_ID } from '../lib/secciones'
 import { useOrdenSecciones } from '../hooks/useOrdenSecciones'
 

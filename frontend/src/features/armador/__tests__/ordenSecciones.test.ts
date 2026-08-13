@@ -55,7 +55,7 @@ describe('reconciliarOrden', () => {
 
 describe('moverSeccion', () => {
   it('sube una sección un lugar', () => {
-    expect(moverSeccion(['a', 'b', 'c'] as SeccionId[], 'c' as SeccionId, 'arriba')).toEqual([
+    expect(moverSeccion((['a', 'b', 'c'] as unknown) as SeccionId[], ('c' as unknown) as SeccionId, 'arriba')).toEqual([
       'a',
       'c',
       'b',
@@ -63,7 +63,7 @@ describe('moverSeccion', () => {
   })
 
   it('baja una sección un lugar', () => {
-    expect(moverSeccion(['a', 'b', 'c'] as SeccionId[], 'a' as SeccionId, 'abajo')).toEqual([
+    expect(moverSeccion((['a', 'b', 'c'] as unknown) as SeccionId[], ('a' as unknown) as SeccionId, 'abajo')).toEqual([
       'b',
       'a',
       'c',
@@ -71,24 +71,24 @@ describe('moverSeccion', () => {
   })
 
   it('subir la primera no hace nada, y no es un error', () => {
-    const orden = ['a', 'b'] as SeccionId[]
-    expect(moverSeccion(orden, 'a' as SeccionId, 'arriba')).toEqual(orden)
+    const orden = (['a', 'b'] as unknown) as SeccionId[]
+    expect(moverSeccion(orden, ('a' as unknown) as SeccionId, 'arriba')).toEqual(orden)
   })
 
   it('bajar la última no hace nada', () => {
-    const orden = ['a', 'b'] as SeccionId[]
-    expect(moverSeccion(orden, 'b' as SeccionId, 'abajo')).toEqual(orden)
+    const orden = (['a', 'b'] as unknown) as SeccionId[]
+    expect(moverSeccion(orden, ('b' as unknown) as SeccionId, 'abajo')).toEqual(orden)
   })
 
   it('no muta el array original', () => {
-    const orden = ['a', 'b', 'c'] as SeccionId[]
-    moverSeccion(orden, 'a' as SeccionId, 'abajo')
+    const orden = (['a', 'b', 'c'] as unknown) as SeccionId[]
+    moverSeccion(orden, ('a' as unknown) as SeccionId, 'abajo')
     expect(orden).toEqual(['a', 'b', 'c'])
   })
 
   it('un id que no está en el orden lo deja igual', () => {
-    const orden = ['a', 'b'] as SeccionId[]
-    expect(moverSeccion(orden, 'z' as SeccionId, 'arriba')).toEqual(orden)
+    const orden = (['a', 'b'] as unknown) as SeccionId[]
+    expect(moverSeccion(orden, ('z' as unknown) as SeccionId, 'arriba')).toEqual(orden)
   })
 })
 

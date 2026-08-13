@@ -54,9 +54,11 @@ export const esquemaEspecie = z.object({
    *  `null` = la emisión no tiene cronograma (125 especies al 13/08/2026, desde que la fuente de
    *  cronogramas se dio de baja). Es faltante declarado, nunca `irregular`.
    *
-   *  `.catch(null)` y no `.nullable()` a secas: las corridas anteriores a este campo no lo traen,
-   *  y una respuesta sin él no puede tumbar la pantalla entera. */
-  periodicidad: z.string().nullable().catch(null),
+   *  Sin `.catch()`: el backend manda el campo siempre y frontend y backend se despliegan juntos,
+   *  así que una respuesta sin él es un contrato roto y tiene que fallar ruidosamente, como el
+   *  resto de los campos de este esquema. Además `.catch()` separa el tipo de entrada del de
+   *  salida, y eso obliga a cada fixture de test a declarar un `undefined` que la API nunca manda. */
+  periodicidad: z.string().nullable(),
   dato_sano: z.boolean(),
   hermanas: z.array(z.string()),
 })

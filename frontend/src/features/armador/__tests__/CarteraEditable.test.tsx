@@ -40,6 +40,7 @@ function especie(extra: Partial<Especie> = {}): Especie {
     rendimiento: 0.1123,
     duracion: 3.2,
     vencimiento: '2030-07-09',
+    periodicidad: 'semestral',
     ley: 'ARG',
     moneda_cupon: 'USD',
     emisor: 'República Argentina',
@@ -549,5 +550,28 @@ describe('bloques por clase de activo', () => {
 
     expect(await screen.findByText('Sin clasificar')).toBeInTheDocument()
     expect(screen.getByRole('row', { name: 'AL30' })).toBeInTheDocument()
+  })
+})
+
+
+describe('sacar una posición desde la cartera', () => {
+  it('quita el bono y reparte su peso pro-rata entre los que quedan', async () => {
+    // La edición post-armado tiene que poder deshacer una sugerencia sin volver a la grilla: el
+    // asesor está mirando la cartera, no la oferta.
+    responderCon({ especies: [especie(), GD30] })
+    renderizar()
+    await userEvent.click(screen.getByRole('button', { name: 'agregar AL30' }))
+    await userEvent.click(screen.getByRole('button', { name: 'agregar GD30' }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'sacar AL30 de la cartera' }))
+
+    expect(screen.queryByRole('row', { name: 'AL30' })).not.toBeInTheDocument()
+    // El que queda se lleva todo: pro-rata sobre una sola posición es el 100%.
+    expect(screen.getByRole('row', { name: 'GD30' })).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('row', { name: 'GD30' })).getByLabelText(
+        'ponderación pedida de GD30',
+      ),
+    ).toHaveValue(100)
   })
 })
