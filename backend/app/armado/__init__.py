@@ -2,7 +2,7 @@
 
 Port de las cuatro funciones de `tools/armar_cartera.py` (`resolver_mix`, `candidatos_del_segmento`,
 `elegir_siguiente`, `armar`) sin la cáscara de CLI. Sin pandas: el resto del backend fuera de
-`ingesta/docta/` trabaja sobre listas y dataclasses, y este paquete sigue ese estilo.
+`ingesta/byma/` trabaja sobre listas y dataclasses, y este paquete sigue ese estilo.
 
 ## Reuso, no reimplementación
 

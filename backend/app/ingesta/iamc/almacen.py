@@ -54,7 +54,7 @@ PREFIJO_ACEPTADO = "iamc-deuda-corporativa-"
 def ultimo_informe() -> tuple[Path, bytes] | None:
     """El informe aceptado más reciente, o `None` si todavía no se subió ninguno.
 
-    Lo necesita la consolidación: IAMC no se puede "correr" como BYMA o Docta, porque el informe
+    Lo necesita la consolidación: IAMC no se puede "correr" como BYMA o data912, porque el informe
     llega por subida manual. Lo que sí se puede hacer es volver a parsear el último aceptado, que
     es determinístico y da lo mismo que la vez que se subió.
 

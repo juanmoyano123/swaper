@@ -1,5 +1,5 @@
 """Lo que el refresh intra-rueda necesita leer del universo ya persistido, para no volver a
-consultar IAMC ni Docta.
+volver a leer el informe de IAMC.
 
 Dos cosas puntuales:
 
@@ -11,7 +11,7 @@ Dos cosas puntuales:
 - **El `type` de cada emisión, tal como quedó del último cronograma persistido.** `public-bonds`
   —soberanos y subsoberanos— sólo se puede clasificar cruzando ese `type` (ver
   `app/ingesta/consolidacion/clasificacion.py`), y sin él `armar_consolidacion` los deja afuera
-  del universo entero, puntas incluidas. Leerlo de `cashflow` en vez de volver a pedirlo a Docta es
+  del universo entero, puntas incluidas. Leerlo de `cashflow`, que es su única fuente ya, es
   lo que permite refrescar soberanos en cada rueda sin tocar la fuente que F-008 tiene prohibido
   volver a consultar.
 """

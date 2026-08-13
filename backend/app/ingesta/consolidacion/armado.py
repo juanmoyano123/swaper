@@ -1,4 +1,4 @@
-"""Las tres fuentes se vuelven un universo. Función pura: sin base, sin red, con el reloj afuera.
+"""Las fuentes se vuelven un universo. Función pura: sin base, sin red, con el reloj afuera.
 
 Toda la lógica que decide qué valor termina en qué columna vive acá, y por eso todo esto se prueba
 sin levantar Postgres. `persistencia.py` no decide nada: escribe lo que este módulo armó.
@@ -14,9 +14,16 @@ fuente posible y ninguna se completa desde otra:
 | tir, duration, paridad — especies calculables    | cálculo propio  | especie        |
 | tir, duration, paridad — el resto                | IAMC            | ticker exacto  |
 | convexidad, residual_value                       | IAMC            | ticker exacto  |
-| clase_activo, tipo_tasa                          | Docta           | emisión (raíz) |
-| el cronograma entero                             | Docta           | ticker exacto  |
+| clase_activo, tipo_tasa                          | cronograma      | emisión (raíz) |
+| el cronograma entero                             | `public.cashflow` | ticker exacto |
 | tna                                              | ninguna         | —              |
+
+**El cronograma ya no tiene fuente viva.** Docta era la única que lo publicaba y se dio de baja el
+12/08/2026 por costo: el flujo contractual sale de lo que quedó persistido en `public.cashflow`, que
+`corrida.py` lee en cada pasada. No es dato viejo presentado como nuevo —un cronograma es
+contractual y no envejece—, pero sí quedó **cerrado**: una emisión que empiece a cotizar de ahora en
+más entra sin cronograma, y por lo tanto sin `tipo_tasa` y sin métricas propias. Se declara faltante
+y no se clasifica por analogía con una especie hermana (regla 1).
 
 Dos granos distintos para IAMC, y la diferencia es de fondo. Ley y moneda de pago son atributos de
 la emisión: AL30, AL30D y AL30C se pagan bajo la misma ley, así que se heredan por raíz. La TIR no:
@@ -25,7 +32,7 @@ distintas aunque sean el mismo bono. Escribir la TIR de una en la otra sería in
 nadie calculó, y eso sigue prohibido — **con cálculo propio o sin él**.
 
 **F-051 movió tir, duration y paridad de "ingeridas" a "calculadas" donde se puede calcularlas.**
-Se descuenta el flujo contractual de Docta contra el precio de BYMA de esa especie, y por eso el
+Se descuenta el flujo contractual persistido contra el precio de BYMA de esa especie, y por eso el
 requisito es que los dos estén en la misma moneda: AL30D contra su precio en dólares sí, AL30 —que
 cotiza en pesos y paga en dólares— no. La decisión de qué especie entra la toma `metricas.py` de
 este mismo paquete, que también explica por qué CER, dollar-linked, badlar y tamar quedan afuera.
@@ -33,8 +40,8 @@ Para lo que no se calcula, IAMC sigue siendo fuente donde publica; la columna `f
 dice de dónde salió su número, y el cálculo propio nunca es pisado por lo publicado ni por el
 arrastre de la corrida anterior.
 
-`tna` sigue sin fuente: venía del endpoint de Rendimiento de Bonos de Docta, que ya no se consume, y
-**el cálculo propio no la llena**. La TIR que resuelve el solver es efectiva anual; convertirla a
+`tna` sigue sin fuente: venía de un endpoint de Docta que ya no se consume, y **el cálculo propio
+no la llena**. La TIR que resuelve el solver es efectiva anual; convertirla a
 nominal exige una convención de capitalización que ninguna fuente declara, y elegirla nosotros sería
 inventar. Queda nula en todo el universo y con alerta propia, porque una columna que el motor usa y
 que nadie llena tiene que doler a la vista y no descubrirse tres features después.
@@ -73,11 +80,27 @@ from app.ingesta.consolidacion.metricas import (
     fuente_de_metricas,
     motivo_de_exclusion,
 )
-from app.ingesta.docta.normalizacion import COLUMNAS_CONTRACTUALES
 from app.ingesta.iamc.parser import FilaInforme
 from app.ingesta.raiz import raiz_emision
 
 CLASES_RENTA_VARIABLE = ("accion", "cedear")
+
+# El contrato de columnas de un cronograma de pagos, que es también el de la tabla `cashflow`.
+# Vivía en `ingesta/docta/normalizacion.py` mientras Docta era la fuente que lo llenaba; se movió
+# acá cuando se dio de baja esa ingesta, porque el contrato es de la tabla y no del proveedor: si
+# mañana otra fuente publica cronogramas, se normaliza contra estas nueve columnas igual.
+# `persistencia.py` la importa de acá para que haya una sola definición.
+COLUMNAS_CASHFLOW: tuple[str, ...] = (
+    "ticker",
+    "type",
+    "issue_date",
+    "payment_date",
+    "capital",
+    "interest_rate",
+    "interest_amount",
+    "residual_value",
+    "cash_flow",
+)
 
 # Los cuatro atributos de la emisión que se heredan entre especies, con el campo de IAMC del que
 # sale cada uno. Es la misma lista que propagaba el motor viejo, menos `lamina` y `calificacion`,
@@ -659,4 +682,4 @@ def _filas_de_cashflow(
     """
     if filas is None:
         return None
-    return [{columna: fila.get(columna) for columna in COLUMNAS_CONTRACTUALES} for fila in filas]
+    return [{columna: fila.get(columna) for columna in COLUMNAS_CASHFLOW} for fila in filas]

@@ -43,7 +43,7 @@ async def corridas(
 
 @router.post(
     "/corridas/matinal",
-    summary="Dispara a mano la corrida matinal completa (BYMA + IAMC + Docta + consolidación)",
+    summary="Dispara a mano la corrida matinal completa (BYMA + data912 + IAMC + consolidación)",
     responses={503: {"description": "La base de datos no está disponible"}},
 )
 async def disparar_matinal(

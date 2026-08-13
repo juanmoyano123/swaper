@@ -91,16 +91,23 @@ class FakeConexionEscritura(FakeConnection):
         *,
         fallar_en: str | None = None,
         metricas_previas: list[dict[str, Any]] | None = None,
+        cronograma: list[dict[str, Any]] | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
         self.fallar_en = fallar_en
         self.metricas_previas = metricas_previas or []
+        self.cronograma = cronograma or []
         self.escrituras: list[tuple[str, list[Any]]] = []
         self.transacciones: list[str] = []
 
     async def fetch(self, query: str, *args: Any) -> list[Any]:
+        # Se rutea por tabla porque desde la baja de Docta la corrida lee el cronograma en cada
+        # pasada, no sólo cuando falta uno nuevo: devolver las métricas para cualquier consulta
+        # dejaría a toda la renta fija sin flujo contractual y sin clasificar.
         self._registrar(query)
+        if "FROM public.cashflow" in query:
+            return self.cronograma
         return self.metricas_previas
 
     def transaction(self) -> _Transaccion:

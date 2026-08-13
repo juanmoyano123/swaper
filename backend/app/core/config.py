@@ -32,13 +32,6 @@ class Settings(BaseSettings):
     supabase_service_role_key: str = Field(min_length=1)
     database_url: str = Field(min_length=1)
 
-    # Docta: nombres canónicos desde ya, obligatorias recién en F-006, que es la feature que
-    # las consume. Exigir una credencial que el servicio no usa acopla el deploy a config muerta.
-    docta_api_token: str | None = None
-    docta_cashflow_url: str | None = None
-    docta_yield_bonds_url: str | None = None
-    docta_serie_precios_url: str | None = None
-
     # BYMA: la API abierta no lleva token. La base se declara igual para poder apuntar a otro
     # host sin tocar código, y la demora es un dato de la fuente que el snapshot informa.
     byma_base_url: str = "https://open.bymadata.com.ar/vanoms-be-core/rest/api/bymadata/free"

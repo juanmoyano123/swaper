@@ -344,6 +344,15 @@ THEN queda vacío y se contabiliza en la cobertura del campo, y no se completa p
 #### F-006 — Cliente del feed de cashflow de Docta
 
 **Etiqueta:** Stage 1 · **Traza a:** F1 (hueco de datos declarado, DECIDIDO 05/08/2026)
+**Estado: DADA DE BAJA el 12/08/2026 — la fuente es paga y el dueño del producto decidió no
+pagarla.** El código del cliente, la ingesta, el endpoint y las variables de entorno se borraron.
+El cronograma que Docta ya había traído **queda persistido en `public.cashflow` y se sigue usando**:
+`corrida.py` lo lee en cada pasada, así que el calendario de doce meses, la clasificación por tipo
+de tasa y las métricas propias de F-051 siguen funcionando igual. Lo que se perdió es la
+actualización: una emisión que empiece a cotizar de ahora en más entra sin cronograma y se declara
+faltante, nunca clasificada por analogía (regla 1). **Reponer una fuente de cronogramas es trabajo
+pendiente** — R1 de la sección de riesgos se materializó por decisión, no por falla.
+La ficha original queda abajo como registro de lo que se construyó.
 
 **Descripción.** Único consumo de Docta que queda en el producto: el cronograma completo de pagos
 futuros por ticker desde `/api/cash-flow`, con 97 % de cobertura de las emisiones. Es el corazón del
@@ -2752,7 +2761,14 @@ sería F-016 más la disponibilidad del design system.
 ### Riesgos de datos y fuentes
 
 **R1 — El token de Docta vence y se lleva puesto el corazón del producto.**
-El cronograma completo de pagos —97 % de cobertura— sale sólo de Docta, y sin él la grilla de doce
+**Se materializó el 12/08/2026, y por decisión: la fuente es paga y se dio de baja.** La mitigación
+descrita abajo resultó ser la que sostiene el producto — el cronograma persistido quedó como fuente
+única, y el calendario, la clasificación por tipo de tasa y las métricas de F-051 siguen en pie
+sobre él. El riesgo vivo ya no es que el token venza sino que **el conjunto de cronogramas está
+cerrado**: toda emisión nueva entra sin flujo contractual. Conseguir una fuente de reemplazo —CNV
+es el candidato a evaluar, ver F-054— es trabajo pendiente y sin fecha.
+
+El cronograma completo de pagos —97 % de cobertura— salía sólo de Docta, y sin él la grilla de doce
 meses deja de existir. El token vence y los tres links lo comparten.
 *Mitigación:* F-006 distingue **HTTP 500 "Error al verificar el token" (vencido, se regenera desde
 Docta Terminal)** de un timeout o un 5xx distinto (API caída), porque la acción que requieren es

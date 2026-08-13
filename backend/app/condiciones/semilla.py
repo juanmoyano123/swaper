@@ -28,8 +28,8 @@ usa. El antecedente está en `CLAUDE.md`: una vez se tradujo un código de la fu
 Inglesa", una categoría que no existe.
 
 **Se lee con el `csv` de la stdlib y no con pandas.** El backend usa pandas sólo donde la fuente lo
-entrega así (Docta). Para 823 filas de texto plano, pandas agrega la ambigüedad del NaN —que
-obliga a distinguir hueco de cero en cada columna— sin aportar nada a cambio.
+entrega en planilla. Para 823 filas de texto plano, pandas agrega la ambigüedad del NaN —que obliga
+a distinguir hueco de cero en cada columna— sin aportar nada a cambio.
 """
 
 import csv

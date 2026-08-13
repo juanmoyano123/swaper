@@ -4,13 +4,6 @@ import pytest
 
 from app.core.config import Settings, get_settings
 
-VARIABLES_DOCTA = (
-    "DOCTA_API_TOKEN",
-    "DOCTA_CASHFLOW_URL",
-    "DOCTA_YIELD_BONDS_URL",
-    "DOCTA_SERIE_PRECIOS_URL",
-)
-
 
 @pytest.fixture
 def sin_env_file(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -65,17 +58,3 @@ def test_el_mensaje_nombra_todas_las_variables_que_faltan(
     error = capsys.readouterr().err
     assert "DATABASE_URL" in error
     assert "SUPABASE_URL" in error
-
-
-def test_las_variables_de_docta_no_bloquean_el_arranque(
-    sin_env_file: None, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Docta se consume recién en F-006; exigirla acá acoplaría el deploy a config que no se usa."""
-    for variable in VARIABLES_DOCTA:
-        monkeypatch.delenv(variable, raising=False)
-    get_settings.cache_clear()
-
-    settings = get_settings()
-
-    assert settings.docta_api_token is None
-    assert settings.docta_cashflow_url is None

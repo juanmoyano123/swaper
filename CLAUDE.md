@@ -98,6 +98,15 @@ una está en `docs/ESTADO.md` y en `docs/historial/`.
   irrecuperable.
 - **`data/output/` es regenerable**, salvo `universo_consolidado.xlsx` y
   `cashflow_completo.csv`, que están versionados a propósito.
+- **El cronograma de pagos no tiene fuente viva y no se regenera.** Docta era la única fuente
+  que lo publicaba y se dio de baja el 12/08/2026 porque es paga. El flujo contractual sale de
+  la tabla `public.cashflow`, que quedó persistida, y de `data/output/cashflow_completo.csv`.
+  Un cronograma es contractual y no envejece, así que reusarlo no es mostrar un dato viejo como
+  nuevo — pero **el conjunto está cerrado**: una emisión que empiece a cotizar de ahora en más
+  entra sin cronograma, sin `tipo_tasa` y sin métricas propias, y eso se declara faltante. No se
+  proyecta el calendario desde la estructura del cupón de IAMC: funcionaría para los bullets de
+  cupón fijo y fallaría en los amortizing con escalera, que son mayoría entre las ONs locales.
+  **Nunca vaciar ni truncar esas dos fuentes de cronograma.**
 - **No correr `tools/consolidar_universo.py`** hasta que el ingestor se reescriba: hoy
   sobrescribiría el universo dejando vacías las columnas de condiciones.
 - **Datos de clientes reales nunca entran al repositorio.** Van a `~/Documents/IFA-confidencial/`.
@@ -113,7 +122,7 @@ una está en `docs/ESTADO.md` y en `docs/historial/`.
 ├── claude-docs/         pipeline de producto: planning, plans, progress, qa, deploys
 ├── referencia/           incluye diseno-cordillera/ (prototipos de Fase 3, no producción)
 ├── docs/                ESTADO.md + historial de decisiones
-└── workflows/            SOPs operativos (ej. trampas de la API de Docta)
+└── workflows/            SOPs operativos del motor de línea de comandos
 ```
 
 ## Comandos útiles

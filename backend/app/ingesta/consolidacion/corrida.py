@@ -1,12 +1,14 @@
-"""Una corrida completa: pedirle a las tres fuentes, armar el universo y escribirlo.
+"""Una corrida completa: pedirle a las fuentes, armar el universo y escribirlo.
 
-Las tres fuentes se comportan distinto y esa asimetría se resuelve acá, no en `armado.py`:
+Las fuentes se comportan distinto y esa asimetría se resuelve acá, no en `armado.py`:
 
-- **BYMA y Docta son asíncronas y no lanzan.** Declaran sus fallos en el snapshot, así que se
+- **BYMA y data912 son asíncronas y no lanzan.** Declaran sus fallos en el snapshot, así que se
   piden juntas con `gather` y lo que salga mal viaja como alerta.
 - **IAMC es síncrona y llega por subida manual.** No se le puede pedir el informe del día: se
   vuelve a parsear el último aceptado del almacén, que es determinístico. Y sí lanza —
   `InformeInvalido` cuando el PDF dejó de tener la forma esperada— así que se envuelve.
+- **El cronograma no se le pide a nadie.** Docta era la única fuente que lo publicaba y se dio de
+  baja el 12/08/2026 por costo; el flujo contractual sale del que quedó persistido en `cashflow`.
 
 Ninguna fuente caída aborta la corrida. Lo que se pudo traer se escribe y lo que no se declara,
 que es la única forma de que un universo incompleto se note.
@@ -33,7 +35,6 @@ from app.ingesta.consolidacion.persistencia import (
     persistir,
 )
 from app.ingesta.data912 import ingerir_live
-from app.ingesta.docta import ConfiguracionFaltante, ingerir_cashflow
 from app.ingesta.iamc import InformeInvalido, parsear_informe
 from app.ingesta.iamc.almacen import ultimo_informe
 from app.ingesta.snapshot import Snapshot
@@ -77,14 +78,6 @@ async def _rueda_de_byma(settings, dormir):
     except Exception as exc:  # la fuente no debería lanzar, pero una corrida no se pierde por eso
         logger.warning("byma_lanzo", error=str(exc))
         return None
-
-
-async def _cashflow_de_docta(settings, dormir):
-    try:
-        return await ingerir_cashflow(settings, dormir=dormir)
-    except ConfiguracionFaltante as exc:
-        logger.warning("docta_sin_configurar", error=str(exc))
-        return exc
 
 
 async def _live_de_data912(settings, dormir):
@@ -150,9 +143,8 @@ async def consolidar(
     `conn` llega por parámetro y no de `app.state` para que F-008 pueda invocar esto desde un job,
     fuera del ciclo HTTP.
     """
-    rueda, cashflow, live = await asyncio.gather(
+    rueda, live = await asyncio.gather(
         _rueda_de_byma(settings, dormir),
-        _cashflow_de_docta(settings, dormir),
         _live_de_data912(settings, dormir),
     )
     # El parseo del PDF es CPU-bound y síncrono: en el event loop bloquearía al resto del servicio.
@@ -185,22 +177,11 @@ async def consolidar(
         snapshot_iamc.alertar(informe.alerta)
     snapshots["iamc"] = snapshot_iamc
 
-    filas_cashflow = None
-    if isinstance(cashflow, ConfiguracionFaltante):
-        sin_configurar = Snapshot(fuente="Docta")
-        sin_configurar.registrar_tramo("cash-flow", 0)
-        sin_configurar.alertar(
-            fuente_caida("Docta", f"falta configuración: {cashflow}", configurada=False)
-        )
-        snapshots["docta"] = sin_configurar
-    elif cashflow is not None:
-        snapshots["docta"] = cashflow.snapshot
-        filas_cashflow = cashflow.filas
-
-    # Sin cronograma nuevo se usa el persistido: es contractual y no envejece, así que reusarlo no
-    # es presentar un dato viejo como nuevo. Sin esto, una corrida sin Docta perdería la
-    # clasificación por submarket y todas las métricas calculadas de F-051.
-    cronograma_persistido = None if filas_cashflow is not None else await leer_cronograma(conn)
+    # Ninguna fuente publica cronogramas desde que se dio de baja Docta, así que el flujo
+    # contractual sale siempre del que ya está persistido. No es dato viejo presentado como nuevo:
+    # un cronograma es contractual y no envejece — lo que no cambia más es qué especies lo tienen.
+    # `filas_cashflow=None` en el armado le dice a `persistir()` que no toque la tabla `cashflow`.
+    cronograma_persistido = await leer_cronograma(conn)
 
     # El sello de la corrida se toma antes de armar porque el armado lo necesita: es la fecha
     # contra la que se devengan los corridos y se miden los plazos al descuento.
@@ -208,7 +189,7 @@ async def consolidar(
     consolidacion = armar_consolidacion(
         especies_por_endpoint=overlay.especies_por_endpoint,
         filas_iamc=informe.filas,
-        filas_cashflow=filas_cashflow,
+        filas_cashflow=None,
         cronograma_persistido=cronograma_persistido,
         archivo_iamc=informe.archivo,
         fecha_informe=informe.fecha,
