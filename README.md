@@ -76,12 +76,20 @@ moneda de pago y estructura son atributos de la emisión, no de la especie:
   existen, en qué endpoint y con qué plazo de liquidación— y es la única fuente de moneda de
   cotización y vencimiento, que data912 no declara. También es el precio de respaldo de lo que
   data912 no trae. 20 minutos de demora; el tiempo real se pide a `marketdata@byma.com.ar`.
-- **IAMC**, informe diario de deuda corporativa **subido a mano**: emisor, ley, moneda de pago,
-  estructura del cupón, y TIR / duración / convexidad publicadas para lo que no se puede
-  calcular. No se descarga sola: cada corrida vuelve a parsear el último informe cargado.
+- **IAMC**, informe diario de deuda corporativa — **pausado desde el 13/08/2026**. Aportaba emisor,
+  ley, moneda de pago, estructura del cupón, y las TIR / duración / convexidad publicadas para lo
+  que no se puede calcular. Llegaba por subida manual y no se descargaba solo: cada corrida volvía
+  a parsear el último informe cargado, que terminó teniendo ocho días. Se pausó porque un dato
+  viejo sin rótulo es peor que uno ausente. El código quedó entero (`IAMC_HABILITADO=true` lo
+  reactiva); se retoma en Stage 2 con descarga automática.
 - **`data/condiciones_emision.csv`**, artefacto curado sin fuente viva: lámina y calificación.
 - **Cálculo propio** (F-051): TIR, duración y paridad se resuelven descontando el cronograma
   contra el precio, para las especies donde precio y flujo están en la misma moneda.
+
+Con IAMC pausado, el rendimiento sale **sólo del cálculo propio**: 248 emisiones lo tienen, contra
+283 antes. Se perdieron 35 —4 hard-dollar sin especie en dólares, 19 dollar-linked y 12 tamar—, más
+la convexidad y el valor residual, que sólo publicaba IAMC. Las 182 restantes que tomaban su TIR de
+IAMC tienen una hermana en dólares que sí se calcula, así que la emisión no queda a ciegas.
 
 **El cronograma de pagos no tiene fuente viva.** Lo publicaba Docta y se dio de baja el
 12/08/2026 porque es paga. El flujo contractual sale de `public.cashflow`, que quedó persistido:

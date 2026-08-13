@@ -10,10 +10,10 @@ Output que consume: `/init-project` (Fase 4) y `/build-feature` (Fase 5).
 
 | | |
 |---|---|
-| Features totales | 54 (F-001 … F-054) |
+| Features totales | 56 (F-001 … F-056) |
 | Stage 1 | 42 |
 | Foundation (obligatorias en Stage 1) | 3 |
-| Stage 2 | 9 |
+| Stage 2 | 11 |
 | Esfuerzo Stage 1 | 185 person-days *(estimación)* |
 | Esfuerzo Stage 2 | 72 person-days *(estimación)* |
 | Ciclos de Stage 1 | 4 |
@@ -303,6 +303,28 @@ THEN expone la hora de captura y la demora declarada de 20 minutos como atributo
 #### F-005 — Parser del informe diario de IAMC
 
 **Etiqueta:** Stage 1 · **Traza a:** F1
+**Estado: CONSUMO PAUSADO el 13/08/2026 — el código quedó entero.** A diferencia de F-006, acá no
+se borró nada: el parser, el almacén y `POST /api/v1/iamc/informe` siguen en el repo y con sus
+tests. Lo que se apagó es el consumo, con `IAMC_HABILITADO` (default `false`).
+
+**Por qué.** El informe llegaba por subida manual y no se descargaba solo: cada corrida volvía a
+parsear el último archivo cargado, que en producción terminó teniendo ocho días. Y no se declaraba
+en ninguna parte —ni `/estado-del-dato` ni la ficha exponen la fecha del informe—, así que el
+asesor veía una TIR del 05/08 al lado de un precio del 12/08 sin ningún rótulo. Un dato viejo sin
+declarar es peor que un dato ausente.
+
+**Qué corta la pausa.** Dos cosas, y la segunda es la que la hace efectiva: la lectura del informe,
+y **el arrastre de las métricas ya guardadas** (`metricas_previas`). Sin lo segundo la TIR del
+último informe se seguiría publicando para siempre.
+
+**Costo medido** (968 especies, corrida #113): las emisiones con rendimiento bajan de 283 a 248
+—se pierden 4 hard-dollar sin especie en dólares, 19 dollar-linked y 12 tamar—, y la convexidad y
+el valor residual quedan vacías. Las otras 182 especies que tomaban su TIR de IAMC tienen una
+hermana en dólares que sí se calcula. **No se pierden** ley, moneda de pago, emisor ni estructura
+de cupón: el upsert los protege con COALESCE y son atributos de la emisión, que no envejecen.
+
+**Cómo se retoma:** F-055 (descarga automática). Prender `IAMC_HABILITADO=true` alcanza para volver
+al comportamiento anterior, pero eso solo devolvería también el problema del dato viejo.
 
 **Descripción.** Extracción estructurada del informe diario de deuda corporativa de IAMC (PDF,
 ~260 ONs). Aporta lo que BYMA no tiene: emisor con nombre completo, ley y moneda de pago, estructura
@@ -2381,6 +2403,99 @@ THEN el espacio va vacío y el faltante se declara con nombre y apellido; no se 
 
 ---
 
+#### F-055 — Descarga automática del informe diario de IAMC
+
+**Etiqueta:** Stage 2 · **Traza a:** F1 (reactiva F-005)
+
+**Descripción.** IAMC se pausó el 13/08/2026 porque el informe llegaba a mano y envejecía. Esta
+feature lo reactiva sacando la parte manual: la corrida matinal baja el informe del día antes de
+parsearlo, y si no lo consigue **lo declara** en vez de reusar el anterior en silencio.
+
+El flujo está verificado en vivo (13/08/2026) y no necesita navegador headless ni credencial:
+
+```
+GET iamc.com.ar/Informe/InformeDiarioDeudaCorporativa{DDMMAAAA}/
+  → href a iamcweb.prod.ingecloud.com/TempFiles/{uuid}.pdf
+GET ese PDF → 200 · application/pdf · ~7 MB
+```
+
+Se probó con tres fechas distintas (12/08, 05/08, 03/08) y cada una resolvió a un PDF propio, así
+que la fecha en la URL manda de verdad. El `{uuid}` es efímero: se resuelve en cada corrida, no se
+guarda.
+
+Lo que hoy falta y esta feature agrega, además de la descarga: **exponer la fecha del informe**. La
+columna `fecha_metricas` ya existe en `precios` pero no llega ni a `/estado-del-dato` ni a la ficha
+del instrumento. Sin eso, un día que la descarga falle vuelve el problema original —una TIR vieja
+sin rótulo—, así que las dos cosas van juntas.
+
+**Input:** la web pública de IAMC.
+**Output:** informe del día parseado en cada corrida matinal, con su fecha declarada en pantalla.
+**Depende de:** F-005 (el parser, que quedó entero), F-008 (la corrida programada)
+**Habilita:** devuelve las 35 emisiones con rendimiento, la convexidad y el valor residual
+
+**RICE:** R = 300 · I = 2 · C = 90 % · E = 3 → **Score 180**
+*Confidence 90 %: el flujo de descarga está verificado en vivo; el riesgo es que IAMC cambie el
+HTML de la página, que es el mismo riesgo que ya corre el parser del PDF.*
+
+```
+GIVEN la corrida matinal y el informe del día publicado en IAMC
+WHEN corre la ingesta
+THEN lo descarga, lo parsea y el universo queda con las métricas de hoy
+
+GIVEN IAMC sin publicar todavía el informe del día
+WHEN corre la ingesta
+THEN se conserva el último informe válido y la pantalla declara de qué fecha es, con su antigüedad
+
+GIVEN un informe cuya fecha es anterior a la de la corrida
+WHEN se muestran TIR, duración, paridad o convexidad
+THEN cada una declara la fecha del informe del que salió, no la del snapshot de precios
+```
+
+---
+
+#### F-056 — Índice CER del BCRA: tasa real de los ajustables
+
+**Etiqueta:** Stage 2 · **Traza a:** F1
+
+**Descripción.** Las especies CER quedan hoy sin rendimiento **de ninguna fuente** —ni cálculo
+propio ni IAMC—: el cronograma trae los montos contractuales sin el coeficiente y el precio en
+pesos sí lo incorpora, así que descontar uno contra otro mezclaría una punta ajustada con otra que
+no lo está (ver `NATURALEZAS_FUERA` en `ingesta/consolidacion/metricas.py`). Son **48 especies**
+medidas en la corrida #113.
+
+Falta un solo dato, y es público. Verificado en vivo el 13/08/2026:
+`api.bcra.gob.ar/estadisticas/v4.0/monetarias/30` — "Coeficiente de estabilización de referencia
+(base 2.2.02=1)", API abierta, sin clave, serie diaria, con valores publicados hasta el 15/08.
+
+Con el índice, ajustar el flujo y descontarlo contra el precio en pesos da la **tasa real**, que es
+la unidad del segmento. **No requiere ningún supuesto**: el CER es un índice oficial, no una
+proyección. Es ganancia neta de cobertura — habilita rendimiento donde hoy no hay nada, no repone
+lo que se perdió al pausar IAMC.
+
+La tasa real no se promedia ni comparte eje con una TIR en dólares ni con una TNA nominal
+(regla 2): entra como su propia naturaleza, como ya lo hacen las demás.
+
+**Input:** la variable 30 de la API de estadísticas monetarias del BCRA.
+**Output:** tasa real para las especies CER, abierta por naturaleza.
+**Depende de:** F-051 (la matemática de descuento ya escrita)
+**Habilita:** —
+
+**RICE:** R = 250 · I = 2 · C = 90 % · E = 4 → **Score 112,5**
+*Confidence 90 %: la fuente está verificada en vivo; queda por confirmar la convención exacta de
+qué fecha de CER aplica a cada cupón.*
+
+```
+GIVEN el índice CER del BCRA ingerido y una especie CER con precio y cronograma
+WHEN se calculan las métricas
+THEN devuelve tasa real, rotulada como tasa real y nunca como TIR en dólares
+
+GIVEN el CER sin actualizar para la fecha que un cupón necesita
+WHEN se calcula esa especie
+THEN queda sin rendimiento con el motivo declarado; no se interpola ni se arrastra el último
+```
+
+---
+
 ## 4. Tabla de RICE ordenada
 
 | # | ID | Feature | Etiqueta | R | I | C | E | Score |
@@ -2402,43 +2517,45 @@ THEN el espacio va vacío y el faltante se declara con nombre y apellido; no se 
 | 15 | F-024 | Redondeo por lámina y diferencia | Stage 1 | 300 | 2 | 100 % | 3 | 200,0 |
 | 16 | F-035 | Costo real de rotar y cupón próximo | Stage 1 | 180 | 3 | 100 % | 3 | 180,0 |
 | 17 | F-041 | Guardar, listar, reabrir y revaluar | Stage 1 | 300 | 3 | 100 % | 5 | 180,0 |
-| 18 | F-020 | Límites de concentración en vivo | Stage 1 | 350 | 2 | 100 % | 4 | 175,0 |
-| 19 | F-022 | Rendimientos por naturaleza y plazo | Stage 1 | 350 | 2 | 100 % | 4 | 175,0 |
-| 20 | F-007 | Consolidador multi-fuente | Stage 1 | 400 | 3 | 80 % | 6 | 160,0 |
-| 21 | F-051 | Métricas propias: TIR, duración y paridad | Stage 1 | 400 | 2 | 80 % | 4 | 160,0 |
-| 22 | F-030 | Valuación y diagnóstico de cartera | Stage 1 | 200 | 3 | 100 % | 4 | 150,0 |
-| 23 | F-018 | Cartera editable y ponderación | Stage 1 | 350 | 3 | 80 % | 6 | 140,0 |
-| 24 | F-053 | Ficha del activo de renta variable | Stage 1 | 300 | 2 | 70 % | 3 | 140,0 |
-| 25 | F-016 | Grilla-selector de doce meses | Stage 1 | 380 | 3 | 80 % | 8 | 114,0 |
-| 26 | F-017 | Filtros de la grilla | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
-| 27 | F-039 | Ficha de instrumento | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
-| 28 | F-029 | Resolución de tickers | Stage 1 | 200 | 2 | 80 % | 3 | 106,7 |
-| 29 | F-038 | Monitor de mercado | Stage 1 | 400 | 2 | 80 % | 6 | 106,7 |
-| 30 | F-052 | Renta variable en el monitor | Stage 1 | 400 | 1 | 80 % | 3 | 106,7 |
-| 31 | F-031 | Vector de riesgo de seis ejes | Stage 1 | 250 | 3 | 80 % | 6 | 100,0 |
-| 32 | F-032 | Motor de rotaciones intra-segmento | Stage 1 | 200 | 3 | 100 % | 6 | 100,0 |
-| 33 | F-042 | Exportación a Excel y PDF | Stage 1 | 250 | 2 | 80 % | 4 | 100,0 |
-| 34 | F-028 | Ingreso de cartera por tres vías | Stage 1 | 200 | 3 | 80 % | 5 | 96,0 |
-| 35 | F-034 | Modo subir TIR con contrapartida | Stage 1 | 180 | 3 | 80 % | 5 | 86,4 |
-| 36 | F-019 | Armado asistido | Stage 1 | 250 | 2 | 100 % | 6 | 83,3 |
-| 37 | F-026 | Bloque de renta variable | Stage 1 | 300 | 2 | 80 % | 6 | 80,0 |
-| 38 | F-050 | API Market Data oficial de BYMA | Stage 2 | 400 | 2 | 50 % | 5 | 80,0 |
-| 39 | F-037 | Comparación original contra propuesta | Stage 1 | 180 | 2 | 80 % | 4 | 72,0 |
-| 40 | F-040 | Sensibilidad por repricing completo | Stage 1 | 200 | 1 | 100 % | 3 | 66,7 |
-| 41 | F-054 | Info pública del emisor (CNV y SEC) | Stage 2 | 300 | 2 | 80 % | 8 | 60,0 |
-| 42 | F-033 | Modo bajar riesgo | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
-| 43 | F-036 | Aceptación rotación por rotación | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
-| 44 | F-025 | Carga asistida de lámina | Stage 1 | 200 | 1 | 80 % | 3 | 53,3 |
-| 45 | F-005 | Parser del informe diario de IAMC | Stage 1 | 400 | 2 | 50 % | 8 | 50,0 |
-| 46 | F-023 | Composición y curva TIR/duración | Stage 1 | 300 | 1 | 80 % | 5 | 48,0 |
-| 47 | F-048 | Alertas y notificaciones | Stage 2 | 300 | 1 | 80 % | 6 | 40,0 |
-| 48 | F-049 | Comparación de carteras entre sí | Stage 2 | 200 | 1 | 80 % | 4 | 40,0 |
-| 49 | F-044 | Historial de propuestas | Stage 2 | 250 | 2 | 50 % | 10 | 25,0 |
-| 50 | F-043 | Gestión de clientes y CRM | Stage 2 | 300 | 2 | 50 % | 15 | 20,0 |
-| 51 | F-027 | Calendario de balances | Stage 1 | 200 | 1 | 50 % | 6 | 16,7 |
-| 52 | F-045 | Colocaciones primarias | Stage 2 | 150 | 2 | 50 % | 10 | 15,0 |
-| 53 | F-046 | FCI con fuente | Stage 2 | 200 | 2 | 25 % | 12 | 8,3 |
-| 54 | F-047 | Opciones | Stage 2 | 80 | 1 | 50 % | 10 | 4,0 |
+| 18 | F-055 | Descarga automática del informe de IAMC | Stage 2 | 300 | 2 | 90 % | 3 | 180,0 |
+| 19 | F-020 | Límites de concentración en vivo | Stage 1 | 350 | 2 | 100 % | 4 | 175,0 |
+| 20 | F-022 | Rendimientos por naturaleza y plazo | Stage 1 | 350 | 2 | 100 % | 4 | 175,0 |
+| 21 | F-007 | Consolidador multi-fuente | Stage 1 | 400 | 3 | 80 % | 6 | 160,0 |
+| 22 | F-051 | Métricas propias: TIR, duración y paridad | Stage 1 | 400 | 2 | 80 % | 4 | 160,0 |
+| 23 | F-030 | Valuación y diagnóstico de cartera | Stage 1 | 200 | 3 | 100 % | 4 | 150,0 |
+| 24 | F-018 | Cartera editable y ponderación | Stage 1 | 350 | 3 | 80 % | 6 | 140,0 |
+| 25 | F-053 | Ficha del activo de renta variable | Stage 1 | 300 | 2 | 70 % | 3 | 140,0 |
+| 26 | F-016 | Grilla-selector de doce meses | Stage 1 | 380 | 3 | 80 % | 8 | 114,0 |
+| 27 | F-017 | Filtros de la grilla | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
+| 28 | F-056 | Índice CER del BCRA: tasa real | Stage 2 | 250 | 2 | 90 % | 4 | 112,5 |
+| 29 | F-039 | Ficha de instrumento | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
+| 30 | F-029 | Resolución de tickers | Stage 1 | 200 | 2 | 80 % | 3 | 106,7 |
+| 31 | F-038 | Monitor de mercado | Stage 1 | 400 | 2 | 80 % | 6 | 106,7 |
+| 32 | F-052 | Renta variable en el monitor | Stage 1 | 400 | 1 | 80 % | 3 | 106,7 |
+| 33 | F-031 | Vector de riesgo de seis ejes | Stage 1 | 250 | 3 | 80 % | 6 | 100,0 |
+| 34 | F-032 | Motor de rotaciones intra-segmento | Stage 1 | 200 | 3 | 100 % | 6 | 100,0 |
+| 35 | F-042 | Exportación a Excel y PDF | Stage 1 | 250 | 2 | 80 % | 4 | 100,0 |
+| 36 | F-028 | Ingreso de cartera por tres vías | Stage 1 | 200 | 3 | 80 % | 5 | 96,0 |
+| 37 | F-034 | Modo subir TIR con contrapartida | Stage 1 | 180 | 3 | 80 % | 5 | 86,4 |
+| 38 | F-019 | Armado asistido | Stage 1 | 250 | 2 | 100 % | 6 | 83,3 |
+| 39 | F-026 | Bloque de renta variable | Stage 1 | 300 | 2 | 80 % | 6 | 80,0 |
+| 40 | F-050 | API Market Data oficial de BYMA | Stage 2 | 400 | 2 | 50 % | 5 | 80,0 |
+| 41 | F-037 | Comparación original contra propuesta | Stage 1 | 180 | 2 | 80 % | 4 | 72,0 |
+| 42 | F-040 | Sensibilidad por repricing completo | Stage 1 | 200 | 1 | 100 % | 3 | 66,7 |
+| 43 | F-054 | Info pública del emisor (CNV y SEC) | Stage 2 | 300 | 2 | 80 % | 8 | 60,0 |
+| 44 | F-033 | Modo bajar riesgo | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
+| 45 | F-036 | Aceptación rotación por rotación | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
+| 46 | F-025 | Carga asistida de lámina | Stage 1 | 200 | 1 | 80 % | 3 | 53,3 |
+| 47 | F-005 | Parser del informe diario de IAMC | Stage 1 | 400 | 2 | 50 % | 8 | 50,0 |
+| 48 | F-023 | Composición y curva TIR/duración | Stage 1 | 300 | 1 | 80 % | 5 | 48,0 |
+| 49 | F-048 | Alertas y notificaciones | Stage 2 | 300 | 1 | 80 % | 6 | 40,0 |
+| 50 | F-049 | Comparación de carteras entre sí | Stage 2 | 200 | 1 | 80 % | 4 | 40,0 |
+| 51 | F-044 | Historial de propuestas | Stage 2 | 250 | 2 | 50 % | 10 | 25,0 |
+| 52 | F-043 | Gestión de clientes y CRM | Stage 2 | 300 | 2 | 50 % | 15 | 20,0 |
+| 53 | F-027 | Calendario de balances | Stage 1 | 200 | 1 | 50 % | 6 | 16,7 |
+| 54 | F-045 | Colocaciones primarias | Stage 2 | 150 | 2 | 50 % | 10 | 15,0 |
+| 55 | F-046 | FCI con fuente | Stage 2 | 200 | 2 | 25 % | 12 | 8,3 |
+| 56 | F-047 | Opciones | Stage 2 | 80 | 1 | 50 % | 10 | 4,0 |
 
 **Cómo se lee esta tabla.** El RICE ordena por eficiencia, no por secuencia. Las features de más
 score son las Foundation y las de ingesta: mucho alcance sobre poco esfuerzo, porque reusan lógica ya

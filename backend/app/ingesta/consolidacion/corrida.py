@@ -47,6 +47,15 @@ ACCION_SUBIR_INFORME = (
     "estructura de cupón, TIR, duración ni paridad."
 )
 
+CODIGO_IAMC_PAUSADO = "iamc_pausado"
+MENSAJE_IAMC_PAUSADO = (
+    "IAMC está pausado por decisión del producto: el informe llegaba por subida manual y "
+    "envejecía sin que nada lo declarara. El universo no publica las TIR, duraciones y paridades "
+    "que sólo IAMC calcula —ni convexidad ni valor residual—; lo que sí muestra sale del cálculo "
+    "propio y es del día. La ley, la moneda de pago y el emisor ya conocidos se conservan: son "
+    "atributos de la emisión y no envejecen."
+)
+
 
 @dataclass(frozen=True, slots=True)
 class ResultadoConsolidacion:
@@ -100,8 +109,25 @@ class Informe:
     alerta: Alerta | None = None
 
 
-def _leer_informe() -> Informe:
-    """Vuelve a parsear el último informe aceptado del almacén."""
+def _leer_informe(settings: Settings) -> Informe:
+    """Vuelve a parsear el último informe aceptado del almacén, salvo que IAMC esté pausado.
+
+    Con la pausa activa **el almacén no se toca**: da lo mismo que haya un informe guardado o que
+    no. La alerta que sale es informativa y sin `accion_requerida`, porque no hay nada que arreglar
+    —es una decisión, no una falla—, y un rojo permanente por algo que nadie va a atender enseña a
+    ignorar el rojo (ver `frontend/src/features/estado-dato/lib/severidad.ts`).
+    """
+    if not settings.iamc_habilitado:
+        return Informe(
+            alerta=Alerta(
+                codigo=CODIGO_IAMC_PAUSADO,
+                mensaje=MENSAJE_IAMC_PAUSADO,
+                severidad=Severidad.INFO,
+                accion_requerida=None,
+                detalle={"fuente": "IAMC", "habilitada": False},
+            )
+        )
+
     guardado = ultimo_informe()
     if guardado is None:
         # Es la única fuente cuya caída tiene una acción humana concreta: subir el archivo.
@@ -148,9 +174,15 @@ async def consolidar(
         _live_de_data912(settings, dormir),
     )
     # El parseo del PDF es CPU-bound y síncrono: en el event loop bloquearía al resto del servicio.
-    informe = await run_in_threadpool(_leer_informe)
+    informe = await run_in_threadpool(_leer_informe, settings)
     # Lo que ya se sabía de IAMC, para que una corrida sin informe no publique un universo sin TIR.
-    metricas_previas = await leer_metricas_previas(conn)
+    #
+    # **Con IAMC pausado esto no se lee, y ese es el corte que hace que la pausa signifique algo.**
+    # El arrastre existe para que un día sin informe no vacíe el universo; sostenido en el tiempo
+    # hace lo contrario de lo que se busca acá, que es no publicar una métrica vieja. Sin este
+    # corte, `_metricas_de` en `armado.py` seguiría entregando la TIR del último informe para
+    # siempre. Las especies que se calculan solas no dependen de esto: F-051 no mira las previas.
+    metricas_previas = await leer_metricas_previas(conn) if settings.iamc_habilitado else {}
     # La moneda que BYMA ya declaró para cada ticker, para los que en esta corrida sólo trae
     # data912 (que no la declara). Ver `overlay.py` — no es un dato nuevo, es atributo estable.
     monedas_previas = await leer_monedas(conn)

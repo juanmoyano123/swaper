@@ -109,6 +109,17 @@ una está en `docs/ESTADO.md` y en `docs/historial/`.
   **Nunca vaciar ni truncar esas dos fuentes de cronograma.**
 - **No correr `tools/consolidar_universo.py`** hasta que el ingestor se reescriba: hoy
   sobrescribiría el universo dejando vacías las columnas de condiciones.
+- **El consumo de IAMC está pausado desde el 13/08/2026** (`IAMC_HABILITADO`, default `false`). El
+  informe llegaba por subida manual y envejecía sin que nada lo declarara —el cargado en producción
+  tenía ocho días—, así que el universo mostraba una TIR vieja al lado de un precio de hoy. La
+  pausa corta dos cosas: la lectura del informe **y el arrastre de las métricas ya guardadas**; sin
+  lo segundo la TIR vieja se seguiría publicando y la pausa no serviría de nada. **El código quedó
+  entero** —parser, almacén y `POST /iamc/informe`— y prender la variable devuelve el
+  comportamiento anterior. Se retoma en Stage 2 con descarga automática, ya verificada viable
+  contra `iamc.com.ar`. Lo que se pierde: 35 emisiones con rendimiento (de 283 a 248), la
+  convexidad y el valor residual. Lo que **no** se pierde: ley, moneda de pago, emisor y estructura
+  de cupón ya escritos, porque el upsert los protege con COALESCE y son atributos de la emisión que
+  no envejecen.
 - **Datos de clientes reales nunca entran al repositorio.** Van a `~/Documents/IFA-confidencial/`.
 
 ## Estructura del repo (desde Fase 4)

@@ -5,9 +5,11 @@
  *
  * **Una barra que grita en rojo todo el tiempo se vuelve invisible en una semana.** En este dominio
  * la mayoría de las alertas no son fallas: son hechos ciertos y permanentes sobre el dato. Que el
- * calendario cubra 70 de 431 emisiones va a estar mañana y pasado, porque IAMC publica la paridad
- * sólo para el ticker exacto que su informe nombra y no hay nada que arreglar. Pintar eso de rojo
- * enseña a ignorar el rojo, y el día que el token de Docta venza de verdad nadie lo va a mirar.
+ * calendario no cubra todas las emisiones va a estar mañana y pasado, porque la paridad sale del
+ * cálculo propio y sólo se puede calcular donde precio y flujo comparten moneda: no hay nada que
+ * arreglar. Pintar eso de rojo enseña a ignorar el rojo, y el día que se caiga una fuente de
+ * verdad nadie lo va a mirar. La pausa de IAMC (13/08/2026) es del mismo tipo: viaja como `info`
+ * y sin acción, porque es una decisión y no una falla.
  *
  * Por eso se separan **dos ejes**, y no uno:
  *

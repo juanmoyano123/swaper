@@ -10,13 +10,22 @@ fuente posible y ninguna se completa desde otra:
 |--------------------------------------------------|-----------------|----------------|
 | moneda_cotizacion, plazo_liquidacion, maturity   | BYMA            | especie        |
 | last_price, effective_volume, px_bid, px_ask     | BYMA            | especie        |
-| law, coupon_currency, underlying, estructura     | IAMC            | emisión (raíz) |
+| law, coupon_currency, underlying, estructura     | IAMC (pausado)  | emisión (raíz) |
 | tir, duration, paridad — especies calculables    | cálculo propio  | especie        |
-| tir, duration, paridad — el resto                | IAMC            | ticker exacto  |
-| convexidad, residual_value                       | IAMC            | ticker exacto  |
+| tir, duration, paridad — el resto                | IAMC (pausado)  | ticker exacto  |
+| convexidad, residual_value                       | IAMC (pausado)  | ticker exacto  |
 | clase_activo, tipo_tasa                          | cronograma      | emisión (raíz) |
 | el cronograma entero                             | `public.cashflow` | ticker exacto |
 | tna                                              | ninguna         | —              |
+
+**IAMC está pausado desde el 13/08/2026** (`settings.iamc_habilitado`, default False). El informe
+llegaba por subida manual y envejecía sin que nada lo declarara: el universo mostraba una TIR de
+ocho días antes al lado de un precio de hoy. Con la pausa, `corrida.py` no lee el informe **y
+además no arrastra las métricas guardadas** —lo segundo es lo que hace que la pausa signifique
+algo—, así que `tir`, `duration` y `paridad` salen sólo del cálculo propio, y `convexidad` y
+`residual_value` quedan vacías en todo el universo. Los atributos de la emisión ya escritos
+sobreviven porque el upsert los protege con COALESCE: la ley de un bono no envejece. Prender
+`IAMC_HABILITADO=true` devuelve las filas de arriba a su fuente original sin más cambios.
 
 **El cronograma ya no tiene fuente viva.** Docta era la única que lo publicaba y se dio de baja el
 12/08/2026 por costo: el flujo contractual sale de lo que quedó persistido en `public.cashflow`, que

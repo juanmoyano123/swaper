@@ -52,16 +52,26 @@ async def _no_dormir(_: float) -> None:
 
 @pytest.fixture
 def settings_de_prueba(tmp_path, monkeypatch):
+    # `iamc_habilitado=True` y no el default: en producción IAMC está pausado desde el 13/08/2026,
+    # pero estos tests existen para probar la orquestación *con* la fuente, que es el
+    # comportamiento que hay que poder recuperar prendiendo la variable. La pausa tiene sus
+    # propios tests, abajo, con la fixture `settings_iamc_pausado`.
     settings = get_settings().model_copy(
         update={
             "byma_base_url": BYMA_URL,
             "iamc_directorio": str(tmp_path),
+            "iamc_habilitado": True,
             "data912_base_url": DATA912_URL,
         }
     )
     # El almacén lee del caché de settings, no del objeto que se le pasa a `consolidar`.
     monkeypatch.setattr(get_settings(), "iamc_directorio", str(tmp_path))
     return settings
+
+
+@pytest.fixture
+def settings_iamc_pausado(settings_de_prueba):
+    return settings_de_prueba.model_copy(update={"iamc_habilitado": False})
 
 
 @pytest.fixture
@@ -149,6 +159,35 @@ ESPECIE_ON = {
     "offerPrice": 157000.0,
     "maturityDate": "2030-07-09",
 }
+
+# La misma especie cotizando en dólares, que es la condición para que F-051 le calcule la TIR:
+# precio y flujo en la misma moneda. El precio es del orden del residual del cronograma para que
+# la TIR salga en un rango creíble y no la descarte la sanidad.
+ESPECIE_ON_EN_USD = {**ESPECIE_ON, "denominationCcy": "USD", "trade": 98.0}
+
+# `CASHFLOW_MINIMO` alcanza para clasificar por submarket —eso sólo mira `type`— pero no para
+# calcular: sus fechas son strings y `indexar_cronograma` descarta la fila por `sin_fecha`, que es
+# lo que pasa acá y no en producción, donde asyncpg ya devuelve `date`. Este cronograma trae fechas
+# nativas y la amortización final, sin la cual no hay flujo que descontar.
+_PAGO_BASE = {"ticker": "PLC7O", "type": "ON", "issue_date": date(2020, 9, 4), "interest_rate": 5.0}
+CASHFLOW_CALCULABLE = [
+    {
+        **_PAGO_BASE,
+        "payment_date": date(2027, 1, 9),
+        "capital": 0.0,
+        "interest_amount": 2.5,
+        "residual_value": 100.0,
+        "cash_flow": 2.5,
+    },
+    {
+        **_PAGO_BASE,
+        "payment_date": date(2027, 7, 9),
+        "capital": 100.0,
+        "interest_amount": 2.5,
+        "residual_value": 0.0,
+        "cash_flow": 102.5,
+    },
+]
 
 
 # --- La corrida completa ------------------------------------------------------------------------
@@ -257,6 +296,90 @@ async def test_un_informe_que_dejo_de_parsearse_no_tumba_la_corrida(
 
     assert resultado.escritura.filas_por_tabla["instrumentos"] >= 1
     assert resultado.snapshots["iamc"].hubo_errores
+
+
+# --- IAMC pausado (13/08/2026) ------------------------------------------------------------------
+#
+# La pausa tiene que cumplir dos cosas a la vez, y la segunda es la que la hace útil: no leer el
+# informe, y **no arrastrar lo que el último informe dejó guardado**. Sin lo segundo el universo
+# seguiría publicando la TIR del 05/08 para siempre, que es exactamente lo que se quiso evitar.
+
+
+async def test_con_iamc_pausado_no_se_lee_el_informe_aunque_haya_uno_guardado(
+    settings_iamc_pausado, informe_guardado
+) -> None:
+    conn = FakeConexionEscritura(cronograma=CASHFLOW_MINIMO)
+    with respx.mock:
+        _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
+        _montar_data912()
+
+        resultado = await consolidar(conn, settings_iamc_pausado, dormir=_no_dormir)
+
+    instrumentos = {f["ticker"]: f for f in resultado.consolidacion.filas_instrumentos}
+    assert instrumentos["PLC7O"]["law"] is None, "no heredó del informe: no se leyó"
+    assert instrumentos["PLC7O"]["tipo_tasa"] == "hard-dollar", "el cronograma sí clasificó"
+
+
+async def test_con_iamc_pausado_las_metricas_guardadas_no_se_arrastran(
+    settings_iamc_pausado, informe_guardado
+) -> None:
+    """El corazón de la pausa: una métrica de un informe viejo no puede volver a publicarse."""
+    previas = [
+        {
+            "ticker": "PLC7O",
+            "tir": 0.0792,
+            "duration": 3.1,
+            "paridad": 0.88,
+            "convexidad": 12.0,
+            "residual_value": 100.0,
+            "fecha_metricas": date(2026, 8, 5),
+        }
+    ]
+    conn = FakeConexionEscritura(cronograma=CASHFLOW_MINIMO, metricas_previas=previas)
+    with respx.mock:
+        _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
+        _montar_data912()
+
+        resultado = await consolidar(conn, settings_iamc_pausado, dormir=_no_dormir)
+
+    precios = {f["ticker"]: f for f in resultado.consolidacion.filas_precios}
+    for columna in ("tir", "duration", "paridad", "convexidad", "residual_value"):
+        assert precios["PLC7O"][columna] is None, f"{columna} se arrastró del informe del 05/08"
+    assert precios["PLC7O"]["fecha_metricas"] is None
+
+
+async def test_con_iamc_pausado_la_alerta_es_informativa_y_no_pide_nada(
+    settings_iamc_pausado, informe_guardado
+) -> None:
+    """Un rojo permanente por una decisión enseña a ignorar el rojo. No es una falla."""
+    conn = FakeConexionEscritura(cronograma=CASHFLOW_MINIMO)
+    with respx.mock:
+        _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
+        _montar_data912()
+
+        resultado = await consolidar(conn, settings_iamc_pausado, dormir=_no_dormir)
+
+    (alerta,) = resultado.snapshots["iamc"].alertas
+    assert alerta.codigo == "iamc_pausado"
+    assert alerta.severidad == "info"
+    assert alerta.accion_requerida is None
+    assert not resultado.snapshots["iamc"].hubo_errores
+
+
+async def test_con_iamc_pausado_la_especie_calculable_conserva_su_tir_propia(
+    settings_iamc_pausado, informe_guardado
+) -> None:
+    """La pausa corta el arrastre de IAMC, no el cálculo de F-051."""
+    conn = FakeConexionEscritura(cronograma=CASHFLOW_CALCULABLE)
+    with respx.mock:
+        _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON_EN_USD]})
+        _montar_data912()
+
+        resultado = await consolidar(conn, settings_iamc_pausado, dormir=_no_dormir)
+
+    precios = {f["ticker"]: f for f in resultado.consolidacion.filas_precios}
+    assert precios["PLC7O"]["tir"] is not None, "la calculada no depende de IAMC"
+    assert precios["PLC7O"]["fuente"] == "byma+calculo"
 
 
 async def test_una_emision_sin_cronograma_persistido_queda_sin_clasificar(
