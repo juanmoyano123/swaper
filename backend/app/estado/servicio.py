@@ -140,7 +140,7 @@ def ordenar(alertas: Sequence[dict[str, object]]) -> list[dict[str, object]]:
     """Las alertas de la más urgente a la menos, y dentro de cada nivel las accionables primero.
 
     El segundo criterio no es decorativo y es el que ordena la barra de verdad: entre dos errores,
-    "la credencial de Docta no es válida" y "BYMA no responde" duelen igual, pero sólo el primero
+    "la credencial de una fuente venció" y "BYMA no responde" duelen igual, pero sólo el primero
     espera que alguien haga algo. Es la distinción que `Alerta` separa en `accion_requerida`, y
     perderla en el orden la escondería debajo de la que se arregla sola.
 

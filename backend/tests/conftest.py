@@ -14,6 +14,10 @@ from httpx import ASGITransport, AsyncClient
 
 from app.api.deps import get_db_optional
 from app.core.config import get_settings
+from app.ingesta.consolidacion.persistencia import (
+    SQL_CRONOGRAMA_PERSISTIDO,
+    SQL_MONEDAS,
+)
 
 # Valores inventados a propósito: los tests de logging verifican que ninguno de estos aparezca
 # en la salida. La contraseña del DSN es el caso testigo.
@@ -91,16 +95,30 @@ class FakeConexionEscritura(FakeConnection):
         *,
         fallar_en: str | None = None,
         metricas_previas: list[dict[str, Any]] | None = None,
+        cronograma: list[dict[str, Any]] | None = None,
+        monedas: list[dict[str, Any]] | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
         self.fallar_en = fallar_en
         self.metricas_previas = metricas_previas or []
+        self.cronograma = cronograma or []
+        self.monedas = monedas or []
         self.escrituras: list[tuple[str, list[Any]]] = []
         self.transacciones: list[str] = []
 
     async def fetch(self, query: str, *args: Any) -> list[Any]:
+        # Se rutea comparando contra el SQL exacto de cada lectura y no por substring: la corrida
+        # hace tres consultas distintas antes de armar —cronograma, métricas previas y monedas— y
+        # servirles la misma lista deja a la renta fija sin flujo contractual, o hace explotar la
+        # lectura de monedas con un KeyError cuando el test sí carga métricas. Comparar por
+        # `FROM public.instrumentos` a secas tampoco alcanza: `renta_variable/perfiles.py` consulta
+        # esa misma tabla para otra cosa.
         self._registrar(query)
+        if query == SQL_CRONOGRAMA_PERSISTIDO:
+            return self.cronograma
+        if query == SQL_MONEDAS:
+            return self.monedas
         return self.metricas_previas
 
     def transaction(self) -> _Transaccion:

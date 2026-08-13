@@ -1,12 +1,12 @@
 """Las dos corridas que orquesta el job de F-008, cada una envolviendo lo que F-004 a F-007 ya
 dejaron listo y dejando su registro auditable en `corridas_ingesta`.
 
-**La matinal** es `consolidar()` de F-007 tal cual: BYMA, IAMC y Docta ya corren ahí en el orden
+**La matinal** es `consolidar()` de F-007 tal cual: BYMA, data912 e IAMC ya corren ahí en el orden
 correcto, con la asimetría entre fuentes ya resuelta. Acá sólo se cronometra y se registra.
 
 **El refresh intra-rueda** arma su propio `Consolidacion` a partir de `armar_consolidacion()`,
 pero sin `filas_iamc` (no se vuelve a leer el informe del día) y con el cronograma leído de
-`cashflow` en vez de pedido a Docta de nuevo —es la única forma de que `public-bonds` (soberanos y
+`cashflow` y no pedido a ninguna fuente —es la única forma de que `public-bonds` (soberanos y
 subsoberanos, que sólo se clasifican por el `type` del cronograma) no queden afuera de cada
 refresco—. Desde F-051 se lee el cronograma **entero** y no sólo su `type`, porque de él salen
 además las métricas propias: cada refresco vuelve a calcular TIR, duración y paridad contra el
@@ -81,7 +81,7 @@ async def corrida_matinal(
     *,
     dormir: Callable[[float], Awaitable[None]] = asyncio.sleep,
 ) -> dict[str, object]:
-    """BYMA + IAMC + Docta + consolidación, en ese orden — el orden ya lo fija `consolidar()`."""
+    """BYMA + data912 + IAMC + consolidación, en ese orden — el orden ya lo fija `consolidar()`."""
     inicio = datetime.now(UTC)
     resultado = await consolidar(conn, settings, dormir=dormir)
     fin = datetime.now(UTC)
@@ -119,7 +119,7 @@ async def refresh_intra_rueda(
     *,
     dormir: Callable[[float], Awaitable[None]] = asyncio.sleep,
 ) -> dict[str, object]:
-    """Sólo precios y puntas desde BYMA. No pide nada a IAMC ni a Docta."""
+    """Sólo precios y puntas desde BYMA. No vuelve a leer el informe de IAMC ni el cronograma."""
     inicio = datetime.now(UTC)
     rueda = await ingerir_rueda(settings=settings, dormir=dormir)
 

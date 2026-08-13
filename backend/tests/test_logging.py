@@ -88,7 +88,7 @@ def test_el_redactor_tapa_las_claves_sensibles() -> None:
         "path": "/api/v1/health",
         "api_key": "abc123",
         "database_url": "postgresql://usuario:clave@host/db",
-        "docta_api_token": "xyz",
+        "supabase_service_role_key": "xyz",
         "anidado": {"password": "secreta"},
     }
 
@@ -96,6 +96,6 @@ def test_el_redactor_tapa_las_claves_sensibles() -> None:
 
     assert resultado["api_key"] == "[REDACTED]"
     assert resultado["database_url"] == "[REDACTED]"
-    assert resultado["docta_api_token"] == "[REDACTED]"
+    assert resultado["supabase_service_role_key"] == "[REDACTED]"
     assert resultado["anidado"]["password"] == "[REDACTED]"
     assert resultado["path"] == "/api/v1/health", "lo que no es secreto tiene que seguir visible"

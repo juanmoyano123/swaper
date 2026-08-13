@@ -1,9 +1,13 @@
-"""La corrida completa y su endpoint, con las tres fuentes simuladas.
+"""La corrida completa y su endpoint, con las fuentes simuladas.
 
 Lo que se prueba acá es la orquestación, que es donde vive la asimetría entre fuentes: BYMA y
-Docta son asíncronas y declaran sus fallos, IAMC es síncrona, llega por subida manual y lanza. Que
-ninguna de las tres pueda tumbar la corrida es la propiedad que hace que un universo incompleto se
+data912 son asíncronas y declaran sus fallos, IAMC es síncrona, llega por subida manual y lanza.
+Que ninguna pueda tumbar la corrida es la propiedad que hace que un universo incompleto se
 publique declarado en vez de no publicarse.
+
+El cronograma no se le pide a ninguna fuente desde la baja de Docta: sale de `public.cashflow`, y
+por eso los tests que necesitan renta fija clasificada se lo pasan a la conexión falsa por
+`cronograma=` en vez de montar un mock HTTP.
 
 El PDF real se parsea en `test_iamc_parser.py`; acá `parsear_informe` se reemplaza para no pagar
 siete megas de pdfplumber en cada test de orquestación.
@@ -27,7 +31,6 @@ from tests.conftest import FakeConexionEscritura, cliente
 from tests.test_consolidacion_armado import informe
 
 BYMA_URL = "https://byma-test.local/free"
-DOCTA_URL = "https://docta-test.local/cashflow?token=${DOCTA_API_TOKEN}&fromDate=2026-01-01"
 DATA912_URL = "https://data912-test.local"
 
 ENDPOINTS_BYMA = (
@@ -49,18 +52,26 @@ async def _no_dormir(_: float) -> None:
 
 @pytest.fixture
 def settings_de_prueba(tmp_path, monkeypatch):
+    # `iamc_habilitado=True` y no el default: en producción IAMC está pausado desde el 13/08/2026,
+    # pero estos tests existen para probar la orquestación *con* la fuente, que es el
+    # comportamiento que hay que poder recuperar prendiendo la variable. La pausa tiene sus
+    # propios tests, abajo, con la fixture `settings_iamc_pausado`.
     settings = get_settings().model_copy(
         update={
             "byma_base_url": BYMA_URL,
-            "docta_cashflow_url": DOCTA_URL,
-            "docta_api_token": "token-de-prueba",
             "iamc_directorio": str(tmp_path),
+            "iamc_habilitado": True,
             "data912_base_url": DATA912_URL,
         }
     )
     # El almacén lee del caché de settings, no del objeto que se le pasa a `consolidar`.
     monkeypatch.setattr(get_settings(), "iamc_directorio", str(tmp_path))
     return settings
+
+
+@pytest.fixture
+def settings_iamc_pausado(settings_de_prueba):
+    return settings_de_prueba.model_copy(update={"iamc_habilitado": False})
 
 
 @pytest.fixture
@@ -90,16 +101,6 @@ def fuera_de_rueda(monkeypatch):
     monkeypatch.setattr(modulo_endpoint, "en_ventana_de_rueda", lambda *_: False)
 
 
-def _excel_de_cashflow(filas: list[dict]) -> bytes:
-    import io
-
-    import pandas as pd
-
-    buffer = io.BytesIO()
-    pd.DataFrame(filas).to_excel(buffer, index=False)
-    return buffer.getvalue()
-
-
 def _montar_byma_con_filas(mapa: dict[str, list[dict]]) -> None:
     for endpoint in ENDPOINTS_BYMA:
         filas = mapa.get(endpoint, [])
@@ -108,12 +109,6 @@ def _montar_byma_con_filas(mapa: dict[str, list[dict]]) -> None:
         respx.post(f"{BYMA_URL}/{endpoint}").mock(
             return_value=httpx.Response(200, json=filas or [{"symbol": f"RELLENO-{endpoint}"}])
         )
-
-
-def _montar_docta(filas: list[dict]) -> None:
-    respx.get(url__startswith="https://docta-test.local/cashflow").mock(
-        return_value=httpx.Response(200, content=_excel_de_cashflow(filas))
-    )
 
 
 def _montar_data912(mapa: dict[str, list[dict]] | None = None) -> None:
@@ -165,17 +160,45 @@ ESPECIE_ON = {
     "maturityDate": "2030-07-09",
 }
 
+# La misma especie cotizando en dólares, que es la condición para que F-051 le calcule la TIR:
+# precio y flujo en la misma moneda. El precio es del orden del residual del cronograma para que
+# la TIR salga en un rango creíble y no la descarte la sanidad.
+ESPECIE_ON_EN_USD = {**ESPECIE_ON, "denominationCcy": "USD", "trade": 98.0}
+
+# `CASHFLOW_MINIMO` alcanza para clasificar por submarket —eso sólo mira `type`— pero no para
+# calcular: sus fechas son strings y `indexar_cronograma` descarta la fila por `sin_fecha`, que es
+# lo que pasa acá y no en producción, donde asyncpg ya devuelve `date`. Este cronograma trae fechas
+# nativas y la amortización final, sin la cual no hay flujo que descontar.
+_PAGO_BASE = {"ticker": "PLC7O", "type": "ON", "issue_date": date(2020, 9, 4), "interest_rate": 5.0}
+CASHFLOW_CALCULABLE = [
+    {
+        **_PAGO_BASE,
+        "payment_date": date(2027, 1, 9),
+        "capital": 0.0,
+        "interest_amount": 2.5,
+        "residual_value": 100.0,
+        "cash_flow": 2.5,
+    },
+    {
+        **_PAGO_BASE,
+        "payment_date": date(2027, 7, 9),
+        "capital": 100.0,
+        "interest_amount": 2.5,
+        "residual_value": 0.0,
+        "cash_flow": 102.5,
+    },
+]
+
 
 # --- La corrida completa ------------------------------------------------------------------------
 
 
-async def test_una_corrida_con_las_tres_fuentes_escribe_las_cuatro_tablas(
+async def test_una_corrida_completa_escribe_el_universo_y_no_toca_el_cronograma(
     settings_de_prueba, informe_guardado
 ) -> None:
-    conn = FakeConexionEscritura()
+    conn = FakeConexionEscritura(cronograma=CASHFLOW_MINIMO)
     with respx.mock:
         _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
-        _montar_docta(CASHFLOW_MINIMO)
         _montar_data912()
 
         resultado = await consolidar(conn, settings_de_prueba, dormir=_no_dormir)
@@ -183,8 +206,8 @@ async def test_una_corrida_con_las_tres_fuentes_escribe_las_cuatro_tablas(
     escrito = resultado.escritura.filas_por_tabla
     assert escrito["instrumentos"] >= 1
     assert escrito["precios"] == escrito["instrumentos"]
-    assert escrito["cashflow"] == 1
-    assert set(resultado.snapshots) == {"byma", "iamc", "docta", "data912"}
+    assert escrito["cashflow"] == 0, "el cronograma se lee, ya no se escribe"
+    assert set(resultado.snapshots) == {"byma", "iamc", "data912"}
 
     instrumentos = {f["ticker"]: f for f in resultado.consolidacion.filas_instrumentos}
     assert instrumentos["PLC7O"]["law"] == "Ley Argentina", "heredó de IAMC"
@@ -205,10 +228,9 @@ async def test_data912_pisa_el_precio_de_byma_y_queda_rotulado(
 ) -> None:
     """Corrida de punta a punta: PLC7O llega de BYMA a 156460 y de data912 (operado) a 200 — gana
     data912, la TIR se recalcula sobre ese precio, y la fila queda rotulada `data912+iamc`."""
-    conn = FakeConexionEscritura()
+    conn = FakeConexionEscritura(cronograma=CASHFLOW_MINIMO)
     with respx.mock:
         _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
-        _montar_docta(CASHFLOW_MINIMO)
         _montar_data912({"arg_corp": [{"symbol": "PLC7O", "c": 200.0, "q_op": 5, "v": 500.0}]})
 
         resultado = await consolidar(conn, settings_de_prueba, dormir=_no_dormir)
@@ -225,10 +247,9 @@ async def test_data912_caido_deja_el_precio_de_respaldo_byma(
 ) -> None:
     """Con los cinco tramos de data912 caídos, la corrida sigue exactamente como si data912 no
     existiera: el precio y la fuente son los de BYMA."""
-    conn = FakeConexionEscritura()
+    conn = FakeConexionEscritura(cronograma=CASHFLOW_MINIMO)
     with respx.mock:
         _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
-        _montar_docta(CASHFLOW_MINIMO)
         _montar_data912_caido()
 
         resultado = await consolidar(conn, settings_de_prueba, dormir=_no_dormir)
@@ -240,10 +261,9 @@ async def test_data912_caido_deja_el_precio_de_respaldo_byma(
 
 
 async def test_sin_informe_la_corrida_sigue_y_pide_que_lo_suban(settings_de_prueba) -> None:
-    conn = FakeConexionEscritura()
+    conn = FakeConexionEscritura(cronograma=CASHFLOW_MINIMO)
     with respx.mock:
         _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
-        _montar_docta(CASHFLOW_MINIMO)
         _montar_data912()
 
         resultado = await consolidar(conn, settings_de_prueba, dormir=_no_dormir)
@@ -266,11 +286,10 @@ async def test_un_informe_que_dejo_de_parsearse_no_tumba_la_corrida(
         raise InformeInvalido("sección desconocida", seccion="NUEVA")
 
     monkeypatch.setattr(modulo_corrida, "parsear_informe", _explotar)
-    conn = FakeConexionEscritura()
+    conn = FakeConexionEscritura(cronograma=CASHFLOW_MINIMO)
 
     with respx.mock:
         _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
-        _montar_docta(CASHFLOW_MINIMO)
         _montar_data912()
 
         resultado = await consolidar(conn, settings_de_prueba, dormir=_no_dormir)
@@ -279,20 +298,104 @@ async def test_un_informe_que_dejo_de_parsearse_no_tumba_la_corrida(
     assert resultado.snapshots["iamc"].hubo_errores
 
 
-async def test_docta_caido_deja_la_renta_fija_sin_clasificar_y_no_toca_el_cronograma(
+# --- IAMC pausado (13/08/2026) ------------------------------------------------------------------
+#
+# La pausa tiene que cumplir dos cosas a la vez, y la segunda es la que la hace útil: no leer el
+# informe, y **no arrastrar lo que el último informe dejó guardado**. Sin lo segundo el universo
+# seguiría publicando la TIR del 05/08 para siempre, que es exactamente lo que se quiso evitar.
+
+
+async def test_con_iamc_pausado_no_se_lee_el_informe_aunque_haya_uno_guardado(
+    settings_iamc_pausado, informe_guardado
+) -> None:
+    conn = FakeConexionEscritura(cronograma=CASHFLOW_MINIMO)
+    with respx.mock:
+        _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
+        _montar_data912()
+
+        resultado = await consolidar(conn, settings_iamc_pausado, dormir=_no_dormir)
+
+    instrumentos = {f["ticker"]: f for f in resultado.consolidacion.filas_instrumentos}
+    assert instrumentos["PLC7O"]["law"] is None, "no heredó del informe: no se leyó"
+    assert instrumentos["PLC7O"]["tipo_tasa"] == "hard-dollar", "el cronograma sí clasificó"
+
+
+async def test_con_iamc_pausado_las_metricas_guardadas_no_se_arrastran(
+    settings_iamc_pausado, informe_guardado
+) -> None:
+    """El corazón de la pausa: una métrica de un informe viejo no puede volver a publicarse."""
+    previas = [
+        {
+            "ticker": "PLC7O",
+            "tir": 0.0792,
+            "duration": 3.1,
+            "paridad": 0.88,
+            "convexidad": 12.0,
+            "residual_value": 100.0,
+            "fecha_metricas": date(2026, 8, 5),
+        }
+    ]
+    conn = FakeConexionEscritura(cronograma=CASHFLOW_MINIMO, metricas_previas=previas)
+    with respx.mock:
+        _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
+        _montar_data912()
+
+        resultado = await consolidar(conn, settings_iamc_pausado, dormir=_no_dormir)
+
+    precios = {f["ticker"]: f for f in resultado.consolidacion.filas_precios}
+    for columna in ("tir", "duration", "paridad", "convexidad", "residual_value"):
+        assert precios["PLC7O"][columna] is None, f"{columna} se arrastró del informe del 05/08"
+    assert precios["PLC7O"]["fecha_metricas"] is None
+
+
+async def test_con_iamc_pausado_la_alerta_es_informativa_y_no_pide_nada(
+    settings_iamc_pausado, informe_guardado
+) -> None:
+    """Un rojo permanente por una decisión enseña a ignorar el rojo. No es una falla."""
+    conn = FakeConexionEscritura(cronograma=CASHFLOW_MINIMO)
+    with respx.mock:
+        _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
+        _montar_data912()
+
+        resultado = await consolidar(conn, settings_iamc_pausado, dormir=_no_dormir)
+
+    (alerta,) = resultado.snapshots["iamc"].alertas
+    assert alerta.codigo == "iamc_pausado"
+    assert alerta.severidad == "info"
+    assert alerta.accion_requerida is None
+    assert not resultado.snapshots["iamc"].hubo_errores
+
+
+async def test_con_iamc_pausado_la_especie_calculable_conserva_su_tir_propia(
+    settings_iamc_pausado, informe_guardado
+) -> None:
+    """La pausa corta el arrastre de IAMC, no el cálculo de F-051."""
+    conn = FakeConexionEscritura(cronograma=CASHFLOW_CALCULABLE)
+    with respx.mock:
+        _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON_EN_USD]})
+        _montar_data912()
+
+        resultado = await consolidar(conn, settings_iamc_pausado, dormir=_no_dormir)
+
+    precios = {f["ticker"]: f for f in resultado.consolidacion.filas_precios}
+    assert precios["PLC7O"]["tir"] is not None, "la calculada no depende de IAMC"
+    assert precios["PLC7O"]["fuente"] == "byma+calculo"
+
+
+async def test_una_emision_sin_cronograma_persistido_queda_sin_clasificar(
     settings_de_prueba, informe_guardado
 ) -> None:
+    """El caso de una emisión nueva después de la baja de Docta: cotiza pero nadie publica su
+    cronograma, así que entra al universo sin tipo de tasa y sin métricas propias — declarada
+    faltante, nunca clasificada por analogía con una hermana (regla 1)."""
     conn = FakeConexionEscritura()
     with respx.mock:
         _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
-        respx.get(url__startswith="https://docta-test.local/cashflow").mock(
-            return_value=httpx.Response(500)
-        )
         _montar_data912()
 
         resultado = await consolidar(conn, settings_de_prueba, dormir=_no_dormir)
 
-    assert not conn.escribio_en("cashflow"), "sin cronograma usable se conserva el persistido"
+    assert not conn.escribio_en("cashflow"), "la tabla del cronograma no se toca"
     instrumentos = {f["ticker"]: f for f in resultado.consolidacion.filas_instrumentos}
     assert instrumentos["PLC7O"]["tipo_tasa"] is None
     assert instrumentos["PLC7O"]["law"] == "Ley Argentina", "IAMC sí aportó"
@@ -301,27 +404,25 @@ async def test_docta_caido_deja_la_renta_fija_sin_clasificar_y_no_toca_el_cronog
 async def test_byma_caido_no_deja_universo_pero_la_corrida_reporta(
     settings_de_prueba, informe_guardado
 ) -> None:
-    conn = FakeConexionEscritura()
+    conn = FakeConexionEscritura(cronograma=CASHFLOW_MINIMO)
     with respx.mock:
         for endpoint in ENDPOINTS_BYMA:
             respx.post(f"{BYMA_URL}/{endpoint}").mock(return_value=httpx.Response(500))
-        _montar_docta(CASHFLOW_MINIMO)
         _montar_data912()
 
         resultado = await consolidar(conn, settings_de_prueba, dormir=_no_dormir)
 
     assert resultado.escritura.filas_por_tabla["instrumentos"] == 0
-    assert resultado.escritura.filas_por_tabla["cashflow"] == 1, "el cronograma sí se escribió"
+    assert not conn.escribio_en("cashflow"), "el cronograma persistido queda intacto"
     assert resultado.snapshots["byma"].hubo_errores
 
 
 async def test_toda_la_corrida_comparte_el_instante_de_captura(
     settings_de_prueba, informe_guardado
 ) -> None:
-    conn = FakeConexionEscritura()
+    conn = FakeConexionEscritura(cronograma=CASHFLOW_MINIMO)
     with respx.mock:
         _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
-        _montar_docta(CASHFLOW_MINIMO)
         _montar_data912()
 
         resultado = await consolidar(conn, settings_de_prueba, dormir=_no_dormir)
@@ -336,12 +437,11 @@ async def test_toda_la_corrida_comparte_el_instante_de_captura(
 async def test_el_endpoint_devuelve_conteos_cobertura_y_alertas(
     crear_app, settings_de_prueba, informe_guardado, en_rueda
 ) -> None:
-    app = crear_app(FakeConexionEscritura())
+    app = crear_app(FakeConexionEscritura(cronograma=CASHFLOW_MINIMO))
     app.dependency_overrides[get_settings] = lambda: settings_de_prueba
 
     with respx.mock:
         _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
-        _montar_docta(CASHFLOW_MINIMO)
         _montar_data912()
 
         async with cliente(app) as http:
@@ -365,28 +465,6 @@ async def test_sin_base_el_endpoint_responde_503(crear_app, en_rueda) -> None:
     assert respuesta.status_code == 503
 
 
-async def test_el_endpoint_no_publica_la_url_de_docta(
-    crear_app, settings_de_prueba, informe_guardado, en_rueda
-) -> None:
-    """La URL del feed lleva el token adentro: no puede salir en una respuesta ni en una alerta."""
-    app = crear_app(FakeConexionEscritura())
-    app.dependency_overrides[get_settings] = lambda: settings_de_prueba
-
-    with respx.mock:
-        _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
-        # 404 y no 500: el endpoint no puede inyectar `dormir`, así que un fallo reintentable
-        # haría esperar de verdad los 3+6+9+12 segundos de la política.
-        respx.get(url__startswith="https://docta-test.local/cashflow").mock(
-            return_value=httpx.Response(404)
-        )
-        _montar_data912()
-
-        async with cliente(app) as http:
-            respuesta = await http.post("/api/v1/consolidar")
-
-    assert "token-de-prueba" not in respuesta.text
-
-
 # --- El guardia de rueda cerrada (08/08/2026) ---------------------------------------------------
 #
 # Correr esto con el mercado cerrado no falla, y ese es el problema: BYMA responde un universo
@@ -399,7 +477,7 @@ async def test_fuera_de_la_rueda_responde_409_y_no_toca_las_fuentes(
 ) -> None:
     """Sin `respx.mock` montado: si el endpoint saliera a la red, el test reventaría. Que pase es
     la prueba de que ni siquiera se molesta a BYMA."""
-    conn = FakeConexionEscritura()
+    conn = FakeConexionEscritura(cronograma=CASHFLOW_MINIMO)
     app = crear_app(conn)
     app.dependency_overrides[get_settings] = lambda: settings_de_prueba
 
@@ -422,7 +500,7 @@ async def test_el_mensaje_del_409_nombra_la_ventana_configurada(
     settings = settings_de_prueba.model_copy(
         update={"ingesta_rueda_desde": "11:00", "ingesta_rueda_hasta": "17:00"}
     )
-    app = crear_app(FakeConexionEscritura())
+    app = crear_app(FakeConexionEscritura(cronograma=CASHFLOW_MINIMO))
     app.dependency_overrides[get_settings] = lambda: settings
 
     async with cliente(app) as http:
@@ -436,12 +514,11 @@ async def test_con_forzar_corre_igual_fuera_de_la_rueda(
     crear_app, settings_de_prueba, informe_guardado, fuera_de_rueda
 ) -> None:
     """Probar la ingesta un domingo es legítimo mientras sea una decisión y no un accidente."""
-    app = crear_app(FakeConexionEscritura())
+    app = crear_app(FakeConexionEscritura(cronograma=CASHFLOW_MINIMO))
     app.dependency_overrides[get_settings] = lambda: settings_de_prueba
 
     with respx.mock:
         _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
-        _montar_docta(CASHFLOW_MINIMO)
         _montar_data912()
 
         async with cliente(app) as http:
@@ -455,12 +532,11 @@ async def test_en_rueda_no_hace_falta_forzar(
     crear_app, settings_de_prueba, informe_guardado, en_rueda
 ) -> None:
     """El guardia no estorba en el caso normal: con el mercado abierto, el default corre."""
-    app = crear_app(FakeConexionEscritura())
+    app = crear_app(FakeConexionEscritura(cronograma=CASHFLOW_MINIMO))
     app.dependency_overrides[get_settings] = lambda: settings_de_prueba
 
     with respx.mock:
         _montar_byma_con_filas({"negociable-obligations": [ESPECIE_ON]})
-        _montar_docta(CASHFLOW_MINIMO)
         _montar_data912()
 
         async with cliente(app) as http:

@@ -17,7 +17,7 @@ muestra, pero no alcanza para el GWT-4: `formato_inesperado` también trae acci�
 una credencial vencida. El código es lo que identifica el hecho; la acción es lo que se hace con él.
 
 **Nunca se expone la URL de la fuente.** El `detalle` viaja tal como lo dejó quien emitió la alerta,
-y el contrato de `Alerta.detalle` ya prohíbe meter ahí una URL de Docta, que lleva el token
+y el contrato de `Alerta.detalle` ya prohíbe meter ahí una URL con credencial, que lleva el token
 embebido. Acá no se agrega ni un campo nuevo a ese diccionario.
 """
 

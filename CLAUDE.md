@@ -98,8 +98,28 @@ una está en `docs/ESTADO.md` y en `docs/historial/`.
   irrecuperable.
 - **`data/output/` es regenerable**, salvo `universo_consolidado.xlsx` y
   `cashflow_completo.csv`, que están versionados a propósito.
+- **El cronograma de pagos no tiene fuente viva y no se regenera.** Docta era la única fuente
+  que lo publicaba y se dio de baja el 12/08/2026 porque es paga. El flujo contractual sale de
+  la tabla `public.cashflow`, que quedó persistida, y de `data/output/cashflow_completo.csv`.
+  Un cronograma es contractual y no envejece, así que reusarlo no es mostrar un dato viejo como
+  nuevo — pero **el conjunto está cerrado**: una emisión que empiece a cotizar de ahora en más
+  entra sin cronograma, sin `tipo_tasa` y sin métricas propias, y eso se declara faltante. No se
+  proyecta el calendario desde la estructura del cupón de IAMC: funcionaría para los bullets de
+  cupón fijo y fallaría en los amortizing con escalera, que son mayoría entre las ONs locales.
+  **Nunca vaciar ni truncar esas dos fuentes de cronograma.**
 - **No correr `tools/consolidar_universo.py`** hasta que el ingestor se reescriba: hoy
   sobrescribiría el universo dejando vacías las columnas de condiciones.
+- **El consumo de IAMC está pausado desde el 13/08/2026** (`IAMC_HABILITADO`, default `false`). El
+  informe llegaba por subida manual y envejecía sin que nada lo declarara —el cargado en producción
+  tenía ocho días—, así que el universo mostraba una TIR vieja al lado de un precio de hoy. La
+  pausa corta dos cosas: la lectura del informe **y el arrastre de las métricas ya guardadas**; sin
+  lo segundo la TIR vieja se seguiría publicando y la pausa no serviría de nada. **El código quedó
+  entero** —parser, almacén y `POST /iamc/informe`— y prender la variable devuelve el
+  comportamiento anterior. Se retoma en Stage 2 con descarga automática, ya verificada viable
+  contra `iamc.com.ar`. Lo que se pierde: 35 emisiones con rendimiento (de 283 a 248), la
+  convexidad y el valor residual. Lo que **no** se pierde: ley, moneda de pago, emisor y estructura
+  de cupón ya escritos, porque el upsert los protege con COALESCE y son atributos de la emisión que
+  no envejecen.
 - **Datos de clientes reales nunca entran al repositorio.** Van a `~/Documents/IFA-confidencial/`.
 
 ## Estructura del repo (desde Fase 4)
@@ -113,7 +133,7 @@ una está en `docs/ESTADO.md` y en `docs/historial/`.
 ├── claude-docs/         pipeline de producto: planning, plans, progress, qa, deploys
 ├── referencia/           incluye diseno-cordillera/ (prototipos de Fase 3, no producción)
 ├── docs/                ESTADO.md + historial de decisiones
-└── workflows/            SOPs operativos (ej. trampas de la API de Docta)
+└── workflows/            SOPs operativos del motor de línea de comandos
 ```
 
 ## Comandos útiles

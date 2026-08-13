@@ -30,7 +30,7 @@ class Snapshot:
     """
 
     fuente: str
-    """Nombre de la fuente tal como se le muestra a una persona: "BYMA", "IAMC", "Docta"."""
+    """Nombre de la fuente tal como se le muestra a una persona: "BYMA", "IAMC", "data912"."""
 
     capturado_en: datetime = field(default_factory=_ahora)
     """Cuándo corrió la ingesta. No es cuándo se generó el dato en origen."""

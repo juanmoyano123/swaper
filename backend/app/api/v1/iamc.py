@@ -13,6 +13,7 @@ from typing import Annotated
 import structlog
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
+from app.core.config import get_settings
 from app.ingesta.iamc.almacen import guardar_informe
 from app.ingesta.iamc.parser import InformeInvalido, parsear_informe
 
@@ -65,8 +66,22 @@ async def subir_informe(
 
     ruta = guardar_informe(contenido, fecha_informe=resultado.fecha_informe)
 
+    # El endpoint sigue aceptando y parseando el informe con IAMC pausado —guardarlo deja el
+    # almacén listo para cuando se reactive— pero la respuesta tiene que decir que la corrida no
+    # lo va a consumir. Sin esto, subir un archivo y no ver el universo cambiar parece un bug.
+    consumido = get_settings().iamc_habilitado
+
     return {
         "archivo": ruta.name,
         "fecha_informe": resultado.fecha_informe.isoformat(),
         "snapshot": resultado.snapshot.como_dict(),
+        "consumido_por_la_corrida": consumido,
+        "aviso": (
+            None
+            if consumido
+            else (
+                "El informe quedó guardado pero el consumo de IAMC está pausado: la corrida no lo "
+                "va a leer y el universo no va a cambiar. Para reactivarlo, IAMC_HABILITADO=true."
+            )
+        ),
     }

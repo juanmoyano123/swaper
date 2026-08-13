@@ -32,13 +32,6 @@ class Settings(BaseSettings):
     supabase_service_role_key: str = Field(min_length=1)
     database_url: str = Field(min_length=1)
 
-    # Docta: nombres canónicos desde ya, obligatorias recién en F-006, que es la feature que
-    # las consume. Exigir una credencial que el servicio no usa acopla el deploy a config muerta.
-    docta_api_token: str | None = None
-    docta_cashflow_url: str | None = None
-    docta_yield_bonds_url: str | None = None
-    docta_serie_precios_url: str | None = None
-
     # BYMA: la API abierta no lleva token. La base se declara igual para poder apuntar a otro
     # host sin tocar código, y la demora es un dato de la fuente que el snapshot informa.
     byma_base_url: str = "https://open.bymadata.com.ar/vanoms-be-core/rest/api/bymadata/free"
@@ -52,6 +45,21 @@ class Settings(BaseSettings):
     # IAMC: el informe diario llega por subida manual, no por descarga. Esta ruta es dónde se
     # guardan los que se van subiendo.
     iamc_directorio: str = "fuentes"
+
+    # **El consumo de IAMC está pausado desde el 13/08/2026, y el default es la pausa.** El informe
+    # llega a mano: el que estaba cargado en producción era del 05/08 y cada corrida lo volvía a
+    # parsear, así que el universo mostraba una TIR de ocho días antes al lado de un precio de hoy
+    # y nada lo declaraba —ni `/estado-del-dato` ni la ficha exponen la fecha del informe—. Un dato
+    # viejo sin rótulo es peor que un dato ausente: el asesor no tiene cómo saber que lo es.
+    #
+    # Lo que se pausa es **el consumo**, no el código: el parser, el almacén y `POST /iamc/informe`
+    # quedan intactos, y poner esto en True devuelve el comportamiento anterior sin tocar nada más.
+    # Se reactiva en Stage 2, cuando la descarga del informe sea automática.
+    #
+    # Con la pausa activa también se corta el arrastre de las métricas ya guardadas (ver
+    # `consolidacion/corrida.py`): sin eso la TIR del último informe seguiría publicándose para
+    # siempre, que es exactamente lo que la pausa existe para evitar.
+    iamc_habilitado: bool = False
 
     # F-008 — job programado. Los horarios son configurables para poder ejercitar el job en un
     # entorno de prueba sin esperar a la hora real, y para que un cambio de horario de la rueda

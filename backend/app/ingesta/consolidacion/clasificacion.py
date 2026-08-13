@@ -11,7 +11,7 @@ interpretación: la fuente separó las especies en esos endpoints.
 **`public-bonds` mezcla soberanos y subsoberanos y BYMA no los distingue.** Verificado el
 06/08/2026 contra la fuente: `securitySubType` vale 'B' en las 1106 filas y `market` vale 'BYMA' en
 todas, así que ninguno de los dos sirve para separar un bono del Tesoro de uno de la Provincia de
-Buenos Aires. Lo que sí lo declara es el `type` del cronograma de Docta —el submarket de la
+Buenos Aires. Lo que sí lo declara es el `type` del cronograma —el submarket de la
 emisión, una de las nueve columnas contractuales que el consolidador ya persiste—, cruzado por raíz
 de ticker. Ese mismo `type` es la única fuente de `tipo_tasa` para toda la renta fija.
 
@@ -75,7 +75,7 @@ EMISOR_SOBERANO = "Gobierno Argentino"
 def clasificar(endpoint: str, tipo_cronograma: str | None) -> tuple[str, str | None] | None:
     """Clase de activo y tipo de tasa de una especie, o `None` si no se puede saber sin inventar.
 
-    `tipo_cronograma` es el `type` que el cashflow de Docta declara para la raíz de esta especie.
+    `tipo_cronograma` es el `type` que el cashflow declara para la raíz de esta especie.
     Para los endpoints que ya declaran la clase sólo aporta el tipo de tasa; para `public-bonds` es
     la única forma de saber si el emisor es el Tesoro o una provincia.
     """
@@ -138,7 +138,7 @@ def clase_discrepante(casos: list[tuple[str, str]]) -> Alerta:
     return Alerta(
         codigo=CODIGO_CLASE_DISCREPANTE,
         mensaje=(
-            f"{len(casos)} especies cuyo endpoint de BYMA y cuyo cronograma de Docta declaran "
+            f"{len(casos)} especies cuyo endpoint de BYMA y cuyo cronograma declaran "
             f"clases distintas ({muestra}). Se conservó la del endpoint."
         ),
         severidad=Severidad.ADVERTENCIA,

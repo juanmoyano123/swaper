@@ -30,7 +30,7 @@ router = APIRouter(tags=["consolidacion"])
 
 @router.post(
     "/consolidar",
-    summary="Une BYMA, IAMC y Docta en las tablas de mercado",
+    summary="Une BYMA, data912 e IAMC en las tablas de mercado",
     responses={
         409: {"description": "Fuera de la ventana de rueda y sin `forzar`"},
         503: {"description": "La base de datos no está disponible"},

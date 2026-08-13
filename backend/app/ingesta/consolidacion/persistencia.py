@@ -28,7 +28,7 @@ from typing import Any
 import structlog
 
 from app.ingesta.alertas import Alerta, Severidad
-from app.ingesta.consolidacion.armado import Consolidacion
+from app.ingesta.consolidacion.armado import COLUMNAS_CASHFLOW, Consolidacion
 
 logger = structlog.get_logger()
 
@@ -95,10 +95,12 @@ async def leer_metricas_previas(conn: Any) -> dict[str, dict[str, object]]:
     return {fila["ticker"]: dict(fila) for fila in filas}
 
 
-# El cronograma que ya está persistido, para las corridas que no traen uno nuevo. Son las mismas
-# nueve columnas del contrato de Docta, porque de acá salen tanto la clasificación por submarket
-# como las métricas propias de F-051: leer sólo `ticker` y `type` alcanzaba para clasificar, pero
-# dejaría sin flujo al descuento y las métricas se vaciarían en cada corrida sin Docta.
+# El cronograma que ya está persistido. Desde que se dio de baja Docta (12/08/2026) ninguna fuente
+# publica cronogramas, así que esta lectura dejó de ser el respaldo y pasó a ser el camino único:
+# el flujo contractual de toda corrida sale de acá. Son las nueve columnas de `COLUMNAS_CASHFLOW`
+# porque de acá salen tanto la clasificación por submarket como las métricas propias de F-051:
+# leer sólo `ticker` y `type` alcanzaba para clasificar, pero dejaría sin flujo al descuento y las
+# métricas se vaciarían en cada corrida.
 SQL_CRONOGRAMA_PERSISTIDO = """
 SELECT ticker, type, issue_date, payment_date, capital, interest_rate,
        interest_amount, residual_value, cash_flow
@@ -137,18 +139,6 @@ COLUMNAS_PUNTAS: tuple[str, ...] = (
     "px_ask",
     "operaciones",
     "fuente",
-)
-
-COLUMNAS_CASHFLOW: tuple[str, ...] = (
-    "ticker",
-    "type",
-    "issue_date",
-    "payment_date",
-    "capital",
-    "interest_rate",
-    "interest_amount",
-    "residual_value",
-    "cash_flow",
 )
 
 # Los ~5.700 upserts de una corrida entran cómodos en el command_timeout de 30 s del pool, pero
