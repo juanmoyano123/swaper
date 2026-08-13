@@ -99,7 +99,7 @@ async def clasificar_renta_variable(
     que falte queda declarado. Es dato que **aporta**, no que decide.
     """
     datos_byma = datos_byma or {}
-    pendientes = await papeles_pendientes_sec(conn)
+    pendientes = await papeles_pendientes_sec(conn, fuente=FUENTE)
     a_procesar = pendientes[:limite]
     if not a_procesar:
         return ResumenClasificacion(pendientes=0, procesados=0, clasificados=0, sin_cik=0)
@@ -126,10 +126,17 @@ async def clasificar_renta_variable(
 
         cik = mapa_cik.get(papel)
         if cik is None:
-            # Sin CIK no hay SIC, pero si BYMA declaró el nombre igual se guarda lo que hay: un
-            # CEDEAR con nombre y ratio ya es mucho más de lo que el asesor tenía.
+            # Sin CIK no hay SIC, pero se guarda igual: si BYMA declaró el nombre, con eso alcanza
+            # para que el asesor reconozca el papel; y si no declaró nada, **la fila queda vacía
+            # pero escrita**.
+            #
+            # Escribirla vacía no es guardar basura: es dejar registrado que a este papel ya se le
+            # preguntó a la SEC y no está. Sin eso vuelve a la cola de pendientes en cada corrida y
+            # el job no avanza nunca — medido el 13/08/2026: nueve tandas de 100 papeles bajaron
+            # los pendientes de 1.539 a 1.536, porque los 99 sin CIK de cada tanda volvían a
+            # entrar. `capturado_en` es lo que hace que se reintente recién al vencer.
+            await _guardar(conn, ticker, None, catalogo, de_byma, estrategia, ahora())
             if de_byma.nombre or estrategia:
-                await _guardar(conn, ticker, None, catalogo, de_byma, estrategia, ahora())
                 clasificados += 1
             sin_cik += 1
             continue

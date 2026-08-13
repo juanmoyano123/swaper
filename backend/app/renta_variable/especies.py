@@ -73,6 +73,25 @@ class EspecieRentaVariable:
     perfil_fuente: str | None = None
     perfil_capturado_en: str | None = None
 
+    # Clasificación de la SEC y de la tabla de CEDEARs de BYMA (13/08/2026). Todas pueden faltar:
+    # la SEC cubre 74 % de los CEDEARs y 9 % de las acciones argentinas, y lo que no está se
+    # declara faltante en pantalla — nunca se completa por analogía con otra empresa.
+    sic_codigo: str | None = None
+    """Código de actividad tal como lo declara la SEC. Sin normalizar: es la llave de auditoría."""
+    sic_titulo: str | None = None
+    """A qué se dedica, en las palabras de la fuente: `Electronic Computers`."""
+    sic_oficina: str | None = None
+    """El rubro, según cómo agrupa la propia SEC: `Office of Energy & Transportation`."""
+    division_cadena: str | None = None
+    """En qué eslabón de la cadena productiva está: extracción, manufactura, comercio, servicios.
+    Derivado del rango del SIC según el SIC Manual — ver `app/externos/sic.py`."""
+    estrategia_etf: str | None = None
+    """Qué idea arma el portafolio si es un fondo. `None` = no es un fondo."""
+    ratio_conversion: str | None = None
+    """Cuántos CEDEARs equivalen a una acción del subyacente, como razón (`20:1`)."""
+    mercado_origen: str | None = None
+    """En qué mercado cotiza el subyacente: `NASDAQ`, `NYSE`, `B3`."""
+
     def como_dict(self) -> dict[str, object]:
         return {
             "ticker": self.ticker,
@@ -98,6 +117,13 @@ class EspecieRentaVariable:
             "pais": self.pais,
             "perfil_fuente": self.perfil_fuente,
             "perfil_capturado_en": self.perfil_capturado_en,
+            "sic_codigo": self.sic_codigo,
+            "sic_titulo": self.sic_titulo,
+            "sic_oficina": self.sic_oficina,
+            "division_cadena": self.division_cadena,
+            "estrategia_etf": self.estrategia_etf,
+            "ratio_conversion": self.ratio_conversion,
+            "mercado_origen": self.mercado_origen,
         }
 
 
@@ -204,6 +230,13 @@ def armar_renta_variable(
                 pais=_texto(fila.get("pais")),
                 perfil_fuente=_texto(fila.get("perfil_fuente")),
                 perfil_capturado_en=_fecha_iso(fila.get("perfil_capturado_en")),
+                sic_codigo=_texto(fila.get("sic_codigo")),
+                sic_titulo=_texto(fila.get("sic_titulo")),
+                sic_oficina=_texto(fila.get("sic_oficina")),
+                division_cadena=_texto(fila.get("division_cadena")),
+                estrategia_etf=_texto(fila.get("estrategia_etf")),
+                ratio_conversion=_texto(fila.get("ratio_conversion")),
+                mercado_origen=_texto(fila.get("mercado_origen")),
             )
         )
     return especies

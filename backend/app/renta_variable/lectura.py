@@ -42,7 +42,22 @@ COLUMNAS_VISTA: tuple[str, ...] = (
 )
 COLUMNAS_INSTRUMENTOS: tuple[str, ...] = ("moneda_cotizacion",)
 COLUMNAS_PUNTAS: tuple[str, ...] = ("px_bid", "px_ask", "operaciones")
-COLUMNAS_PERFIL: tuple[str, ...] = ("nombre_corto", "nombre_largo", "sector", "industria", "pais")
+COLUMNAS_PERFIL: tuple[str, ...] = (
+    "nombre_corto",
+    "nombre_largo",
+    "sector",
+    "industria",
+    "pais",
+    # La clasificación de la SEC y de la tabla de CEDEARs de BYMA (13/08/2026). Conviven con las de
+    # Yahoo en la misma fila: cada job escribe sus columnas y `fuente` declara cuál corrió última.
+    "sic_codigo",
+    "sic_titulo",
+    "sic_oficina",
+    "division_cadena",
+    "estrategia_etf",
+    "ratio_conversion",
+    "mercado_origen",
+)
 
 _SELECT = ", ".join(
     [f'u."{c}"' for c in COLUMNAS_VISTA]

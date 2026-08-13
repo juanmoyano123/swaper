@@ -155,3 +155,44 @@ def como_dict(resultado: ResultadoLista) -> dict[str, Any]:
         "cedears": len(resultado.cedears),
         "alertas": [a.como_dict() for a in resultado.alertas],
     }
+
+
+async def traer_lista(*, timeout: float = 30.0) -> ResultadoLista:
+    """Baja la página de BYMA, encuentra el PDF, lo lee y lo parsea.
+
+    **No lanza.** Si la página cambió de forma, si el PDF no responde o si no se puede abrir, se
+    devuelve una lista vacía con la alerta correspondiente: esta fuente *aporta* nombre y ratio, y
+    su ausencia no puede tumbar una clasificación que la SEC igual puede hacer.
+    """
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as cliente:
+            html = (await cliente.get(URL_PAGINA)).text
+            url_pdf = link_del_pdf(html)
+            if url_pdf is None:
+                return ResultadoLista(
+                    alertas=[_alerta_sin_pdf("la página no ofrece un PDF de CEDEARs")]
+                )
+            contenido = (await cliente.get(url_pdf)).content
+    except Exception as exc:
+        return ResultadoLista(alertas=[_alerta_sin_pdf(f"no se pudo bajar la lista ({exc})")])
+
+    try:
+        return parsear_lista(texto_de_pdf(contenido))
+    except Exception as exc:
+        return ResultadoLista(alertas=[_alerta_sin_pdf(f"el PDF no se pudo leer ({exc})")])
+
+
+def _alerta_sin_pdf(motivo: str) -> Alerta:
+    return Alerta(
+        codigo="lista_cedears_no_disponible",
+        mensaje=(
+            f"No se pudo traer la tabla de CEDEARs de BYMA: {motivo}. Los papeles quedan sin "
+            f"nombre en castellano ni ratio de conversión; la clasificación por actividad sigue "
+            f"funcionando con lo que da la SEC."
+        ),
+        severidad=Severidad.ADVERTENCIA,
+        accion_requerida=None,
+        detalle={"fuente": NOMBRE_FUENTE, "url": URL_PAGINA},
+    )

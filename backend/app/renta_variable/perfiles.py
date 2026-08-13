@@ -103,25 +103,29 @@ SQL_UPSERT_SEC = (
     "capturado_en = EXCLUDED.capturado_en"
 )
 
-# Los papeles a clasificar, no las especies: `AAPL` una vez, y `AAPLC`/`AAPLD` heredan de su
-# emisión. Se cuentan pendientes los que no tienen `sic_codigo` **ni** `estrategia_etf`: un ETF
-# nunca va a tener SIC útil, y sin esta condición volvería a pedirse en cada corrida para siempre.
+# Pendiente = sin fila, con una fila que escribió otra fuente, o con una vencida.
+#
+# **No se mira si `sic_codigo` quedó nulo.** La primera versión lo hacía —"si no tiene SIC, falta
+# clasificarlo"— y el job no avanzaba nunca: los ~1.500 papeles que la SEC no lista volvían a la
+# cola en cada corrida, y nueve tandas de 100 bajaron los pendientes de 1.539 a 1.536 (medido el
+# 13/08/2026). Una fila vacía escrita por la SEC significa "se preguntó y no está", que es un
+# resultado, no una tarea pendiente. `capturado_en` decide cuándo se vuelve a preguntar.
 SQL_PAPELES_PENDIENTES_SEC = (
     "SELECT i.ticker FROM public.instrumentos i "
     "LEFT JOIN public.perfil_renta_variable p ON p.ticker = i.ticker "
     f"WHERE i.clase_activo IN ({_CLASES}) "
     "AND (p.ticker IS NULL "
-    "     OR (p.sic_codigo IS NULL AND p.estrategia_etf IS NULL) "
+    "     OR p.fuente IS DISTINCT FROM $2 "
     "     OR p.capturado_en < now() - make_interval(days => $1::int)) "
     "ORDER BY i.ticker"
 )
 
 
 async def papeles_pendientes_sec(
-    conn: Any, *, dias_vencimiento: int = DIAS_VENCIMIENTO
+    conn: Any, *, fuente: str, dias_vencimiento: int = DIAS_VENCIMIENTO
 ) -> list[str]:
-    """Tickers de renta variable sin clasificar por la SEC, o con una clasificación vencida."""
-    filas = await conn.fetch(SQL_PAPELES_PENDIENTES_SEC, dias_vencimiento)
+    """Tickers de renta variable sin clasificar por `fuente`, o con una clasificación vencida."""
+    filas = await conn.fetch(SQL_PAPELES_PENDIENTES_SEC, dias_vencimiento, fuente)
     return [fila["ticker"] for fila in filas]
 
 
