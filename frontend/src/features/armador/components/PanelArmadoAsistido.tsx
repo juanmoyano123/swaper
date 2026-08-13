@@ -54,22 +54,28 @@ export function PanelArmadoAsistido() {
   // El monto vive en el store y no acá: es el mismo capital que reparte `CarteraEditable`, y
   // tenerlo duplicado hacía que cargar 10.000 en el asistido y 10.000 en la cartera se leyera como
   // 20.000 sin que nada lo dijera. Los dos campos son ahora dos vistas del mismo número.
-  const { montoTotal } = useArmador()
-  const { fijarMontoTotal } = useArmadorAcciones()
+  const { montoTotal, objetivoRv } = useArmador()
+  const { fijarMontoTotal, fijarObjetivoRv } = useArmadorAcciones()
 
   const [moneda, setMoneda] = useState<ParametrosArmadoAsistido['moneda']>('todas')
   const [cobertura, setCobertura] = useState<ParametrosArmadoAsistido['cobertura']>('mixta')
   const [perfil, setPerfilCrudo] = useState<ParametrosArmadoAsistido['perfil']>('moderado')
   const [horizonte, setHorizonte] = useState<ParametrosArmadoAsistido['horizonte']>('medio')
-  const [pctRv, setPctRv] = useState<number>(PCT_RV_PERFIL.moderado)
   const [tematica, setTematica] = useState<string>('')
+
+  // El % de renta variable dejó de ser estado local y pasó al store, por la misma razón que el
+  // monto: es el mandato del cliente y la cartera se sigue comparando contra él mucho después de
+  // que este panel se pliegue. Sin objetivo declarado se muestra el default del perfil, que es lo
+  // que el backend va a aplicar si no se manda nada.
+  const pctRv = objetivoRv ?? PCT_RV_PERFIL[perfil]
+  const setPctRv = fijarObjetivoRv
 
   // Cambiar de perfil pisa el % de renta variable con el default del perfil nuevo, aunque el asesor
   // lo hubiera editado. Es lo menos sorpresivo: elegir "conservador" y que quede un 60% de acciones
   // de la vez anterior sería peor que perder el valor escrito, que se vuelve a tipear en un segundo.
   function setPerfil(nuevo: ParametrosArmadoAsistido['perfil']) {
     setPerfilCrudo(nuevo)
-    setPctRv(PCT_RV_PERFIL[nuevo])
+    fijarObjetivoRv(PCT_RV_PERFIL[nuevo])
   }
 
   const mutacion = useArmadoAsistido()

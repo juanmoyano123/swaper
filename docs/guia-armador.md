@@ -1,4 +1,4 @@
-# Guía del Armador — cómo se llega a una cartera armada
+Qu# Guía del Armador — cómo se llega a una cartera armada
 
 Esta guía explica la pestaña **Armador** (`/armador`): qué hace cada sección y en qué orden
 conviene recorrerlas para terminar con una cartera armada. No es una spec técnica — para eso está

@@ -23,13 +23,13 @@ import { useCalendarioCartera } from '../hooks/useCalendarioCartera'
 import { useCarteraResuelta } from '../hooks/useCarteraResuelta'
 import { useSnapshotArmador } from '../hooks/useSnapshotArmador'
 import { calcularRentaAnualPorMoneda, invertidoPorMoneda, type RentaAnualPorMoneda } from '../lib/renta'
-import { mixPedido } from '../lib/mix'
+import { desvioContraObjetivo, mixPedido } from '../lib/mix'
 import { plazoPromedio, rendimientosPorNaturaleza } from '../lib/rendimientos'
 import type { MesDelCalendario } from '../lib/schema'
 import { useArmador, useArmadorAcciones } from '../store/carteraStore'
 
 export function ColumnaKpis({ meses }: { meses: MesDelCalendario[] }) {
-  const { pos } = useArmador()
+  const { pos, objetivoRv } = useArmador()
   const { alternarMes } = useArmadorAcciones()
   const { resueltas, porTicker, posicionesParaCalendario } = useCarteraResuelta()
   const calendario = useCalendarioCartera(posicionesParaCalendario)
@@ -50,6 +50,7 @@ export function ColumnaKpis({ meses }: { meses: MesDelCalendario[] }) {
   const tirUsd = naturalezas.find((n) => n.naturaleza === 'tir_usd') ?? null
   const plazo = plazoPromedio(resueltas, porTicker)
   const mix = mixPedido(pos)
+  const desvio = desvioContraObjetivo(objetivoRv, mix)
 
   let rentaUsd: RentaAnualPorMoneda | null = null
   let porMoneda: RentaAnualPorMoneda[] = []
@@ -109,6 +110,41 @@ export function ColumnaKpis({ meses }: { meses: MesDelCalendario[] }) {
           }
         />
       </div>
+
+      {/* El objetivo declarado, comparado contra lo que la cartera tiene ahora. Sólo aparece si se
+          declaró uno: sin mandato no hay desvío que mostrar, y el default de un perfil no es un
+          mandato. El desvío se señala, nunca se corrige solo — mismo criterio que la suma de pesos
+          en `CarteraEditable`. */}
+      {desvio !== null && (
+        <div
+          style={{
+            borderTop: '1px solid var(--lin)',
+            paddingTop: 10,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'baseline',
+            gap: 8,
+          }}
+        >
+          <span
+            className="rotulo"
+            style={{ fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase' }}
+          >
+            Objetivo RF/RV
+          </span>
+          <span style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ color: 'var(--dim)' }}>
+              {fmtPct(desvio.objetivo.rf, 0)}/{fmtPct(desvio.objetivo.rv, 0)}
+            </span>
+            {desvio.fueraDeTolerancia && (
+              <span style={{ color: 'var(--ac2)', marginLeft: 6 }}>
+                {desvio.desvioRv > 0 ? '+' : '−'}
+                {fmtPct(Math.abs(desvio.desvioRv), 1)} en RV
+              </span>
+            )}
+          </span>
+        </div>
+      )}
 
       <div style={{ borderTop: '1px solid var(--lin)', paddingTop: 10 }}>
         <div

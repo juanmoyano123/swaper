@@ -64,6 +64,19 @@ interface EstadoArmador {
   /** Qué preset temático está aplicado, o `null`. Es sólo el chip prendido: los filtros que el
    *  preset dejó viven en `filtros`, y tocarlos a mano apaga el chip sin deshacerlos. */
   tematicaId: string | null
+  /** Qué porcentaje de la cartera se declaró para renta variable, en puntos porcentuales. El
+   *  resto es el objetivo de renta fija: son dos caras del mismo número, así que se guarda uno
+   *  solo y el otro se deriva (`100 - objetivoRv`).
+   *
+   *  `null` es "sin objetivo declarado", que no es lo mismo que 0: con `null` el armado asistido
+   *  usa el default del perfil (`PCT_RV_PERFIL`) y la pantalla no compara contra nada, mientras
+   *  que con 0 el asesor pidió explícitamente cero renta variable. Es la misma distinción que ya
+   *  hace `pct_rv` en el backend (`app/armado/parametros.py`), y por eso viaja igual.
+   *
+   *  Vive acá y no como estado local del panel de armado —que es donde estaba— porque es el
+   *  mandato del cliente, no un campo de un formulario: la cartera se sigue comparando contra él
+   *  mientras el asesor edita pesos a mano, mucho después de que ese panel se haya plegado. */
+  objetivoRv: number | null
 }
 
 type AccionArmador =
@@ -79,6 +92,7 @@ type AccionArmador =
   | { tipo: 'limpiarFiltros' }
   | { tipo: 'aplicarTematica'; id: string; filtros: FiltrosArmador }
   | { tipo: 'cargarCartera'; posiciones: PosicionArmador[] }
+  | { tipo: 'fijarObjetivoRv'; pct: number | null }
 
 const ESTADO_INICIAL: EstadoArmador = {
   pos: [],
@@ -87,6 +101,9 @@ const ESTADO_INICIAL: EstadoArmador = {
   // Default de fábrica: sólo TIR ≥ 6% con cupones, no "sin filtros" — ver FILTROS_ARMADOR_INICIALES.
   filtros: FILTROS_ARMADOR_INICIALES,
   tematicaId: null,
+  // Sin objetivo declarado: el armado asistido usa el default del perfil y la pantalla no compara
+  // contra nada hasta que el asesor diga cuánto quiere en cada bloque.
+  objetivoRv: null,
 }
 
 /** Agrega el ticker con esa clase si no estaba; lo saca si ya estaba. El toggle es por ticker y no
@@ -163,6 +180,10 @@ function reducer(estado: EstadoArmador, accion: AccionArmador): EstadoArmador {
       const pesos = normalizarA100(accion.posiciones.map((p) => p.peso))
       return { ...estado, pos: accion.posiciones.map((p, i) => ({ ...p, peso: pesos[i] })) }
     }
+    // No toca `pos`: declarar el objetivo no rearma la cartera. Lo que cambia es contra qué se
+    // compara lo que ya hay — el desvío se muestra, no se corrige solo, igual que `fijarPeso`.
+    case 'fijarObjetivoRv':
+      return { ...estado, objetivoRv: accion.pct }
   }
 }
 
@@ -199,6 +220,10 @@ interface AccionesArmador {
    *  pedir confirmación -- el asesor sigue pudiendo editar cada una después, igual que con
    *  cualquier otra. */
   cargarCartera: (posiciones: PosicionArmador[]) => void
+  /** Declara qué porcentaje de la cartera va a renta variable (el resto es el objetivo de renta
+   *  fija). `null` borra el objetivo y devuelve el armado asistido al default de su perfil.
+   *  **No rearma ni rebalancea nada**: fija contra qué se compara la cartera. */
+  fijarObjetivoRv: (pct: number | null) => void
 }
 
 const EstadoContext = createContext<EstadoArmador | null>(null)
@@ -227,6 +252,7 @@ export function ArmadorProvider({ children }: { children: ReactNode }) {
         dispatch({ tipo: 'aplicarTematica', id, filtros }),
       cargarCartera: (posiciones: PosicionArmador[]) =>
         dispatch({ tipo: 'cargarCartera', posiciones }),
+      fijarObjetivoRv: (pct: number | null) => dispatch({ tipo: 'fijarObjetivoRv', pct }),
     }),
     [],
   )
