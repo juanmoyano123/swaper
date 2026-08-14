@@ -33,6 +33,14 @@ export interface EspecieDelPapel {
 }
 
 export interface PapelRentaVariable {
+  /** Identidad única del papel para listas de React (`key`) y cualquier lookup por identidad.
+   *  **No usar `emision` para esto**: una especie no identificada (`AAPLB`) y el papel de sus
+   *  hermanas identificadas pueden mostrar el mismo `emision` en pantalla sin ser el mismo papel —
+   *  son las dos caras del mismo ticker que el backend no pudo confirmar que fueran una sola cosa
+   *  (ver el docstring de `agruparEnPapeles`). Colisionar esa clave rompía la reconciliación de
+   *  React: `key={papel.emision}` hacía que dos filas compartieran identidad y el filtro de
+   *  eslabón/rubro dejaba en pantalla una fila vieja que ya no correspondía (11/08/2026). */
+  id: string
   /** El ticker del papel — el de la especie en pesos cuando existe. */
   emision: string
   /** Todas sus especies, ordenadas ARS → MEP → Cable. */
@@ -83,6 +91,7 @@ export function agruparEnPapeles(especies: EspecieRentaVariable[]): PapelRentaVa
         (ORDEN_MONEDA[b.sufijo_liquidacion ?? 'ARS'] ?? 9),
     )
     papeles.push({
+      id: clave,
       emision: clave.startsWith(`${NO_IDENTIFICADO}:`) ? grupo[0].ticker : clave,
       especies: ordenadas.map((especie) => ({
         especie,

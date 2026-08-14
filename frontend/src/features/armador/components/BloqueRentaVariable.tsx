@@ -335,7 +335,7 @@ export function BloqueRentaVariable() {
           ) : (
             papelesFiltrados.map((papel) => (
               <FilaPicker
-                key={papel.emision}
+                key={papel.id}
                 papel={papel}
                 enCartera={yaEnCartera}
                 onAbrir={(ticker) => abrirInstrumento(ticker)}

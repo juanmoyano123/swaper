@@ -101,6 +101,22 @@ describe('agruparEnPapeles', () => {
     ])
     expect(papeles).toHaveLength(2)
   })
+
+  it('la ARS no identificada y sus hermanas identificadas tienen `id` distinto aunque compartan `emision`', () => {
+    // Caso real: ABNB (ARS, no_identificado, emision del backend = "n/n") y ABNBC/ABNBD
+    // (identificadas, emision = "ABNB") arman dos papeles con el mismo `emision` de display
+    // ("ABNB"). Antes de la corrección, `key={papel.emision}` en BloqueRentaVariable colisionaba
+    // ahí y React perdía filas al filtrar (11/08/2026).
+    const papeles = agruparEnPapeles([
+      especie({ ticker: 'ABNB', emision: 'n/n', no_identificado: true }),
+      especie({ ticker: 'ABNBC', emision: 'ABNB', sufijo_liquidacion: 'C', no_identificado: false }),
+      especie({ ticker: 'ABNBD', emision: 'ABNB', sufijo_liquidacion: 'D', no_identificado: false }),
+    ])
+
+    expect(papeles).toHaveLength(2)
+    expect(papeles.every((p) => p.emision === 'ABNB')).toBe(true)
+    expect(new Set(papeles.map((p) => p.id)).size).toBe(2)
+  })
 })
 
 describe('papelCoincide', () => {
