@@ -366,17 +366,6 @@ it('muestra las puntas y las operaciones de BYMA', async () => {
   expect(screen.getByText('120')).toBeInTheDocument()
 })
 
-// --- GWT-6: el vocabulario de la fuente no se traduce ------------------------------------------
-
-it('muestra sector, industria y país tal como los declara la fuente', async () => {
-  mockearRutas({ [RUTA_RV(TICKER)]: { body: fichaRV() } })
-  renderizar()
-
-  expect(await screen.findByText('Financial Services')).toBeInTheDocument()
-  expect(screen.getByText('Banks - Regional')).toBeInTheDocument()
-  expect(screen.getByText('Argentina')).toBeInTheDocument()
-})
-
 // --- GWT-5: la opinión de terceros no entra ----------------------------------------------------
 
 it('no muestra recomendación, precio objetivo ni consenso de analistas', async () => {
@@ -422,67 +411,6 @@ it('sin nombre de empresa la cabecera dice el ticker, no un nombre inventado', a
   renderizar()
 
   expect(await screen.findByText('GGAL — nombre no disponible')).toBeInTheDocument()
-})
-
-// --- El nivel 2 degrada solo -------------------------------------------------------------------
-
-it('con el perfil roto conserva la cotización y declara ausente sólo el perfil', async () => {
-  const sinPerfil = fichaRV({
-    externo: externo({
-      perfil: null,
-      perfil_motivo: 'Yahoo Finance no entregó el perfil de la empresa: HTTP 401',
-    }),
-  })
-  mockearRutas({ [RUTA_RV(TICKER)]: { body: sinPerfil } })
-  renderizar()
-
-  // La cotización de Yahoo (nivel 1) sigue viva: sin nombre propio, la cabecera cae a ella.
-  expect(await screen.findByText('Grupo Financiero Galicia S.A.')).toBeInTheDocument()
-  expect(screen.getByText('El perfil de la empresa no está disponible.')).toBeInTheDocument()
-  expect(screen.getByText(/HTTP 401/)).toBeInTheDocument()
-})
-
-// --- La valuación -------------------------------------------------------------------------------
-
-it('muestra los ratios de valuación y los montos con su moneda al lado', async () => {
-  mockearRutas({ [RUTA_RV(TICKER)]: { body: fichaRV() } })
-  renderizar()
-
-  expect(await screen.findByText('PER (forward)')).toBeInTheDocument()
-  expect(screen.getByText('7,70')).toBeInTheDocument()
-  expect(screen.getByText('0,315')).toBeInTheDocument()
-  // El monto y su moneda salen juntos, en el mismo campo.
-  expect(screen.getByText('Ganancia por acción').parentElement?.textContent).toContain('ARS')
-})
-
-it('un monto sin moneda declarada no se muestra y el faltante se dice', async () => {
-  const sinMoneda = fichaRV({
-    externo: externo({
-      valuacion: valuacion({
-        ganancia_por_accion: null,
-        valor_empresa: null,
-        montos_sin_moneda: ['trailingEps', 'enterpriseValue'],
-      }),
-    }),
-  })
-  mockearRutas({ [RUTA_RV(TICKER)]: { body: sinMoneda } })
-  const { container } = renderizar()
-
-  expect(await screen.findByText(/sin moneda declarada/)).toBeInTheDocument()
-  expect(screen.getByText(/trailingEps, enterpriseValue/)).toBeInTheDocument()
-  // Los ratios, que no dependen de ninguna moneda, siguen a la vista.
-  expect(screen.getByText('1,37')).toBeInTheDocument()
-  // Y el número sin unidad no aparece por ningún lado.
-  expect(container.textContent ?? '').not.toContain('134.603')
-})
-
-it('sin módulo de valuación lo declara y el resto de la ficha sigue', async () => {
-  const sinValuacion = fichaRV({ externo: externo({ valuacion: null }) })
-  mockearRutas({ [RUTA_RV(TICKER)]: { body: sinValuacion } })
-  renderizar()
-
-  expect(await screen.findByText('La valuación no está disponible.')).toBeInTheDocument()
-  expect(screen.getByText('Financial Services')).toBeInTheDocument()
 })
 
 // --- El histórico -------------------------------------------------------------------------------

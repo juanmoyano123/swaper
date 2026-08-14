@@ -1,38 +1,32 @@
 /**
- * La ficha de una acción o un CEDEAR — F-053, rediseñada el 13/08/2026 con la pausa de Yahoo.
+ * La ficha de una acción o un CEDEAR — F-053, sin los paneles de Yahoo (14/08/2026).
  *
- * Tres orígenes en una pantalla, y cada bloque dice de dónde salió. **El bloque propio** sostiene
- * la ficha: precio, cierre anterior, variación, puntas, operaciones, OHLC del día y —desde el
- * 13/08/2026— la clasificación de la SEC (a qué se dedica, rubro, eslabón productivo, y la
- * estrategia si es un fondo). Desde el experimento data912 (rama `experimento/data912`) el precio
- * ya no es siempre BYMA — `propio.fuente` declara la procedencia real de cada corrida, ver
- * `textoFuentePropia()` acá abajo — pero el OHLC sí es siempre de BYMA, el overlay no lo toca.
+ * Cada bloque dice de dónde salió. **El bloque propio** sostiene la ficha: precio, cierre
+ * anterior, variación, puntas, operaciones, OHLC del día y la clasificación de la SEC (a qué se
+ * dedica, rubro, eslabón productivo, y la estrategia si es un fondo). `propio.fuente` declara la
+ * procedencia real del precio de cada corrida (BYMA o data912), ver `textoFuentePropia()` acá
+ * abajo — el OHLC sí es siempre de BYMA, el overlay no lo toca.
  *
- * **El histórico de cierres es de data912**, no de Yahoo: cubre más papeles y más años que Yahoo
- * daba, y no depende de si Yahoo está pausado.
+ * **El histórico de cierres es de data912.** **El paquete de estados contables es de la SEC**,
+ * sólo para CEDEARs: activos, pasivos, patrimonio, ROE, márgenes y links a los filings reales.
  *
- * **El bloque externo es Yahoo Finance**, pausado desde el 13/08/2026 (`Settings.yahoo_habilitado`,
- * default `False`: la fuente limita toda esta conexión). Mientras dure la pausa, valuación y perfil
- * de Yahoo se muestran declarados ausentes con el motivo — igual que ante cualquier otro fallo de
- * la fuente, la pantalla no distingue los dos casos.
+ * **Los paneles de Yahoo Finance (valuación y perfil) se sacaron de la ficha (14/08/2026):
+ * decisión del dueño del producto, no los va a usar.** El backend sigue pidiéndole a Yahoo el
+ * bloque `externo` — `Cabecera` todavía lo usa como último fallback del nombre de la empresa
+ * cuando ni BYMA ni la SEC lo tienen — pero ninguna pantalla vuelve a mostrar su valuación ni su
+ * perfil.
  *
  * Lo que no está, y no es un olvido:
  *
- * - **No hay recomendación de analistas, ni precio objetivo, ni consenso.** Yahoo los publica; son
- *   opinión de terceros y la regla 6 del dominio mantiene el análisis determinístico. El backend no
- *   los trae y acá no hay dónde ponerlos.
+ * - **No hay recomendación de analistas, ni precio objetivo, ni consenso.** Eran de Yahoo; son
+ *   opinión de terceros y la regla 6 del dominio mantiene el análisis determinístico.
  * - **No hay rendimiento, ni duración, ni paridad.** Una acción no tiene ninguna de las tres y no se
  *   pone nada en su lugar (regla 2).
- * - **Los valores de Yahoo y los de la SEC no se traducen.** "Financial Services" tanto como
- *   "Office of Energy & Transportation" se muestran como la fuente los declara (regla 11);
- *   traducirlos sería mostrar nuestra interpretación en el lugar del dato.
+ * - **Los valores de la SEC no se traducen.** "Office of Energy & Transportation" se muestra como
+ *   la fuente lo declara (regla 11); traducirlo sería mostrar nuestra interpretación en el lugar
+ *   del dato.
  * - **El precio no lleva símbolo de moneda.** La moneda de cotización se muestra al lado, tal como
  *   la declara la fuente — incluido `EXT`, que BYMA no documenta y que no se toma por dólares.
- * - **Ningún monto de la valuación se muestra sin su moneda.** En un CEDEAR, Yahoo expresa el EPS y
- *   el valor de empresa en la moneda de la especie local, no en la del subyacente: el EPS de
- *   `MSFT.BA` son pesos. Un monto que llegó sin moneda declarada queda vacío y se dice cuál fue
- *   (regla 11); los ratios —PER, precio sobre valor libro, beta— son adimensionales y se muestran
- *   siempre.
  */
 
 import type { ReactNode } from 'react'
@@ -49,11 +43,8 @@ import type {
   BloqueHistorico as TipoBloqueHistorico,
   BloquePropio,
   BloqueSec,
-  MontoExterno,
-  PerfilExterno,
   PuntoHistorico,
   RatioSec,
-  ValuacionExterna,
 } from './lib/schemaRentaVariable'
 
 /** Cómo se lee cada estrategia en pantalla. Espejo de las claves de `app/renta_variable/etfs.py`.
@@ -120,21 +111,9 @@ export function FichaRentaVariable({ ticker }: { ticker: string }) {
         <BloqueEmpresa propio={propio} />
       </Panel>
 
-      {externo.disponible && (
-        <Panel rotulo={`Valuación · ${externo.fuente}`}>
-          <BloqueValuacion externo={externo} />
-        </Panel>
-      )}
-
       {sec !== undefined && (
         <Panel rotulo={`Estados contables · ${sec.fuente}`}>
           <BloqueEstadosContablesSec sec={sec} />
-        </Panel>
-      )}
-
-      {externo.disponible && (
-        <Panel rotulo={`Perfil de la empresa · ${externo.fuente}`}>
-          <BloquePerfil externo={externo} />
         </Panel>
       )}
 
@@ -173,19 +152,6 @@ function Leyenda({ children }: { children: ReactNode }) {
     <p style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 10, textWrap: 'pretty' }}>
       {children}
     </p>
-  )
-}
-
-/** El bloque externo no vino: se dice por qué y no se muestra nada más. */
-function ExternoAusente({ externo }: { externo: BloqueExterno }) {
-  return (
-    <EstadoVacio
-      titulo={`${externo.fuente} no está disponible para ${externo.simbolo_consultado}.`}
-      detalle={
-        externo.motivo ??
-        'La fuente externa no respondió. Lo que muestra esta ficha de BYMA no depende de ella.'
-      }
-    />
   )
 }
 
@@ -322,68 +288,6 @@ function BloqueEmpresa({ propio }: { propio: BloquePropio }) {
   )
 }
 
-// --- Yahoo: valuación ---------------------------------------------------------------------------
-
-/**
- * Un monto de la fuente con su moneda al lado, siempre. Nunca lleva símbolo: la moneda se escribe
- * como la fuente la declara, igual que el precio de BYMA — un CEDEAR puede traer la valuación en
- * pesos y ponerle "US$" sería equivocar la magnitud por mil.
- */
-function Monto({ monto }: { monto: MontoExterno | null }) {
-  if (monto === null) return <>{SIN_DATO}</>
-  return (
-    <>
-      {fmtCompacto(monto.valor)}{' '}
-      <span style={{ fontSize: 10.5, color: 'var(--dim)' }}>{monto.moneda}</span>
-    </>
-  )
-}
-
-function BloqueValuacion({ externo }: { externo: BloqueExterno }) {
-  if (externo.cotizacion === null) return <ExternoAusente externo={externo} />
-
-  if (externo.valuacion === null) {
-    return (
-      <EstadoVacio
-        titulo="La valuación no está disponible."
-        detalle={
-          externo.perfil_motivo ?? `${externo.fuente} no publica valuación para este símbolo.`
-        }
-      />
-    )
-  }
-
-  const v: ValuacionExterna = externo.valuacion
-  const campos: [string, ReactNode][] = [
-    ['PER (trailing)', fmtNumero(v.per_trailing, 2)],
-    ['PER (forward)', fmtNumero(v.per_forward, 2)],
-    ['Precio / valor libro', fmtNumero(v.precio_sobre_libros, 2)],
-    ['Beta', fmtNumero(v.beta, 3)],
-    ['Ganancia por acción', <Monto key="eps" monto={v.ganancia_por_accion} />],
-    ['Capitalización', <Monto key="cap" monto={v.capitalizacion} />],
-    ['Valor de empresa', <Monto key="ev" monto={v.valor_empresa} />],
-  ]
-
-  return (
-    <div>
-      <Grilla campos={campos} />
-      {v.montos_sin_moneda.length > 0 && (
-        <p style={{ fontSize: 10.5, color: 'var(--neg)', marginTop: 10, textWrap: 'pretty' }}>
-          {v.montos_sin_moneda.length} campo(s) llegaron con número pero sin moneda declarada
-          ({v.montos_sin_moneda.join(', ')}) y por eso quedan vacíos. No se los expresa en la moneda
-          de cotización: la fuente no dice que sea la misma.
-        </p>
-      )}
-      <Leyenda>
-        Cocientes y montos de {externo.fuente}, capturados el {fmtFechaHora(v.capturado_en)}. El PER,
-        el precio sobre valor libro y la beta son adimensionales; los montos llevan siempre la moneda
-        que la fuente declara para ellos, que en un CEDEAR es la de la especie local y no la del
-        subyacente.
-      </Leyenda>
-    </div>
-  )
-}
-
 // --- SEC: estados contables (14/08/2026) -------------------------------------------------------
 
 /**
@@ -473,51 +377,7 @@ function BloqueEstadosContablesSec({ sec }: { sec: BloqueSec }) {
   )
 }
 
-// --- Yahoo: perfil ----------------------------------------------------------------------------
-
-function BloquePerfil({ externo }: { externo: BloqueExterno }) {
-  if (externo.cotizacion === null) return <ExternoAusente externo={externo} />
-
-  if (externo.perfil === null) {
-    return (
-      <EstadoVacio
-        titulo="El perfil de la empresa no está disponible."
-        detalle={
-          externo.perfil_motivo ??
-          `${externo.fuente} entregó la cotización pero no los datos de la empresa.`
-        }
-      />
-    )
-  }
-
-  const p: PerfilExterno = externo.perfil
-  const campos: [string, ReactNode][] = [
-    ['País', p.pais ?? SIN_DATO],
-    ['Sector', p.sector ?? SIN_DATO],
-    ['Industria', p.industria ?? SIN_DATO],
-    ['Empleados', fmtNumero(p.empleados, 0)],
-  ]
-
-  return (
-    <div>
-      <Grilla campos={campos} />
-      {p.sitio !== null && (
-        <div style={{ marginTop: 10, fontSize: 11.5 }}>
-          <a href={p.sitio} target="_blank" rel="noreferrer" style={{ color: 'var(--ac2)' }}>
-            {p.sitio}
-          </a>
-        </div>
-      )}
-      <Leyenda>
-        País, sector e industria se muestran <strong>tal como {externo.fuente} los declara</strong>,
-        sin traducir: son su vocabulario, no una clasificación nuestra. Capturado el{' '}
-        {fmtFechaHora(p.capturado_en)}.
-      </Leyenda>
-    </div>
-  )
-}
-
-// --- Yahoo: histórico -------------------------------------------------------------------------
+// --- data912: histórico -------------------------------------------------------------------------
 
 const ANCHO = 300
 const ALTO = 72
