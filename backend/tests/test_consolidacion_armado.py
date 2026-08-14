@@ -712,3 +712,79 @@ def test_la_punta_de_un_ticker_no_pisado_sigue_siendo_byma() -> None:
     )
 
     assert resultado.filas_puntas[0]["fuente"] == "byma"
+
+
+# --- El OHLC de BYMA que se descartaba ----------------------------------------------------------
+
+
+def test_los_ohlc_de_byma_llegan_a_la_fila_de_precios() -> None:
+    resultado = armar_consolidacion(
+        hoy=HOY,
+        especies_por_endpoint={
+            "public-bonds": [
+                especie(
+                    "AL30",
+                    ultimo=86320.0,
+                    openingPrice=86000.0,
+                    tradingHighPrice=86500.0,
+                    tradingLowPrice=85800.0,
+                    vwap=86210.5,
+                )
+            ]
+        },
+        filas_iamc=[informe("AL30")],
+        filas_cashflow=[cashflow("AL30", "HARD_DOLLAR")],
+    )
+
+    (precio,) = resultado.filas_precios
+    assert precio["precio_apertura"] == 86000.0
+    assert precio["precio_maximo"] == 86500.0
+    assert precio["precio_minimo"] == 85800.0
+    assert precio["vwap"] == 86210.5
+
+
+def test_un_ohlc_en_cero_se_guarda_como_ausente() -> None:
+    """Mismo criterio que `last_price`: un 0 no es un precio, es que la especie no operó."""
+    resultado = armar_consolidacion(
+        hoy=HOY,
+        especies_por_endpoint={
+            "public-bonds": [
+                especie(
+                    "AL30",
+                    openingPrice=0.0,
+                    tradingHighPrice=0.0,
+                    tradingLowPrice=0.0,
+                    vwap=0.0,
+                )
+            ]
+        },
+        filas_iamc=[informe("AL30")],
+        filas_cashflow=[cashflow("AL30", "HARD_DOLLAR")],
+    )
+
+    (precio,) = resultado.filas_precios
+    assert precio["precio_apertura"] is None
+    assert precio["precio_maximo"] is None
+    assert precio["precio_minimo"] is None
+    assert precio["vwap"] is None
+
+
+def test_un_precio_de_data912_no_inventa_ohlc() -> None:
+    """El overlay pisa precio/puntas/operaciones, nunca el OHLC (no está en `CAMPOS_PISADOS`): una
+    fila cuyo precio vino de data912 tiene que quedar sin apertura/máximo/mínimo/VWAP, no heredar
+    el de BYMA de otra sesión ni inventarlos."""
+    fila_pisada = {**especie("AL30", ultimo=86320.0), "origen_precio": "data912"}
+
+    resultado = armar_consolidacion(
+        hoy=HOY,
+        especies_por_endpoint={"public-bonds": [fila_pisada]},
+        filas_iamc=[informe("AL30")],
+        filas_cashflow=[cashflow("AL30", "HARD_DOLLAR")],
+    )
+
+    (precio,) = resultado.filas_precios
+    assert precio["fuente"].startswith("data912")
+    assert precio["precio_apertura"] is None
+    assert precio["precio_maximo"] is None
+    assert precio["precio_minimo"] is None
+    assert precio["vwap"] is None

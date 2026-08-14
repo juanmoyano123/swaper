@@ -106,6 +106,7 @@ from typing import Any
 import httpx
 import structlog
 
+from app.externos.cache import CacheConTTL
 from app.ingesta.http import ErrorDeFuente, Reintentos, con_reintentos, pedir
 
 logger = structlog.get_logger()
@@ -379,6 +380,27 @@ def _no_disponible(simbolo: str, motivo: str) -> BloqueExterno:
     )
 
 
+# El consumo de Yahoo está pausado desde el 13/08/2026 (`Settings.yahoo_habilitado`, default
+# `False`) — ver el comentario de esa variable en `app/core/config.py` para el motivo completo y por
+# qué reintentar no lo destraba.
+MOTIVO_PAUSA = (
+    "Yahoo Finance está pausado desde el 13/08/2026: la fuente limita todos los pedidos desde "
+    "esta conexión (HTTP 429 sostenido, sin Retry-After). Se reactiva con YAHOO_HABILITADO=true."
+)
+
+
+def bloque_pausado(ticker: str) -> BloqueExterno:
+    """El bloque externo cuando la pausa está activa — nunca se pide nada a la red.
+
+    Mismo contrato que `bloque_externo`: el frontend no necesita distinguir "Yahoo no respondió" de
+    "Yahoo está pausado", los dos son "el bloque externo no está disponible, y acá está dicho por
+    qué" (regla 11). El símbolo se arma igual que `ClienteYahoo.simbolo_de`, sin instanciar el
+    cliente ni abrir una conexión.
+    """
+    simbolo = f"{ticker.strip().upper()}{SUFIJO_BUENOS_AIRES}"
+    return _no_disponible(simbolo, MOTIVO_PAUSA)
+
+
 def _perfil_no_disponible(
     motivo: str, status: int | None, capturado_en: datetime
 ) -> ResultadoPerfilEmpresa:
@@ -620,35 +642,6 @@ def _valuacion_vacia(valuacion: ValuacionExterna) -> bool:
             valuacion.montos_sin_moneda,
         )
     )
-
-
-# --- Caché ----------------------------------------------------------------------------------------
-
-
-class CacheConTTL[T]:
-    """Caché en memoria con vencimiento. Sin tope de tamaño a propósito.
-
-    Las claves son tickers del universo del día: unos pocos miles como mucho, y las entradas
-    vencidas se pisan solas. Un LRU acá sería complejidad sin problema que resolver.
-    """
-
-    def __init__(self, ttl: float, reloj: Callable[[], float] = time.monotonic) -> None:
-        self._ttl = ttl
-        self._reloj = reloj
-        self._entradas: dict[str, tuple[float, T]] = {}
-
-    def obtener(self, clave: str) -> T | None:
-        entrada = self._entradas.get(clave)
-        if entrada is None:
-            return None
-        vence_en, valor = entrada
-        if self._reloj() >= vence_en:
-            del self._entradas[clave]
-            return None
-        return valor
-
-    def guardar(self, clave: str, valor: T) -> None:
-        self._entradas[clave] = (self._reloj() + self._ttl, valor)
 
 
 # --- El cliente -----------------------------------------------------------------------------------

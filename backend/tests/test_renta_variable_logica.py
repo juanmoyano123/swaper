@@ -140,3 +140,44 @@ def test_con_fila_de_perfil_los_campos_llegan_tal_como_la_fuente_los_declaro() -
     assert especie.pais == "Argentina"
     assert especie.perfil_fuente == "Yahoo Finance"
     assert especie.perfil_capturado_en == capturado.isoformat()
+
+
+# --- El OHLC de BYMA (13/08/2026) ------------------------------------------------------------------
+
+
+def test_una_fila_sin_ohlc_los_declara_none() -> None:
+    """Una fila anterior a la migración de OHLC (o una que sólo trajo lo mínimo) no rompe: los
+    cuatro campos quedan `None`, igual que un perfil que todavía no cargó."""
+    filas = [
+        {
+            "ticker": "GGAL",
+            "clase_activo": "accion",
+            "lastPrice": 5000.0,
+            "effectiveVolume": 1_500_000_000.0,
+        }
+    ]
+    (especie,) = armar_renta_variable(filas, TipoDeCambio())
+    assert especie.precio_apertura is None
+    assert especie.precio_maximo is None
+    assert especie.precio_minimo is None
+    assert especie.vwap is None
+
+
+def test_el_ohlc_llega_tal_como_lo_declaro_byma() -> None:
+    filas = [
+        {
+            "ticker": "GGAL",
+            "clase_activo": "accion",
+            "lastPrice": 5000.0,
+            "effectiveVolume": 1_500_000_000.0,
+            "precio_apertura": 4900.0,
+            "precio_maximo": 5100.0,
+            "precio_minimo": 4880.0,
+            "vwap": 4990.5,
+        }
+    ]
+    (especie,) = armar_renta_variable(filas, TipoDeCambio())
+    assert especie.precio_apertura == 4900.0
+    assert especie.precio_maximo == 5100.0
+    assert especie.precio_minimo == 4880.0
+    assert especie.vwap == 4990.5

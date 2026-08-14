@@ -61,6 +61,20 @@ class Settings(BaseSettings):
     # siempre, que es exactamente lo que la pausa existe para evitar.
     iamc_habilitado: bool = False
 
+    # **El consumo de Yahoo Finance está pausado desde el 13/08/2026, y el default es la pausa.**
+    # Yahoo limita toda esta conexión con HTTP 429 sostenido desde el 08/08 — medido con `curl`
+    # puro, fuera de nuestro código: el mismo 429 aparece en el endpoint de cotización, en el de
+    # perfil y hasta en el que entrega el crumb sin pedir credencial, sin `Retry-After`. No es una
+    # credencial vencida ni un símbolo mal armado, y reintentar no lo destraba.
+    #
+    # Lo que se pausa es **el consumo**, no el código: el cliente, sus cachés y el job de
+    # enriquecimiento quedan intactos, y poner esto en True devuelve el comportamiento anterior sin
+    # tocar nada más. Casi todo lo que Yahoo aportaba ya tiene reemplazo propio (nombre, actividad y
+    # rubro desde la SEC; apertura/máximo/mínimo/VWAP desde BYMA; el histórico de precios desde
+    # data912) — lo que no se reemplaza (PER, valor libro, beta, país, empleados, sitio web) queda
+    # declarado ausente en la ficha mientras dure la pausa.
+    yahoo_habilitado: bool = False
+
     # F-008 — job programado. Los horarios son configurables para poder ejercitar el job en un
     # entorno de prueba sin esperar a la hora real, y para que un cambio de horario de la rueda
     # no sea un cambio de código. `ingesta_habilitada` en False deja el servicio sin scheduler:

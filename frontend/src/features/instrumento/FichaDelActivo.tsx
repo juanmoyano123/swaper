@@ -20,7 +20,9 @@
  */
 
 import { EstadoCarga } from '@/components/EstadoCarga'
+import { EstadoError } from '@/components/EstadoError'
 import { Panel } from '@/components/Panel'
+import { ApiError } from '@/lib/api/errors'
 
 import { FichaInstrumento } from './FichaInstrumento'
 import { FichaRentaVariable } from './FichaRentaVariable'
@@ -41,9 +43,22 @@ export function FichaDelActivo({ ticker }: { ticker: string | undefined }) {
     )
   }
 
-  // Cualquier fallo —el 404 de "no es renta variable", pero también un 503— cae en la ficha de renta
-  // fija, que muestra su propio estado. Un problema de la API no puede dejar la pantalla en blanco.
-  if (query.isError) return <FichaInstrumento ticker={ticker} />
+  if (query.isError) {
+    // Sólo el 404 ("no es renta variable del universo de hoy") cae en la ficha de renta fija, que
+    // muestra su propio estado — es la señal contractual, no una adivinanza por el ticker.
+    //
+    // Cualquier otro error (503, un `contract_mismatch` por un deploy desalineado entre frontend y
+    // backend) se muestra como error explícito acá: caer en silencio a la ficha de renta fija haría
+    // que una acción real mostrara "no está en el universo de hoy", que es la respuesta equivocada
+    // dicha con total confianza.
+    const es404 = query.error instanceof ApiError && query.error.status === 404
+    if (es404) return <FichaInstrumento ticker={ticker} />
+    return (
+      <Panel rotulo="Ficha">
+        <EstadoError error={query.error} onRetry={() => void query.refetch()} />
+      </Panel>
+    )
+  }
 
   return <FichaRentaVariable ticker={ticker} />
 }

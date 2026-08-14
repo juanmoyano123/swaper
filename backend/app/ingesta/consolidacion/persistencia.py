@@ -74,6 +74,10 @@ COLUMNAS_PRECIOS: tuple[str, ...] = (
     "fuente",
     "fecha_metricas",
     "cierre_anterior",
+    "precio_apertura",
+    "precio_maximo",
+    "precio_minimo",
+    "vwap",
 )
 
 # Por ticker, las métricas del informe más reciente que se haya llegado a guardar. Lo consulta la

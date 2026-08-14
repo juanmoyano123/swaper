@@ -641,6 +641,13 @@ def armar_consolidacion(
                     propias, metricas["fecha_metricas"], origen=fila.get("origen_precio", "byma")
                 ),
                 "cierre_anterior": _precio(fila["precio_cierre_anterior"]),
+                # Siempre de BYMA, aunque `fuente` diga data912: el overlay no los pisa (no están
+                # en `CAMPOS_PISADOS`) y una fila sólo-data912 los trae `None` de fábrica. Por
+                # `_precio()`: un 0 no es un precio, es "no operó".
+                "precio_apertura": _precio(fila["precio_apertura"]),
+                "precio_maximo": _precio(fila["precio_maximo"]),
+                "precio_minimo": _precio(fila["precio_minimo"]),
+                "vwap": _precio(fila["vwap"]),
                 **metricas,
             }
         )

@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends
 
 from app.api.deps import get_db
 from app.core.config import Settings, get_settings
-from app.externos import cliente_yahoo
+from app.externos import MOTIVO_PAUSA, cliente_yahoo
 from app.externos.sec import ClienteSec
 from app.ingesta.byma.cedears import traer_lista
 from app.jobs.corridas import corrida_matinal, refresh_intra_rueda
@@ -86,11 +86,20 @@ async def disparar_refresh(
 )
 async def disparar_enriquecimiento_renta_variable(
     conn: Annotated[asyncpg.Connection, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
     limite: int = LIMITE_POR_CORRIDA,
 ) -> dict[str, object]:
     """Incremental: procesa hasta `limite` tickers pendientes por corrida, corta al primer 429 de
     la fuente y deja el resto para la próxima invocación (ver
-    `app/renta_variable/enriquecimiento.py`)."""
+    `app/renta_variable/enriquecimiento.py`).
+
+    **Con `settings.yahoo_habilitado` en `False` (el default desde el 13/08/2026) no corre nada**:
+    ni se lee la base ni se le pide un solo ticker a Yahoo. La respuesta tiene una forma distinta a
+    la del resumen normal —`{"pausado": True, "motivo": ...}` en vez de `ResumenEnriquecimiento.
+    como_dict()`— porque no es una corrida de cero resultados, es una corrida que no ocurrió.
+    """
+    if not settings.yahoo_habilitado:
+        return {"pausado": True, "motivo": MOTIVO_PAUSA}
     resumen = await enriquecer_perfiles(conn, cliente_yahoo(), limite=limite)
     return resumen.como_dict()
 

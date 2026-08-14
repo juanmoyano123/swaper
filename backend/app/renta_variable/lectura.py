@@ -39,6 +39,12 @@ COLUMNAS_VISTA: tuple[str, ...] = (
     "cierre_anterior",
     # Experimento data912: de dónde salió el precio de esta fila. Ver `universo/lectura.py`.
     "fuente",
+    # OHLC de BYMA (13/08/2026): siempre de BYMA aunque `fuente` diga data912 — el overlay no los
+    # pisa. Ver el `COMMENT ON COLUMN` de la migración `ohlc_byma_precios`.
+    "precio_apertura",
+    "precio_maximo",
+    "precio_minimo",
+    "vwap",
 )
 COLUMNAS_INSTRUMENTOS: tuple[str, ...] = ("moneda_cotizacion",)
 COLUMNAS_PUNTAS: tuple[str, ...] = ("px_bid", "px_ask", "operaciones")

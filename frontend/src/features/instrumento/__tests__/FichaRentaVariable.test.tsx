@@ -20,6 +20,7 @@ import { crearQueryClient } from '@/app/queryClient'
 import { FichaDelActivo } from '../FichaDelActivo'
 import type {
   BloqueExterno,
+  BloqueHistorico as TipoBloqueHistorico,
   BloquePropio,
   CotizacionExterna,
   FichaRentaVariable as Ficha,
@@ -54,6 +55,23 @@ function propio(extra: Partial<BloquePropio> = {}): BloquePropio {
     px_bid: 4995,
     px_ask: 5005,
     operaciones: 120,
+    precio_apertura: 4900,
+    precio_maximo: 5050,
+    precio_minimo: 4880,
+    vwap: 4990,
+    // Sin clasificar por defecto: es el caso más común (la SEC cubre 74 % de los CEDEARs y 9 %
+    // de las acciones argentinas). Los tests de "La empresa" lo sobreescriben.
+    nombre_corto: null,
+    nombre_largo: null,
+    perfil_fuente: null,
+    perfil_capturado_en: null,
+    sic_codigo: null,
+    sic_titulo: null,
+    sic_oficina: null,
+    division_cadena: null,
+    estrategia_etf: null,
+    ratio_conversion: null,
+    mercado_origen: null,
     ...extra,
   }
 }
@@ -125,8 +143,22 @@ function externo(extra: Partial<BloqueExterno> = {}): BloqueExterno {
   }
 }
 
+function historico(extra: Partial<TipoBloqueHistorico> = {}): TipoBloqueHistorico {
+  return {
+    fuente: 'data912',
+    disponible: true,
+    motivo: null,
+    puntos: [
+      { fecha: '2026-08-05', cierre: 4800 },
+      { fecha: '2026-08-06', cierre: 4850 },
+      { fecha: '2026-08-07', cierre: 5000 },
+    ],
+    ...extra,
+  }
+}
+
 function fichaRV(extra: Partial<Ficha> = {}): Ficha {
-  return { ticker: TICKER, propio: propio(), externo: externo(), ...extra }
+  return { ticker: TICKER, propio: propio(), externo: externo(), historico: historico(), ...extra }
 }
 
 const CONTRATO_ERROR = (mensaje: string) => ({
@@ -194,10 +226,113 @@ it('muestra el nombre de la empresa de Yahoo, el precio de BYMA y la fuente de c
 
   expect(await screen.findByText('Grupo Financiero Galicia S.A.')).toBeInTheDocument()
   // `getAllByText`: 5.000,00 es el precio de BYMA de la cabecera y también el último cierre de la
-  // serie de Yahoo. Que coincidan es normal y no vuelve ambiguo lo que se está probando acá.
+  // serie de data912. Que coincidan es normal y no vuelve ambiguo lo que se está probando acá.
   expect(screen.getAllByText('5.000,00').length).toBeGreaterThan(0)
   expect(screen.getByText('La rueda de hoy · BYMA')).toBeInTheDocument()
-  expect(screen.getByText('Resumen · Yahoo Finance')).toBeInTheDocument()
+  expect(screen.getByText('Cierres del último año · data912')).toBeInTheDocument()
+})
+
+// --- El OHLC de BYMA (13/08/2026) ---------------------------------------------------------------
+
+it('muestra apertura, rango del día y VWAP en la rueda', async () => {
+  mockearRutas({ [RUTA_RV(TICKER)]: { body: fichaRV() } })
+  renderizar()
+
+  expect(await screen.findByText('Apertura')).toBeInTheDocument()
+  expect(screen.getByText('4.900,00')).toBeInTheDocument()
+  expect(screen.getByText('4.880,00 – 5.050,00')).toBeInTheDocument()
+  expect(screen.getByText('VWAP')).toBeInTheDocument()
+  expect(screen.getByText('4.990,00')).toBeInTheDocument()
+})
+
+it('sin OHLC (fila anterior a la migración) declara vacío, no rompe la rueda', async () => {
+  const sinOhlc = fichaRV({
+    propio: propio({
+      precio_apertura: null,
+      precio_maximo: null,
+      precio_minimo: null,
+      vwap: null,
+    }),
+  })
+  mockearRutas({ [RUTA_RV(TICKER)]: { body: sinOhlc } })
+  renderizar()
+
+  await screen.findByText('Apertura')
+  expect(screen.getAllByText('s/d').length).toBeGreaterThan(0)
+})
+
+// --- La empresa: la clasificación de la SEC ------------------------------------------------------
+
+it('muestra la actividad, el rubro y el eslabón productivo de la SEC', async () => {
+  const clasificado = fichaRV({
+    propio: propio({
+      nombre_largo: 'GRUPO FINANCIERO GALICIA SA',
+      perfil_fuente: 'SEC EDGAR',
+      perfil_capturado_en: '2026-08-13T18:33:59+00:00',
+      sic_codigo: '6029',
+      sic_titulo: 'Commercial Banks, NEC',
+      sic_oficina: 'Office of Finance',
+      division_cadena: 'Finanzas y seguros',
+    }),
+  })
+  mockearRutas({ [RUTA_RV(TICKER)]: { body: clasificado } })
+  renderizar()
+
+  expect(await screen.findByText('Commercial Banks, NEC')).toBeInTheDocument()
+  expect(screen.getByText('Office of Finance')).toBeInTheDocument()
+  expect(screen.getByText('Finanzas y seguros')).toBeInTheDocument()
+  // El nombre propio (SEC) gana sobre el de Yahoo.
+  expect(screen.getByText('GRUPO FINANCIERO GALICIA SA')).toBeInTheDocument()
+  expect(screen.queryByText('Grupo Financiero Galicia S.A.')).not.toBeInTheDocument()
+})
+
+it('un fondo muestra su estrategia', async () => {
+  const etf = fichaRV({
+    propio: propio({
+      ticker: 'GLD',
+      nombre_largo: 'ETF SPDR GOLD TRUST',
+      sic_codigo: '6221',
+      estrategia_etf: 'activo_fisico',
+      ratio_conversion: '50:1',
+      mercado_origen: 'NYSE',
+    }),
+  })
+  mockearRutas({ [RUTA_RV('GLD')]: { body: etf } })
+  renderizar('GLD')
+
+  expect(await screen.findByText('Estrategia')).toBeInTheDocument()
+  expect(screen.getByText('activo físico')).toBeInTheDocument()
+  expect(screen.getByText('50:1')).toBeInTheDocument()
+})
+
+it('sin clasificar declara que el job no pasó por este papel, no inventa un sector', async () => {
+  mockearRutas({ [RUTA_RV(TICKER)]: { body: fichaRV() } })
+  renderizar()
+
+  expect(await screen.findByText('Todavía no se clasificó este papel.')).toBeInTheDocument()
+})
+
+// --- La pausa de Yahoo (13/08/2026) -------------------------------------------------------------
+
+it('con Yahoo pausado los paneles de valuación y perfil dicen el motivo de la pausa', async () => {
+  const pausado = fichaRV({
+    externo: externo({
+      disponible: false,
+      motivo:
+        'Yahoo Finance está pausado desde el 13/08/2026: la fuente limita todos los pedidos ' +
+        'desde esta conexión (HTTP 429 sostenido, sin Retry-After). Se reactiva con ' +
+        'YAHOO_HABILITADO=true.',
+      cotizacion: null,
+      perfil: null,
+      valuacion: null,
+    }),
+  })
+  mockearRutas({ [RUTA_RV(TICKER)]: { body: pausado } })
+  const { container } = renderizar()
+
+  expect(await screen.findAllByText(/pausado desde el 13\/08\/2026/)).not.toHaveLength(0)
+  // El histórico no depende de la pausa de Yahoo.
+  expect(container.querySelector('polyline')).not.toBeNull()
 })
 
 it('muestra las puntas y las operaciones de BYMA', async () => {
@@ -244,16 +379,17 @@ it('con Yahoo caído muestra igual lo de BYMA y declara el bloque externo ausent
     }),
   })
   mockearRutas({ [RUTA_RV(TICKER)]: { body: sinYahoo } })
-  renderizar()
+  const { container } = renderizar()
 
-  // Lo nuestro sigue: el precio de BYMA está en pantalla.
-  expect(await screen.findByText('5.000,00')).toBeInTheDocument()
-  // Y el bloque externo se declara, con el motivo de la fuente, en cada uno de sus cuatro paneles:
-  // resumen, valuación, perfil e histórico. Ninguno se queda mudo.
-  expect(
-    screen.getAllByText('Yahoo Finance no está disponible para GGAL.BA.'),
-  ).toHaveLength(4)
-  expect(screen.getAllByText(/no respondió la cotización/)).not.toHaveLength(0)
+  // Lo nuestro sigue: el precio de BYMA está en pantalla (y coincide con el último cierre de la
+  // serie de data912, que no depende de Yahoo — por eso `findAllByText` y no `findByText`).
+  expect((await screen.findAllByText('5.000,00')).length).toBeGreaterThan(0)
+  // El bloque externo se declara, con el motivo de la fuente, en cada uno de los dos paneles que
+  // dependen de Yahoo: valuación y perfil. Ninguno se queda mudo.
+  expect(screen.getAllByText('Yahoo Finance no está disponible para GGAL.BA.')).toHaveLength(2)
+  expect(screen.getAllByText(/no respondió la cotización/).length).toBeGreaterThan(0)
+  // El histórico es de data912, no de Yahoo: un fallo de Yahoo no lo arrastra.
+  expect(container.querySelector('polyline')).not.toBeNull()
 })
 
 it('sin nombre de empresa la cabecera dice el ticker, no un nombre inventado', async () => {
@@ -278,7 +414,8 @@ it('con el perfil roto conserva la cotización y declara ausente sólo el perfil
   mockearRutas({ [RUTA_RV(TICKER)]: { body: sinPerfil } })
   renderizar()
 
-  expect(await screen.findByText('Rango 52 semanas')).toBeInTheDocument()
+  // La cotización de Yahoo (nivel 1) sigue viva: sin nombre propio, la cabecera cae a ella.
+  expect(await screen.findByText('Grupo Financiero Galicia S.A.')).toBeInTheDocument()
   expect(screen.getByText('El perfil de la empresa no está disponible.')).toBeInTheDocument()
   expect(screen.getByText(/HTTP 401/)).toBeInTheDocument()
 })
@@ -342,13 +479,40 @@ it('dibuja la serie de cierres con su rango y sus extremos', async () => {
 
 it('con un solo cierre no dibuja nada y dice cuántos vinieron', async () => {
   const serieCorta = fichaRV({
-    externo: externo({ cotizacion: cotizacion({ historico: [{ fecha: '2026-08-07', cierre: 5000 }] }) }),
+    historico: historico({ puntos: [{ fecha: '2026-08-07', cierre: 5000 }] }),
   })
   mockearRutas({ [RUTA_RV(TICKER)]: { body: serieCorta } })
   const { container } = renderizar()
 
   expect(await screen.findByText('No hay serie de cierres para dibujar.')).toBeInTheDocument()
   expect(container.querySelector('polyline')).toBeNull()
+})
+
+it('con data912 caído declara el histórico ausente y el resto de la ficha sigue', async () => {
+  const sinHistorico = fichaRV({
+    historico: historico({
+      disponible: false,
+      motivo: 'data912 no respondió el histórico de GGAL (timeout)',
+      puntos: [],
+    }),
+  })
+  mockearRutas({ [RUTA_RV(TICKER)]: { body: sinHistorico } })
+  const { container } = renderizar()
+
+  expect(
+    await screen.findByText('data912 no tiene serie histórica para este símbolo.'),
+  ).toBeInTheDocument()
+  expect(screen.getByText(/timeout/)).toBeInTheDocument()
+  expect(container.querySelector('polyline')).toBeNull()
+  // Lo demás no depende de data912.
+  expect(screen.getByText('Grupo Financiero Galicia S.A.')).toBeInTheDocument()
+})
+
+it('la leyenda del histórico no hereda la moneda de la especie', async () => {
+  mockearRutas({ [RUTA_RV(TICKER)]: { body: fichaRV() } })
+  renderizar()
+
+  expect(await screen.findByText(/no declara la moneda de la serie/)).toBeInTheDocument()
 })
 
 // --- Qué ficha se muestra ------------------------------------------------------------------------

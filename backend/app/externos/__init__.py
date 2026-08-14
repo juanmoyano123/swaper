@@ -7,6 +7,7 @@ un bloque declarado vacío, no una columna del universo.
 """
 
 from app.externos.yahoo import (
+    MOTIVO_PAUSA,
     BloqueExterno,
     ClienteYahoo,
     CotizacionExterna,
@@ -15,10 +16,12 @@ from app.externos.yahoo import (
     PuntoHistorico,
     ResultadoPerfilEmpresa,
     ValuacionExterna,
+    bloque_pausado,
     cliente_yahoo,
 )
 
 __all__ = [
+    "MOTIVO_PAUSA",
     "BloqueExterno",
     "ClienteYahoo",
     "CotizacionExterna",
@@ -27,5 +30,6 @@ __all__ = [
     "PuntoHistorico",
     "ResultadoPerfilEmpresa",
     "ValuacionExterna",
+    "bloque_pausado",
     "cliente_yahoo",
 ]

@@ -173,6 +173,32 @@ async def test_disparar_enriquecimiento_renta_variable_sin_base_responde_503(cre
     assert respuesta.status_code == 503
 
 
+async def test_con_yahoo_pausado_el_enriquecimiento_no_corre(crear_app, monkeypatch) -> None:
+    """Con la pausa activa el endpoint corta antes de leer la base: ni un ticker se le pide a
+    Yahoo, y `enriquecer_perfiles` -que sí tocaría la conexión falsa- no se llama."""
+    monkeypatch.setenv("YAHOO_HABILITADO", "false")
+    get_settings.cache_clear()
+
+    llamado = False
+
+    async def _no_deberia_llamarse(conn, cliente_yahoo, *, limite):
+        nonlocal llamado
+        llamado = True
+        return _ResumenFalso()
+
+    monkeypatch.setattr(modulo_jobs, "enriquecer_perfiles", _no_deberia_llamarse)
+    app = crear_app(_FakeConexionCorridas())
+
+    async with cliente(app) as http:
+        respuesta = await http.post("/api/v1/jobs/perfiles-renta-variable")
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["pausado"] is True
+    assert "pausado" in cuerpo["motivo"]
+    assert llamado is False
+
+
 class _ResumenFalso:
     def como_dict(self) -> dict:
         return {

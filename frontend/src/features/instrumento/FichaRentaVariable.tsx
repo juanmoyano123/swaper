@@ -1,12 +1,20 @@
 /**
- * La ficha de una acción o un CEDEAR — F-053.
+ * La ficha de una acción o un CEDEAR — F-053, rediseñada el 13/08/2026 con la pausa de Yahoo.
  *
- * Dos orígenes en una pantalla, y cada bloque dice de dónde salió. **El bloque propio** sostiene la
- * ficha: precio, cierre anterior, variación, puntas y operaciones. Desde el experimento data912
- * (rama `experimento/data912`) ya no es siempre BYMA — `propio.fuente` declara la procedencia real
- * de cada corrida, ver `textoFuentePropia()` acá abajo. **El bloque externo es Yahoo Finance**, con
- * la hora en que se lo capturó, y puede faltar entero sin que la pantalla se rompa — cuando falta,
- * se declara y lo nuestro se muestra igual.
+ * Tres orígenes en una pantalla, y cada bloque dice de dónde salió. **El bloque propio** sostiene
+ * la ficha: precio, cierre anterior, variación, puntas, operaciones, OHLC del día y —desde el
+ * 13/08/2026— la clasificación de la SEC (a qué se dedica, rubro, eslabón productivo, y la
+ * estrategia si es un fondo). Desde el experimento data912 (rama `experimento/data912`) el precio
+ * ya no es siempre BYMA — `propio.fuente` declara la procedencia real de cada corrida, ver
+ * `textoFuentePropia()` acá abajo — pero el OHLC sí es siempre de BYMA, el overlay no lo toca.
+ *
+ * **El histórico de cierres es de data912**, no de Yahoo: cubre más papeles y más años que Yahoo
+ * daba, y no depende de si Yahoo está pausado.
+ *
+ * **El bloque externo es Yahoo Finance**, pausado desde el 13/08/2026 (`Settings.yahoo_habilitado`,
+ * default `False`: la fuente limita toda esta conexión). Mientras dure la pausa, valuación y perfil
+ * de Yahoo se muestran declarados ausentes con el motivo — igual que ante cualquier otro fallo de
+ * la fuente, la pantalla no distingue los dos casos.
  *
  * Lo que no está, y no es un olvido:
  *
@@ -15,9 +23,9 @@
  *   los trae y acá no hay dónde ponerlos.
  * - **No hay rendimiento, ni duración, ni paridad.** Una acción no tiene ninguna de las tres y no se
  *   pone nada en su lugar (regla 2).
- * - **Los valores de Yahoo no se traducen.** "Financial Services" y "Banks - Regional" se muestran
- *   como la fuente los declara (regla 11); traducirlos sería mostrar nuestra interpretación en el
- *   lugar del dato.
+ * - **Los valores de Yahoo y los de la SEC no se traducen.** "Financial Services" tanto como
+ *   "Office of Energy & Transportation" se muestran como la fuente los declara (regla 11);
+ *   traducirlos sería mostrar nuestra interpretación en el lugar del dato.
  * - **El precio no lleva símbolo de moneda.** La moneda de cotización se muestra al lado, tal como
  *   la declara la fuente — incluido `EXT`, que BYMA no documenta y que no se toma por dólares.
  * - **Ningún monto de la valuación se muestra sin su moneda.** En un CEDEAR, Yahoo expresa el EPS y
@@ -38,13 +46,28 @@ import { fmtCompacto, fmtFecha, fmtFechaHora, fmtNumero, fmtPct, SIN_DATO } from
 import { useFichaRentaVariable } from './hooks/useFichaRentaVariable'
 import type {
   BloqueExterno,
+  BloqueHistorico as TipoBloqueHistorico,
   BloquePropio,
-  CotizacionExterna,
   MontoExterno,
   PerfilExterno,
   PuntoHistorico,
   ValuacionExterna,
 } from './lib/schemaRentaVariable'
+
+/** Cómo se lee cada estrategia en pantalla. Espejo de las claves de `app/renta_variable/etfs.py`.
+ *  Duplicado a propósito de `BloqueRentaVariable.tsx` del armador: son fichas de features
+ *  distintas y no comparten módulo, mismo criterio que ya usa `textoFuentePropia`. */
+const ETIQUETA_ESTRATEGIA: Record<string, string> = {
+  indice_amplio: 'índice amplio',
+  equiponderado: 'equiponderado',
+  factor: 'por factor',
+  geografico: 'geográfico',
+  sectorial: 'sectorial',
+  activo_fisico: 'activo físico',
+  cripto: 'cripto',
+  esg: 'ESG',
+  sin_clasificar: 'sin clasificar',
+}
 
 /**
  * Experimento data912: `propio.fuente` compone origen y cálculo con `+`
@@ -79,7 +102,7 @@ export function FichaRentaVariable({ ticker }: { ticker: string }) {
     )
   }
 
-  const { propio, externo } = query.data
+  const { propio, externo, historico } = query.data
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -91,8 +114,8 @@ export function FichaRentaVariable({ ticker }: { ticker: string }) {
         <BloqueDeLaRueda propio={propio} />
       </Panel>
 
-      <Panel rotulo={`Resumen · ${externo.fuente}`}>
-        <BloqueResumen externo={externo} />
+      <Panel rotulo="La empresa · SEC">
+        <BloqueEmpresa propio={propio} />
       </Panel>
 
       <Panel rotulo={`Valuación · ${externo.fuente}`}>
@@ -103,8 +126,8 @@ export function FichaRentaVariable({ ticker }: { ticker: string }) {
         <BloquePerfil externo={externo} />
       </Panel>
 
-      <Panel rotulo={`Cierres del último año · ${externo.fuente}`}>
-        <BloqueHistorico externo={externo} />
+      <Panel rotulo={`Cierres del último año · ${historico.fuente}`}>
+        <BloqueHistorico historico={historico} />
       </Panel>
     </div>
   )
@@ -163,9 +186,19 @@ function rango(minimo: number | null, maximo: number | null): string {
 // --- Cabecera ---------------------------------------------------------------------------------
 
 function Cabecera({ propio, externo }: { propio: BloquePropio; externo: BloqueExterno }) {
-  // El nombre de la empresa es lo único de la cabecera que sale de Yahoo. Sin Yahoo la ficha
-  // arranca con el ticker de BYMA y nada inventado en su lugar.
-  const nombre = externo.cotizacion?.nombre_largo ?? externo.cotizacion?.nombre_corto ?? null
+  // El nombre sale primero de lo nuestro (SEC o la lista de CEDEARs de BYMA, ver `perfil_fuente`)
+  // y sólo cae a Yahoo si lo propio no lo tiene: con Yahoo pausado la cabecera no se queda sin
+  // nombre para los papeles que la SEC ya clasificó.
+  const nombre =
+    propio.nombre_largo ??
+    propio.nombre_corto ??
+    externo.cotizacion?.nombre_largo ??
+    externo.cotizacion?.nombre_corto ??
+    null
+  const fuenteDelNombre =
+    propio.nombre_largo !== null || propio.nombre_corto !== null
+      ? (propio.perfil_fuente ?? 'una corrida anterior')
+      : externo.fuente
   const variacion = propio.variacion
   const color =
     variacion === null || variacion === 0 ? 'var(--tx)' : variacion > 0 ? 'var(--pos)' : 'var(--neg)'
@@ -189,7 +222,8 @@ function Cabecera({ propio, externo }: { propio: BloquePropio; externo: BloqueEx
       <Leyenda>
         Precio y variación: {textoFuentePropia(propio.fuente)}. El nombre de la empresa
         {nombre === null ? ' no lo entregó ' : ' lo declara '}
-        {externo.fuente}. La moneda es la que declara la fuente, sin convertir.
+        {nombre === null ? externo.fuente : fuenteDelNombre}. La moneda es la que declara la
+        fuente, sin convertir.
       </Leyenda>
     </div>
   )
@@ -199,6 +233,9 @@ function Cabecera({ propio, externo }: { propio: BloquePropio; externo: BloqueEx
 
 function BloqueDeLaRueda({ propio }: { propio: BloquePropio }) {
   const campos: [string, ReactNode][] = [
+    ['Apertura', fmtNumero(propio.precio_apertura, 2)],
+    ['Rango del día', rango(propio.precio_minimo, propio.precio_maximo)],
+    ['VWAP', fmtNumero(propio.vwap, 2)],
     ['Cierre anterior', fmtNumero(propio.cierre_anterior, 2)],
     ['Variación', propio.variacion === null ? SIN_DATO : fmtPct(propio.variacion * 100)],
     ['Compra', fmtNumero(propio.px_bid, 2)],
@@ -211,36 +248,63 @@ function BloqueDeLaRueda({ propio }: { propio: BloquePropio }) {
     <div>
       <Grilla campos={campos} />
       <Leyenda>
-        Todo en esta grilla sale del universo consolidado de {textoFuentePropia(propio.fuente)}. El
-        volumen se muestra en dólares sólo cuando la moneda declarada permite convertirlo; con EXT,
-        que BYMA no documenta, queda {SIN_DATO}.
+        Todo en esta grilla sale del universo consolidado. Apertura, rango del día y VWAP son
+        siempre de BYMA, incluso en las filas donde el último precio vino de data912 — la fuente no
+        los pisa. El volumen se muestra en dólares sólo cuando la moneda declarada permite
+        convertirlo; con EXT, que BYMA no documenta, queda {SIN_DATO}.
       </Leyenda>
     </div>
   )
 }
 
-// --- Yahoo: resumen ---------------------------------------------------------------------------
+// --- La empresa: la clasificación de la SEC -----------------------------------------------------
 
-function BloqueResumen({ externo }: { externo: BloqueExterno }) {
-  if (externo.cotizacion === null) return <ExternoAusente externo={externo} />
+function BloqueEmpresa({ propio }: { propio: BloquePropio }) {
+  const esFondo = propio.estrategia_etf !== null
+  const sinNadaQueMostrar =
+    propio.sic_titulo === null &&
+    propio.sic_oficina === null &&
+    propio.division_cadena === null &&
+    propio.ratio_conversion === null &&
+    propio.mercado_origen === null &&
+    !esFondo
 
-  const c: CotizacionExterna = externo.cotizacion
+  if (sinNadaQueMostrar) {
+    return (
+      <EstadoVacio
+        titulo="Todavía no se clasificó este papel."
+        detalle={
+          'La SEC cubre el 74 % de los CEDEARs y el 9 % de las acciones argentinas (13/08/2026); ' +
+          'el resto espera a la CNV. No se completa por analogía con otra empresa.'
+        }
+      />
+    )
+  }
+
   const campos: [string, ReactNode][] = [
-    ['Último', fmtNumero(c.precio, 2)],
-    ['Cierre previo', fmtNumero(c.cierre_previo, 2)],
-    ['Rango del día', rango(c.minimo_dia, c.maximo_dia)],
-    ['Rango 52 semanas', rango(c.minimo_52_semanas, c.maximo_52_semanas)],
-    ['Volumen', fmtCompacto(c.volumen)],
-    ['Moneda', c.moneda ?? SIN_DATO],
+    ['Actividad', propio.sic_titulo ?? SIN_DATO],
+    ['Rubro (SEC)', propio.sic_oficina ?? SIN_DATO],
+    ['Eslabón productivo', propio.division_cadena ?? SIN_DATO],
+    ['Mercado de origen', propio.mercado_origen ?? SIN_DATO],
+    ['Ratio de conversión', propio.ratio_conversion ?? SIN_DATO],
   ]
+  if (esFondo) {
+    campos.push([
+      'Estrategia',
+      ETIQUETA_ESTRATEGIA[propio.estrategia_etf ?? ''] ?? propio.estrategia_etf,
+    ])
+  }
 
   return (
     <div>
       <Grilla campos={campos} />
       <Leyenda>
-        {externo.fuente} · símbolo {c.simbolo} · bolsa {c.bolsa_nombre ?? c.bolsa} · capturado el{' '}
-        {fmtFechaHora(c.capturado_en)}. Son los números de otra fuente para el mismo papel: no
-        reemplazan los de BYMA ni se promedian con ellos.
+        Actividad, rubro y eslabón productivo son de la SEC (código {propio.sic_codigo ?? SIN_DATO},
+        la llave de auditoría), sin traducir (regla 11). El eslabón sale de la división del SIC
+        Manual, no de una interpretación nuestra. Mercado y ratio son de la tabla oficial de
+        CEDEARs de BYMA cuando el papel es un CEDEAR.
+        {propio.perfil_capturado_en !== null &&
+          ` Clasificado el ${fmtFechaHora(propio.perfil_capturado_en)}.`}
       </Leyenda>
     </div>
   )
@@ -407,15 +471,22 @@ function Sparkline({ puntos }: { puntos: PuntoHistorico[] }) {
   )
 }
 
-function BloqueHistorico({ externo }: { externo: BloqueExterno }) {
-  if (externo.cotizacion === null) return <ExternoAusente externo={externo} />
+function BloqueHistorico({ historico }: { historico: TipoBloqueHistorico }) {
+  if (!historico.disponible) {
+    return (
+      <EstadoVacio
+        titulo={`${historico.fuente} no tiene serie histórica para este símbolo.`}
+        detalle={historico.motivo ?? 'La fuente no respondió. El resto de la ficha no depende de esto.'}
+      />
+    )
+  }
 
-  const puntos = externo.cotizacion.historico
+  const puntos = historico.puntos
   if (puntos.length < 2) {
     return (
       <EstadoVacio
         titulo="No hay serie de cierres para dibujar."
-        detalle={`${externo.fuente} devolvió ${puntos.length} cierre(s) publicado(s) para este símbolo.`}
+        detalle={`${historico.fuente} devolvió ${puntos.length} cierre(s) publicado(s) para este símbolo.`}
       />
     )
   }
@@ -451,9 +522,10 @@ function BloqueHistorico({ externo }: { externo: BloqueExterno }) {
         />
       </div>
       <Leyenda>
-        {puntos.length} cierres publicados por {externo.fuente} en{' '}
-        {externo.cotizacion.moneda ?? SIN_DATO}. El eje horizontal es el orden de las ruedas, no el
-        calendario, y los días sin cierre publicado no están en la serie: no se interpolan.
+        {puntos.length} cierres publicados por {historico.fuente}. {historico.fuente} no declara la
+        moneda de la serie: se muestra tal como la fuente los publica. El eje horizontal es el orden
+        de las ruedas, no el calendario, y los días sin cierre publicado no están en la serie: no se
+        interpolan.
       </Leyenda>
     </div>
   )

@@ -13,7 +13,13 @@
 
 import { z } from 'zod'
 
-/** El bloque nuestro: lo que BYMA publica, idéntico a lo que muestra la tabla del monitor. */
+/**
+ * El bloque nuestro: lo que BYMA publica, idéntico a lo que muestra la tabla del monitor, más la
+ * clasificación de la SEC y el OHLC del día (13/08/2026) — que reemplazan lo que la ficha le pedía
+ * a Yahoo mientras esa fuente está pausada. Todo puede faltar: la SEC cubre 74 % de los CEDEARs y
+ * 9 % de las acciones argentinas, y `precio_apertura`/`precio_maximo`/`precio_minimo`/`vwap` son
+ * `null` en toda fila anterior a la migración que los agrega.
+ */
 export const esquemaBloquePropio = z.object({
   fuente: z.string(),
   ticker: z.string(),
@@ -28,6 +34,32 @@ export const esquemaBloquePropio = z.object({
   px_bid: z.number().nullable(),
   px_ask: z.number().nullable(),
   operaciones: z.number().nullable(),
+  // OHLC de BYMA: siempre de BYMA aunque `fuente` diga data912 (el overlay no los pisa).
+  precio_apertura: z.number().nullable(),
+  precio_maximo: z.number().nullable(),
+  precio_minimo: z.number().nullable(),
+  vwap: z.number().nullable(),
+  // Perfil de empresa: nombre_corto/nombre_largo son de Yahoo o de la lista de CEDEARs de BYMA
+  // según cuál corrió último (`perfil_fuente` lo dice). El resto es siempre de la SEC.
+  nombre_corto: z.string().nullable(),
+  nombre_largo: z.string().nullable(),
+  perfil_fuente: z.string().nullable(),
+  perfil_capturado_en: z.string().nullable(),
+  /** Código de actividad de la SEC, sin normalizar: es la llave de auditoría. */
+  sic_codigo: z.string().nullable(),
+  /** A qué se dedica, en las palabras de la fuente: `Electronic Computers`. */
+  sic_titulo: z.string().nullable(),
+  /** El rubro, según cómo agrupa la propia SEC: `Office of Energy & Transportation`. */
+  sic_oficina: z.string().nullable(),
+  /** Eslabón de la cadena productiva (extracción, manufactura, comercio, servicios), derivado de
+   *  la división del SIC Manual — nunca una interpretación nuestra. */
+  division_cadena: z.string().nullable(),
+  /** Qué idea arma el portafolio si es un fondo. `null` = no es un fondo. */
+  estrategia_etf: z.string().nullable(),
+  /** Cuántos CEDEARs equivalen a una acción del subyacente, como razón (`20:1`). */
+  ratio_conversion: z.string().nullable(),
+  /** En qué mercado cotiza el subyacente: `NASDAQ`, `NYSE`, `B3`. */
+  mercado_origen: z.string().nullable(),
 })
 
 export type BloquePropio = z.infer<typeof esquemaBloquePropio>
@@ -38,6 +70,21 @@ export const esquemaPuntoHistorico = z.object({
 })
 
 export type PuntoHistorico = z.infer<typeof esquemaPuntoHistorico>
+
+/**
+ * El histórico de cierres — de data912, no de Yahoo (13/08/2026). Bloque propio y top-level, no
+ * dentro de `externo`: es otra fuente, con su propio rótulo, y regla 11 exige una fuente por
+ * bloque. `data912` no declara la moneda de la serie; quien la muestre tiene que decirlo en vez de
+ * heredar la de la especie, que podría no ser la misma.
+ */
+export const esquemaBloqueHistorico = z.object({
+  fuente: z.string(),
+  disponible: z.boolean(),
+  motivo: z.string().nullable(),
+  puntos: z.array(esquemaPuntoHistorico),
+})
+
+export type BloqueHistorico = z.infer<typeof esquemaBloqueHistorico>
 
 /** El nivel 1 de Yahoo: el papel visto por la fuente externa, con la hora en que se lo capturó. */
 export const esquemaCotizacionExterna = z.object({
@@ -131,6 +178,7 @@ export const esquemaFichaRentaVariable = z.object({
   ticker: z.string(),
   propio: esquemaBloquePropio,
   externo: esquemaBloqueExterno,
+  historico: esquemaBloqueHistorico,
 })
 
 export type FichaRentaVariable = z.infer<typeof esquemaFichaRentaVariable>

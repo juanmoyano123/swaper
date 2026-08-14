@@ -92,6 +92,14 @@ class EspecieRentaVariable:
     mercado_origen: str | None = None
     """En qué mercado cotiza el subyacente: `NASDAQ`, `NYSE`, `B3`."""
 
+    # El OHLC de BYMA que la consolidación descartaba (13/08/2026): reemplaza lo que la ficha le
+    # pedía a Yahoo Finance para el rango del día. **Siempre de BYMA**, aunque `fuente` diga
+    # data912 — el overlay no los pisa. Ver `COMMENT ON COLUMN` de la migración `ohlc_byma_precios`.
+    precio_apertura: float | None = None
+    precio_maximo: float | None = None
+    precio_minimo: float | None = None
+    vwap: float | None = None
+
     def como_dict(self) -> dict[str, object]:
         return {
             "ticker": self.ticker,
@@ -124,6 +132,10 @@ class EspecieRentaVariable:
             "estrategia_etf": self.estrategia_etf,
             "ratio_conversion": self.ratio_conversion,
             "mercado_origen": self.mercado_origen,
+            "precio_apertura": self.precio_apertura,
+            "precio_maximo": self.precio_maximo,
+            "precio_minimo": self.precio_minimo,
+            "vwap": self.vwap,
         }
 
 
@@ -237,6 +249,10 @@ def armar_renta_variable(
                 estrategia_etf=_texto(fila.get("estrategia_etf")),
                 ratio_conversion=_texto(fila.get("ratio_conversion")),
                 mercado_origen=_texto(fila.get("mercado_origen")),
+                precio_apertura=a_numero(fila.get("precio_apertura")),
+                precio_maximo=a_numero(fila.get("precio_maximo")),
+                precio_minimo=a_numero(fila.get("precio_minimo")),
+                vwap=a_numero(fila.get("vwap")),
             )
         )
     return especies
