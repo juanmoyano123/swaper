@@ -48,9 +48,11 @@ import type {
   BloqueExterno,
   BloqueHistorico as TipoBloqueHistorico,
   BloquePropio,
+  BloqueSec,
   MontoExterno,
   PerfilExterno,
   PuntoHistorico,
+  RatioSec,
   ValuacionExterna,
 } from './lib/schemaRentaVariable'
 
@@ -102,7 +104,7 @@ export function FichaRentaVariable({ ticker }: { ticker: string }) {
     )
   }
 
-  const { propio, externo, historico } = query.data
+  const { propio, externo, historico, sec } = query.data
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -121,6 +123,12 @@ export function FichaRentaVariable({ ticker }: { ticker: string }) {
       <Panel rotulo={`Valuación · ${externo.fuente}`}>
         <BloqueValuacion externo={externo} />
       </Panel>
+
+      {sec !== undefined && (
+        <Panel rotulo={`Estados contables · ${sec.fuente}`}>
+          <BloqueEstadosContablesSec sec={sec} />
+        </Panel>
+      )}
 
       <Panel rotulo={`Perfil de la empresa · ${externo.fuente}`}>
         <BloquePerfil externo={externo} />
@@ -367,6 +375,95 @@ function BloqueValuacion({ externo }: { externo: BloqueExterno }) {
         el precio sobre valor libro y la beta son adimensionales; los montos llevan siempre la moneda
         que la fuente declara para ellos, que en un CEDEAR es la de la especie local y no la del
         subyacente.
+      </Leyenda>
+    </div>
+  )
+}
+
+// --- SEC: estados contables (14/08/2026) -------------------------------------------------------
+
+/**
+ * Cómo se lee cada ratio: `pct` para los que son variación o proporción de resultado (ROE, margen,
+ * crecimiento), `x` para los de estructura de capital (deuda/patrimonio, liquidez, que se leen como
+ * veces), `monto` para el único que lleva moneda propia (EPS). El período va siempre debajo del
+ * valor — regla 11: ningún número sin decir de qué fecha es.
+ */
+function ValorRatioSec({ ratio, tipo }: { ratio: RatioSec | null; tipo: 'pct' | 'x' | 'monto' }) {
+  if (ratio === null) return <>{SIN_DATO}</>
+  return (
+    <>
+      <div>
+        {tipo === 'pct' && fmtPct(ratio.valor * 100)}
+        {tipo === 'x' && `${fmtNumero(ratio.valor, 2)}x`}
+        {tipo === 'monto' && (
+          <>
+            {fmtNumero(ratio.valor, 2)}{' '}
+            <span style={{ fontSize: 10.5, color: 'var(--dim)' }}>{ratio.unidad ?? SIN_DATO}</span>
+          </>
+        )}
+      </div>
+      <div style={{ fontSize: 9.5, color: 'var(--dim)', marginTop: 2 }}>{fmtFecha(ratio.periodo)}</div>
+    </>
+  )
+}
+
+function BloqueEstadosContablesSec({ sec }: { sec: BloqueSec }) {
+  if (!sec.disponible) {
+    return (
+      <EstadoVacio
+        titulo={`${sec.fuente} no tiene estados contables disponibles para este papel.`}
+        detalle={
+          sec.motivo_ausente ?? 'La fuente no respondió. El resto de la ficha no depende de esto.'
+        }
+      />
+    )
+  }
+
+  const r = sec.ratios
+  const campos: [string, ReactNode][] = [
+    ['ROE', <ValorRatioSec key="roe" ratio={r?.roe ?? null} tipo="pct" />],
+    ['Margen operativo', <ValorRatioSec key="mo" ratio={r?.margen_operativo ?? null} tipo="pct" />],
+    [
+      'Crecimiento de ingresos i.a.',
+      <ValorRatioSec key="ci" ratio={r?.crecimiento_ingresos ?? null} tipo="pct" />,
+    ],
+    ['Ganancia por acción', <ValorRatioSec key="eps" ratio={r?.eps ?? null} tipo="monto" />],
+    ['Deuda / patrimonio', <ValorRatioSec key="dp" ratio={r?.deuda_patrimonio ?? null} tipo="x" />],
+    [
+      'Liquidez corriente',
+      <ValorRatioSec key="lc" ratio={r?.liquidez_corriente ?? null} tipo="x" />,
+    ],
+  ]
+
+  return (
+    <div>
+      {sec.solo_anual && sec.nota_solo_anual !== null && (
+        <p style={{ fontSize: 10.5, color: 'var(--dim)', marginBottom: 10, textWrap: 'pretty' }}>
+          {sec.nota_solo_anual}
+        </p>
+      )}
+      <Grilla campos={campos} />
+      {sec.filings.length > 0 && (
+        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {sec.filings.map((f) => (
+            <a
+              key={f.url_documento}
+              href={f.url_documento}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ fontSize: 11.5, color: 'var(--ac2)' }}
+            >
+              {f.form} · {fmtFecha(f.fecha)}
+            </a>
+          ))}
+        </div>
+      )}
+      <Leyenda>
+        Estados contables de {sec.fuente}
+        {sec.cik !== null && ` (CIK ${sec.cik})`}. Cada ratio se calcula sobre el mismo ejercicio
+        fiscal, y el período va debajo del número. El crecimiento de ingresos compara contra el
+        ejercicio anterior; PER queda fuera de este paquete porque cruzaría el precio de BYMA con
+        el EPS de la SEC en otra moneda.
       </Leyenda>
     </div>
   )

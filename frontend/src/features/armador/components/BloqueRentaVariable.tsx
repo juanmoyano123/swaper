@@ -66,11 +66,6 @@ import {
  *  diferencia entre pedido y real se marca, no antes. */
 const TOLERANCIA_DIFERENCIA_FILA = 0.6
 
-const CLASES: { clave: 'accion' | 'cedear'; etiqueta: string }[] = [
-  { clave: 'accion', etiqueta: 'Acciones' },
-  { clave: 'cedear', etiqueta: 'CEDEARs' },
-]
-
 const estiloSelectPicker = {
   minWidth: 140,
   font: 'inherit',
@@ -87,14 +82,17 @@ export function BloqueRentaVariable() {
   const { alternarRentaVariable, fijarPeso } = useArmadorAcciones()
   const abrirInstrumento = useAbrirInstrumento()
 
-  const acciones = useRentaVariable('accion')
+  // Sólo CEDEARs desde el 14/08/2026 (pedido del dueño del producto): las acciones argentinas
+  // dejaron de ser descubribles desde este picker — la mayoría no opera nunca, y el armado
+  // automático (backend) tampoco puede sugerirlas. El dato de `accion` sigue existiendo en el
+  // universo; sólo se dejó de pedir acá. `FichaInstrumento.tsx` sigue reconociendo `accion` para
+  // que una posición vieja o un link directo a `/instrumento/GGAL` sigan resolviendo.
   const cedears = useRentaVariable('cedear')
   // Sólo lectura: F-021/F-020 ya extrajeron este hook para no repetir el pipeline. Se usa acá
   // únicamente para declarar cómo se compone el monto total (GWT-4) — este bloque no recalcula
   // nada de renta fija.
   const { totalInvertidoUsd: subtotalRfUsd, hayAlgunaResuelta: hayRfResuelta } = useCarteraResuelta()
 
-  const [clasePicker, setClasePickerCrudo] = useState<'accion' | 'cedear'>('accion')
   const [busqueda, setBusqueda] = useState('')
   // Para que "reemplazar" deje el cursor donde se elige el sustituto: sacar la posición y dejar al
   // asesor buscando dónde estaba el scroll sería la mitad del trabajo.
@@ -112,15 +110,6 @@ export function BloqueRentaVariable() {
   if (tematicaId !== tematicaAplicada) {
     setTematicaAplicada(tematicaId)
     setRubroFiltro(presetPorId(tematicaId)?.rubroRv ?? null)
-    setEslabonFiltro(null)
-  }
-
-  // Las opciones de una clase no tienen por qué existir en la otra, así que cambiar de Acciones a
-  // CEDEARs limpia la selección en vez de dejar un filtro activo que no matchea nada sin que se
-  // entienda por qué.
-  function setClasePicker(clase: 'accion' | 'cedear') {
-    setClasePickerCrudo(clase)
-    setRubroFiltro(null)
     setEslabonFiltro(null)
   }
 
@@ -153,9 +142,9 @@ export function BloqueRentaVariable() {
     totalUsd !== null && totalUsd > 0 && subtotalRvUsd !== null ? (subtotalRvUsd / totalUsd) * 100 : null
 
   const yaEnCartera = new Set(posicionesRv.map((p) => p.ticker))
-  const listaPicker = (clasePicker === 'accion' ? acciones.data : cedears.data) ?? []
-  const cargandoPicker = clasePicker === 'accion' ? acciones.isPending : cedears.isPending
-  const erroresPicker = clasePicker === 'accion' ? acciones.isError : cedears.isError
+  const listaPicker = cedears.data ?? []
+  const cargandoPicker = cedears.isPending
+  const erroresPicker = cedears.isError
 
   // Opciones del filtro: sólo las que de verdad aparecen en esta clase, ordenadas alfabéticamente
   // (orden de presentación — rubro y eslabón no tienen jerarquía propia que ordenar por otro
@@ -208,8 +197,8 @@ export function BloqueRentaVariable() {
     <div>
       <header style={{ marginBottom: 8 }}>
         <p style={{ margin: 0, fontSize: 11, color: 'var(--dim)' }}>
-          Acciones y CEDEARs. Fuera del cálculo de renta fija, de la TIR, la duración y los cuatro
-          rendimientos por naturaleza de tasa.
+          CEDEARs — y, si venían de una cartera anterior, acciones ya cargadas. Fuera del cálculo
+          de renta fija, de la TIR, la duración y los cuatro rendimientos por naturaleza de tasa.
         </p>
       </header>
 
@@ -259,37 +248,14 @@ export function BloqueRentaVariable() {
         </div>
       )}
 
-      <div role="radiogroup" aria-label="Clase de renta variable a buscar" style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
-        {CLASES.map(({ clave, etiqueta }) => {
-          const activa = clave === clasePicker
-          return (
-            <button
-              key={clave}
-              type="button"
-              role="radio"
-              aria-checked={activa}
-              onClick={() => setClasePicker(clave)}
-              style={{
-                font: `${activa ? 600 : 400} 12px/1 inherit`,
-                color: activa ? 'var(--bg)' : 'var(--dim)',
-                background: activa ? 'var(--ac)' : 'transparent',
-                border: `1px solid ${activa ? 'var(--ac)' : 'var(--lin)'}`,
-                borderRadius: 3,
-                padding: '5px 10px',
-                cursor: 'pointer',
-              }}
-            >
-              {etiqueta}
-            </button>
-          )
-        })}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
         <input
           ref={refBuscador}
           type="text"
           value={busqueda}
           onChange={(evento) => setBusqueda(evento.target.value)}
           placeholder="Buscar ticker o nombre…"
-          aria-label="Buscar acción o CEDEAR por ticker o nombre"
+          aria-label="Buscar CEDEAR por ticker o nombre"
           className="mono"
           style={{
             marginLeft: 8,
@@ -359,7 +325,7 @@ export function BloqueRentaVariable() {
       {!cargandoPicker && !erroresPicker && (
         <div
           role="list"
-          aria-label={`Resultados de ${clasePicker === 'accion' ? 'acciones' : 'CEDEARs'}`}
+          aria-label="Resultados de CEDEARs"
           style={{ maxHeight: 176, overflowY: 'auto', border: '1px solid var(--lin)', borderRadius: 4 }}
         >
           {papelesFiltrados.length === 0 ? (

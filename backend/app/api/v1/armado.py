@@ -162,7 +162,13 @@ async def armado_asistido(
     alertas_rv: list[Alerta] = []
     if n_rv > 0:
         filas_rv = await leer_renta_variable(conn)
-        especies_rv = construir_especies_rv(filas_rv, saneado.cambio)
+        # Sólo CEDEARs (14/08/2026): las acciones argentinas dejaron de ser descubribles desde el
+        # picker del armador manual, y el armado automático no puede sugerir algo que el asesor no
+        # puede ni buscar. La ingesta y la clasificación de acciones siguen igual — este filtro es
+        # sólo del armado, no del universo (ver `app/renta_variable/lectura.py`, sin cambios).
+        especies_rv = [
+            e for e in construir_especies_rv(filas_rv, saneado.cambio) if e.clase_activo == "cedear"
+        ]
         posiciones_rv, alertas_rv = seleccionar_renta_variable(
             especies_rv,
             pct_rv=pct_rv_efectivo,

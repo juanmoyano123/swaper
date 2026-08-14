@@ -32,8 +32,13 @@ export const NOMBRE_SEGMENTO: Record<string, string> = {
   'usd_hard/on_corporativo': 'ONs',
 }
 
-/** Las pestañas que no son de renta fija: quien las active muestra columnas propias, sin TIR. */
-export const CLAVES_RENTA_VARIABLE = ['accion', 'cedear'] as const
+/** Las pestañas que no son de renta fija: quien las active muestra columnas propias, sin TIR.
+ *
+ *  Sólo `cedear` desde el 14/08/2026: las acciones argentinas dejaron de ser descubribles desde
+ *  cualquier picker (pedido del dueño del producto — la pestaña quedaba mayormente `s/d`, casi
+ *  ninguna opera). El dato sigue existiendo: `FichaInstrumento.tsx` reconoce `accion` aparte para
+ *  que una posición vieja o un link directo a `/instrumento/GGAL` sigan resolviendo. */
+export const CLAVES_RENTA_VARIABLE = ['cedear'] as const
 
 /**
  * Los segmentos que se muestran abiertos por crédito, con las clases de activo que los componen.

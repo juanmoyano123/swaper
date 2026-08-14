@@ -123,7 +123,7 @@ export const SECCIONES: readonly DefinicionDeSeccion[] = [
     id: 'rv',
     rotulo: 'Renta variable',
     bajada:
-      'El buscador para sumar acciones y CEDEARs a la cartera. Ya cargadas se editan también desde Cartera. No suman a la renta ni a los rendimientos: una acción no tiene cupón ni TIR (regla 2).',
+      'El buscador para sumar CEDEARs a la cartera (14/08/2026: las acciones argentinas se sacaron de acá). Una acción de una cartera anterior sigue viéndose y se edita desde Cartera. No suman a la renta ni a los rendimientos: ni una acción ni un CEDEAR tienen cupón ni TIR (regla 2).',
     acento: 'var(--cat6)',
     resumen: () => <ResumenRentaVariable />,
     contenido: () => (

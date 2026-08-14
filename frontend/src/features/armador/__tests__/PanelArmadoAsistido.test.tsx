@@ -150,7 +150,7 @@ describe('PanelArmadoAsistido', () => {
     renderizar()
 
     await userEvent.type(screen.getByLabelText('Monto a invertir (USD)'), '100000')
-    await userEvent.selectOptions(screen.getByLabelText('Temática (acciones)'), 'tecnologicas')
+    await userEvent.selectOptions(screen.getByLabelText('Temática (CEDEARs)'), 'tecnologicas')
     await userEvent.click(screen.getByRole('button', { name: 'Armar cartera asistida' }))
 
     const [, init] = await esperarLlamadaDeArmado(fetchMock)

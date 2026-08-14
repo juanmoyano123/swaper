@@ -181,26 +181,30 @@ async def test_con_renta_variable_activa_el_endpoint_consulta_las_dos_fuentes(cr
 # no hay los 20 pares que pide `derivar_tipo_de_cambio`, así que el implícito no sale y una
 # especie en pesos quedaría sin `volumen_usd` -- lo que se quiere probar acá es la composición, no
 # el tipo de cambio (eso ya lo prueba `test_armado_renta_variable.py`).
+#
+# `clase_activo: "cedear"` en las tres (14/08/2026): el armado automático dejó de poder sugerir
+# acciones argentinas -- ver `test_el_armado_automatico_nunca_sugiere_una_accion` más abajo, que
+# prueba el filtro con un universo mixto.
 FILAS_RENTA_VARIABLE: list[dict[str, Any]] = [
     {
-        "ticker": "GGAL",
-        "clase_activo": "accion",
+        "ticker": "AAPL",
+        "clase_activo": "cedear",
         "lastPrice": 5000.0,
         "effectiveVolume": 1_500_000.0,
         "moneda_cotizacion": "USD",
         "sector": "Bancos",
     },
     {
-        "ticker": "YPFD",
-        "clase_activo": "accion",
+        "ticker": "XOM",
+        "clase_activo": "cedear",
         "lastPrice": 30_000.0,
         "effectiveVolume": 800_000.0,
         "moneda_cotizacion": "USD",
         "sector": "O&G",
     },
     {
-        "ticker": "PAMP",
-        "clase_activo": "accion",
+        "ticker": "KO",
+        "clase_activo": "cedear",
         "lastPrice": 2000.0,
         "effectiveVolume": 600_000.0,
         "moneda_cotizacion": "USD",
@@ -281,6 +285,51 @@ async def test_sin_candidatos_de_renta_variable_la_renta_fija_no_se_reescala(
     assert sum(p["pct_cartera"] for p in cuerpo["posiciones"]) == pytest.approx(100.0, abs=0.5)
 
 
+# --- Sólo CEDEARs (14/08/2026) --------------------------------------------------------------
+
+# Una acción con el volumen más alto de todo el universo: si el filtro de clase no anduviera,
+# sería la primera candidata elegida por el ranking de liquidez (`app/armado/renta_variable.py`
+# ordena por `volumen_usd` descendente). Que quede afuera es justo lo que este test prueba.
+FILAS_RENTA_VARIABLE_MIXTA: list[dict[str, Any]] = [
+    {
+        "ticker": "GGAL",
+        "clase_activo": "accion",
+        "lastPrice": 5000.0,
+        "effectiveVolume": 50_000_000.0,
+        "moneda_cotizacion": "USD",
+    },
+    {
+        "ticker": "AAPL",
+        "clase_activo": "cedear",
+        "lastPrice": 24_000.0,
+        "effectiveVolume": 1_000_000.0,
+        "moneda_cotizacion": "USD",
+    },
+    {
+        "ticker": "KO",
+        "clase_activo": "cedear",
+        "lastPrice": 6_000.0,
+        "effectiveVolume": 500_000.0,
+        "moneda_cotizacion": "USD",
+    },
+]
+
+
+async def test_el_armado_automatico_nunca_sugiere_una_accion(app_con_universo) -> None:
+    """El picker manual dejó de ofrecer acciones argentinas (13/08/2026): el armado automático no
+    puede sugerir algo que el asesor no puede ni buscar, aunque esa acción tenga más liquidez que
+    cualquier CEDEAR del universo."""
+    async with cliente(app_con_universo(renta_variable=FILAS_RENTA_VARIABLE_MIXTA)) as http:
+        cuerpo = (
+            await http.post(RUTA, json={"monto": 100_000, "perfil": "moderado", "pct_rv": 25})
+        ).json()
+
+    posiciones_rv = [p for p in cuerpo["posiciones"] if p["clase"] == "renta_variable"]
+    assert posiciones_rv, "el universo tiene CEDEARs candidatos, el bloque no puede quedar vacío"
+    assert "GGAL" not in {p["ticker"] for p in posiciones_rv}
+    assert all(p["ticker"] in {"AAPL", "KO"} for p in posiciones_rv)
+
+
 async def test_un_pct_rv_fuera_de_rango_se_rechaza(app_con_universo) -> None:
     async with cliente(app_con_universo()) as http:
         assert (
@@ -301,22 +350,22 @@ async def test_un_pct_rv_fuera_de_rango_se_rechaza(app_con_universo) -> None:
 # atajo del fixture.
 FILAS_RENTA_VARIABLE_SIN_PERFIL: list[dict[str, Any]] = [
     {
-        "ticker": "GGAL",
-        "clase_activo": "accion",
+        "ticker": "AAPL",
+        "clase_activo": "cedear",
         "lastPrice": 5000.0,
         "effectiveVolume": 1_500_000.0,
         "moneda_cotizacion": "USD",
     },
     {
-        "ticker": "YPFD",
-        "clase_activo": "accion",
+        "ticker": "XOM",
+        "clase_activo": "cedear",
         "lastPrice": 30_000.0,
         "effectiveVolume": 800_000.0,
         "moneda_cotizacion": "USD",
     },
     {
-        "ticker": "PAMP",
-        "clase_activo": "accion",
+        "ticker": "KO",
+        "clase_activo": "cedear",
         "lastPrice": 2000.0,
         "effectiveVolume": 600_000.0,
         "moneda_cotizacion": "USD",
@@ -327,17 +376,18 @@ FILAS_RENTA_VARIABLE_SIN_PERFIL: list[dict[str, Any]] = [
 async def test_sin_perfiles_de_renta_variable_la_cartera_sigue_siendo_usable(
     app_con_universo,
 ) -> None:
-    """El caso de las acciones argentinas, que son el 91 % sin clasificar: sin un sólo rubro
-    informado, `pct_rv > 0` igual devuelve un bloque de renta variable elegido por liquidez pura,
-    la cartera sigue sumando 100% y la alerta declara por qué no se pudo diversificar por rubro --
-    no se rompe nada, no se inventa un rubro para poder diversificar."""
+    """El caso de un CEDEAR sin clasificación SEC todavía (26 % de los CEDEARs, medido el
+    13/08/2026): sin un sólo rubro informado, `pct_rv > 0` igual devuelve un bloque de renta
+    variable elegido por liquidez pura, la cartera sigue sumando 100% y la alerta declara por qué
+    no se pudo diversificar por rubro -- no se rompe nada, no se inventa un rubro para poder
+    diversificar."""
     async with cliente(app_con_universo(renta_variable=FILAS_RENTA_VARIABLE_SIN_PERFIL)) as http:
         cuerpo = (await http.post(RUTA, json={"monto": 100_000, "perfil": "moderado"})).json()
 
     assert cuerpo["pct_rv_aplicado"] == pytest.approx(25.0)
     posiciones_rv = [p for p in cuerpo["posiciones"] if p["clase"] == "renta_variable"]
     assert posiciones_rv
-    assert all(p["ticker"] in {"GGAL", "YPFD", "PAMP"} for p in posiciones_rv)
+    assert all(p["ticker"] in {"AAPL", "XOM", "KO"} for p in posiciones_rv)
     codigos = {a["codigo"] for a in cuerpo["alertas"]}
     assert "rv_sin_perfil_sectorial" in codigos
     assert sum(p["pct_cartera"] for p in cuerpo["posiciones"]) == pytest.approx(100.0, abs=0.5)

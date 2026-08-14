@@ -218,6 +218,22 @@ function renderizar(ticker: string | undefined = TICKER) {
   )
 }
 
+// --- No regresión: una acción argentina navegada directo sigue resolviendo (14/08/2026) ------
+//
+// Las acciones dejaron de ser descubribles desde el Monitor y el Armador, pero el endpoint de
+// ficha (`/renta-variable/{ticker}/ficha`) no filtra por clase — verificado en vivo contra GGAL
+// real: sigue devolviendo 200 con `propio.clase_activo: "accion"`. Una posición vieja en una
+// cartera guardada, o un link directo a `/instrumento/GGAL`, tienen que seguir mostrando la ficha
+// de renta variable, no caer a la de renta fija ni romperse.
+
+it('una acción navegada directo sigue mostrando la ficha de renta variable, no la de renta fija', async () => {
+  mockearRutas({ [RUTA_RV(TICKER)]: { body: fichaRV({ propio: propio({ clase_activo: 'accion' }) }) } })
+  renderizar()
+
+  expect((await screen.findAllByText('5.000,00')).length).toBeGreaterThan(0)
+  expect(screen.queryByText(/no está en el universo de hoy/)).not.toBeInTheDocument()
+})
+
 // --- GWT-1: la ficha de una acción -----------------------------------------------------------
 
 it('muestra el nombre de la empresa de Yahoo, el precio de BYMA y la fuente de cada bloque', async () => {

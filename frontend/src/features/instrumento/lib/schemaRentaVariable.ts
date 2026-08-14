@@ -174,11 +174,70 @@ export const esquemaBloqueExterno = z.object({
 
 export type BloqueExterno = z.infer<typeof esquemaBloqueExterno>
 
+/**
+ * Un documento presentado ante la SEC, con el link directo al PDF/HTM real — nunca a una página de
+ * resumen nuestra.
+ */
+export const esquemaFilingSec = z.object({
+  form: z.string(),
+  fecha: z.string(),
+  url_documento: z.string(),
+})
+
+export type FilingSec = z.infer<typeof esquemaFilingSec>
+
+/**
+ * Un ratio o un monto del paquete SEC. `unidad` es `null` para los seis adimensionales (ROE,
+ * márgenes, liquidez, deuda/patrimonio, crecimiento); el EPS es el único que lleva moneda —
+ * mismo contrato que `MontoExterno`, pero separado porque acá el `unidad` puede faltar.
+ */
+export const esquemaRatioSec = z.object({
+  valor: z.number(),
+  unidad: z.string().nullable(),
+  periodo: z.string(),
+})
+
+export type RatioSec = z.infer<typeof esquemaRatioSec>
+
+export const esquemaRatiosSec = z.object({
+  roe: esquemaRatioSec.nullable(),
+  margen_operativo: esquemaRatioSec.nullable(),
+  crecimiento_ingresos: esquemaRatioSec.nullable(),
+  eps: esquemaRatioSec.nullable(),
+  deuda_patrimonio: esquemaRatioSec.nullable(),
+  liquidez_corriente: esquemaRatioSec.nullable(),
+})
+
+export type RatiosSec = z.infer<typeof esquemaRatiosSec>
+
+/**
+ * El paquete de estados contables (14/08/2026), sólo para CEDEARs — para una acción argentina
+ * `disponible` da `false` con el motivo, sin que la ficha rompa nada. `solo_anual` es `true` para
+ * la mayoría de los CEDEARs sudamericanos: la SEC no les publica trimestral consistente porque
+ * reportan como emisor privado extranjero, y `nota_solo_anual` lo dice en vez de esconderlo.
+ */
+export const esquemaBloqueSec = z.object({
+  fuente: z.string(),
+  disponible: z.boolean(),
+  motivo_ausente: z.string().nullable(),
+  solo_anual: z.boolean(),
+  nota_solo_anual: z.string().nullable(),
+  cik: z.string().nullable(),
+  filings: z.array(esquemaFilingSec),
+  ratios: esquemaRatiosSec.nullable(),
+})
+
+export type BloqueSec = z.infer<typeof esquemaBloqueSec>
+
 export const esquemaFichaRentaVariable = z.object({
   ticker: z.string(),
   propio: esquemaBloquePropio,
   externo: esquemaBloqueExterno,
   historico: esquemaBloqueHistorico,
+  // `.optional()`, no obligatorio: un despliegue no atómico puede servir esta pantalla contra un
+  // backend anterior al 14/08/2026 que todavía no manda esta clave, y el resto de la ficha tiene
+  // que seguir parseando igual.
+  sec: esquemaBloqueSec.optional(),
 })
 
 export type FichaRentaVariable = z.infer<typeof esquemaFichaRentaVariable>

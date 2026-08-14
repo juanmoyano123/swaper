@@ -3,7 +3,12 @@
  *
  * Mismo patrón que `MonitorPage.test.tsx`: el segmento renta fija por defecto (`usd_hard`) trae
  * una sola especie mínima —hace falta para que la pestaña por defecto tenga algo que mostrar—, y
- * el foco de este archivo está en lo que pasa al activar la pestaña de acciones o CEDEARs.
+ * el foco de este archivo está en lo que pasa al activar la pestaña de CEDEARs.
+ *
+ * Sólo CEDEARs desde el 14/08/2026: la pestaña "Acciones" se sacó del monitor (pedido del dueño
+ * del producto — la mayoría de las acciones argentinas no opera nunca). `CLAVES_RENTA_VARIABLE`
+ * (`components/SelectorSegmento.tsx`) quedó en `['cedear']`, así que la pestaña "Acciones" ni
+ * siquiera se renderiza — no hay botón que clickear.
  */
 
 import { QueryClientProvider } from '@tanstack/react-query'
@@ -67,7 +72,7 @@ function especieRentaFija(): Especie {
 function especieRV(extra: Partial<EspecieRentaVariable> = {}): EspecieRentaVariable {
   return {
     ticker: 'GGAL',
-    clase_activo: 'accion',
+    clase_activo: 'cedear',
     precio: 1000.0,
     moneda_cotizacion: 'ARS',
     cierre_anterior: 950.0,
@@ -181,8 +186,7 @@ function mockearApi() {
 
     if (url.pathname === '/api/v1/renta-variable/especies') {
       const clase = url.searchParams.get('clase')
-      if (clase === 'accion') return respuestaJson(pagina([GGAL, LOMA, PAMP, TXAR]))
-      if (clase === 'cedear') return respuestaJson(pagina([]))
+      if (clase === 'cedear') return respuestaJson(pagina([GGAL, LOMA, PAMP, TXAR]))
     }
 
     throw new Error(`ruta no mockeada en el test: ${url.pathname}${url.search}`)
@@ -211,10 +215,10 @@ function renderizar() {
   )
 }
 
-/** Abre Acciones, que arranca en ARS: GGAL y PAMP. LOMA está en USD y TXAR en EXT. */
-async function irALaPestanaDeAcciones() {
+/** Abre CEDEARs, que arranca en ARS: GGAL y PAMP. LOMA está en USD y TXAR en EXT. */
+async function irALaPestanaDeCedears() {
   const resultado = renderizar()
-  await userEvent.click(await screen.findByRole('button', { name: 'Acciones' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'CEDEARs' }))
   await screen.findByText('2 de 2 especies en ARS')
   return resultado
 }
@@ -229,7 +233,7 @@ function chipDeMoneda(codigo: string) {
 describe('GWT-1: las pestañas de renta variable no tienen columna de rendimiento', () => {
   it('las columnas son precio, variación, volumen, compra y venta — sin rendimiento ni TIR', async () => {
     mockearApi()
-    await irALaPestanaDeAcciones()
+    await irALaPestanaDeCedears()
 
     expect(screen.getByRole('button', { name: /precio/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /variación/i })).toBeInTheDocument()
@@ -253,7 +257,7 @@ describe('GWT-1: las pestañas de renta variable no tienen columna de rendimient
 describe('GWT-2: la columna de volumen nunca compara dos monedas', () => {
   it('en ARS sólo están las especies en ARS, y ordenan entre ellas por el volumen publicado', async () => {
     mockearApi()
-    const { container } = await irALaPestanaDeAcciones()
+    const { container } = await irALaPestanaDeCedears()
 
     const cabeceraVolumen = screen.getByRole('button', { name: /^volumen/i })
     await userEvent.click(cabeceraVolumen) // asc
@@ -267,7 +271,7 @@ describe('GWT-2: la columna de volumen nunca compara dos monedas', () => {
 
   it('cambiar de moneda cambia la lista entera, y el conteo dice en cuál se está', async () => {
     mockearApi()
-    await irALaPestanaDeAcciones()
+    await irALaPestanaDeCedears()
 
     await userEvent.click(chipDeMoneda('USD'))
 
@@ -278,7 +282,7 @@ describe('GWT-2: la columna de volumen nunca compara dos monedas', () => {
 
   it('las especies en EXT se muestran igual, en su propia moneda y con su volumen crudo', async () => {
     mockearApi()
-    await irALaPestanaDeAcciones()
+    await irALaPestanaDeCedears()
 
     await userEvent.click(chipDeMoneda('EXT'))
 
@@ -292,7 +296,7 @@ describe('GWT-2: la columna de volumen nunca compara dos monedas', () => {
 
   it('el selector declara que los códigos son de BYMA y no los traduce', async () => {
     mockearApi()
-    await irALaPestanaDeAcciones()
+    await irALaPestanaDeCedears()
 
     expect(screen.getByText(/Denominación declarada por BYMA, sin traducir/)).toBeInTheDocument()
     expect(screen.queryByText(/cable/i)).not.toBeInTheDocument()
@@ -305,7 +309,7 @@ describe('GWT-2: la columna de volumen nunca compara dos monedas', () => {
 describe('GWT-3: un campo que BYMA no publica queda vacío y contado en la nota de cobertura', () => {
   it('PAMP muestra s/d en variación y puntas, y la nota declara los faltantes', async () => {
     mockearApi()
-    await irALaPestanaDeAcciones()
+    await irALaPestanaDeCedears()
 
     const filaPampa = screen.getByText('PAMP').closest('div[role="button"]')
     expect(filaPampa).not.toBeNull()
@@ -322,7 +326,7 @@ describe('GWT-3: un campo que BYMA no publica queda vacío y contado en la nota 
 describe('GWT-4: lo excluido se declara aunque se esté mirando renta variable', () => {
   it('el texto de sin_segmento sigue visible con la pestaña de acciones activa', async () => {
     mockearApi()
-    await irALaPestanaDeAcciones()
+    await irALaPestanaDeCedears()
 
     expect(await screen.findByText(/535 sin segmento no se muestran acá/)).toBeInTheDocument()
   })
@@ -333,7 +337,7 @@ describe('GWT-4: lo excluido se declara aunque se esté mirando renta variable',
 describe('mecánica heredada de la grilla', () => {
   it('clic en una fila navega a la ficha del instrumento', async () => {
     mockearApi()
-    await irALaPestanaDeAcciones()
+    await irALaPestanaDeCedears()
 
     await userEvent.click(screen.getByText('GGAL'))
 
@@ -345,7 +349,34 @@ describe('mecánica heredada de la grilla', () => {
 
 describe('una clase sin filas hoy', () => {
   it('la pestaña de CEDEARs sin datos declara la etiqueta de la pestaña activa', async () => {
-    mockearApi()
+    // Mock propio, no `mockearApi()`: ese devuelve el universo lleno para `clase=cedear`, y acá
+    // se prueba justo el caso contrario.
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = new URL(String(input), 'http://localhost')
+      if (url.pathname === '/api/v1/universo/segmentos') {
+        return respuestaJson({
+          segmentos: [
+            {
+              clave: 'usd_hard',
+              nombre: 'Hard dollar',
+              naturaleza: 'tir_usd',
+              naturaleza_nombre: 'TIR en dólares (hard dollar)',
+              especies: 1,
+            },
+          ],
+          renta_variable: 3,
+          sin_segmento: 535,
+        })
+      }
+      if (url.pathname === '/api/v1/universo/emisiones/especies') {
+        return respuestaJson(pagina([especieRentaFija()]))
+      }
+      if (url.pathname === '/api/v1/renta-variable/especies') {
+        return respuestaJson(pagina([]))
+      }
+      throw new Error(`ruta no mockeada en el test: ${url.pathname}${url.search}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
     renderizar()
     await userEvent.click(await screen.findByRole('button', { name: 'CEDEARs' }))
 

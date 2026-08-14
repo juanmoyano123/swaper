@@ -22,6 +22,7 @@ la regla 2 prohíbe — y el hecho de que desde F-051 el universo de renta fija 
 cambia nada acá.
 """
 
+import asyncio
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -31,6 +32,7 @@ from app.core.config import Settings, get_settings
 from app.core.pagination import CursorParams, Page, build_page
 from app.externos import bloque_pausado, cliente_yahoo
 from app.externos.data912 import cliente_data912_historico
+from app.externos.sec_ficha import cliente_sec_ficha
 from app.renta_variable import EspecieRentaVariable, armar_renta_variable, leer_renta_variable
 from app.universo.servicio import sanear_universo
 
@@ -96,8 +98,8 @@ async def _especie_de(conn: Any, ticker: str) -> EspecieRentaVariable | None:
 
 @router.get(
     "/{ticker}/ficha",
-    summary="La ficha de una acción o un CEDEAR: lo nuestro de BYMA, el histórico de data912 y el "
-    "bloque externo de Yahoo",
+    summary="La ficha de una acción o un CEDEAR: lo nuestro de BYMA, el histórico de data912, los "
+    "estados contables de la SEC y el bloque externo de Yahoo",
     responses={
         404: {"description": "El ticker no es renta variable del universo de hoy"},
         503: {"description": "La base de datos no está disponible"},
@@ -108,8 +110,8 @@ async def ficha(
     conn: Annotated[object, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> dict[str, object]:
-    """Tres bloques con su fuente a la vista, y la ficha se muestra aunque el segundo o el
-    tercero falten.
+    """Cuatro bloques con su fuente a la vista, y la ficha se muestra aunque cualquiera de los
+    últimos tres falte.
 
     **El bloque propio** —precio, cierre anterior, variación, puntas, operaciones, apertura, rango
     del día, VWAP— sale del universo consolidado de BYMA y es el que sostiene la pantalla. **El
@@ -133,6 +135,13 @@ async def ficha(
     contrato que `externo`: rotulado, y declarado ausente sin romper el resto de la ficha si
     data912 no tiene la serie de este ticker.
 
+    **El cuarto bloque, `sec`**, es el paquete de estados contables (14/08/2026): activos,
+    pasivos, patrimonio, ROE, márgenes y links a los filings reales — **sólo para CEDEARs**
+    (decisión del dueño del producto: las acciones argentinas se sacaron de la UI). Para las
+    empresas que reportan ante la SEC como emisor privado extranjero (la mayoría de los CEDEARs
+    sudamericanos) declara `solo_anual=true`: la fuente no publica trimestral para ellas, y se
+    dice en vez de esconderse.
+
     404 y no una ficha vacía cuando el ticker no es renta variable del universo de hoy: es también
     lo que le permite al frontend distinguir una acción de un bono sin adivinarlo por el ticker.
     """
@@ -140,16 +149,21 @@ async def ficha(
     if especie is None:
         raise HTTPException(404, detail=f"{ticker} no es renta variable del universo de hoy")
 
+    # `historico` y `sec` siempre van en paralelo: son dos fuentes independientes que nunca se
+    # bloquean entre sí. `externo` se suma al mismo `gather` sólo cuando Yahoo está habilitado —
+    # pausado, `bloque_pausado()` no hace red y no tiene sentido esperarlo junto a los otros dos.
     if settings.yahoo_habilitado:
-        externo = await cliente_yahoo().bloque_externo(especie.ticker)
+        externo, historico, sec = await asyncio.gather(
+            cliente_yahoo().bloque_externo(especie.ticker),
+            cliente_data912_historico().bloque_historico(especie.ticker, especie.clase_activo),
+            cliente_sec_ficha().bloque_sec(especie.ticker, especie.clase_activo, especie.emision),
+        )
     else:
         externo = bloque_pausado(especie.ticker)
-    # Secuencial y no en paralelo con el pedido de arriba: hoy, con Yahoo pausado, esto es la
-    # única llamada de red de la ficha. Si Yahoo se reactiva conviene revisar si conviene un
-    # `asyncio.gather` para no pagar los dos timeouts en serie.
-    historico = await cliente_data912_historico().bloque_historico(
-        especie.ticker, especie.clase_activo
-    )
+        historico, sec = await asyncio.gather(
+            cliente_data912_historico().bloque_historico(especie.ticker, especie.clase_activo),
+            cliente_sec_ficha().bloque_sec(especie.ticker, especie.clase_activo, especie.emision),
+        )
     return {
         "ticker": especie.ticker,
         # `**especie.como_dict()` va primero: si trae `fuente` (experimento data912), gana sobre
@@ -157,4 +171,5 @@ async def ficha(
         "propio": {**especie.como_dict(), "fuente": especie.fuente or FUENTE_PROPIA},
         "externo": externo.como_dict(),
         "historico": historico.como_dict(),
+        "sec": sec.como_dict(),
     }

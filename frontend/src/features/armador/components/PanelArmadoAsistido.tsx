@@ -285,7 +285,7 @@ export function PanelArmadoAsistido() {
           />
         </Campo>
 
-        <Campo etiqueta="Temática (acciones)">
+        <Campo etiqueta="Temática (CEDEARs)">
           <select
             value={tematica}
             onChange={(e) => setTematica(e.target.value)}
@@ -311,7 +311,7 @@ export function PanelArmadoAsistido() {
 
         <p style={{ flexBasis: '100%', margin: 0, fontSize: 11, color: 'var(--dim)' }}>
           {pctRv > 0
-            ? `Los bonos se arman sobre el ${100 - pctRv}% restante; las acciones se eligen por liquidez, diversificando sectores.`
+            ? `Los bonos se arman sobre el ${100 - pctRv}% restante; los CEDEARs se eligen por liquidez, diversificando sectores.`
             : 'Sin renta variable: la cartera se arma entera con renta fija.'}
         </p>
       </div>
@@ -390,7 +390,7 @@ export function PanelArmadoAsistido() {
         mutacion.data.pct_rv_aplicado < (mutacion.variables?.pct_rv ?? 0) && (
           <p style={{ margin: 0, fontSize: 11.5, color: 'var(--ac2)' }}>
             Pediste {mutacion.variables?.pct_rv}% en renta variable y entró{' '}
-            {mutacion.data.pct_rv_aplicado}%: no hubo acciones que cumplieran. El resto quedó en
+            {mutacion.data.pct_rv_aplicado}%: no hubo CEDEARs que cumplieran. El resto quedó en
             renta fija — mirá las alertas de abajo.
           </p>
         )}

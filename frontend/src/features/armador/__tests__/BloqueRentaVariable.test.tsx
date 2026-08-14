@@ -366,7 +366,7 @@ describe('el mix RF/RV de la cabecera', () => {
 describe('una especie en ARS sin tipo de cambio', () => {
   it('la tarjeta declara peso e invertido sin dato, sin estimar nada', async () => {
     responderCon({
-      acciones: [accion({ ticker: 'PAMP', moneda_cotizacion: 'ARS' })],
+      cedears: [cedear({ ticker: 'PAMP', moneda_cotizacion: 'ARS' })],
       tipoDeCambio: { valor: null, disponible: false },
     })
     renderizar()
@@ -385,54 +385,43 @@ describe('una especie en ARS sin tipo de cambio', () => {
 
 // --- El buscador: agregar y sacar desde la lista, cambiar de clase -------------------------------
 
-describe('el buscador de acciones y CEDEARs', () => {
+describe('el buscador de CEDEARs', () => {
   it('filtra por ticker y agrega con el botón +', async () => {
-    responderCon({ acciones: [accion(), accion({ ticker: 'PAMP' })] })
+    responderCon({ cedears: [cedear(), cedear({ ticker: 'PAMP' })] })
     renderizar()
 
     await screen.findAllByRole('listitem')
-    await userEvent.type(screen.getByRole('textbox', { name: /Buscar acción o CEDEAR/i }), 'PAM')
+    await userEvent.type(screen.getByRole('textbox', { name: /Buscar CEDEAR/i }), 'PAM')
 
-    expect(screen.queryByText('GGAL')).not.toBeInTheDocument()
+    expect(screen.queryByText('AAPL')).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'agregar PAMP a la cartera' }))
 
     expect(await screen.findByRole('article', { name: 'PAMP' })).toBeInTheDocument()
-  })
-
-  it('cambia a CEDEARs y lista otro universo', async () => {
-    responderCon({ acciones: [accion()], cedears: [cedear()] })
-    renderizar()
-
-    await screen.findByRole('listitem')
-    await userEvent.click(screen.getByRole('radio', { name: 'CEDEARs' }))
-
-    expect(await screen.findByRole('button', { name: 'AAPL' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'GGAL' })).not.toBeInTheDocument()
   })
 
   // --- Etapa 5 del rediseño del armador: sector, rubro y búsqueda por nombre --------------------
 
   it('busca por nombre además de por ticker', async () => {
     responderCon({
-      acciones: [
-        accion({ nombre_corto: 'GRUPO FINANCIERO GALICIA', nombre_largo: 'Grupo Financiero Galicia S.A.' }),
-        accion({ ticker: 'PAMP', nombre_corto: 'PAMPA ENERGIA' }),
+      cedears: [
+        cedear({ nombre_corto: 'APPLE INC', nombre_largo: 'Apple Inc.' }),
+        cedear({ ticker: 'PAMP', nombre_corto: 'PAMPA ENERGIA' }),
       ],
     })
     renderizar()
     await screen.findAllByRole('listitem')
 
-    await userEvent.type(screen.getByRole('textbox', { name: /Buscar acción o CEDEAR/i }), 'galicia')
+    await userEvent.type(screen.getByRole('textbox', { name: /Buscar CEDEAR/i }), 'apple')
 
-    expect(screen.getByRole('button', { name: 'GGAL' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'AAPL' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'PAMP' })).not.toBeInTheDocument()
   })
 
   it('filtra por rubro, sólo con las especies de esa clase que lo declaran', async () => {
     responderCon({
-      acciones: [
-        accion({ sic_oficina: 'Office of Finance' }),
-        accion({ ticker: 'PAMP', sic_oficina: 'Office of Energy & Transportation' }),
+      cedears: [
+        cedear({ sic_oficina: 'Office of Finance' }),
+        cedear({ ticker: 'PAMP', sic_oficina: 'Office of Energy & Transportation' }),
       ],
     })
     renderizar()
@@ -440,15 +429,15 @@ describe('el buscador de acciones y CEDEARs', () => {
 
     await userEvent.selectOptions(screen.getByLabelText('Rubro (SEC)'), 'Office of Finance')
 
-    expect(screen.getByRole('button', { name: 'GGAL' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'AAPL' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'PAMP' })).not.toBeInTheDocument()
   })
 
   it('filtra por eslabón productivo, que es la división del SIC y no una lectura nuestra', async () => {
     responderCon({
-      acciones: [
-        accion({ division_cadena: 'Finanzas y seguros' }),
-        accion({ ticker: 'PAMP', division_cadena: 'Extracción' }),
+      cedears: [
+        cedear({ division_cadena: 'Finanzas y seguros' }),
+        cedear({ ticker: 'PAMP', division_cadena: 'Extracción' }),
       ],
     })
     renderizar()
@@ -457,41 +446,34 @@ describe('el buscador de acciones y CEDEARs', () => {
     await userEvent.selectOptions(screen.getByLabelText('Eslabón productivo'), 'Extracción')
 
     expect(screen.getByRole('button', { name: 'PAMP' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'GGAL' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'AAPL' })).not.toBeInTheDocument()
   })
 
   it('sin clasificar todavía, rubro y eslabón sólo ofrecen "todos" — no rompe la búsqueda', async () => {
-    // El caso normal de las acciones argentinas: la SEC clasifica 21 de 245.
-    responderCon({ acciones: [accion(), accion({ ticker: 'PAMP' })] })
+    // El caso normal de un CEDEAR sin clasificación SEC todavía: cubre el 74 % (13/08/2026), no
+    // el 100 %.
+    responderCon({ cedears: [cedear(), cedear({ ticker: 'PAMP' })] })
     renderizar()
     await screen.findAllByRole('listitem')
 
     expect(screen.getByLabelText('Rubro (SEC)')).toHaveValue('')
     expect(screen.getByLabelText('Rubro (SEC)').children).toHaveLength(1) // sólo "todos"
-    expect(screen.getByRole('button', { name: 'GGAL' })).toBeInTheDocument()
-  })
-
-  it('cambiar de clase limpia rubro y eslabón elegidos', async () => {
-    responderCon({
-      acciones: [accion({ sic_oficina: 'Office of Finance' })],
-      cedears: [cedear({ sic_oficina: 'Office of Technology' })],
-    })
-    renderizar()
-    await screen.findAllByRole('listitem')
-
-    await userEvent.selectOptions(screen.getByLabelText('Rubro (SEC)'), 'Office of Finance')
-    expect(screen.getByLabelText('Rubro (SEC)')).toHaveValue('Office of Finance')
-
-    await userEvent.click(screen.getByRole('radio', { name: 'CEDEARs' }))
-
-    expect(screen.getByLabelText('Rubro (SEC)')).toHaveValue('')
+    expect(screen.getByRole('button', { name: 'AAPL' })).toBeInTheDocument()
   })
 })
 
 
 describe('reemplazar una sugerencia', () => {
+  // GGAL entra a la cartera con el botón directo del arnés (`alternarRentaVariable`, no el
+  // picker): resuelve su rubro vía `useRentaVariableResuelta`, que sigue trayendo accion+cedear
+  // para no romper una posición ya cargada (ver el comentario de esa decisión en
+  // `useRentaVariableResuelta.ts`). El picker que se usa para *elegir el reemplazo* sólo lista
+  // CEDEARs -- por eso el sustituto de estos tests siempre es un `cedear()`.
   it('saca la posición y deja el buscador enfocado para elegir otra', async () => {
-    responderCon({ acciones: [accion({ sic_oficina: 'Office of Finance' })] })
+    responderCon({
+      acciones: [accion({ sic_oficina: 'Office of Finance' })],
+      cedears: [cedear({ ticker: 'MSFT' })],
+    })
     renderizar()
     await screen.findAllByRole('listitem')
 
@@ -504,14 +486,18 @@ describe('reemplazar una sugerencia', () => {
     expect(
       screen.queryByRole('button', { name: 'reemplazar GGAL por otro activo' }),
     ).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Buscar acción o CEDEAR por ticker o nombre')).toHaveFocus()
+    expect(screen.getByLabelText('Buscar CEDEAR por ticker o nombre')).toHaveFocus()
   })
 
   it('pre-filtra por el rubro de la que se saca: "otro banco, no este"', async () => {
     responderCon({
-      acciones: [
-        accion({ sic_oficina: 'Office of Finance' }),
-        accion({ ticker: 'PAMP', sic_oficina: 'Office of Energy & Transportation' }),
+      acciones: [accion({ sic_oficina: 'Office of Finance' })],
+      // El select sólo puede mostrar seleccionado un rubro que exista como opción -- por eso
+      // hace falta un CEDEAR con el mismo rubro de GGAL además de PAMP, aunque el test no agregue
+      // ese CEDEAR a la cartera.
+      cedears: [
+        cedear({ sic_oficina: 'Office of Finance' }),
+        cedear({ ticker: 'PAMP', sic_oficina: 'Office of Energy & Transportation' }),
       ],
     })
     renderizar()
@@ -526,10 +512,8 @@ describe('reemplazar una sugerencia', () => {
 
   it('sin rubro declarado no inventa un filtro: la búsqueda queda abierta', async () => {
     responderCon({
-      acciones: [
-        accion({ sic_oficina: null }),
-        accion({ ticker: 'PAMP', sic_oficina: 'Office of Energy & Transportation' }),
-      ],
+      acciones: [accion({ sic_oficina: null })],
+      cedears: [cedear({ ticker: 'PAMP', sic_oficina: 'Office of Energy & Transportation' })],
     })
     renderizar()
     await screen.findAllByRole('listitem')
@@ -554,7 +538,6 @@ describe('un papel con sus monedas de liquidación', () => {
   it('las tres especies son una sola fila, con un botón por moneda', async () => {
     responderCon({ cedears: APPLE })
     renderizar()
-    await userEvent.click(screen.getByRole('radio', { name: 'CEDEARs' }))
 
     const lista = await screen.findByRole('list', { name: /Resultados de CEDEARs/ })
     expect(within(lista).getAllByRole('listitem')).toHaveLength(1)
@@ -566,7 +549,6 @@ describe('un papel con sus monedas de liquidación', () => {
   it('cada moneda agrega su propia especie a la cartera', async () => {
     responderCon({ cedears: APPLE })
     renderizar()
-    await userEvent.click(screen.getByRole('radio', { name: 'CEDEARs' }))
     await screen.findByRole('list', { name: /Resultados de CEDEARs/ })
 
     await userEvent.click(screen.getByRole('button', { name: 'agregar AAPLD a la cartera' }))
@@ -577,11 +559,10 @@ describe('un papel con sus monedas de liquidación', () => {
   it('buscar por el ticker de una hermana encuentra el papel', async () => {
     responderCon({ cedears: APPLE })
     renderizar()
-    await userEvent.click(screen.getByRole('radio', { name: 'CEDEARs' }))
     await screen.findByRole('list', { name: /Resultados de CEDEARs/ })
 
     await userEvent.type(
-      screen.getByLabelText('Buscar acción o CEDEAR por ticker o nombre'),
+      screen.getByLabelText('Buscar CEDEAR por ticker o nombre'),
       'AAPLC',
     )
 
@@ -596,7 +577,6 @@ describe('un papel con sus monedas de liquidación', () => {
       ],
     })
     renderizar()
-    await userEvent.click(screen.getByRole('radio', { name: 'CEDEARs' }))
     await screen.findByRole('list', { name: /Resultados de CEDEARs/ })
 
     expect(screen.getByRole('button', { name: 'agregar AAPLD a la cartera' })).toBeDisabled()
@@ -607,7 +587,6 @@ describe('un papel con sus monedas de liquidación', () => {
       cedears: [cedear({ ticker: 'AAPLB', emision: 'n/n', no_identificado: true })],
     })
     renderizar()
-    await userEvent.click(screen.getByRole('radio', { name: 'CEDEARs' }))
 
     const lista = await screen.findByRole('list', { name: /Resultados de CEDEARs/ })
     expect(within(lista).getByText('n/n')).toBeInTheDocument()
@@ -629,7 +608,6 @@ describe('qué es cada papel', () => {
       ],
     })
     renderizar()
-    await userEvent.click(screen.getByRole('radio', { name: 'CEDEARs' }))
 
     const lista = await screen.findByRole('list', { name: /Resultados de CEDEARs/ })
     expect(within(lista).getByText('Apple Inc.')).toBeInTheDocument()
@@ -643,7 +621,6 @@ describe('qué es cada papel', () => {
       ],
     })
     renderizar()
-    await userEvent.click(screen.getByRole('radio', { name: 'CEDEARs' }))
 
     const lista = await screen.findByRole('list', { name: /Resultados de CEDEARs/ })
     expect(within(lista).getByText(/fondo · activo físico/)).toBeInTheDocument()
@@ -653,7 +630,6 @@ describe('qué es cada papel', () => {
     // Las acciones argentinas: la SEC cubre el 9 %. Vacío declarado, nunca completado por analogía.
     responderCon({ cedears: [cedear({ ticker: 'GGAL', nombre_largo: null, sic_titulo: null })] })
     renderizar()
-    await userEvent.click(screen.getByRole('radio', { name: 'CEDEARs' }))
 
     const lista = await screen.findByRole('list', { name: /Resultados de CEDEARs/ })
     expect(within(lista).getByRole('button', { name: 'GGAL' })).toBeInTheDocument()
