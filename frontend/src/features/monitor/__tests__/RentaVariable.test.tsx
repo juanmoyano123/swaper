@@ -7,8 +7,9 @@
  *
  * Sólo CEDEARs desde el 14/08/2026: la pestaña "Acciones" se sacó del monitor (pedido del dueño
  * del producto — la mayoría de las acciones argentinas no opera nunca). `CLAVES_RENTA_VARIABLE`
- * (`components/SelectorSegmento.tsx`) quedó en `['cedear']`, así que la pestaña "Acciones" ni
- * siquiera se renderiza — no hay botón que clickear.
+ * (`components/SelectorSegmento.tsx`) quedó en `['cedear']`, así que no hay una sub-pestaña propia
+ * de "CEDEARs" que clickear: activar la familia "Renta variable" (reorganización del mismo día, ver
+ * `MonitorPage.tsx`) va directo a la tabla, sin sub-barra de una sola opción.
  */
 
 import { QueryClientProvider } from '@tanstack/react-query'
@@ -215,10 +216,11 @@ function renderizar() {
   )
 }
 
-/** Abre CEDEARs, que arranca en ARS: GGAL y PAMP. LOMA está en USD y TXAR en EXT. */
+/** Abre Renta variable (única sub-clase: CEDEARs), que arranca en ARS: GGAL y PAMP. LOMA está en
+ *  USD y TXAR en EXT. */
 async function irALaPestanaDeCedears() {
   const resultado = renderizar()
-  await userEvent.click(await screen.findByRole('button', { name: 'CEDEARs' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Renta variable' }))
   await screen.findByText('2 de 2 especies en ARS')
   return resultado
 }
@@ -231,6 +233,13 @@ function chipDeMoneda(codigo: string) {
 // --- GWT-1: columnas de renta variable, sin rendimiento ni nada en su lugar ----------------------
 
 describe('GWT-1: las pestañas de renta variable no tienen columna de rendimiento', () => {
+  it('activar Renta variable no deja una sub-barra: va directo a la tabla', async () => {
+    mockearApi()
+    await irALaPestanaDeCedears()
+
+    expect(screen.queryByRole('button', { name: 'CEDEARs' })).not.toBeInTheDocument()
+  })
+
   it('las columnas son precio, variación, volumen, compra y venta — sin rendimiento ni TIR', async () => {
     mockearApi()
     await irALaPestanaDeCedears()
@@ -378,7 +387,7 @@ describe('una clase sin filas hoy', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
     renderizar()
-    await userEvent.click(await screen.findByRole('button', { name: 'CEDEARs' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Renta variable' }))
 
     expect(await screen.findByText('0 de 0 especies')).toBeInTheDocument()
     expect(screen.getByText('No hay CEDEARs en el universo de hoy.')).toBeInTheDocument()

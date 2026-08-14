@@ -3,8 +3,10 @@
  *
  * Es la regla 2 del dominio hecha componente: los rendimientos de distinta naturaleza no comparten
  * eje ni columna, y la forma de garantizarlo en pantalla es que sólo pueda haber un segmento a la
- * vista. Base común de la tanda 6: la usan el monitor (F-038) y, más adelante, los filtros del
- * armador (F-017); si cada pantalla tuviera su propia barra, alguna terminaría permitiendo dos.
+ * vista. Base común de la tanda 6: la usan el monitor (F-038, con las claves de tipo de tasa sin
+ * partir desde el 14/08/2026), los filtros del armador (F-017, ídem) y, partidas por crédito, la
+ * curva del armador (`PanelComposicion.tsx`, F-023) — si cada pantalla tuviera su propia barra,
+ * alguna terminaría permitiendo dos.
  *
  * La lista de segmentos viene del dato (los que el universo del día realmente tiene), no de una
  * constante: un segmento sin especies hoy no se muestra. Lo único que este archivo fija son los
@@ -43,22 +45,30 @@ export const CLAVES_RENTA_VARIABLE = ['cedear'] as const
 /**
  * Los segmentos que se muestran abiertos por crédito, con las clases de activo que los componen.
  *
+ * **Desde el 14/08/2026 el Monitor ya no usa esto.** La reorganización en jerarquía (familia →
+ * segmento → chip de crédito, ver el header de `features/monitor/MonitorPage.tsx`) reemplazó las
+ * pestañas de crédito por `SelectorCredito`, un chip que generaliza la partición a los seis
+ * segmentos en vez de sólo al dólar hard. Este diccionario y los cuatro helpers de abajo
+ * (`claveDeCredito`, `segmentoDeClave`, `claseDeClave`, `expandirSegmentos`) quedan **exclusivamente
+ * para `PanelComposicion.tsx`** del armador (la curva TIR/duración de la cartera, F-023), que sigue
+ * mostrando Soberanos/Subsoberanos/ONs como pestañas propias — es otra superficie, con su propio
+ * criterio de cuándo conviene partir. No se borran ni cambian de firma para no tocarla sin pedido.
+ *
  * El dólar hard es el 81 % de la renta fija segmentada (764 de 942) y mete al Tesoro, a las
  * provincias y a las ONs en una sola lista de 764 filas. Todas comparten naturaleza de tasa, así
  * que la regla 2 no obliga a separarlas; lo que las separa es el crédito, que es el eje que importa
  * cuando la unidad ya es la misma — y es la regla 4 del dominio, que exige que el riesgo soberano
- * se agrupe aparte. Es también cómo lo presentan el monitor de mesa y Balanz, cada uno a su manera.
+ * se agrupe aparte.
  *
  * **La partición es de presentación y no toca el backend.** `/segmentos` sigue devolviendo
- * `usd_hard` y la grilla sigue pidiendo `?segmento=usd_hard`: las tres pestañas leen la misma query
- * ya cacheada y filtran por `clase_activo`, que es un dato declarado. Cambiar de pestaña no dispara
- * un pedido.
+ * `usd_hard` y la grilla sigue pidiendo `?segmento=usd_hard`: las pestañas de `PanelComposicion`
+ * leen la misma query ya cacheada y filtran por `clase_activo`, que es un dato declarado. Cambiar
+ * de pestaña no dispara un pedido.
  *
  * Los valores de `clase_activo` son los cinco de `SUBMARKET_MAP` (backend
  * `ingesta/consolidacion/clasificacion.py`); dos son renta variable y los otros tres están acá. **No
  * existe una clase "letra"**: una LECAP llega como `bono_soberano`, así que no hay pestaña que
- * inventarle. Si apareciera una clase nueva, sus especies no entrarían en ninguna de las tres y el
- * conteo de la pestaña lo delataría — por eso el monitor cuenta lo que reparte.
+ * inventarle.
  */
 export const SEGMENTO_POR_CREDITO: Record<string, readonly string[]> = {
   usd_hard: ['bono_soberano', 'bono_subsoberano', 'on_corporativo'],
@@ -120,9 +130,9 @@ export function unidadDeNaturaleza(naturaleza: string): string {
 /**
  * Orden de pestañas del design system; los segmentos que no figuren van al final, en su orden.
  *
- * `usd_hard` sigue en la lista aunque el monitor lo muestre abierto: el armador (F-017) pasa la
- * clave sin partir y tiene que seguir ordenándose donde siempre estuvo. Las tres pestañas de
- * crédito ocupan su lugar, delante del resto.
+ * `usd_hard` es el que usa el Monitor desde el 14/08/2026 (claves sin partir). Las tres claves
+ * compuestas `usd_hard/bono_*` siguen en la lista sólo por `PanelComposicion.tsx`, que todavía las
+ * pide partidas; el Monitor no las usa más.
  */
 const ORDEN = [
   'usd_hard',

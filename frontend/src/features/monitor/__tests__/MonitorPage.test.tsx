@@ -79,6 +79,15 @@ const TX26 = especie({
   rendimiento: 0.05,
   duracion: 1.0,
 })
+// Una ON en el dólar hard, para tener más de un crédito en el segmento y que `SelectorCredito`
+// dibuje sus chips — con un solo crédito presente el selector no se muestra (nada que elegir).
+const YMCHO = especie({
+  ticker: 'YMCHO',
+  emision: 'YMCHO',
+  clase_activo: 'on_corporativo',
+  rendimiento: 0.12,
+  duracion: 1.8,
+})
 
 function segmentosResponse(): Segmentos {
   return {
@@ -132,6 +141,36 @@ function mockearApi() {
         if (cursor === 'pagina-2') return respuestaJson(pagina([AE38]))
       }
       if (segmento === 'cer') return respuestaJson(pagina([TX26]))
+    }
+
+    throw new Error(`ruta no mockeada en el test: ${url.pathname}${url.search}`)
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  return fetchMock
+}
+
+/** Un único segmento (`usd_hard`) con tres soberanos y una ON, para ejercitar los chips de crédito. */
+function mockearApiConCredito() {
+  const fetchMock = vi.fn((input: RequestInfo | URL) => {
+    const url = new URL(String(input), 'http://localhost')
+
+    if (url.pathname === '/api/v1/universo/segmentos') {
+      return respuestaJson({
+        segmentos: [
+          {
+            clave: 'usd_hard',
+            nombre: 'Hard dollar',
+            naturaleza: 'tir_usd',
+            naturaleza_nombre: 'TIR en dólares (hard dollar)',
+            especies: 4,
+          },
+        ],
+        renta_variable: 0,
+        sin_segmento: 0,
+      })
+    }
+    if (url.pathname === '/api/v1/universo/emisiones/especies') {
+      return respuestaJson(pagina([AL30, GD30, AE38, YMCHO]))
     }
 
     throw new Error(`ruta no mockeada en el test: ${url.pathname}${url.search}`)
@@ -249,6 +288,91 @@ describe('un solo segmento a la vez', () => {
   })
 })
 
+// --- Jerarquía de dos niveles: familia arriba, segmento (tipo de tasa) adentro --------------------
+
+describe('jerarquía de dos niveles: familia arriba, segmento adentro', () => {
+  it('arranca en Renta fija, con Dólar hard como segmento activo y sin pestañas de crédito', async () => {
+    mockearApi()
+    renderizar()
+
+    const rf = await screen.findByRole('button', { name: 'Renta fija' })
+    expect(rf).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByRole('button', { name: 'Renta variable' })).toBeInTheDocument()
+
+    const dolarHard = screen.getByRole('button', { name: 'Dólar hard' })
+    expect(dolarHard).toHaveAttribute('aria-current', 'true')
+    // El crédito ya no se elige como pestaña: no hay botón "Soberanos" ni "ONs" en la barra.
+    expect(screen.queryByRole('button', { name: 'Soberanos' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'ONs' })).not.toBeInTheDocument()
+  })
+
+  it('sin renta variable en el universo, la pestaña de familia no se dibuja', async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = new URL(String(input), 'http://localhost')
+      if (url.pathname === '/api/v1/universo/segmentos') {
+        return respuestaJson({ ...segmentosResponse(), renta_variable: 0 })
+      }
+      if (url.pathname === '/api/v1/universo/emisiones/especies') {
+        const segmento = url.searchParams.get('segmento')
+        const cursor = url.searchParams.get('cursor')
+        if (segmento === 'usd_hard') {
+          if (cursor === null) return respuestaJson(pagina([AL30, GD30], 'pagina-2'))
+          if (cursor === 'pagina-2') return respuestaJson(pagina([AE38]))
+        }
+        if (segmento === 'cer') return respuestaJson(pagina([TX26]))
+      }
+      throw new Error(`ruta no mockeada en el test: ${url.pathname}${url.search}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderizar()
+
+    await screen.findByText('3 de 3 especies en USD')
+    expect(screen.queryByText('Renta fija')).not.toBeInTheDocument()
+    expect(screen.queryByText('Renta variable')).not.toBeInTheDocument()
+  })
+})
+
+// --- Chips de crédito: Todos por defecto, generalizado a cualquier segmento -----------------------
+
+describe('chips de crédito dentro del segmento', () => {
+  it('con un solo crédito presente no se dibuja el selector', async () => {
+    mockearApi() // usd_hard sólo con bono_soberano (AL30, GD30, AE38)
+    renderizar()
+
+    await screen.findByText('3 de 3 especies en USD')
+    expect(screen.queryByRole('radiogroup', { name: 'Crédito' })).not.toBeInTheDocument()
+  })
+
+  it('con más de un crédito, muestra Todos primero y cada chip con su conteo', async () => {
+    mockearApiConCredito()
+    renderizar()
+
+    const radiogroup = await screen.findByRole('radiogroup', { name: 'Crédito' })
+    expect(within(radiogroup).getByRole('radio', { name: /^Todos/ })).toHaveAttribute('aria-checked', 'true')
+    expect(within(radiogroup).getByRole('radio', { name: 'Todos 4' })).toBeInTheDocument()
+    expect(within(radiogroup).getByRole('radio', { name: /^Soberanos/ })).toBeInTheDocument()
+    expect(within(radiogroup).getByRole('radio', { name: /^ONs/ })).toBeInTheDocument()
+    expect(within(radiogroup).queryByRole('radio', { name: /^Subsoberanos/ })).not.toBeInTheDocument()
+  })
+
+  it('clickear un crédito filtra la tabla; volver a Todos la restaura', async () => {
+    mockearApiConCredito()
+    renderizar()
+
+    await screen.findByText('4 de 4 especies en USD')
+    await userEvent.click(screen.getByRole('radio', { name: /^ONs/ }))
+
+    expect(await screen.findByText('1 de 1 especies en USD')).toBeInTheDocument()
+    expect(screen.getByText('YMCHO')).toBeInTheDocument()
+    expect(screen.queryByText('AL30')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('radio', { name: /^Todos/ }))
+    expect(await screen.findByText('4 de 4 especies en USD')).toBeInTheDocument()
+    expect(screen.getByText('AL30')).toBeInTheDocument()
+    expect(screen.getByText('YMCHO')).toBeInTheDocument()
+  })
+})
+
 // --- GWT-2: orden + dos filtros numéricos, con el conteo siempre visible -------------------------
 
 describe('orden y filtros del universo cargado', () => {
@@ -338,10 +462,10 @@ describe('las columnas de tipo y ley', () => {
     mockearApiConUnaEspecie(especie({ clase_activo: 'on_corporativo', ley: 'Ley Argentina' }))
     renderizar()
 
-    // Una ON del dólar hard vive en la pestaña de ONs, no en la de Soberanos, que es la que abre.
-    await userEvent.click(await screen.findByRole('button', { name: 'ONs' }))
-
+    // Con una sola especie en el segmento hay un solo crédito presente: no hay chip que elegir,
+    // se ve directo bajo "Todos" (el default).
     const fila = await screen.findByText('AL30').then((el) => el.closest('div[role="button"]'))
+    expect(screen.queryByRole('radiogroup', { name: 'Crédito' })).not.toBeInTheDocument()
     expect(fila).not.toBeNull()
     expect(fila).toHaveTextContent('ON corporativa')
     expect(fila).toHaveTextContent('Ley Argentina')
@@ -371,17 +495,18 @@ describe('las columnas de tipo y ley', () => {
     expect(within(fila as HTMLElement).getAllByText('s/d')).toHaveLength(2)
   })
 
-  it('una clase que ninguna pestaña de crédito cubre se declara en vez de desaparecer', async () => {
-    // El riesgo que introduce partir un segmento en pestañas: una clase de activo nueva no entra en
-    // ninguna y se pierde sin que nada avise. Hoy no pasa —las tres pestañas cubren las tres clases
-    // de renta fija de `SUBMARKET_MAP`—, y el conteo existe para el día que la fuente cambie.
+  it('una clase que ningún chip de crédito reconoce se muestra igual, bajo Todos', async () => {
+    // Antes de la reorganización del 14/08/2026, partir el segmento en pestañas de crédito podía
+    // dejar afuera una clase de activo nueva sin que nada avisara. Con "Todos" como default eso ya
+    // no pasa: la fila se ve igual, y la nota del chip de crédito declara cuántas quedan fuera de
+    // los tres créditos reconocidos.
     mockearApiConUnaEspecie(especie({ clase_activo: 'clase_inventada' }))
     renderizar()
 
+    expect(await screen.findByText('AL30')).toBeInTheDocument()
     expect(
-      await screen.findByText(/1 de este segmento no entran en ninguna de estas pestañas/),
+      await screen.findByText(/1 especies con otra clase de activo sólo se ven en Todos/),
     ).toBeInTheDocument()
-    expect(screen.queryByText('AL30')).not.toBeInTheDocument()
   })
 })
 
