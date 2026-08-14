@@ -120,9 +120,11 @@ export function FichaRentaVariable({ ticker }: { ticker: string }) {
         <BloqueEmpresa propio={propio} />
       </Panel>
 
-      <Panel rotulo={`Valuación · ${externo.fuente}`}>
-        <BloqueValuacion externo={externo} />
-      </Panel>
+      {externo.disponible && (
+        <Panel rotulo={`Valuación · ${externo.fuente}`}>
+          <BloqueValuacion externo={externo} />
+        </Panel>
+      )}
 
       {sec !== undefined && (
         <Panel rotulo={`Estados contables · ${sec.fuente}`}>
@@ -130,9 +132,11 @@ export function FichaRentaVariable({ ticker }: { ticker: string }) {
         </Panel>
       )}
 
-      <Panel rotulo={`Perfil de la empresa · ${externo.fuente}`}>
-        <BloquePerfil externo={externo} />
-      </Panel>
+      {externo.disponible && (
+        <Panel rotulo={`Perfil de la empresa · ${externo.fuente}`}>
+          <BloquePerfil externo={externo} />
+        </Panel>
+      )}
 
       <Panel rotulo={`Cierres del último año · ${historico.fuente}`}>
         <BloqueHistorico historico={historico} />

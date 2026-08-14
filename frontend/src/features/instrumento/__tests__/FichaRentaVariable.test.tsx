@@ -330,7 +330,7 @@ it('sin clasificar declara que el job no pasó por este papel, no inventa un sec
 
 // --- La pausa de Yahoo (13/08/2026) -------------------------------------------------------------
 
-it('con Yahoo pausado los paneles de valuación y perfil dicen el motivo de la pausa', async () => {
+it('con Yahoo pausado los paneles de valuación y perfil no se muestran', async () => {
   const pausado = fichaRV({
     externo: externo({
       disponible: false,
@@ -346,7 +346,12 @@ it('con Yahoo pausado los paneles de valuación y perfil dicen el motivo de la p
   mockearRutas({ [RUTA_RV(TICKER)]: { body: pausado } })
   const { container } = renderizar()
 
-  expect(await screen.findAllByText(/pausado desde el 13\/08\/2026/)).not.toHaveLength(0)
+  // Con Yahoo pausado los dos paneles que dependen de él ni se renderizan: no tiene sentido
+  // mostrar un panel entero para decir "no disponible" cuando la pausa es de fondo, no un evento.
+  await screen.findByText('La rueda de hoy · BYMA')
+  expect(screen.queryByText('Valuación · Yahoo Finance')).not.toBeInTheDocument()
+  expect(screen.queryByText('Perfil de la empresa · Yahoo Finance')).not.toBeInTheDocument()
+  expect(screen.queryByText(/pausado desde el 13\/08\/2026/)).not.toBeInTheDocument()
   // El histórico no depende de la pausa de Yahoo.
   expect(container.querySelector('polyline')).not.toBeNull()
 })
@@ -385,7 +390,7 @@ it('no muestra recomendación, precio objetivo ni consenso de analistas', async 
 
 // --- GWT-4: la fuente externa puede faltar entera ----------------------------------------------
 
-it('con Yahoo caído muestra igual lo de BYMA y declara el bloque externo ausente', async () => {
+it('con Yahoo caído muestra igual lo de BYMA, sin los paneles que dependen de él', async () => {
   const sinYahoo = fichaRV({
     externo: externo({
       disponible: false,
@@ -400,10 +405,11 @@ it('con Yahoo caído muestra igual lo de BYMA y declara el bloque externo ausent
   // Lo nuestro sigue: el precio de BYMA está en pantalla (y coincide con el último cierre de la
   // serie de data912, que no depende de Yahoo — por eso `findAllByText` y no `findByText`).
   expect((await screen.findAllByText('5.000,00')).length).toBeGreaterThan(0)
-  // El bloque externo se declara, con el motivo de la fuente, en cada uno de los dos paneles que
-  // dependen de Yahoo: valuación y perfil. Ninguno se queda mudo.
-  expect(screen.getAllByText('Yahoo Finance no está disponible para GGAL.BA.')).toHaveLength(2)
-  expect(screen.getAllByText(/no respondió la cotización/).length).toBeGreaterThan(0)
+  // El bloque externo no está disponible: los dos paneles que dependen de Yahoo (valuación y
+  // perfil) no se renderizan — mismo contrato que la pausa, el frontend no distingue los motivos.
+  expect(screen.queryByText('Valuación · Yahoo Finance')).not.toBeInTheDocument()
+  expect(screen.queryByText('Perfil de la empresa · Yahoo Finance')).not.toBeInTheDocument()
+  expect(screen.queryByText(/no respondió la cotización/)).not.toBeInTheDocument()
   // El histórico es de data912, no de Yahoo: un fallo de Yahoo no lo arrastra.
   expect(container.querySelector('polyline')).not.toBeNull()
 })
