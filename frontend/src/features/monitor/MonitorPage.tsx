@@ -46,11 +46,13 @@ import { useRentaVariable } from '@/lib/rentaVariable'
 import { useAbrirInstrumento } from '@/features/instrumento/useAbrirInstrumento'
 
 import { CurvaSegmento } from './components/CurvaSegmento'
-import { FILTROS_VACIOS, FiltrosNumericos, type FiltrosUniverso } from './components/FiltrosNumericos'
+import { FiltrosNumericos } from './components/FiltrosNumericos'
+import { FiltrosPerfil } from './components/FiltrosPerfil'
 import { SelectorFamilia, type Familia } from './components/SelectorFamilia'
 import { TablaUniverso } from './components/TablaUniverso'
 import { useSegmentos } from './hooks/useSegmentos'
 import { useUniversoSegmento } from './hooks/useUniversoSegmento'
+import { FILTROS_VACIOS, facetarUniverso, pasaFiltros, type FiltrosUniverso } from './lib/filtros'
 
 export function MonitorPage() {
   const segmentos = useSegmentos()
@@ -174,26 +176,57 @@ function UniversoDelSegmento({
   onCambioFiltros: (filtros: FiltrosUniverso) => void
 }) {
   const universo = useUniversoSegmento(segmento)
-  const [credito, setCredito] = useState<string | null>(null)
-  const [moneda, setMoneda] = useState<string | null>(null)
-
   const deLSegmento = useMemo(() => universo.data ?? [], [universo.data])
-  const creditos = useMemo(() => contarPorCredito(deLSegmento), [deLSegmento])
 
-  // El crédito: el segmento entero, o sólo una clase de activo si se eligió un chip. Es un filtro
-  // sobre `clase_activo`, que es dato declarado por la fuente.
-  const deLCredito = useMemo(
-    () => (credito === null ? deLSegmento : deLSegmento.filter((e) => e.clase_activo === credito)),
-    [deLSegmento, credito],
+  // Facetado en cascada (14/08/2026): crédito, moneda, ley, sector, calificación y emisor se
+  // validan juntos y las opciones de cada uno se acotan por lo que dejan los demás — ver
+  // `facetarUniverso` en `lib/filtros.ts`. `efectivos` es lo que realmente filtra: una selección
+  // sin respaldo (p. ej. un crédito sin especies en la ley elegida) queda en `apagadas` y se
+  // declara, no se aplica en fantasma.
+  const { opciones, efectivos, apagadas } = useMemo(
+    () => facetarUniverso(deLSegmento, filtros),
+    [deLSegmento, filtros],
   )
 
-  const monedas = useMemo(() => contarPorMoneda(deLCredito), [deLCredito])
-  const activa =
-    moneda ?? monedaInicial(monedas, MONEDA_PREFERIDA[segmento] ?? MONEDA_PREFERIDA_POR_DEFECTO)
+  // Los chips de crédito y moneda muestran conteos, no sólo una lista de valores posibles: se
+  // calculan aparte, cada uno sobre el subconjunto que deja el resto de los filtros (la propia
+  // dimensión neutralizada) — mismo criterio *leave-one-out* que ya aplica `facetarUniverso` para
+  // sector/ley/calificación/emisor.
+  const especiesParaCredito = useMemo(
+    () => deLSegmento.filter((e) => pasaFiltros(e, { ...efectivos, credito: null })),
+    [deLSegmento, efectivos],
+  )
+  const creditos = useMemo(() => contarPorCredito(especiesParaCredito), [especiesParaCredito])
 
+  const especiesParaMoneda = useMemo(
+    () => deLSegmento.filter((e) => pasaFiltros(e, { ...efectivos, moneda: null })),
+    [deLSegmento, efectivos],
+  )
+  const monedas = useMemo(() => contarPorMoneda(especiesParaMoneda), [especiesParaMoneda])
+
+  // La moneda nunca se filtra en "todas mezcladas" (regla 3): si no se eligió a mano, o si la
+  // elegida quedó apagada por no tener especies bajo el resto de los filtros, se resuelve a una
+  // concreta entre las que sí tienen especies — la preferida del segmento si está, si no la de
+  // mayor volumen. `monedaInicial` devuelve `null` sólo cuando no queda ninguna.
+  const activa =
+    efectivos.moneda ?? monedaInicial(monedas, MONEDA_PREFERIDA[segmento] ?? MONEDA_PREFERIDA_POR_DEFECTO)
+
+  // Filtros ya resueltos del todo, para la tabla y la curva: iguales a `efectivos` salvo que la
+  // moneda queda concreta.
+  const filtrosResueltos = useMemo(() => ({ ...efectivos, moneda: activa }), [efectivos, activa])
+
+  // Filtrado por crédito y moneda solamente — el "M" del conteo "N de M" de la tabla, y también lo
+  // que ve la curva. Ley/sector/calificación/emisor y los umbrales los aplica `TablaUniverso` con
+  // `filtrosResueltos`: `especies` acá no baja más que crédito+moneda a propósito, porque "cuántas
+  // hay bajo este crédito y esta moneda" es una pregunta distinta de "cuántas pasan todo lo demás"
+  // (la curva, en particular, sólo quiere la primera — no lleva los umbrales ni las dimensiones
+  // nuevas, sigue siendo rendimiento contra duración del recorte de siempre).
   const deLaMoneda = useMemo(
-    () => deLCredito.filter((e) => (e.moneda_cotizacion ?? SIN_MONEDA_DECLARADA) === activa),
-    [deLCredito, activa],
+    () =>
+      deLSegmento
+        .filter((e) => efectivos.credito === null || e.clase_activo === efectivos.credito)
+        .filter((e) => (e.moneda_cotizacion ?? SIN_MONEDA_DECLARADA) === activa),
+    [deLSegmento, efectivos.credito, activa],
   )
 
   if (universo.isPending) {
@@ -217,7 +250,10 @@ function UniversoDelSegmento({
     )
   }
 
-  if (activa === null) {
+  // Segmento sin una sola especie, sea cual sea el crédito: no hay filtro que ofrecer sobre nada.
+  // Distinto de que los filtros elegidos dejen cero — eso sigue mostrando la barra (abajo), porque
+  // ahí lo que falta es la combinación, no el dato.
+  if (deLSegmento.length === 0) {
     return (
       <p style={{ margin: '18px 0', fontSize: 12.5, color: 'var(--dim)' }}>
         No hay especies de {nombreSegmento(segmento)} en el universo de hoy.
@@ -228,24 +264,38 @@ function UniversoDelSegmento({
   return (
     <>
       <SelectorCredito
-        total={deLSegmento.length}
+        total={especiesParaCredito.length}
         disponibles={creditos.disponibles}
         otras={creditos.otras}
-        activo={credito}
-        onCambio={(c) => {
-          setCredito(c)
-          setMoneda(null) // el crédito nuevo puede no tener especies en la moneda elegida a mano
-        }}
+        activo={efectivos.credito}
+        onCambio={(c) => onCambioFiltros({ ...filtros, credito: c })}
       />
-      <SelectorMoneda disponibles={monedas} activa={activa} onCambio={setMoneda} />
+      {/* `activa` puede ser `null` de forma transitoria —p. ej. mientras se tipea un rango de
+          rendimiento que por un instante queda invertido— sin que eso signifique que no hay
+          monedas: `SelectorMoneda` necesita una activa concreta, así que sólo se monta cuando hay
+          alguna. La barra de filtros de abajo se queda montada siempre: no hay motivo para que
+          desaparezca (y con ella el input donde el asesor sigue escribiendo) por un estado de
+          filtrado que se resuelve solo en el próximo tipeo. */}
+      {activa !== null && (
+        <SelectorMoneda disponibles={monedas} activa={activa} onCambio={(m) => onCambioFiltros({ ...filtros, moneda: m })} />
+      )}
+      <FiltrosPerfil filtros={filtros} efectivos={efectivos} opciones={opciones} apagadas={apagadas} onCambio={onCambioFiltros} />
       <FiltrosNumericos naturaleza={naturaleza} valores={filtros} onCambio={onCambioFiltros} />
-      <TablaUniverso especies={deLaMoneda} naturaleza={naturaleza} filtros={filtros} moneda={activa} />
-      <div style={{ marginTop: 16 }}>
-        {/* La curva también sale de una sola moneda: es rendimiento contra duración, y aunque el
-            rendimiento sea comparable entre hermanas, mezclarlas dibujaba tres puntos por emisión
-            sobre las mismas coordenadas. */}
-        <CurvaSegmento especies={deLaMoneda} naturaleza={naturaleza} />
-      </div>
+      {activa === null ? (
+        <p style={{ margin: '18px 0', fontSize: 12.5, color: 'var(--dim)' }}>
+          Ninguna especie pasa los filtros activos.
+        </p>
+      ) : (
+        <>
+          <TablaUniverso especies={deLaMoneda} naturaleza={naturaleza} filtros={filtrosResueltos} moneda={activa} />
+          <div style={{ marginTop: 16 }}>
+            {/* La curva también sale de una sola moneda: es rendimiento contra duración, y aunque
+                el rendimiento sea comparable entre hermanas, mezclarlas dibujaba tres puntos por
+                emisión sobre las mismas coordenadas. */}
+            <CurvaSegmento especies={deLaMoneda} naturaleza={naturaleza} />
+          </div>
+        </>
+      )}
     </>
   )
 }

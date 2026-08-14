@@ -57,6 +57,8 @@ function especie(extra: Partial<Especie> = {}): Especie {
     volumen: 1_000_000,
     volumen_usd: 1_000_000,
     paridad: 0.875,
+    sector: null,
+    calificacion: null,
     dato_sano: true,
     hermanas: [],
     fuente: null,
@@ -370,6 +372,153 @@ describe('chips de crédito dentro del segmento', () => {
     expect(await screen.findByText('4 de 4 especies en USD')).toBeInTheDocument()
     expect(screen.getByText('AL30')).toBeInTheDocument()
     expect(screen.getByText('YMCHO')).toBeInTheDocument()
+  })
+})
+
+// --- Facetado en cascada: Ley/Sector/Calificación/Emisor, más los chips de crédito y moneda ------
+//
+// Cuatro especies con dos créditos y dos sectores cruzados: AL30 es el único soberano; de las tres
+// ONs, YPFD y PAMP son O&G y BYMA es Financiera. El conteo "N de M" de la tabla sigue siendo
+// crédito+moneda solamente (M no se mueve con sector/emisor: es una invariante de antes de esta
+// feature, `deLaMoneda` en `MonitorPage.tsx`) — lo nuevo se verifica en las opciones de los
+// selects, en el conteo del chip de crédito, y en el aviso de selecciones apagadas.
+
+describe('facetado de la barra del universo', () => {
+  const YPFD = especie({
+    ticker: 'YPFD', emision: 'YPFD', clase_activo: 'on_corporativo',
+    sector: 'O&G', emisor: 'YPF S.A.', ley: 'Ley N.Y.', rendimiento: 0.09,
+  })
+  const PAMP = especie({
+    ticker: 'PAMP', emision: 'PAMP', clase_activo: 'on_corporativo',
+    sector: 'O&G', emisor: 'Pampa Energía', ley: 'Ley Argentina', rendimiento: 0.08,
+  })
+  const BYMA = especie({
+    ticker: 'BYMA', emision: 'BYMA', clase_activo: 'on_corporativo',
+    sector: 'Financiera', emisor: 'Banco Galicia', ley: 'Ley Argentina', rendimiento: 0.07,
+  })
+  const AL30_SOB = especie({
+    ticker: 'AL30', emision: 'AL30', clase_activo: 'bono_soberano',
+    sector: 'Soberano', emisor: 'Tesoro Nacional', ley: 'Ley Argentina', rendimiento: 0.1,
+  })
+
+  function mockearApiConSector() {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = new URL(String(input), 'http://localhost')
+      if (url.pathname === '/api/v1/universo/segmentos') {
+        return respuestaJson({
+          segmentos: [
+            {
+              clave: 'usd_hard',
+              nombre: 'Hard dollar',
+              naturaleza: 'tir_usd',
+              naturaleza_nombre: 'TIR en dólares (hard dollar)',
+              especies: 4,
+            },
+          ],
+          renta_variable: 0,
+          sin_segmento: 0,
+        })
+      }
+      if (url.pathname === '/api/v1/universo/emisiones/especies') {
+        return respuestaJson(pagina([AL30_SOB, YPFD, PAMP, BYMA]))
+      }
+      throw new Error(`ruta no mockeada en el test: ${url.pathname}${url.search}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+  }
+
+  function opcionesDe(etiqueta: string) {
+    return Array.from(screen.getByLabelText(etiqueta).children).map((o) => o.textContent)
+  }
+
+  it('elegir Sector deja en Emisor sólo los emisores de ese sector', async () => {
+    mockearApiConSector()
+    renderizar()
+    await screen.findByText('4 de 4 especies en USD')
+
+    expect(opcionesDe('Emisor')).toEqual([
+      'todos', 'Banco Galicia', 'Pampa Energía', 'Tesoro Nacional', 'YPF S.A.',
+    ])
+
+    await userEvent.selectOptions(screen.getByLabelText('Sector'), 'O&G')
+
+    expect(opcionesDe('Emisor')).toEqual(['todos', 'Pampa Energía', 'YPF S.A.'])
+    // El select propio no se acota a sí mismo.
+    expect(opcionesDe('Sector')).toEqual(['todos', 'Financiera', 'O&G', 'Soberano'])
+    // El "M" del conteo sigue siendo el segmento entero (crédito+moneda, no sector): la tabla
+    // filtra las dos que no son O&G, la denominación no cambia.
+    expect(await screen.findByText('2 de 4 especies en USD')).toBeInTheDocument()
+  })
+
+  it('y la inversa: elegir Emisor deja en Sector sólo el suyo', async () => {
+    mockearApiConSector()
+    renderizar()
+    await screen.findByText('4 de 4 especies en USD')
+
+    await userEvent.selectOptions(screen.getByLabelText('Emisor'), 'YPF S.A.')
+
+    expect(opcionesDe('Sector')).toEqual(['todos', 'O&G'])
+    expect(await screen.findByText('1 de 4 especies en USD')).toBeInTheDocument()
+  })
+
+  it('el conteo del chip de crédito respeta el filtro de ley', async () => {
+    mockearApiConSector()
+    renderizar()
+
+    expect(await screen.findByRole('radio', { name: 'Todos 4' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /^ONs/ })).toHaveTextContent('3')
+    expect(screen.getByRole('radio', { name: /^Soberanos/ })).toHaveTextContent('1')
+
+    // Bajo Ley Argentina sólo quedan dos de las tres ONs (YPFD es Ley N.Y.): el chip lo dice, y el
+    // soberano (también Ley Argentina) no se mueve.
+    await userEvent.selectOptions(screen.getByLabelText('Ley'), 'Ley Argentina')
+
+    expect(await screen.findByRole('radio', { name: 'Todos 3' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /^ONs/ })).toHaveTextContent('2')
+    expect(screen.getByRole('radio', { name: /^Soberanos/ })).toHaveTextContent('1')
+  })
+
+  it('el chip de crédito desaparece cuando el resto de los filtros ya no deja nada que separar', async () => {
+    mockearApiConSector()
+    renderizar()
+    await screen.findByRole('radio', { name: 'Todos 4' })
+
+    // Bajo el sector O&G sólo hay ONs (YPFD y PAMP): no queda nada que el chip pueda separar.
+    await userEvent.selectOptions(screen.getByLabelText('Sector'), 'O&G')
+
+    await screen.findByText('2 de 4 especies en USD')
+    expect(screen.queryByRole('radiogroup', { name: 'Crédito' })).not.toBeInTheDocument()
+  })
+
+  it('una selección sin respaldo se apaga, se declara, y no deja la barra sin controles', async () => {
+    mockearApiConSector()
+    renderizar()
+    await screen.findByText('4 de 4 especies en USD')
+
+    await userEvent.selectOptions(screen.getByLabelText('Sector'), 'O&G')
+    await userEvent.selectOptions(screen.getByLabelText('Emisor'), 'Pampa Energía')
+    // Un rango de rendimiento que Pampa (8%) no cumple.
+    await userEvent.type(screen.getByLabelText(/Rendimiento mín/), '50')
+
+    expect(await screen.findByText('Ninguna especie pasa los filtros activos.')).toBeInTheDocument()
+    // Los selects y el input siguen montados e interactuables: no desaparece la barra.
+    expect(screen.getByLabelText('Sector')).toBeInTheDocument()
+    expect(screen.getByLabelText('Emisor')).toBeInTheDocument()
+    expect(screen.getByLabelText(/Rendimiento mín/)).toBeInTheDocument()
+  })
+
+  it('limpiar filtros también vacía sector, emisor y calificación', async () => {
+    mockearApiConSector()
+    renderizar()
+    await screen.findByText('4 de 4 especies en USD')
+
+    await userEvent.selectOptions(screen.getByLabelText('Sector'), 'O&G')
+    await screen.findByText('2 de 4 especies en USD')
+
+    await userEvent.click(screen.getByRole('button', { name: 'limpiar filtros' }))
+
+    expect(await screen.findByText('4 de 4 especies en USD')).toBeInTheDocument()
+    expect(screen.getByLabelText('Sector')).toHaveValue('')
   })
 })
 

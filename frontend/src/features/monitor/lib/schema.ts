@@ -30,6 +30,14 @@ export const esquemaEspecie = z.object({
   volumen_usd: z.number().nullable(),
   /** Adimensional y ronda 1.0 (`cupones.py` del backend): 0.875 es un bono bajo la par. */
   paridad: z.number().nullable(),
+  /** Rubro declarado por la fuente curada (`data/condiciones_emision.csv`). `null` = sin dato: no
+   *  se infiere de ningún parecido con otra especie (regla 1). Agregado 14/08/2026 para el
+   *  facetado de la barra de filtros — el mismo campo que ya usa el armador. */
+  sector: z.string().nullable(),
+  /** Texto literal de la calificadora (`'AA(arg)'`, `'AAA (FIX)'`), sin escala común entre las
+   *  cuatro calificadoras del universo: nunca se ordena por riesgo, sólo se filtra por
+   *  coincidencia exacta. `null` = sin dato. Agregado 14/08/2026, mismo criterio que `sector`. */
+  calificacion: z.string().nullable(),
   /** `false` cuando la sanidad de F-010 la descartó. Sigue en la lista: no se propone, no se
    * esconde. */
   dato_sano: z.boolean(),

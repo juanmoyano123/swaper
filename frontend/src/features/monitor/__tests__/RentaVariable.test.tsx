@@ -64,6 +64,8 @@ function especieRentaFija(): Especie {
     volumen: 1_000_000,
     volumen_usd: 1_000_000,
     paridad: 0.875,
+    sector: null,
+    calificacion: null,
     dato_sano: true,
     hermanas: [],
     fuente: null,

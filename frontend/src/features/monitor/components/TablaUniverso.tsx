@@ -21,8 +21,7 @@ import { fmtCompacto, fmtFecha, fmtNumero, fmtPct, SIN_DATO } from '@/lib/fmt'
 
 import { useAbrirInstrumento } from '@/features/instrumento/useAbrirInstrumento'
 
-import type { FiltrosUniverso } from './FiltrosNumericos'
-import { pasaFiltros } from './FiltrosNumericos'
+import { pasaFiltros, type FiltrosUniverso } from '../lib/filtros'
 import type { Especie } from '../lib/schema'
 
 /** Las columnas ordenables, en el orden en que se muestran. Todas lo son. */
@@ -99,11 +98,14 @@ export function TablaUniverso({
   filtros,
   moneda,
 }: {
-  /** Ya filtradas por moneda: la tabla no elige qué mostrar, sólo ordena y aplica los filtros. */
+  /** Ya filtradas por crédito y moneda (el "M" del conteo): la tabla aplica el resto —ley, sector,
+   *  calificación, emisor y los umbrales, todos adentro de `filtros`— para no tener que decidir de
+   *  nuevo por qué quedó afuera una fila que ya se filtró río arriba. */
   especies: Especie[]
   naturaleza: string
   filtros: FiltrosUniverso
-  /** La moneda del selector, para el conteo. La tabla no la usa para decidir nada más. */
+  /** La moneda ya resuelta, para el conteo. La tabla no la usa para decidir nada más: el filtro de
+   *  moneda de verdad ya viene aplicado en `especies`. */
   moneda: string
 }) {
   const [orden, setOrden] = useState<Orden>({ campo: null, direccion: 'asc' })

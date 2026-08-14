@@ -1,46 +1,12 @@
 /**
- * Los filtros numéricos del universo — F-038.
+ * La fila de umbrales del universo — F-038. `FiltrosUniverso`, `FILTROS_VACIOS` y `pasaFiltros` se
+ * mudaron a `../lib/filtros.ts` (14/08/2026, facetado en cascada) y se re-exportan acá para no
+ * romper a quien ya los importaba de este archivo.
  *
  * Inputs controlados y vacío significa "sin filtro": no hay un valor por defecto que discrimine
  * filas, porque eso sería decidir en silencio qué es "razonable" sin que el asesor lo haya pedido.
  * El rótulo del rendimiento lleva la unidad del segmento activo (regla 2 del dominio): un filtro
  * sin unidad invitaría a escribir un número pensando en TIR dólar y filtrar sobre una TNA en pesos.
- */
-
-import type { ReactNode } from 'react'
-
-import { unidadDeNaturaleza } from '@/components/SelectorSegmento'
-
-export interface FiltrosUniverso {
-  rendimientoMin: string
-  rendimientoMax: string
-  duracionMax: string
-  /** Sólo especies con precio publicado. Apagado por defecto: un faltante se muestra y se cuenta. */
-  soloConPrecio: boolean
-  /** Sólo especies con volumen operado mayor a cero en la rueda. */
-  soloOperadoHoy: boolean
-}
-
-export const FILTROS_VACIOS: FiltrosUniverso = {
-  rendimientoMin: '',
-  rendimientoMax: '',
-  duracionMax: '',
-  soloConPrecio: false,
-  soloOperadoHoy: false,
-}
-
-/**
- * Si una fila pasa los filtros activos.
- *
- * Una fila con `rendimiento: null` no puede pasar un filtro de rendimiento —no se puede afirmar
- * que un dato que no existe cumple un umbral— pero sin filtros activos se muestra igual: el
- * faltante no es un motivo para esconder la fila, sólo para no poder filtrarla por ese campo.
- * Mismo criterio para duración: sin dato no hay cómo saber si cumple un máximo.
- *
- * `especie.rendimiento` es una fracción (0.13 = 13%, igual que en el esquema), pero el input de
- * filtro está rotulado en la unidad de columna —puntos porcentuales, lo que se ve en la celda— así
- * que lo que el asesor escribe se divide por 100 antes de comparar. Filtrar contra la fracción cruda
- * obligaría a escribir "0.13" para encontrar un 13%, que no es lo que el rótulo promete.
  *
  * Los dos interruptores son de otra clase que los tres numéricos: no comparan contra un umbral que
  * el asesor eligió, sacan de la vista lo que no operó. Vienen apagados a propósito —una especie sin
@@ -48,33 +14,14 @@ export const FILTROS_VACIOS: FiltrosUniverso = {
  * rueda, y poder taparlas de un clic es lo que las hace mirables. Es lo que hace Balanz con sus dos
  * casillas "Mostrar con precio" y "Operado hoy".
  */
-export function pasaFiltros(
-  especie: {
-    rendimiento: number | null
-    duracion: number | null
-    precio: number | null
-    volumen: number | null
-  },
-  filtros: FiltrosUniverso,
-): boolean {
-  const min = filtros.rendimientoMin === '' ? null : Number(filtros.rendimientoMin) / 100
-  const max = filtros.rendimientoMax === '' ? null : Number(filtros.rendimientoMax) / 100
-  const duracionMax = filtros.duracionMax === '' ? null : Number(filtros.duracionMax)
 
-  if ((min !== null || max !== null) && especie.rendimiento === null) return false
-  if (min !== null && especie.rendimiento !== null && especie.rendimiento < min) return false
-  if (max !== null && especie.rendimiento !== null && especie.rendimiento > max) return false
+import type { ReactNode } from 'react'
 
-  if (duracionMax !== null && especie.duracion === null) return false
-  if (duracionMax !== null && especie.duracion !== null && especie.duracion > duracionMax) return false
+import { unidadDeNaturaleza } from '@/components/SelectorSegmento'
 
-  if (filtros.soloConPrecio && especie.precio === null) return false
-  // Volumen cero y volumen sin publicar son cosas distintas y las dos quedan fuera de "operado hoy":
-  // de la primera consta que no operó, de la segunda no consta que sí.
-  if (filtros.soloOperadoHoy && !(especie.volumen !== null && especie.volumen > 0)) return false
+import { FILTROS_VACIOS, pasaFiltros, type FiltrosUniverso } from '../lib/filtros'
 
-  return true
-}
+export { FILTROS_VACIOS, pasaFiltros, type FiltrosUniverso }
 
 export function FiltrosNumericos({
   naturaleza,
