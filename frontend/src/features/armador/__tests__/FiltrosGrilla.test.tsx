@@ -458,6 +458,125 @@ describe('filtro de calificación', () => {
   })
 })
 
+// --- Facetado: cada filtro acota las opciones de los demás --------------------------------------------
+
+describe('facetado de la barra', () => {
+  function ypfd(extra: Partial<InstrumentoDelMes> = {}): InstrumentoDelMes {
+    return { ...al30(), ticker: 'YPFD', emision: 'YPFD', rendimiento: 0.09, ...extra }
+  }
+
+  /** Una tercera ON, de otro sector y otro emisor: sin ella el facetado no tendría qué descartar
+   *  (TZX26 no declara emisor, así que sola no alcanza para ver el select de Emisor achicarse). */
+  function especieYpfd(): Especie {
+    return {
+      ...especieAl30(),
+      ticker: 'YPFD',
+      emision: 'YPFD',
+      rendimiento: 0.09,
+      duracion: 2.5,
+      sector: 'O&G',
+      emisor: 'YPF S.A.',
+      volumen_usd: 50_000,
+    }
+  }
+
+  function responderConTresPapeles() {
+    const ventana = VENTANA.map((_, indice) => mes(indice))
+    ventana[1] = mes(1, [tzx26()]) // Octubre 2026
+    ventana[2] = mes(2, [al30(), ypfd()]) // Noviembre 2026
+    ventana[6] = mes(6, [al30({ fechas: ['2027-03-09'] })]) // Marzo 2027
+    ventana[10] = mes(10, [al30({ fechas: ['2027-07-09'] })]) // Julio 2027
+
+    const fetchMock = vi.fn((entrada: RequestInfo | URL) => {
+      const url = typeof entrada === 'string' ? entrada : entrada.toString()
+      if (url.includes('/emisiones/especies')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [especieAl30(), especieTzx26(), especieYpfd()],
+              next_cursor: null,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        )
+      }
+      if (url.includes('/calendario/universo')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ ...calendarioUniverso(), meses: ventana }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      throw new Error(`fetch no mockeado en este test: ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+  }
+
+  /** Los tres papeles a la vista, sin el default de fábrica. */
+  async function grillaConLosTres() {
+    await grillaCargada()
+    await userEvent.click(screen.getByRole('button', { name: 'limpiar filtros' }))
+    await screen.findByText('3 de 3 papeles pasan los filtros')
+  }
+
+  function opcionesDe(etiqueta: string) {
+    return Array.from(screen.getByLabelText(etiqueta).children).map((o) => o.textContent)
+  }
+
+  it('elegir sector deja en Emisor sólo los emisores de ese sector', async () => {
+    responderConTresPapeles()
+    renderizar()
+    await grillaConLosTres()
+
+    expect(opcionesDe('Emisor')).toEqual(['todos', 'República Argentina', 'YPF S.A.'])
+
+    await userEvent.selectOptions(screen.getByLabelText('Sector'), 'O&G')
+
+    expect(opcionesDe('Emisor')).toEqual(['todos', 'YPF S.A.'])
+    // El select propio no se acota a sí mismo: el sector se puede cambiar sin limpiar nada.
+    expect(opcionesDe('Sector')).toEqual(['todos', 'Financiera', 'O&G', 'Soberano'])
+  })
+
+  it('y la inversa: elegir emisor deja en Sector sólo el suyo', async () => {
+    responderConTresPapeles()
+    renderizar()
+    await grillaConLosTres()
+
+    await userEvent.selectOptions(screen.getByLabelText('Emisor'), 'YPF S.A.')
+
+    expect(opcionesDe('Sector')).toEqual(['todos', 'O&G'])
+    expect(await screen.findByText('1 de 3 papeles pasan los filtros')).toBeInTheDocument()
+  })
+
+  it('las pestañas de segmento no se facetan: siguen ofreciendo todo el mercado', async () => {
+    responderConTresPapeles()
+    renderizar()
+    await grillaCargada()
+
+    // Con el default de fábrica (TIR ≥ 6%) TZX26 —tasa real CER, sin TIR— queda afuera de la
+    // grilla, pero su pestaña tiene que seguir estando: es la forma de pivotar hacia ella.
+    expect(screen.getByText('2 de 3 papeles pasan los filtros')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'CER' })).toBeInTheDocument()
+  })
+
+  it('una selección sin respaldo se apaga, se declara y no deja la barra muerta', async () => {
+    responderConTresPapeles()
+    renderizar()
+    await grillaConLosTres()
+
+    // Ninguno de los tres papeles es del sector Agro: el preset no tiene con qué cumplirse.
+    await userEvent.click(screen.getByRole('button', { name: 'Agro' }))
+
+    expect(await screen.findByText(/no se aplica: Sector «Agro»/)).toBeInTheDocument()
+    expect(screen.getByText(/Lo que se ve abajo no cumple ese criterio/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Sector')).toHaveValue('')
+    // Y las demás opciones no quedaron envenenadas por el sector inexistente.
+    expect(opcionesDe('Emisor')).toEqual(['todos', 'República Argentina', 'YPF S.A.'])
+    expect(screen.getByText('3 de 3 papeles pasan los filtros')).toBeInTheDocument()
+  })
+})
+
 // --- Universo caído: la grilla se muestra sin filtrar, la barra se declara no disponible --------------
 
 describe('universo caído', () => {

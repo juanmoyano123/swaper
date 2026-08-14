@@ -11,11 +11,13 @@ import {
   FILTROS_ARMADOR_VACIOS,
   LEY_NO_INFORMADA,
   contarPagosPorTicker,
+  facetarFiltros,
   filtrarMeses,
   hayFiltrosActivos,
   pasaFiltros,
   percentilesDeLiquidez,
   tickersConCupon,
+  type FiltrosArmador,
 } from '../lib/filtros'
 import type { Especie, InstrumentoDelMes, MesDelCalendario } from '../lib/schema'
 
@@ -568,5 +570,120 @@ describe('aniosHastaVencimiento', () => {
 
   it('un vencimiento ya pasado da negativo, no cero: el dato roto se ve', () => {
     expect(aniosHastaVencimiento('2020-01-01', HOY)).toBeLessThan(0)
+  })
+})
+
+describe('facetarFiltros', () => {
+  const HOY = new Date('2026-08-14T00:00:00Z')
+
+  /** Cuatro ONs con los perfiles cruzados a propósito: dos sectores, cuatro emisores, una sin ley
+   *  declarada y otra sin calificación. ONA es la única que paga dos veces en la ventana. */
+  function universoFacetado() {
+    const especies = [
+      especie({ ticker: 'ONA', emision: 'ONA', sector: 'O&G', emisor: 'YPF', ley: 'Ley Argentina', calificacion: 'AAA(arg)' }),
+      especie({ ticker: 'ONB', emision: 'ONB', sector: 'Financiera', emisor: 'Banco Galicia', ley: 'Ley Argentina', calificacion: 'AA(arg)' }),
+      especie({ ticker: 'ONC', emision: 'ONC', sector: 'O&G', emisor: 'Vista', ley: 'Ley N.Y.', calificacion: null }),
+      especie({ ticker: 'OND', emision: 'OND', sector: 'Financiera', emisor: 'Banco Macro', ley: null, calificacion: 'AA(arg)' }),
+    ]
+    const cruce = new Map(especies.map((e) => [e.ticker, e]))
+    const meses = Array.from({ length: 12 }, (_, i) => mesVacio(i))
+    meses[0].instrumentos = [
+      instrumento({ ticker: 'ONA', emision: 'ONA', rendimiento: 0.12 }),
+      instrumento({ ticker: 'ONB', emision: 'ONB', rendimiento: 0.08 }),
+      instrumento({ ticker: 'ONC', emision: 'ONC', rendimiento: 0.04 }),
+      instrumento({ ticker: 'OND', emision: 'OND', rendimiento: 0.1 }),
+    ]
+    meses[1].instrumentos = [instrumento({ ticker: 'ONA', emision: 'ONA', rendimiento: 0.12 })]
+    return { cruce, meses }
+  }
+
+  function facetar(parcial: Partial<FiltrosArmador> = {}) {
+    const { cruce, meses } = universoFacetado()
+    return facetarFiltros(meses, cruce, { ...FILTROS_ARMADOR_VACIOS, ...parcial }, HOY)
+  }
+
+  it('sin filtros ofrece todo lo que hay en la ventana', () => {
+    const { opciones } = facetar()
+    expect([...opciones.sectores].sort()).toEqual(['Financiera', 'O&G'])
+    expect([...opciones.emisores].sort()).toEqual(['Banco Galicia', 'Banco Macro', 'Vista', 'YPF'])
+    expect([...opciones.leyes].sort()).toEqual(['Ley Argentina', 'Ley N.Y.'])
+    expect(opciones.tieneLeyNoInformada).toBe(true)
+    expect([...opciones.pagos].sort()).toEqual([1, 2])
+  })
+
+  it('elegir sector deja sólo los emisores que emiten en ese sector', () => {
+    const { opciones } = facetar({ sector: 'O&G' })
+    expect([...opciones.emisores].sort()).toEqual(['Vista', 'YPF'])
+  })
+
+  it('y la inversa: elegir emisor deja sólo su sector', () => {
+    const { opciones } = facetar({ emisor: 'Vista' })
+    expect(opciones.sectores).toEqual(['O&G'])
+  })
+
+  it('el select propio no se acota a sí mismo: siempre se puede cambiar de idea', () => {
+    const { opciones } = facetar({ sector: 'O&G' })
+    expect([...opciones.sectores].sort()).toEqual(['Financiera', 'O&G'])
+  })
+
+  it('un umbral también acota: con TIR mín. 6% el emisor de la ON al 4% desaparece', () => {
+    const { opciones } = facetar({ tirMin: '6' })
+    expect([...opciones.emisores].sort()).toEqual(['Banco Galicia', 'Banco Macro', 'YPF'])
+  })
+
+  it('"ley no informada" sólo se ofrece si alguna superviviente no la declara', () => {
+    expect(facetar({ sector: 'O&G' }).opciones.tieneLeyNoInformada).toBe(false)
+    expect(facetar({ sector: 'Financiera' }).opciones.tieneLeyNoInformada).toBe(true)
+  })
+
+  it('una selección sin respaldo se apaga y no envenena las opciones de las demás', () => {
+    // Sin el punto fijo, el sector inexistente dejaría el select de emisor vacío: nadie pasa el
+    // filtro, así que no habría ningún valor que ofrecer, y la barra quedaría muerta.
+    const { opciones, efectivos } = facetar({ sector: 'Mineria' })
+    expect(efectivos.sector).toBeNull()
+    expect([...opciones.emisores].sort()).toEqual(['Banco Galicia', 'Banco Macro', 'Vista', 'YPF'])
+  })
+
+  it('de las calificaciones tildadas sobreviven las que el resto de los filtros respalda', () => {
+    const { opciones, efectivos } = facetar({
+      sector: 'O&G',
+      calificaciones: ['AAA(arg)', 'AA(arg)'],
+    })
+    expect(opciones.calificaciones).toEqual(['AAA(arg)'])
+    expect(efectivos.calificaciones).toEqual(['AAA(arg)'])
+    expect(efectivos.sector).toBe('O&G')
+  })
+
+  it('los umbrales no se apagan nunca, ni cuando dejan la ventana en cero', () => {
+    const { efectivos } = facetar({ tirMin: '99', soloConCupones: true })
+    expect(efectivos.tirMin).toBe('99')
+    expect(efectivos.soloConCupones).toBe(true)
+  })
+
+  it('declara lo que apagó, con el valor que el asesor había elegido', () => {
+    const { apagadas } = facetar({ sector: 'Mineria', calificaciones: ['AAA(arg)', 'B(arg)'] })
+    expect(apagadas).toEqual([
+      { dimension: 'sector', valor: 'Mineria' },
+      { dimension: 'calificaciones', valor: 'B(arg)' },
+    ])
+  })
+
+  it('sin nada apagado no hay nada que declarar', () => {
+    expect(facetar({ sector: 'O&G' }).apagadas).toEqual([])
+  })
+
+  it('sin nada que apagar los efectivos son los del store', () => {
+    const filtros = { ...FILTROS_ARMADOR_VACIOS, sector: 'O&G', tirMin: '6' }
+    const { cruce, meses } = universoFacetado()
+    expect(facetarFiltros(meses, cruce, filtros, HOY).efectivos).toEqual(filtros)
+  })
+
+  it('entre dos selecciones incompatibles gana la más general y cae la más específica', () => {
+    // 'Financiera' y 'YPF' no conviven: sin un orden de validación se invalidarían mutuamente y el
+    // asesor perdería las dos.
+    const { efectivos, apagadas } = facetar({ sector: 'Financiera', emisor: 'YPF' })
+    expect(efectivos.sector).toBe('Financiera')
+    expect(efectivos.emisor).toBeNull()
+    expect(apagadas).toEqual([{ dimension: 'emisor', valor: 'YPF' }])
   })
 })

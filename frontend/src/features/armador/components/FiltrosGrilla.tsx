@@ -9,34 +9,59 @@
  * (GWT-4 lo exige explícito) el plan no lo pide para sector, y `pasaFiltros` ya trata un
  * `sector: null` contra un filtro de sector concreto como "no pasa", nunca asignándolo a un
  * sector real (mismo criterio no-elegible que emisor).
+ *
+ * Los filtros se leen de dos lados a propósito (facetado, 14/08/2026): las dimensiones que el
+ * facetado acota —sector, emisor, ley, calificación, pagos— se muestran desde `efectivos`, para
+ * que una selección que se quedó sin respaldo aparezca en "todos" y no como algo elegido que no
+ * filtra. Los umbrales y la pestaña de segmento se leen del store, porque siempre aplican. Los
+ * `onChange` escriben siempre el store crudo: nadie corrige a nadie, todo se deriva
+ * (`facetarFiltros` en `lib/filtros.ts`).
+ *
+ * El orden de la barra va de lo general a lo específico, como se arma el perfil de una ON: la
+ * pestaña de naturaleza de tasa, después ley → sector → calificación → cashflow → emisor, y en una
+ * segunda fila los umbrales que afinan. Emisor va último porque es la dimensión más larga y la que
+ * más gana con lo que las anteriores ya descartaron.
  */
 
 import type { ReactNode } from 'react'
 
 import { unidadDeNaturaleza, SelectorSegmento } from '@/components/SelectorSegmento'
 
-import { CALIFICACION_NO_INFORMADA, LEY_NO_INFORMADA, type FiltrosArmador } from '../lib/filtros'
+import {
+  CALIFICACION_NO_INFORMADA,
+  LEY_NO_INFORMADA,
+  type DimensionFacetada,
+  type FiltrosArmador,
+  type OpcionesFacetadas,
+  type SeleccionApagada,
+} from '../lib/filtros'
 import { useArmador, useArmadorAcciones } from '../store/carteraStore'
+
+/** Cómo se nombra cada dimensión en el aviso de selecciones apagadas — el mismo rótulo que lleva
+ *  su control en la barra. */
+const ROTULO_DIMENSION: Record<DimensionFacetada, string> = {
+  sector: 'Sector',
+  emisor: 'Emisor',
+  ley: 'Ley',
+  calificaciones: 'Calificación',
+  pagos: 'Pagos de renta',
+}
 
 export function FiltrosGrilla({
   opciones,
+  efectivos,
+  apagadas,
   conteo,
   deshabilitado,
   motivoDeshabilitado,
 }: {
-  opciones: {
-    segmentos: Array<{ clave: string; naturaleza: string }>
-    sectores: string[]
-    emisores: string[]
-    leyes: string[]
-    /** true si hay especies del cruce con `ley: null` — habilita la opción "ley no informada". */
-    tieneLeyNoInformada: boolean
-    /** Valores literales distintos, ya ordenados alfabéticamente (orden de presentación, no de
-     *  riesgo — ver `CALIFICACION_NO_INFORMADA` en `lib/filtros.ts`). */
-    calificaciones: string[]
-    tieneCalificacionNoInformada: boolean
-    pagos: number[]
-  }
+  opciones: OpcionesFacetadas & { segmentos: Array<{ clave: string; naturaleza: string }> }
+  /** Los filtros que realmente se están aplicando: los del store con las selecciones que el
+   *  facetado dejó sin respaldo apagadas. */
+  efectivos: FiltrosArmador
+  /** Lo que el facetado apagó, para declararlo: sin esto la grilla mostraría la ventana entera con
+   *  un filtro elegido a la vista, y esos papeles se leerían como si lo cumplieran. */
+  apagadas: SeleccionApagada[]
   conteo: { visibles: number; total: number; sinCruce: number }
   /** true mientras el universo carga o si falló: los filtros se declaran no disponibles. */
   deshabilitado: boolean
@@ -52,6 +77,9 @@ export function FiltrosGrilla({
     fijarFiltros({ ...filtros, ...parcial })
   }
 
+  // Alterna sobre las del store, no sobre las efectivas: una calificación que hoy no tiene
+  // respaldo sigue guardada y vuelve sola si se aflojan los otros filtros. Para las que están a la
+  // vista —las únicas que se pueden tildar— store y efectivas dicen lo mismo.
   function alternarCalificacion(valor: string) {
     const activa = filtros.calificaciones.includes(valor)
     cambiar({
@@ -98,67 +126,12 @@ export function FiltrosGrilla({
         )}
       </div>
 
+      {/* El perfil del papel, de lo general a lo específico. Cada uno de estos acota las opciones
+          de los demás: lo que queda a la vista es lo que existe bajo lo ya elegido. */}
       <div style={estiloFila}>
-        <Campo etiqueta="Duración máx. (años)">
-          <input
-            type="number"
-            inputMode="decimal"
-            value={filtros.duracionMax}
-            disabled={deshabilitado}
-            onChange={(e) => cambiar({ duracionMax: e.target.value })}
-            style={estiloInput}
-          />
-        </Campo>
-
-        <Campo etiqueta="Liquidez mín. (percentil de volumen USD, sobre el universo a la vista)">
-          <select
-            value={filtros.liquidezMin}
-            disabled={deshabilitado}
-            onChange={(e) => cambiar({ liquidezMin: e.target.value as FiltrosArmador['liquidezMin'] })}
-            style={estiloInput}
-          >
-            <option value="">todos</option>
-            <option value="25">≥ p25</option>
-            <option value="50">≥ p50</option>
-            <option value="75">≥ p75</option>
-          </select>
-        </Campo>
-
-        <Campo etiqueta="Sector">
-          <select
-            value={filtros.sector ?? ''}
-            disabled={deshabilitado}
-            onChange={(e) => cambiar({ sector: e.target.value === '' ? null : e.target.value })}
-            style={estiloInput}
-          >
-            <option value="">todos</option>
-            {[...opciones.sectores].sort().map((sector) => (
-              <option key={sector} value={sector}>
-                {sector}
-              </option>
-            ))}
-          </select>
-        </Campo>
-
-        <Campo etiqueta="Emisor">
-          <select
-            value={filtros.emisor ?? ''}
-            disabled={deshabilitado}
-            onChange={(e) => cambiar({ emisor: e.target.value === '' ? null : e.target.value })}
-            style={estiloInput}
-          >
-            <option value="">todos</option>
-            {[...opciones.emisores].sort().map((emisor) => (
-              <option key={emisor} value={emisor}>
-                {emisor}
-              </option>
-            ))}
-          </select>
-        </Campo>
-
         <Campo etiqueta="Ley">
           <select
-            value={filtros.ley ?? ''}
+            value={efectivos.ley ?? ''}
             disabled={deshabilitado}
             onChange={(e) => cambiar({ ley: e.target.value === '' ? null : e.target.value })}
             style={estiloInput}
@@ -172,6 +145,22 @@ export function FiltrosGrilla({
             {opciones.tieneLeyNoInformada && (
               <option value={LEY_NO_INFORMADA}>ley no informada</option>
             )}
+          </select>
+        </Campo>
+
+        <Campo etiqueta="Sector">
+          <select
+            value={efectivos.sector ?? ''}
+            disabled={deshabilitado}
+            onChange={(e) => cambiar({ sector: e.target.value === '' ? null : e.target.value })}
+            style={estiloInput}
+          >
+            <option value="">todos</option>
+            {[...opciones.sectores].sort().map((sector) => (
+              <option key={sector} value={sector}>
+                {sector}
+              </option>
+            ))}
           </select>
         </Campo>
 
@@ -191,9 +180,9 @@ export function FiltrosGrilla({
                 listStyle: 'none',
               }}
             >
-              {filtros.calificaciones.length === 0
+              {efectivos.calificaciones.length === 0
                 ? 'todas'
-                : `${filtros.calificaciones.length} elegida${filtros.calificaciones.length === 1 ? '' : 's'}`}
+                : `${efectivos.calificaciones.length} elegida${efectivos.calificaciones.length === 1 ? '' : 's'}`}
             </summary>
             <div
               role="group"
@@ -221,7 +210,7 @@ export function FiltrosGrilla({
                 >
                   <input
                     type="checkbox"
-                    checked={filtros.calificaciones.includes(calificacion)}
+                    checked={efectivos.calificaciones.includes(calificacion)}
                     disabled={deshabilitado}
                     onChange={() => alternarCalificacion(calificacion)}
                   />
@@ -232,7 +221,7 @@ export function FiltrosGrilla({
                 <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--dim)' }}>
                   <input
                     type="checkbox"
-                    checked={filtros.calificaciones.includes(CALIFICACION_NO_INFORMADA)}
+                    checked={efectivos.calificaciones.includes(CALIFICACION_NO_INFORMADA)}
                     disabled={deshabilitado}
                     onChange={() => alternarCalificacion(CALIFICACION_NO_INFORMADA)}
                   />
@@ -248,7 +237,7 @@ export function FiltrosGrilla({
 
         <Campo etiqueta="Pagos de renta (ventana 12 m)">
           <select
-            value={filtros.pagos}
+            value={efectivos.pagos}
             disabled={deshabilitado}
             onChange={(e) => cambiar({ pagos: e.target.value })}
             style={estiloInput}
@@ -262,6 +251,37 @@ export function FiltrosGrilla({
           </select>
         </Campo>
 
+        <Campo etiqueta="Emisor">
+          <select
+            value={efectivos.emisor ?? ''}
+            disabled={deshabilitado}
+            onChange={(e) => cambiar({ emisor: e.target.value === '' ? null : e.target.value })}
+            style={estiloInput}
+          >
+            <option value="">todos</option>
+            {[...opciones.emisores].sort().map((emisor) => (
+              <option key={emisor} value={emisor}>
+                {emisor}
+              </option>
+            ))}
+          </select>
+        </Campo>
+      </div>
+
+      {/* Los umbrales no son categorías del perfil, pero sí acotan sus opciones: subir la TIR
+          mínima depura los cinco selects de arriba. */}
+      <div style={estiloFila}>
+        <Campo etiqueta="Duración máx. (años)">
+          <input
+            type="number"
+            inputMode="decimal"
+            value={filtros.duracionMax}
+            disabled={deshabilitado}
+            onChange={(e) => cambiar({ duracionMax: e.target.value })}
+            style={estiloInput}
+          />
+        </Campo>
+
         <Campo etiqueta="TIR mín. (%, sólo TIR USD / TIR DL)">
           <input
             type="number"
@@ -271,6 +291,20 @@ export function FiltrosGrilla({
             onChange={(e) => cambiar({ tirMin: e.target.value })}
             style={estiloInput}
           />
+        </Campo>
+
+        <Campo etiqueta="Liquidez mín. (percentil de volumen USD, sobre el universo a la vista)">
+          <select
+            value={filtros.liquidezMin}
+            disabled={deshabilitado}
+            onChange={(e) => cambiar({ liquidezMin: e.target.value as FiltrosArmador['liquidezMin'] })}
+            style={estiloInput}
+          >
+            <option value="">todos</option>
+            <option value="25">≥ p25</option>
+            <option value="50">≥ p50</option>
+            <option value="75">≥ p75</option>
+          </select>
         </Campo>
 
         <label
@@ -297,6 +331,18 @@ export function FiltrosGrilla({
         </button>
       </div>
 
+      {apagadas.length > 0 && (
+        <p style={{ margin: 0, fontSize: 11.5, color: 'var(--tx)' }}>
+          Sin papeles en la ventana bajo el resto de los filtros, así que no se{' '}
+          {apagadas.length === 1 ? 'aplica' : 'aplican'}:{' '}
+          {apagadas
+            .map(({ dimension, valor }) => `${ROTULO_DIMENSION[dimension]} «${etiquetaDe(valor)}»`)
+            .join(', ')}
+          .{/* La advertencia sólo tiene sentido si hay algo abajo que se pueda leer mal. */}
+          {conteo.visibles > 0 && ' Lo que se ve abajo no cumple ese criterio.'}
+        </p>
+      )}
+
       <p style={{ margin: 0, fontSize: 11.5, color: 'var(--dim)' }}>
         {conteo.visibles} de {conteo.total} papeles pasan los filtros
         {conteo.sinCruce > 0 && (
@@ -307,6 +353,13 @@ export function FiltrosGrilla({
       </p>
     </div>
   )
+}
+
+/** Los dos valores centinela se nombran como en su control, no con su clave interna. */
+function etiquetaDe(valor: string): string {
+  if (valor === LEY_NO_INFORMADA) return 'ley no informada'
+  if (valor === CALIFICACION_NO_INFORMADA) return 'sin calificación'
+  return valor
 }
 
 function Campo({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
