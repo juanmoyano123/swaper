@@ -151,12 +151,34 @@ export function BloqueRentaVariable() {
   // criterio). Los nombres van tal como los publica la fuente: `Office of Finance` no se traduce
   // (regla 11), y la SEC hasta publica rubros ambiguos como `Office of Finance or Office of Crypto
   // Assets`, que se muestran así porque así vienen.
+  //
+  // Facetado bidireccional (14/08/2026): las opciones de cada select se calculan sobre la lista
+  // filtrada por EL OTRO filtro, no por ambos — así el select propio siempre puede pivotar, y
+  // ninguna opción visible produce una lista vacía. Se usa el filtro crudo, no el efectivo de
+  // abajo: si una selección quedó inválida, su faceta se comporta como "todos" y las opciones del
+  // otro select vuelven a abrirse solas.
   const rubrosPicker = [
-    ...new Set(listaPicker.map((e) => e.sic_oficina).filter((s): s is string => s !== null)),
+    ...new Set(
+      listaPicker
+        .filter((e) => eslabonFiltro === null || e.division_cadena === eslabonFiltro)
+        .map((e) => e.sic_oficina)
+        .filter((s): s is string => s !== null),
+    ),
   ].sort()
   const eslabonesPicker = [
-    ...new Set(listaPicker.map((e) => e.division_cadena).filter((d): d is string => d !== null)),
+    ...new Set(
+      listaPicker
+        .filter((e) => rubroFiltro === null || e.sic_oficina === rubroFiltro)
+        .map((e) => e.division_cadena)
+        .filter((d): d is string => d !== null),
+    ),
   ].sort()
+
+  // Una selección que el facetado dejó sin opciones no se aplica ni se muestra: se cae a "todos".
+  // Derivado, no sincronizado: setState en cascada entre dos selects es una carrera perdida.
+  const rubroEfectivo = rubroFiltro !== null && rubrosPicker.includes(rubroFiltro) ? rubroFiltro : null
+  const eslabonEfectivo =
+    eslabonFiltro !== null && eslabonesPicker.includes(eslabonFiltro) ? eslabonFiltro : null
 
   /**
    * Saca una sugerencia y deja al asesor eligiendo con qué cambiarla.
@@ -170,7 +192,14 @@ export function BloqueRentaVariable() {
   function reemplazar(ticker: string) {
     const rubro = porTicker.get(ticker)?.sic_oficina ?? null
     alternarRentaVariable(ticker)
-    if (rubro !== null) setRubroFiltro(rubro)
+    if (rubro !== null) {
+      setRubroFiltro(rubro)
+      // Mismo reset que el sync de temática: setear el rubro con un eslabón viejo activo dejaría
+      // a los dos filtros invalidándose mutuamente por el facetado (cada uno queda fuera de las
+      // opciones del otro) y los dos caerían a "todos" — perdiendo justo el rubro que este flujo
+      // vino a poner.
+      setEslabonFiltro(null)
+    }
     setBusqueda('')
     refBuscador.current?.focus()
   }
@@ -185,8 +214,8 @@ export function BloqueRentaVariable() {
   // mismo — salvo que una hermana no tenga la clasificación cargada, y en ese caso lo correcto es
   // que no arrastre al papel entero.
   const filtradaPicker = listaPicker.filter((e) => {
-    if (rubroFiltro !== null && e.sic_oficina !== rubroFiltro) return false
-    if (eslabonFiltro !== null && e.division_cadena !== eslabonFiltro) return false
+    if (rubroEfectivo !== null && e.sic_oficina !== rubroEfectivo) return false
+    if (eslabonEfectivo !== null && e.division_cadena !== eslabonEfectivo) return false
     return true
   })
   const papelesFiltrados = agruparEnPapeles(filtradaPicker).filter((papel) =>
@@ -282,7 +311,7 @@ export function BloqueRentaVariable() {
         <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, color: 'var(--dim)' }}>
           Rubro (SEC)
           <select
-            value={rubroFiltro ?? ''}
+            value={rubroEfectivo ?? ''}
             onChange={(evento) => setRubroFiltro(evento.target.value === '' ? null : evento.target.value)}
             style={estiloSelectPicker}
           >
@@ -299,7 +328,7 @@ export function BloqueRentaVariable() {
         <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, color: 'var(--dim)' }}>
           Eslabón productivo
           <select
-            value={eslabonFiltro ?? ''}
+            value={eslabonEfectivo ?? ''}
             onChange={(evento) => setEslabonFiltro(evento.target.value === '' ? null : evento.target.value)}
             style={estiloSelectPicker}
           >

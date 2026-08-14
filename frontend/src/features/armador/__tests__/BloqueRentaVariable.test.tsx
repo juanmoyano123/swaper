@@ -449,6 +449,73 @@ describe('el buscador de CEDEARs', () => {
     expect(screen.queryByRole('button', { name: 'AAPL' })).not.toBeInTheDocument()
   })
 
+  // Fixture del facetado bidireccional (14/08/2026): dos financieras en eslabones distintos y una
+  // tecnológica, para que cada select tenga algo que achicar en las dos direcciones.
+  const facetado = () =>
+    responderCon({
+      cedears: [
+        cedear({ sic_oficina: 'Office of Finance', division_cadena: 'Finanzas y seguros' }),
+        cedear({ ticker: 'MELI', sic_oficina: 'Office of Finance', division_cadena: 'Servicios' }),
+        cedear({ ticker: 'TSLA', sic_oficina: 'Office of Technology', division_cadena: 'Manufactura' }),
+      ],
+    })
+
+  it('elegir rubro achica el eslabón a los que tienen empresas de ese rubro', async () => {
+    facetado()
+    renderizar()
+    await screen.findAllByRole('listitem')
+
+    await userEvent.selectOptions(screen.getByLabelText('Rubro (SEC)'), 'Office of Finance')
+
+    const eslabon = screen.getByLabelText('Eslabón productivo')
+    const opciones = Array.from(eslabon.children).map((o) => o.textContent)
+    expect(opciones).toEqual(['todos', 'Finanzas y seguros', 'Servicios'])
+  })
+
+  it('elegir eslabón achica el rubro: el facetado va en las dos direcciones', async () => {
+    facetado()
+    renderizar()
+    await screen.findAllByRole('listitem')
+
+    await userEvent.selectOptions(screen.getByLabelText('Eslabón productivo'), 'Manufactura')
+
+    const rubro = screen.getByLabelText('Rubro (SEC)')
+    const opciones = Array.from(rubro.children).map((o) => o.textContent)
+    expect(opciones).toEqual(['todos', 'Office of Technology'])
+  })
+
+  it('reemplazar con un eslabón activo de otro rubro: el rubro nuevo gana y el eslabón se abre', async () => {
+    // Con el facetado, la UI sola no puede armar una combinación inválida: elegido un eslabón,
+    // los rubros sin empresas de ese eslabón desaparecen del select. La vía programática que
+    // quedaba — `reemplazar()` setea el rubro de la posición que se saca — resetea el eslabón al
+    // hacerlo; sin ese reset los dos filtros se invalidarían mutuamente y los dos caerían a
+    // "todos", perdiendo el rubro que el reemplazo vino a poner.
+    responderCon({
+      acciones: [accion({ sic_oficina: 'Office of Finance' })],
+      cedears: [
+        cedear({ sic_oficina: 'Office of Finance', division_cadena: 'Finanzas y seguros' }),
+        cedear({ ticker: 'MELI', sic_oficina: 'Office of Finance', division_cadena: 'Servicios' }),
+        cedear({ ticker: 'TSLA', sic_oficina: 'Office of Technology', division_cadena: 'Manufactura' }),
+      ],
+    })
+    renderizar()
+    await screen.findAllByRole('listitem')
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar GGAL directo' }))
+    // Manufactura sólo existe en Technology; el reemplazo setea el rubro Finance y la invalida.
+    await userEvent.selectOptions(screen.getByLabelText('Eslabón productivo'), 'Manufactura')
+    await userEvent.click(screen.getByRole('button', { name: 'reemplazar GGAL por otro activo' }))
+
+    expect(screen.getByLabelText('Rubro (SEC)')).toHaveValue('Office of Finance')
+    expect(screen.getByLabelText('Eslabón productivo')).toHaveValue('')
+    // Las DOS financieras a la vista: el eslabón inválido no sigue filtrando invisible.
+    expect(screen.getByRole('button', { name: 'AAPL' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'MELI' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'TSLA' })).not.toBeInTheDocument()
+    const opciones = Array.from(screen.getByLabelText('Eslabón productivo').children).map((o) => o.textContent)
+    expect(opciones).toEqual(['todos', 'Finanzas y seguros', 'Servicios'])
+  })
+
   it('sin clasificar todavía, rubro y eslabón sólo ofrecen "todos" — no rompe la búsqueda', async () => {
     // El caso normal de un CEDEAR sin clasificación SEC todavía: cubre el 74 % (13/08/2026), no
     // el 100 %.
