@@ -2663,6 +2663,520 @@ THEN el campo aparece marcado como no informado, y no vacío ni inferido del tip
 
 ---
 
+### Bloque P — Paridad competitiva con Docta Terminal (F-058 … F-070)
+
+Salen del relevamiento de `app.docta.com.ar` del 13/08/2026, documentado en
+**`claude-docs/planning/analisis-docta.md`**. Ese archivo tiene el mapa de las 32 rutas, las 78
+columnas de sus tablas y —lo que más importa— el cruce de cada feature contra el dato que necesita y
+contra si lo tenemos.
+
+**Tres cosas que el relevamiento dejó claras y valen para todo el bloque.**
+
+Primero, **tres de estas features dependen de tener serie, no de conseguir una fuente** (F-061, F-062
+y el flujo neto de F-067). La acumulación propia ya está resuelta y no hay nada que decidir:
+`public.precios` tiene `PRIMARY KEY (ticker, capturado_en)`, así que cada corrida agrega fila en vez
+de pisar y la historia se viene guardando desde la primera. Para **acciones y CEDEARs** hay además
+historia externa disponible hoy —data912 da hasta 23 años, ya hay cliente en
+`backend/app/externos/data912.py`—, pero con el contrato de `app/externos/`: se consulta al hacer
+clic, se muestra rotulada con su fuente y **no se persiste ni se mezcla con nuestro dato**. Para
+**bonos** no hay equivalente, y la curva histórica de TIR no podría venir de afuera aunque lo hubiera:
+la TIR es cálculo nuestro contra el cronograma. De ahí sale la regla común a todo el bloque: cada
+gráfico declara desde qué fecha hay datos, en vez de arrancar donde le convenga.
+
+Segundo, **buena parte de lo que Docta hace ya está planificado acá**: el calendario consolidado es
+F-015/F-016, el screener con filtros es F-017, la exportación es F-042, las opciones son F-047, y la
+ficha de instrumento es F-039. Este bloque sólo contiene lo que **no** estaba.
+
+Tercero, **nada de lo que ofrecen resuelve el Flujo B.** Tienen monitor, calculadoras y registro de
+tenencias; no tienen un optimizador que proponga rotaciones con su costo real y su contrapartida de
+riesgo nombrada. El diferenciador del proyecto sigue en pie.
+
+---
+
+#### F-058 — Carry trade: calculadora, tabla y breakeven
+
+**Etiqueta:** Stage 2 · **Traza a:** análisis Docta §2.1
+
+**Descripción.** La operación más consultada del mercado local: vender dólares, comprar un instrumento
+en pesos, mantenerlo al vencimiento y recomprar dólares. Tres piezas.
+
+**La calculadora.** Entradas: ticker, tipo de cambio inicial, nominales, precio del bono y el tipo de
+cambio al vencimiento en dos escenarios. Salidas: valor final por cada tipo de cambio, tasa directa y
+TIR. El supuesto de la operación va escrito en pantalla, no implícito en el número.
+
+**La tabla.** Una fila por instrumento del segmento: vencimiento, días al vencimiento, retorno total,
+máxima variación tolerable, spread contra el tipo de cambio y precio de salida.
+
+**La curva de breakeven.** El tipo de cambio al cual el carry deja de convenir, por instrumento. Es la
+regla 8 hecha gráfico: no muestra una ganancia sin mostrar a qué tipo de cambio se evapora.
+
+**El escenario lo tipea el asesor.** Docta publica bandas proyectadas con un supuesto de inflación
+propio; **eso no se replica**. Se muestran las bandas **publicadas** por el BCRA, y el tipo de cambio
+futuro es un input del asesor, rotulado como supuesto suyo. Un número que depende de un supuesto se
+muestra junto al supuesto que lo produjo, o no se muestra.
+
+**Input:** universo con precios; cronograma contractual; bandas cambiarias publicadas por el BCRA.
+**Output:** calculadora, tabla y curva de breakeven por segmento.
+**Depende de:** F-051 (TIR y cronograma), F-012 (tipo de cambio implícito), F-056 (el cliente de la
+API del BCRA, que esta feature reusa)
+**Habilita:** —
+
+**RICE:** R = 300 · I = 3 · C = 70 % · E = 8 → **Score 78,8**
+*Confidence 70 %: la aritmética es nuestra y el cronograma está, pero la serie de bandas cambiarias
+del BCRA no se verificó en vivo todavía. La API de estadísticas monetarias ya está probada para el
+CER (F-056), así que el riesgo es de disponibilidad de la serie, no de acceso.*
+
+```
+GIVEN un ticker, nominales y un tipo de cambio de salida tipeado por el asesor
+WHEN se calcula el carry
+THEN devuelve valor final, tasa directa y TIR, y declara en pantalla que el tipo de cambio de salida
+     es un supuesto del asesor y no un dato de mercado
+
+GIVEN la curva de breakeven de un segmento
+WHEN se la mira
+THEN cada instrumento muestra el tipo de cambio al cual su carry se anula, y ningún instrumento de
+     otra naturaleza de tasa aparece en la misma curva
+
+GIVEN las bandas cambiarias del BCRA
+WHEN se las grafica
+THEN se muestran las publicadas, con su fecha; ninguna banda proyectada se dibuja como si fuera dato
+
+GIVEN un instrumento sin cronograma contractual
+WHEN se arma la tabla de carry
+THEN queda fuera con el motivo declarado, y no se le estima el flujo
+```
+
+---
+
+#### F-059 — Comparador de dos instrumentos con la misma vara
+
+**Etiqueta:** Stage 2 · **Traza a:** análisis Docta §2.2 · absorbe la candidata "spread por
+legislación" de la sección 11
+
+**Descripción.** Dos instrumentos lado a lado, medidos con la misma convención y con la diferencia
+explícita. El par canónico es AL30 contra GD30 —misma emisión, distinta legislación—, y de ahí sale el
+spread por ley que la sección 11 ya tenía anotado como candidata.
+
+Cuatro paneles: **cashflows superpuestos**, **evolución de ambos** más la serie del cociente, la
+**calculadora comparativa**, y las **diferencias**.
+
+La calculadora expone las convenciones como parámetros en vez de esconderlas: fecha de operación, tipo
+de liquidación (CI / 24hs) y convención de tasa. Devuelve por instrumento precio dirty, paridad, TIR,
+TNA, duración, intereses corridos y días al vencimiento; y después **Diferencia TIR** y **Diferencia
+TNA**, que son el número que el asesor busca.
+
+**Las combinaciones rápidas son parte de la feature**, no decoración: pares preseleccionados que valen
+la pena mirar —Bonar contra Global del mismo año, CER contra dólar linked, ONs del mismo sector—.
+Ninguna se arma derivando familia del prefijo del ticker: se arman sobre `subtipo`, que ya distingue
+global de bonar por ley, y sobre `sector` de `condiciones_emision`.
+
+**Sólo compara lo comparable.** Dos instrumentos de distinta naturaleza de tasa pueden ponerse lado a
+lado —es útil ver una CER contra una dólar linked— pero **la diferencia de TIR no se calcula entre
+naturalezas distintas**: ahí el campo va vacío y dice por qué. La regla 2 no se suspende porque las
+dos columnas entren en la misma pantalla.
+
+**Input:** universo con precios; cronograma; `subtipo` y `sector`.
+**Output:** panel comparativo de dos instrumentos con diferencias explícitas.
+**Depende de:** F-051, F-039
+**Habilita:** —
+
+**RICE:** R = 350 · I = 3 · C = 90 % · E = 5 → **Score 189**
+*Confidence 90 %: toda la matemática ya está escrita en F-051 y el cronograma está persistido. Lo
+único nuevo es la presentación y las convenciones de liquidación.*
+
+```
+GIVEN dos bonos hard dollar del mismo vencimiento y distinta ley
+WHEN se los compara
+THEN muestra las dos TIR, las dos duraciones y la diferencia en puntos básicos, con la ley de cada uno
+     visible al lado del número
+
+GIVEN dos instrumentos de distinta naturaleza de tasa
+WHEN se los pone lado a lado
+THEN cada columna muestra su rendimiento rotulado con su naturaleza, y la fila de diferencia de TIR
+     va vacía declarando que no son unidades comparables
+
+GIVEN una fecha de operación y un tipo de liquidación elegidos
+WHEN se recalcula
+THEN los intereses corridos y el precio dirty de los dos instrumentos usan esa misma convención, y la
+     convención usada queda visible
+
+GIVEN un par sugerido por las combinaciones rápidas
+WHEN se lo abre
+THEN el emparejamiento sale de subtipo y sector declarados, nunca del prefijo del ticker
+```
+
+---
+
+#### F-060 — Navegación por categoría de emisor × naturaleza de tasa
+
+**Etiqueta:** Stage 2 · **Traza a:** análisis Docta §1
+
+**Descripción.** El monitor de F-038 navega por segmento. Docta navega por **categoría de emisor ×
+naturaleza de tasa** —soberanos / subsoberanos / corporativos, cruzado con hard dollar, tasa fija, CER,
+UVA, dollar linked, badlar, tamar y bopreal—, con una pantalla por combinación.
+
+Es un eje más fino que el nuestro y **es el mismo criterio de la regla 2 llevado a la navegación**: si
+dos instrumentos no comparten unidad de rendimiento, no comparten pantalla. Que un competidor con años
+de uso haya llegado a la misma estructura por su cuenta es la mejor validación que tiene esa decisión.
+
+Adoptarlo es barato: `tipo_tasa` ya sale del cronograma y `subtipo_de()` ya distingue por ley. Lo que
+falta es la navegación de dos ejes y que cada combinación vacía se declare como vacía en vez de
+mostrar una tabla en blanco.
+
+**Input:** universo consolidado con `tipo_tasa` y `subtipo`.
+**Output:** navegación de dos ejes en el monitor, con conteo por celda.
+**Depende de:** F-038
+**Habilita:** F-062
+
+**RICE:** R = 400 · I = 2 · C = 90 % · E = 3 → **Score 240**
+
+```
+GIVEN el monitor abierto
+WHEN se elige categoría de emisor y naturaleza de tasa
+THEN la grilla muestra sólo esa combinación, y la columna de rendimiento lleva la unidad de esa
+     naturaleza
+
+GIVEN una combinación sin instrumentos
+WHEN se la selecciona
+THEN se declara que no hay instrumentos en esa combinación, con el conteo en cero visible
+
+GIVEN un instrumento sin tipo_tasa declarado
+WHEN se arma la navegación
+THEN cae en una celda de "naturaleza no declarada" y se cuenta ahí; no se lo asigna por parecido
+```
+
+---
+
+#### F-061 — Rendimientos históricos por ventana temporal
+
+**Etiqueta:** Stage 2 · **Traza a:** análisis Docta §4, fila 15
+
+**Descripción.** Variación acumulada por ticker en ventanas de 1 día, 1 semana, 1 mes, 3 meses, 6
+meses, 1 año y año a la fecha, en pesos y en dólares, y —para bonos— con precio clean o dirty.
+
+**Depende de tiempo, no de una fuente.** La serie se construye con los cierres que la corrida
+programada vaya guardando en `precios`, que ya acumula una fila por especie y por corrida. Una ventana
+de un año exige un año de corridas: hasta entonces la ventana existe pero se declara incompleta, con
+la fecha de la primera corrida a la vista. **No se rellena** con precios reconstruidos ni empalmando
+la serie de un tercero.
+
+**El histórico de data912 no sirve para esta feature, y conviene decir por qué.** Cubre acciones y
+CEDEARs con años de profundidad, pero su contrato (`app/externos/`) es consulta por especie al hacer
+clic, sin persistir ni mezclar con nuestro dato. Un ranking por ventana sobre el panel entero exigiría
+una consulta por cada especie y produciría una tabla que mezcla serie externa con serie propia. Sirve
+para el sparkline de una ficha; no para esta grilla.
+
+**Input:** serie de cierres acumulada por F-008.
+**Output:** tabla de rendimientos por ventana, por segmento.
+**Depende de:** F-008, F-012 (para la vista en dólares)
+**Habilita:** —
+
+**RICE:** R = 300 · I = 2 · C = 60 % · E = 5 → **Score 72**
+*Confidence 60 %: la implementación es simple; la incertidumbre es cuándo hay suficiente historia
+para que la pantalla sirva.*
+
+```
+GIVEN una ventana temporal más larga que la historia acumulada
+WHEN se la muestra
+THEN el valor va vacío y declara desde qué fecha hay datos; no se calcula sobre una ventana parcial
+     presentándola como completa
+
+GIVEN la vista en dólares
+WHEN se convierte la serie
+THEN se usa el tipo de cambio derivado del universo de cada fecha, nombrando el par, y no el de hoy
+     aplicado a toda la serie
+```
+
+---
+
+#### F-062 — Curva histórica del segmento
+
+**Etiqueta:** Stage 2 · **Traza a:** análisis Docta §4, fila 16
+
+**Descripción.** Cómo se movió la curva TIR/duración de un segmento a lo largo del tiempo: la foto de
+F-023 convertida en película. Sirve para ver si una TIR alta es alta contra el propio historial del
+instrumento o sólo contra sus pares de hoy.
+
+Misma restricción que F-061: **se dibuja desde la primera corrida guardada y el eje lo dice**. Una
+curva histórica de tres semanas es ruido con ejes.
+
+**Input:** serie de TIR y duración por ticker acumulada por F-008.
+**Output:** curva del segmento con selector de fecha y comparación contra hoy.
+**Depende de:** F-008, F-023, F-060
+**Habilita:** —
+
+**RICE:** R = 250 · I = 2 · C = 60 % · E = 4 → **Score 75**
+
+```
+GIVEN una fecha anterior a la primera corrida guardada
+WHEN se la elige en el selector
+THEN no se dibuja nada y se declara desde cuándo hay datos
+
+GIVEN una curva de un segmento en dos fechas
+WHEN se las superpone
+THEN las dos son de la misma naturaleza de tasa, y la fecha de cada una está rotulada sobre su serie
+```
+
+---
+
+#### F-063 — Heatmap del panel
+
+**Etiqueta:** Stage 2 · **Traza a:** análisis Docta §1
+
+**Descripción.** La variación del día como mapa de calor, dimensionado por volumen operado. Docta lo
+tiene en acciones, CEDEARs, futuros, opciones y bonos. Es lectura de un vistazo: qué se movió hoy y
+cuánto se operó.
+
+No agrega ningún dato que el monitor no tenga; agrega velocidad de lectura. Por eso el Impact es 1.
+
+**Input:** snapshot del día contra el cierre anterior.
+**Output:** heatmap por panel, con la variación y el volumen.
+**Depende de:** F-038
+**Habilita:** —
+
+**RICE:** R = 250 · I = 1 · C = 90 % · E = 3 → **Score 75**
+
+```
+GIVEN el heatmap de un panel
+WHEN se lo mira
+THEN el color codifica variación del día y el tamaño codifica volumen operado, con la escala de las
+     dos cosas visible
+
+GIVEN un instrumento sin cierre anterior con el cual comparar
+WHEN se arma el heatmap
+THEN aparece en gris declarado como sin variación calculable, y no como variación cero
+```
+
+---
+
+#### F-064 — Watchlist
+
+**Etiqueta:** Stage 2 · **Traza a:** análisis Docta §1
+
+**Descripción.** Un conjunto de tickers marcados por el asesor, que atraviesa todas las pantallas. No
+tiene lógica financiera: es persistencia por asesor y un filtro. La razón por la que puntúa alto no es
+su valor sino su costo: sale casi gratis sobre el aislamiento de F-014.
+
+**Input:** selección del asesor.
+**Output:** lista propia por asesor, filtrable en el monitor.
+**Depende de:** F-014, F-038
+**Habilita:** —
+
+**RICE:** R = 300 · I = 1 · C = 100 % · E = 2 → **Score 150**
+
+```
+GIVEN dos asesores con watchlists distintas
+WHEN cada uno consulta la suya
+THEN ninguno ve la del otro, verificado consultando la API directamente
+```
+
+---
+
+#### F-065 — Cauciones
+
+**Etiqueta:** Stage 2 · **Traza a:** análisis Docta §4, fila 9
+
+**Descripción.** La curva de tasas de caución por plazo. Es el instrumento de liquidez de corto del
+mercado local y la referencia contra la cual se mide si conviene quedarse corto.
+
+**Hay que ingerirlo.** La ingesta usa cinco endpoints de BYMA —`negociable-obligations`,
+`public-bonds`, `cedears`, `general-equity`, `leading-equity`— y el de cauciones no está entre ellos.
+Verificar si BYMA lo publica en la API abierta es el primer paso, y **si no lo publica, la feature no
+se construye**: no hay caución que derivar de otra cosa.
+
+**Input:** panel de cauciones de BYMA, por verificar.
+**Output:** curva de tasas por plazo.
+**Depende de:** F-004
+**Habilita:** —
+
+**RICE:** R = 200 · I = 1 · C = 60 % · E = 4 → **Score 30**
+*Confidence 60 %: no se verificó que BYMA publique cauciones en la API abierta.*
+
+```
+GIVEN el panel de cauciones ingerido
+WHEN se muestra la curva
+THEN cada punto lleva su plazo y su volumen, y la tasa se muestra en la convención que publica la
+     fuente, sin anualizar por cuenta propia
+
+GIVEN que BYMA no publica cauciones en la API abierta
+WHEN se planifica el ciclo
+THEN la feature no se construye y la ausencia se declara; no se deriva la tasa de otra fuente
+```
+
+---
+
+#### F-066 — Futuros de dólar
+
+**Etiqueta:** Stage 2 · **Traza a:** análisis Docta §4, fila 10
+
+**Descripción.** La curva de futuros de dólar con su tasa implícita por contrato. Es el complemento
+natural de F-058: el carry trade se mide contra lo que el mercado ya está pagando por cubrirse.
+
+**Fuente por identificar.** No está en los cinco endpoints que ingerimos y no se verificó si BYMA lo
+publica. La tasa implícita **se calcula** contra el spot derivado de nuestro propio universo (regla 3),
+nunca contra un tipo de cambio de fuente externa.
+
+**Input:** una fuente de futuros de dólar, por identificar.
+**Output:** curva de futuros con tasa implícita por contrato.
+**Depende de:** F-004, F-012
+**Habilita:** —
+
+**RICE:** R = 200 · I = 1 · C = 50 % · E = 4 → **Score 25**
+*Confidence 50 %: sin fuente verificada al 13/08/2026.*
+
+```
+GIVEN la curva de futuros y el spot derivado del universo
+WHEN se calcula la tasa implícita de cada contrato
+THEN se declara contra qué par se derivó el spot, y no se usa ningún tipo de cambio externo
+```
+
+---
+
+#### F-067 — FCI: comparador, categorías y gestoras
+
+**Etiqueta:** Stage 2 · **Traza a:** análisis Docta §1 · extiende F-057
+
+**Descripción.** Tres vistas más sobre los datos que F-057 ya ingiere, sin fuente nueva:
+
+- **Comparador** de fondos lado a lado, con la misma lógica de F-059.
+- **Categorías**: AUM por categoría, participación y cantidad de fondos. Sale de agregar la planilla
+  por su columna de clasificación.
+- **Gestoras**: lo mismo por sociedad gerente, más el flujo neto a 30 días y en el año.
+
+**El flujo neto no sale de la planilla.** Es la diferencia de patrimonio entre dos fechas, así que
+depende de historia acumulada igual que F-061. Las otras dos vistas funcionan desde la primera corrida;
+el flujo aparece cuando haya treinta días guardados, y hasta entonces la columna se declara vacía.
+
+**Input:** la planilla diaria de CAFCI ingerida por F-057.
+**Output:** comparador, agregado por categoría y agregado por gestora.
+**Depende de:** F-057, F-059
+**Habilita:** —
+
+**RICE:** R = 250 · I = 2 · C = 85 % · E = 5 → **Score 85**
+
+```
+GIVEN menos de treinta días de planillas acumuladas
+WHEN se muestra el flujo neto de una gestora
+THEN la columna va vacía y declara desde qué fecha hay datos; no se calcula sobre la ventana parcial
+
+GIVEN el agregado por categoría
+WHEN se suma el AUM
+THEN sólo se suman fondos de la misma moneda, y la moneda del total está rotulada; los fondos USB no
+     se suman con los USD
+
+GIVEN dos fondos de categorías distintas
+WHEN se los compara
+THEN sus variaciones se muestran lado a lado sin calcular diferencia, porque no son la misma unidad
+```
+
+---
+
+#### F-068 — Panel de dólar y spreads
+
+**Etiqueta:** Stage 2 · **Traza a:** análisis Docta §1 · promueve la candidata de la sección 11
+
+**Descripción.** Los tipos de cambio implícitos que **F-012 ya calcula desde el Ciclo 1 y que no se
+muestran en ninguna pantalla**. Es la feature de mejor relación valor/esfuerzo de todo el bloque: el
+cálculo está hecho y verificado —0,14 % de desvío contra el Índice Dólar de BYMA—, falta la pantalla.
+
+Cada tarjeta muestra el número **junto al par que lo produjo** (`AL30 ÷ AL30D`), que es lo que lo hace
+auditable en vez de mágico. Rotular por el par y no por "MEP" o "cable" no es un detalle de estilo: es
+la regla 11: nombrarlos sería declarar una interpretación que la fuente no publica.
+
+Incluye la serie histórica del spread entre implícitos a medida que se acumule, con la misma
+restricción de F-061.
+
+**Input:** tipos de cambio implícitos de F-012.
+**Output:** panel con las tarjetas de cada implícito y su spread, cada una nombrando su par.
+**Depende de:** F-012, F-038
+**Habilita:** —
+
+**RICE:** R = 400 · I = 2 · C = 100 % · E = 3 → **Score 266,7**
+
+```
+GIVEN una tarjeta de tipo de cambio implícito
+WHEN se la muestra
+THEN dice el par que lo produjo y el precio de cada pata, y no lo rotula con un nombre de mercado que
+     la fuente no declara
+
+GIVEN el Índice Dólar publicado por BYMA
+WHEN se lo muestra
+THEN aparece como contraste con su fuente declarada, nunca como el origen del número propio
+```
+
+---
+
+#### F-069 — Top ganadores y perdedores del día
+
+**Etiqueta:** Stage 2 · **Traza a:** análisis Docta §1
+
+**Descripción.** Los diez que más subieron y los diez que más bajaron, por panel. Es la puerta de
+entrada de la mañana: qué pasó hoy, antes de buscar nada en particular.
+
+**Se rankea dentro del panel, nunca entre paneles.** Un ranking que mezcle un bono en pesos con un
+CEDEAR en dólares compara variaciones que no son la misma cosa.
+
+**Input:** snapshot del día contra el cierre anterior.
+**Output:** dos listas por panel.
+**Depende de:** F-038
+**Habilita:** —
+
+**RICE:** R = 300 · I = 1 · C = 100 % · E = 2 → **Score 150**
+
+```
+GIVEN los rankings del día
+WHEN se los arma
+THEN cada uno se calcula dentro de un panel y de una moneda de cotización, y el rótulo lo declara
+
+GIVEN un instrumento sin volumen operado en el día
+WHEN se arma el ranking
+THEN queda fuera, porque una variación sin operaciones no es un movimiento de mercado
+```
+
+---
+
+#### F-070 — Tenencias con P&L por lote
+
+**Etiqueta:** Stage 2 · **Traza a:** análisis Docta §2.3 · **decisión de producto pendiente**
+
+**Descripción.** Registro de compras y ventas con posición consolidada, valor total, resultado diario y
+ganancia no realizada, con costo por lote.
+
+**Esta ficha se anota, pero no se recomienda sin decisión previa.** El riesgo R16 del plan dice que
+*"se guardan carteras, no clientes"* es una frontera de producto y que las fronteras se erosionan de a
+un campo por vez. Un registro de transacciones con resultado por lote no es el armador: es seguimiento
+de posiciones reales, y empuja el producto hacia el CRM (F-043) y hacia el back-office —que es
+justamente el otro producto de Docta, DPM, y otro negocio—.
+
+Además arrastra una obligación nueva: el resultado por lote exige guardar **precio y fecha de cada
+operación de un cliente real**, y eso son datos que por regla del proyecto no entran al repositorio y
+hoy no se persisten en ninguna forma.
+
+Si se construye, va **después** de F-043 y no antes: el orden inverso deja transacciones huérfanas sin
+a quién pertenecer.
+
+**Input:** operaciones cargadas por el asesor; precios del universo.
+**Output:** posición consolidada con resultado realizado y no realizado.
+**Depende de:** F-041, F-043
+**Habilita:** —
+
+**RICE:** R = 200 · I = 2 · C = 40 % · E = 12 → **Score 13,3**
+*Confidence 40 %: no es incertidumbre técnica sino de producto — no está decidido que el producto deba
+hacer esto, y el plan tiene una frontera declarada que lo desaconseja.*
+
+```
+GIVEN una posición con tres compras a precios distintos y una venta
+WHEN se calcula el resultado realizado
+THEN el criterio de imputación de lotes está declarado en pantalla, y el mismo criterio se usa en
+     todos los cálculos
+
+GIVEN datos de operaciones de un cliente real
+WHEN se los persiste
+THEN nunca quedan en el repositorio de código
+```
+
+---
+
 ## 4. Tabla de RICE ordenada
 
 | # | ID | Feature | Etiqueta | R | I | C | E | Score |
@@ -2677,53 +3191,66 @@ THEN el campo aparece marcado como no informado, y no vacío ni inferido del tip
 | 8 | F-021 | Panel de renta y renta anual | Stage 1 | 380 | 3 | 100 % | 4 | 285,0 |
 | 9 | F-008 | Job programado de ingesta | Stage 1 | 400 | 2 | 100 % | 3 | 266,7 |
 | 10 | F-012 | Tipo de cambio implícito y normalización | Stage 1 | 400 | 2 | 100 % | 3 | 266,7 |
-| 11 | F-006 | Cliente del feed de cashflow de Docta | Stage 1 | 400 | 3 | 80 % | 4 | 240,0 |
-| 12 | F-009 | condiciones_emision: semilla y herencia | Stage 1 | 400 | 2 | 100 % | 4 | 200,0 |
-| 13 | F-013 | Barra de estado del dato | Stage 1 | 400 | 2 | 100 % | 4 | 200,0 |
-| 14 | F-014 | Autenticación y aislamiento por asesor | Stage 1 | 400 | 2 | 100 % | 4 | 200,0 |
-| 15 | F-024 | Redondeo por lámina y diferencia | Stage 1 | 300 | 2 | 100 % | 3 | 200,0 |
-| 16 | F-035 | Costo real de rotar y cupón próximo | Stage 1 | 180 | 3 | 100 % | 3 | 180,0 |
-| 17 | F-041 | Guardar, listar, reabrir y revaluar | Stage 1 | 300 | 3 | 100 % | 5 | 180,0 |
-| 18 | F-055 | Descarga automática del informe de IAMC | Stage 2 | 300 | 2 | 90 % | 3 | 180,0 |
-| 19 | F-020 | Límites de concentración en vivo | Stage 1 | 350 | 2 | 100 % | 4 | 175,0 |
-| 20 | F-022 | Rendimientos por naturaleza y plazo | Stage 1 | 350 | 2 | 100 % | 4 | 175,0 |
-| 21 | F-007 | Consolidador multi-fuente | Stage 1 | 400 | 3 | 80 % | 6 | 160,0 |
-| 22 | F-051 | Métricas propias: TIR, duración y paridad | Stage 1 | 400 | 2 | 80 % | 4 | 160,0 |
-| 23 | F-030 | Valuación y diagnóstico de cartera | Stage 1 | 200 | 3 | 100 % | 4 | 150,0 |
-| 24 | F-018 | Cartera editable y ponderación | Stage 1 | 350 | 3 | 80 % | 6 | 140,0 |
-| 25 | F-053 | Ficha del activo de renta variable | Stage 1 | 300 | 2 | 70 % | 3 | 140,0 |
-| 26 | F-016 | Grilla-selector de doce meses | Stage 1 | 380 | 3 | 80 % | 8 | 114,0 |
-| 27 | F-056 | Índice CER del BCRA: tasa real | Stage 2 | 250 | 2 | 90 % | 4 | 112,5 |
-| 28 | F-017 | Filtros de la grilla | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
-| 29 | F-039 | Ficha de instrumento | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
-| 30 | F-029 | Resolución de tickers | Stage 1 | 200 | 2 | 80 % | 3 | 106,7 |
-| 31 | F-038 | Monitor de mercado | Stage 1 | 400 | 2 | 80 % | 6 | 106,7 |
-| 32 | F-052 | Renta variable en el monitor | Stage 1 | 400 | 1 | 80 % | 3 | 106,7 |
-| 33 | F-031 | Vector de riesgo de seis ejes | Stage 1 | 250 | 3 | 80 % | 6 | 100,0 |
-| 34 | F-032 | Motor de rotaciones intra-segmento | Stage 1 | 200 | 3 | 100 % | 6 | 100,0 |
-| 35 | F-042 | Exportación a Excel y PDF | Stage 1 | 250 | 2 | 80 % | 4 | 100,0 |
-| 36 | F-028 | Ingreso de cartera por tres vías | Stage 1 | 200 | 3 | 80 % | 5 | 96,0 |
-| 37 | F-034 | Modo subir TIR con contrapartida | Stage 1 | 180 | 3 | 80 % | 5 | 86,4 |
-| 38 | F-057 | FCI en el monitor (CAFCI) | Stage 2 | 300 | 2 | 85 % | 6 | 85,0 |
-| 39 | F-019 | Armado asistido | Stage 1 | 250 | 2 | 100 % | 6 | 83,3 |
-| 40 | F-026 | Bloque de renta variable | Stage 1 | 300 | 2 | 80 % | 6 | 80,0 |
-| 41 | F-050 | API Market Data oficial de BYMA | Stage 2 | 400 | 2 | 50 % | 5 | 80,0 |
-| 42 | F-037 | Comparación original contra propuesta | Stage 1 | 180 | 2 | 80 % | 4 | 72,0 |
-| 43 | F-040 | Sensibilidad por repricing completo | Stage 1 | 200 | 1 | 100 % | 3 | 66,7 |
-| 44 | F-054 | Info pública del emisor (CNV y SEC) | Stage 2 | 300 | 2 | 80 % | 8 | 60,0 |
-| 45 | F-033 | Modo bajar riesgo | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
-| 46 | F-036 | Aceptación rotación por rotación | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
-| 47 | F-025 | Carga asistida de lámina | Stage 1 | 200 | 1 | 80 % | 3 | 53,3 |
-| 48 | F-005 | Parser del informe diario de IAMC | Stage 1 | 400 | 2 | 50 % | 8 | 50,0 |
-| 49 | F-023 | Composición y curva TIR/duración | Stage 1 | 300 | 1 | 80 % | 5 | 48,0 |
-| 50 | F-048 | Alertas y notificaciones | Stage 2 | 300 | 1 | 80 % | 6 | 40,0 |
-| 51 | F-049 | Comparación de carteras entre sí | Stage 2 | 200 | 1 | 80 % | 4 | 40,0 |
-| 52 | F-046 | FCI valuables en cartera | Stage 2 | 200 | 2 | 60 % | 8 | 30,0 |
-| 53 | F-044 | Historial de propuestas | Stage 2 | 250 | 2 | 50 % | 10 | 25,0 |
-| 54 | F-043 | Gestión de clientes y CRM | Stage 2 | 300 | 2 | 50 % | 15 | 20,0 |
-| 55 | F-027 | Calendario de balances | Stage 1 | 200 | 1 | 50 % | 6 | 16,7 |
-| 56 | F-045 | Colocaciones primarias | Stage 2 | 150 | 2 | 50 % | 10 | 15,0 |
-| 57 | F-047 | Opciones | Stage 2 | 80 | 1 | 50 % | 10 | 4,0 |
+| 11 | F-068 | Panel de dólar y spreads | Stage 2 | 400 | 2 | 100 % | 3 | 266,7 |
+| 12 | F-006 | Cliente del feed de cashflow de Docta | Stage 1 | 400 | 3 | 80 % | 4 | 240,0 |
+| 13 | F-060 | Navegación por emisor × naturaleza | Stage 2 | 400 | 2 | 90 % | 3 | 240,0 |
+| 14 | F-009 | condiciones_emision: semilla y herencia | Stage 1 | 400 | 2 | 100 % | 4 | 200,0 |
+| 15 | F-013 | Barra de estado del dato | Stage 1 | 400 | 2 | 100 % | 4 | 200,0 |
+| 16 | F-014 | Autenticación y aislamiento por asesor | Stage 1 | 400 | 2 | 100 % | 4 | 200,0 |
+| 17 | F-024 | Redondeo por lámina y diferencia | Stage 1 | 300 | 2 | 100 % | 3 | 200,0 |
+| 18 | F-059 | Comparador de dos instrumentos | Stage 2 | 350 | 3 | 90 % | 5 | 189,0 |
+| 19 | F-035 | Costo real de rotar y cupón próximo | Stage 1 | 180 | 3 | 100 % | 3 | 180,0 |
+| 20 | F-041 | Guardar, listar, reabrir y revaluar | Stage 1 | 300 | 3 | 100 % | 5 | 180,0 |
+| 21 | F-055 | Descarga automática del informe de IAMC | Stage 2 | 300 | 2 | 90 % | 3 | 180,0 |
+| 22 | F-020 | Límites de concentración en vivo | Stage 1 | 350 | 2 | 100 % | 4 | 175,0 |
+| 23 | F-022 | Rendimientos por naturaleza y plazo | Stage 1 | 350 | 2 | 100 % | 4 | 175,0 |
+| 24 | F-007 | Consolidador multi-fuente | Stage 1 | 400 | 3 | 80 % | 6 | 160,0 |
+| 25 | F-051 | Métricas propias: TIR, duración y paridad | Stage 1 | 400 | 2 | 80 % | 4 | 160,0 |
+| 26 | F-030 | Valuación y diagnóstico de cartera | Stage 1 | 200 | 3 | 100 % | 4 | 150,0 |
+| 27 | F-064 | Watchlist | Stage 2 | 300 | 1 | 100 % | 2 | 150,0 |
+| 28 | F-069 | Top ganadores y perdedores | Stage 2 | 300 | 1 | 100 % | 2 | 150,0 |
+| 29 | F-018 | Cartera editable y ponderación | Stage 1 | 350 | 3 | 80 % | 6 | 140,0 |
+| 30 | F-053 | Ficha del activo de renta variable | Stage 1 | 300 | 2 | 70 % | 3 | 140,0 |
+| 31 | F-016 | Grilla-selector de doce meses | Stage 1 | 380 | 3 | 80 % | 8 | 114,0 |
+| 32 | F-056 | Índice CER del BCRA: tasa real | Stage 2 | 250 | 2 | 90 % | 4 | 112,5 |
+| 33 | F-017 | Filtros de la grilla | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
+| 34 | F-039 | Ficha de instrumento | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
+| 35 | F-029 | Resolución de tickers | Stage 1 | 200 | 2 | 80 % | 3 | 106,7 |
+| 36 | F-038 | Monitor de mercado | Stage 1 | 400 | 2 | 80 % | 6 | 106,7 |
+| 37 | F-052 | Renta variable en el monitor | Stage 1 | 400 | 1 | 80 % | 3 | 106,7 |
+| 38 | F-031 | Vector de riesgo de seis ejes | Stage 1 | 250 | 3 | 80 % | 6 | 100,0 |
+| 39 | F-032 | Motor de rotaciones intra-segmento | Stage 1 | 200 | 3 | 100 % | 6 | 100,0 |
+| 40 | F-042 | Exportación a Excel y PDF | Stage 1 | 250 | 2 | 80 % | 4 | 100,0 |
+| 41 | F-028 | Ingreso de cartera por tres vías | Stage 1 | 200 | 3 | 80 % | 5 | 96,0 |
+| 42 | F-034 | Modo subir TIR con contrapartida | Stage 1 | 180 | 3 | 80 % | 5 | 86,4 |
+| 43 | F-057 | FCI en el monitor (CAFCI) | Stage 2 | 300 | 2 | 85 % | 6 | 85,0 |
+| 44 | F-067 | FCI: comparador, categorías y gestoras | Stage 2 | 250 | 2 | 85 % | 5 | 85,0 |
+| 45 | F-019 | Armado asistido | Stage 1 | 250 | 2 | 100 % | 6 | 83,3 |
+| 46 | F-026 | Bloque de renta variable | Stage 1 | 300 | 2 | 80 % | 6 | 80,0 |
+| 47 | F-050 | API Market Data oficial de BYMA | Stage 2 | 400 | 2 | 50 % | 5 | 80,0 |
+| 48 | F-058 | Carry trade: calculadora y breakeven | Stage 2 | 300 | 3 | 70 % | 8 | 78,8 |
+| 49 | F-062 | Curva histórica del segmento | Stage 2 | 250 | 2 | 60 % | 4 | 75,0 |
+| 50 | F-063 | Heatmap del panel | Stage 2 | 250 | 1 | 90 % | 3 | 75,0 |
+| 51 | F-037 | Comparación original contra propuesta | Stage 1 | 180 | 2 | 80 % | 4 | 72,0 |
+| 52 | F-061 | Rendimientos históricos por ventana | Stage 2 | 300 | 2 | 60 % | 5 | 72,0 |
+| 53 | F-040 | Sensibilidad por repricing completo | Stage 1 | 200 | 1 | 100 % | 3 | 66,7 |
+| 54 | F-054 | Info pública del emisor (CNV y SEC) | Stage 2 | 300 | 2 | 80 % | 8 | 60,0 |
+| 55 | F-033 | Modo bajar riesgo | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
+| 56 | F-036 | Aceptación rotación por rotación | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
+| 57 | F-025 | Carga asistida de lámina | Stage 1 | 200 | 1 | 80 % | 3 | 53,3 |
+| 58 | F-005 | Parser del informe diario de IAMC | Stage 1 | 400 | 2 | 50 % | 8 | 50,0 |
+| 59 | F-023 | Composición y curva TIR/duración | Stage 1 | 300 | 1 | 80 % | 5 | 48,0 |
+| 60 | F-048 | Alertas y notificaciones | Stage 2 | 300 | 1 | 80 % | 6 | 40,0 |
+| 61 | F-049 | Comparación de carteras entre sí | Stage 2 | 200 | 1 | 80 % | 4 | 40,0 |
+| 62 | F-046 | FCI valuables en cartera | Stage 2 | 200 | 2 | 60 % | 8 | 30,0 |
+| 63 | F-065 | Cauciones | Stage 2 | 200 | 1 | 60 % | 4 | 30,0 |
+| 64 | F-044 | Historial de propuestas | Stage 2 | 250 | 2 | 50 % | 10 | 25,0 |
+| 65 | F-066 | Futuros de dólar | Stage 2 | 200 | 1 | 50 % | 4 | 25,0 |
+| 66 | F-043 | Gestión de clientes y CRM | Stage 2 | 300 | 2 | 50 % | 15 | 20,0 |
+| 67 | F-027 | Calendario de balances | Stage 1 | 200 | 1 | 50 % | 6 | 16,7 |
+| 68 | F-045 | Colocaciones primarias | Stage 2 | 150 | 2 | 50 % | 10 | 15,0 |
+| 69 | F-070 | Tenencias con P&L por lote | Stage 2 | 200 | 2 | 40 % | 12 | 13,3 |
+| 70 | F-047 | Opciones | Stage 2 | 80 | 1 | 50 % | 10 | 4,0 |
 
 **Cómo se lee esta tabla.** El RICE ordena por eficiencia, no por secuencia. Las features de más
 score son las Foundation y las de ingesta: mucho alcance sobre poco esfuerzo, porque reusan lógica ya
@@ -3039,7 +3566,7 @@ Al final de este ciclo **Stage 1 está completo**: los tres flujos funcionan de 
 | 3 — RV, carga y diagnóstico | 9 | 41 | ~8 | ~28,5 |
 | 4 — Optimizador y persistencia | 9 | 42 | ~8,5 | ~37 |
 | **Stage 1** | **42** | **185** | **~37 semanas** | |
-| Stage 2 (12 features) | 12 | 89 | ~18 | |
+| Stage 2 (25 features) | 25 | 149 | ~30 | |
 
 **~37 semanas de un desarrollador a tiempo completo para Stage 1.** El camino crítico son 73 pd de esos
 185: con un segundo desarrollador, el piso teórico de compresión es **~15 semanas**, y el cuello real
@@ -3281,9 +3808,13 @@ se decida, no antes.
 | Candidata | Por qué vale | Qué haría falta |
 |---|---|---|
 | **Matriz de sensibilidad multi-instrumento**: una fila por bono, una columna por TIR objetivo (−5 % a +5 %), con heatmap | F-040 ya calcula el repricing de un instrumento contra escenarios; esto es la misma cuenta sobre una familia entera, que es como se mira en la mesa | Extender el endpoint de sensibilidad a varios tickers; agrupar por familia y **nunca mezclar familias en una misma tabla** (regla 2) |
-| **Spread por legislación**: Bonar contra Global del mismo año, las dos TIR, las dos durations y el spread en bps | Es la **regla 8 hecha tabla** —no propone una mejora de TIR sin nombrar el riesgo que se asume— y el emparejamiento por año y duration comparable ya es derivable de lo que tenemos | Definir el criterio de emparejamiento con precisión; la nota al pie que explica el signo es parte de la feature, no decoración |
-| **Tarjetas de tipo de cambio implícito** (MEP, cable, canje) **nombrando el par que las produjo** | El cálculo existe desde F-012 y hoy no se muestra en ninguna pantalla. El patrón de mostrar el número junto a sus insumos (`AL30 ÷ AL30D`) es lo que lo hace auditable en vez de mágico | Rotular por el par y no por "MEP"/"cable": nombrarlos sería traducir `EXT`, que la regla 11 prohíbe |
 | **Badge de familia** (Bonares / Globales / Bopreal) en la grilla | Agrupa sin gastar una pestaña | **Salvedad de la regla 11**: derivarla del prefijo del ticker es manipulación de strings. Sólo entra si `subtipo` la declara — `subtipo_de()` ya distingue global de bonar por ley, así que hay de dónde |
+
+**Dos candidatas dejaron esta tabla el 13/08/2026**, promovidas a feature por el relevamiento de Docta:
+el **spread por legislación** quedó absorbido por **F-059** —es el caso particular de comparar dos
+instrumentos con la misma vara— y las **tarjetas de tipo de cambio implícito** son ahora **F-068**, que
+puntúa 266,7 y es de las más altas del plan: el cálculo ya está hecho y verificado desde F-012, sólo
+falta la pantalla.
 
 **Lo que no se copia, y por qué.** El panel de Balanz abre la solapa de Corporativos en una landing
 comercial con ONs destacadas y botón "Invertir". Es su selección de producto: exactamente la
