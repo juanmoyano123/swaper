@@ -49,7 +49,7 @@ desde `/build-feature` a medida que cada una se implementa.
 |---|---|---|---|---|
 | F-025 | Carga asistida de lámina | Stage 1 | 53,3 | completada |
 | F-026 | Bloque de renta variable | Stage 1 | 80,0 | completada |
-| F-027 | Calendario de balances | Stage 1 | 16,7 | pendiente |
+| F-027 | Calendario de balances (sólo CEDEARs, vía SEC) | Stage 1 | 42,5 | **completada** |
 | F-028 | Ingreso de cartera por tres vías | Stage 1 | 96,0 | completada |
 | F-029 | Resolución de tickers | Stage 1 | 106,7 | completada |
 | F-030 | Valuación y diagnóstico de cartera | Stage 1 | 150,0 | completada |
@@ -734,6 +734,41 @@ una cartera de cada origen. Consumió F-018 y F-037.
 - **GWT-4 (sin campos de cliente) verificado en una fila real**: `jsonb_object_keys(snapshot)` de
   la cartera guardada en el navegador dio exactamente `{origen, version, resueltas, posiciones,
   tipoDeCambio, montoTotalUsd, totalInvertidoUsd}` — la whitelist declarada, nada más.
+
+### Tanda 21 cerrada el 16/08/2026 — F-027 (calendario de balances), sola: cierra Stage 1
+
+Última feature pendiente del MVP. Alcance recortado el mismo día por el dueño del producto: sin
+CNV (queda para Stage 2, F-054) — la renta variable del producto son sólo CEDEARs desde la Tanda
+20, y un CEDEAR cotiza en EEUU, así que **SEC EDGAR alcanza solo**.
+
+- **La fuente se verificó en vivo antes de escribir código**, contra Apple (filer doméstico) y
+  Vale (foreign private issuer, el caso más ruidoso: 840 `6-K` en la ventana). `filings.recent`
+  de `submissions/CIK.json` alcanza sin paginar — cubre 11 años para Apple y los últimos cinco
+  `20-F` para Vale — y la ventana realmente cubierta se declara en la respuesta.
+- **Los `6-K` de un foreign private issuer no se clasifican.** Medido: `core_type` dice "6-K" en
+  839 de 840, `isXBRLNumeric` viene en 0/`None` en todos — la SEC no distingue cuáles traen un
+  estado contable. Estos emisores quedan en `solo_anual=true` con su nota, mismo concepto que ya
+  usaba la ficha de F-053 para el mismo tipo de emisor.
+- **Cliente nuevo (`externos/sec_calendario.py`), no se tocó `sec_ficha.py`**: su `_filings()`
+  corta a propósito en 1 anual + 3 intermedios (lo que necesita la ficha); acá hace falta recorrer
+  la lista entera para derivar un patrón, que es un problema distinto.
+- **On-demand, sin persistencia**, por el contrato de `app/externos/` y el mismo criterio que
+  F-054: caché de 24 h por papel, sin migración ni job ni tabla nueva.
+- **Endpoint nuevo `POST /renta-variable/balances`**, papeles ya resueltos en el cuerpo (no
+  tickers de especie) — el llamador es el bloque de renta variable, que ya sabe el papel de cada
+  posición. Verificado en vivo contra la SEC real después de implementar: AAPL con patrón
+  trimestral completo, VALE con `solo_anual` y su nota, un papel inexistente declarado ausente —
+  los tres coinciden con lo medido en la investigación previa.
+- **1.264 tests backend (13 nuevos) y 983 frontend (44 nuevos)**, todos verdes. La única falla de
+  la corrida completa (`test_migraciones.py`, una migración de la Tanda 12) es preexistente y no
+  la tocó esta tanda — confirmado corriéndola contra el working tree sin estos cambios.
+
+**Lo que esta tanda NO pudo verificar:** la extensión de Chrome no estaba conectada en esta
+sesión, así que el flujo no se recorrió a ojo en el navegador (el checklist habitual de estas
+tandas). El respaldo es la cobertura de tests más la verificación por `curl` contra la SEC real y
+contra el backend local ya corriendo (con recarga automática, tomó el código nuevo sin reiniciar).
+
+---
 
 ### Tanda 20 cerrada el 13/08/2026 — clasificación de la renta variable (sin ficha de plan.md)
 

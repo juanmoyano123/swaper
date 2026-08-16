@@ -23,8 +23,9 @@
  *
  * 2. **"Div. est." siempre en `SIN_DATO`.** No hay fuente de dividendos en el universo consolidado.
  *    Mostrar un estimado sería inventar un dato (regla 1); se declara `s/d` con una nota, siempre.
- *    Por la misma razón no se dibuja el calendario de doce celdas de balances/dividendos del
- *    mockup: es de F-027 (calendario de balances), que todavía no corrió.
+ *    El calendario de doce celdas del mockup sí se dibuja desde F-027 (16/08/2026) — pero es sólo
+ *    de **balances**, vía SEC EDGAR: un patrón histórico de presentación, no una fecha confirmada
+ *    ni un cobro. Sigue sin dividendos, que es un dato distinto y sigue sin fuente.
  *
  * ## Selección de peso
  *
@@ -43,14 +44,17 @@
  * efectivamente invertido) — dos cuentas distintas que pueden no coincidir, y las dos se muestran.
  */
 
-import { type ReactNode, useRef, useState } from 'react'
+import { type ReactNode, useMemo, useRef, useState } from 'react'
 
 import { useAbrirInstrumento } from '@/features/instrumento/useAbrirInstrumento'
 import { fmtFecha, fmtMonto, fmtPct, SIN_DATO } from '@/lib/fmt'
 import { type EspecieRentaVariable, useRentaVariable } from '@/lib/rentaVariable'
 
 import { BadgeClase } from './BadgeClase'
+import { PatronBalances } from './PatronBalances'
 import { agruparEnPapeles, papelCoincide, type PapelRentaVariable } from '../lib/papelesRentaVariable'
+import { type CalendarioBalances } from '../lib/esquemaBalances'
+import { useCalendarioBalances } from '../hooks/useCalendarioBalances'
 import { useCarteraResuelta } from '../hooks/useCarteraResuelta'
 import { useRentaVariableResuelta } from '../hooks/useRentaVariableResuelta'
 import { sumaPesos } from '../lib/mix'
@@ -61,6 +65,12 @@ import {
   useArmadorAcciones,
   type PosicionArmador,
 } from '../store/carteraStore'
+
+/** El papel que la SEC conoce para una especie: `emision` si está resuelta, si no el ticker —
+ *  mismo criterio que usa la ficha de F-053 (`bloque_sec`) para buscar por papel, no por especie. */
+function papelSecDe(especie: EspecieRentaVariable): string {
+  return (especie.emision || especie.ticker).toUpperCase()
+}
 
 /** Mismo umbral que `CarteraEditable.tsx` (design system, sección A8): a partir de acá la
  *  diferencia entre pedido y real se marca, no antes. */
@@ -123,6 +133,20 @@ export function BloqueRentaVariable() {
     subtotalUsd: subtotalRvUsd,
     hayAlgunaResuelta: hayAlgunaRvResuelta,
   } = useRentaVariableResuelta()
+
+  // F-027: sólo se pide a la SEC por los CEDEARs de la cartera (las acciones heredadas de una
+  // cartera vieja quedan fuera — el endpoint no las reconoce, `sec_calendario.py` sólo cubre
+  // CEDEARs). Se deriva de `posicionesRv`/`porTicker`, no de un estado propio: la lista de papeles
+  // a pedir es la misma cartera, así que no hay nada que sincronizar.
+  const papelesCedear = useMemo(
+    () =>
+      posicionesRv
+        .map((p) => porTicker.get(p.ticker))
+        .filter((e): e is EspecieRentaVariable => e !== undefined && e.clase_activo === 'cedear')
+        .map(papelSecDe),
+    [posicionesRv, porTicker],
+  )
+  const balances = useCalendarioBalances(papelesCedear)
 
   // GWT-4: el monto total incluye las dos porciones, cada una con su subtotal identificado. Sin
   // ninguna de las dos resuelta no hay total que declarar — no es 0, es sin dato.
@@ -262,19 +286,37 @@ export function BloqueRentaVariable() {
             marginBottom: 14,
           }}
         >
-          {posicionesRv.map((posicion) => (
-            <TarjetaRentaVariable
-              key={posicion.ticker}
-              posicion={posicion}
-              especie={porTicker.get(posicion.ticker) ?? null}
-              resuelta={resueltas.find((r) => r.ticker === posicion.ticker) ?? null}
-              onAbrir={() => abrirInstrumento(posicion.ticker)}
-              onQuitar={() => alternarRentaVariable(posicion.ticker)}
-              onReemplazar={() => reemplazar(posicion.ticker)}
-              onFijarPeso={(peso) => fijarPeso(posicion.ticker, peso)}
-            />
-          ))}
+          {posicionesRv.map((posicion) => {
+            const especie = porTicker.get(posicion.ticker) ?? null
+            const esCedear = especie?.clase_activo === 'cedear'
+            return (
+              <TarjetaRentaVariable
+                key={posicion.ticker}
+                posicion={posicion}
+                especie={especie}
+                resuelta={resueltas.find((r) => r.ticker === posicion.ticker) ?? null}
+                onAbrir={() => abrirInstrumento(posicion.ticker)}
+                onQuitar={() => alternarRentaVariable(posicion.ticker)}
+                onReemplazar={() => reemplazar(posicion.ticker)}
+                onFijarPeso={(peso) => fijarPeso(posicion.ticker, peso)}
+                calendarioBalances={
+                  esCedear && especie ? balances.porPapel.get(papelSecDe(especie)) : undefined
+                }
+                cargandoBalances={esCedear && balances.isPending}
+              />
+            )
+          })}
         </div>
+      )}
+
+      {/* Una sola leyenda a nivel bloque: cada tarjeta sólo marca sus doce celdas, la explicación
+          del criterio va acá una vez. Sólo aparece si hay al menos un CEDEAR — sin CEDEARs no se
+          le pidió nada a la SEC (ver `papelesCedear`). */}
+      {papelesCedear.length > 0 && (
+        <p style={{ margin: '0 0 12px', fontSize: 10.5, color: 'var(--dim)' }}>
+          Balances: patrón histórico de presentaciones ante la SEC (SEC EDGAR) — no es fecha
+          confirmada. Los emisores privados extranjeros sólo muestran patrón anual.
+        </p>
       )}
 
       <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
@@ -513,6 +555,8 @@ function TarjetaRentaVariable({
   onQuitar,
   onReemplazar,
   onFijarPeso,
+  calendarioBalances,
+  cargandoBalances,
 }: {
   posicion: PosicionArmador
   especie: EspecieRentaVariable | null
@@ -522,6 +566,9 @@ function TarjetaRentaVariable({
   /** Saca esta posición y deja el buscador listo para elegir la que la reemplaza. */
   onReemplazar: () => void
   onFijarPeso: (peso: number) => void
+  /** `undefined`: no es CEDEAR, o el pedido todavía no trajo este papel. */
+  calendarioBalances: CalendarioBalances | undefined
+  cargandoBalances: boolean
 }) {
   const variacionPct = especie?.variacion == null ? null : especie.variacion * 100
   const colorVariacion =
@@ -644,6 +691,26 @@ function TarjetaRentaVariable({
           {SIN_DATO}
         </Metrica>
       </div>
+
+      {/* F-027, sólo CEDEARs — una acción heredada de una cartera vieja no tiene celdas: el
+          calendario no le pide nada a la SEC (`papelesCedear` la excluye río arriba). */}
+      {especie?.clase_activo === 'cedear' && (
+        <div style={{ marginTop: 8 }}>
+          <span
+            style={{
+              fontSize: 9.5,
+              color: 'var(--dim)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+            }}
+          >
+            Balances
+          </span>
+          <div style={{ marginTop: 2 }}>
+            <PatronBalances calendario={calendarioBalances} cargando={cargandoBalances} />
+          </div>
+        </div>
+      )}
     </article>
   )
 }

@@ -68,8 +68,10 @@ de ejecución**. Si contradice a `plan.md` en una dependencia, gana `plan.md` y 
 Las tandas 14–18 son el camino crítico del plan: cada una consume la salida de la anterior y no hay
 paralelismo posible.
 
-**Fuera de tanda:** **F-027** (calendario de balances) queda para el final o a demanda — RICE 16,7 y
-confidence 50 % porque la disponibilidad programática de las fechas de CNV no está verificada.
+**Fuera de tanda, completada el 16/08/2026 (Tanda 21):** **F-027** (calendario de balances,
+recortado a sólo CEDEARs vía SEC EDGAR — sin CNV, que quedó para Stage 2 en F-054). RICE final
+42,5 (subió de 16,7: la única fuente que necesitaba ya estaba integrada al proyecto). Cierra
+Stage 1 — ver `PROGRESS.md`, Tanda 21.
 
 ## Dudas de solape y cómo se resolvieron (siempre por lo conservador)
 

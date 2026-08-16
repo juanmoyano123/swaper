@@ -1365,28 +1365,35 @@ THEN figura como "país no informado", y en ningún caso se le asigna uno deriva
 
 **Etiqueta:** Stage 1 · **Traza a:** F8
 
-**Descripción.** El equivalente del cupón del lado de la renta variable: en qué mes cada acción o
-CEDEAR presenta balance. Las fechas salen de **SEC EDGAR** (`data.sec.gov`, gratuita, sin clave) para
-los CEDEARs de empresas estadounidenses, y de la **CNV** para emisores argentinos. EDGAR registra lo
-ya presentado, no un calendario a futuro; el patrón mensual es estable y es lo que se necesita, y **la
-pantalla lo declara como patrón histórico, no como fecha confirmada**. Se muestra en su propia grilla,
-nunca superpuesto a la de cupones, porque un balance no es un cobro.
+**Descripción.** El equivalente del cupón del lado de la renta variable: en qué mes cada CEDEAR
+presenta balance. La renta variable del producto son sólo CEDEARs (la Tanda 20, `a2ca43c`, sacó las
+acciones locales de la UI y del armado), y un CEDEAR es una empresa que cotiza en EEUU: **una sola
+fuente alcanza, SEC EDGAR** (`data.sec.gov`, gratuita, sin clave; cliente ya escrito en
+`backend/app/externos/sec.py`) — no hace falta CNV, porque no hay ningún emisor local que cubrir. La
+CNV queda para Stage 2 (F-054), sin tocar esta feature. EDGAR registra lo ya presentado, no un
+calendario a futuro; el patrón mensual es estable y es lo que se necesita, y **la pantalla lo declara
+como patrón histórico, no como fecha confirmada**. Se muestra en su propia grilla, nunca superpuesto a
+la de cupones, porque un balance no es un cobro.
 
-**Input:** tickers de renta variable de F-026; EDGAR y CNV.
+**Input:** tickers de CEDEARs de F-026; SEC EDGAR (`submissions/CIK{cik}.json` para el historial de
+presentaciones; el puente ticker→CIK ya está resuelto vía `company_tickers.json`, el mismo mapeo que
+usa `sec.py`).
 **Output:** patrón mensual de presentación por emisor, declarado como histórico.
 **Depende de:** F-026
 **Habilita:** —
 
-**RICE:** R = 200 · I = 1 · C = 50 % · E = 6 → **Score 16,7**
-*Confidence 50 %: la disponibilidad programática de las fechas de CNV no está verificada en los inputs.*
+**RICE:** R = 200 · I = 1 · C = 85 % · E = 4 → **Score 42,5**
+*Confidence 85 % (subió de 50 %): con la CNV fuera de alcance, la única fuente es SEC EDGAR, ya
+integrada al proyecto (cliente y mapeo ticker→CIK reutilizables de `sec.py`/F-054). Lo único no
+verificado en vivo todavía es el endpoint `submissions` para derivar el patrón mensual.*
 
 ```
-GIVEN un CEDEAR de una empresa estadounidense con historial en EDGAR
+GIVEN un CEDEAR con historial de presentaciones en EDGAR
 WHEN se muestra su calendario de balances
 THEN muestra el patrón mensual derivado de las presentaciones ya hechas, etiquetado como patrón
      histórico y no como fecha confirmada
 
-GIVEN un emisor argentino sin dato de CNV disponible
+GIVEN un CEDEAR sin historial resoluble en EDGAR (sin CIK mapeado, o sin presentaciones)
 WHEN se muestra su calendario
 THEN queda vacío y declarado como sin dato, y no se le proyecta un patrón por analogía con otros
      emisores
@@ -3247,7 +3254,7 @@ THEN nunca quedan en el repositorio de código
 | 64 | F-044 | Historial de propuestas | Stage 2 | 250 | 2 | 50 % | 10 | 25,0 |
 | 65 | F-066 | Futuros de dólar | Stage 2 | 200 | 1 | 50 % | 4 | 25,0 |
 | 66 | F-043 | Gestión de clientes y CRM | Stage 2 | 300 | 2 | 50 % | 15 | 20,0 |
-| 67 | F-027 | Calendario de balances | Stage 1 | 200 | 1 | 50 % | 6 | 16,7 |
+| 67 | F-027 | Calendario de balances (sólo CEDEARs, vía SEC) | Stage 1 | 200 | 1 | 85 % | 4 | 42,5 |
 | 68 | F-045 | Colocaciones primarias | Stage 2 | 150 | 2 | 50 % | 10 | 15,0 |
 | 69 | F-070 | Tenencias con P&L por lote | Stage 2 | 200 | 2 | 40 % | 12 | 13,3 |
 | 70 | F-047 | Opciones | Stage 2 | 80 | 1 | 50 % | 10 | 4,0 |

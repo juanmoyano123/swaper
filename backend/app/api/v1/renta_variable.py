@@ -26,17 +26,26 @@ import asyncio
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from app.api.deps import get_db
 from app.core.config import Settings, get_settings
 from app.core.pagination import CursorParams, Page, build_page
 from app.externos import bloque_pausado, cliente_yahoo
 from app.externos.data912 import cliente_data912_historico
+from app.externos.sec_calendario import cliente_sec_calendario
 from app.externos.sec_ficha import cliente_sec_ficha
 from app.renta_variable import EspecieRentaVariable, armar_renta_variable, leer_renta_variable
 from app.universo.servicio import sanear_universo
 
 router = APIRouter(prefix="/renta-variable", tags=["renta variable"])
+
+# Una cartera real no supera unas pocas decenas de CEDEARs; el tope está para no convertir el
+# endpoint en un scraper masivo de la SEC desde un solo pedido.
+MAX_PAPELES_BALANCES = 40
+
+# La SEC admite ~10 pedidos por segundo (ver `externos/sec.py`); se pide a la mitad de ese ritmo.
+MAX_CONCURRENCIA_SEC = 5
 
 # El bloque propio lleva su fuente escrita al lado del dato, igual que el externo: en una ficha que
 # junta dos orígenes, cuál es cuál no puede quedar librado a que el lector se acuerde.
@@ -173,3 +182,45 @@ async def ficha(
         "historico": historico.como_dict(),
         "sec": sec.como_dict(),
     }
+
+
+class PapelesEntrada(BaseModel):
+    """Los papeles a consultar. Van por POST y no por query string por el mismo motivo que
+    `POST /calendario/cartera`: es una lista, no un solo valor, y crece con el tamaño de la
+    cartera."""
+
+    papeles: list[str] = Field(min_length=1, max_length=MAX_PAPELES_BALANCES)
+
+
+@router.post(
+    "/balances",
+    summary="El patrón mensual de presentación de balances de una lista de CEDEARs — F-027",
+    responses={422: {"description": "Sin papeles, o más de los que admite un solo pedido"}},
+)
+async def balances(entrada: PapelesEntrada) -> dict[str, object]:
+    """El calendario de F-027: en qué mes cada CEDEAR suele presentar su balance ante la SEC,
+    como patrón histórico derivado de `submissions/CIK.json` — nunca una fecha confirmada.
+
+    **Se reciben papeles ya resueltos, no tickers de especie.** El llamador (el bloque de renta
+    variable del armador) ya sabe qué papel de la SEC corresponde a cada posición —`emision` si
+    lo tiene, si no el ticker— porque es el mismo dato que resuelve la ficha de F-053. Este
+    endpoint no vuelve a tocar la base para reconstruirlo.
+
+    Un papel repetido en la lista se pide una sola vez. Cada elemento de la respuesta corresponde
+    a un papel pedido, disponible o declarado ausente por igual: no hay 404 por papel, porque un
+    CEDEAR sin patrón detectable en la SEC es un resultado válido, no un error.
+    """
+    papeles = list(dict.fromkeys(p.strip().upper() for p in entrada.papeles if p.strip()))
+    if not papeles:
+        return {"calendarios": []}
+
+    semaforo = asyncio.Semaphore(MAX_CONCURRENCIA_SEC)
+    cliente = cliente_sec_calendario()
+
+    async def _uno(papel: str) -> dict[str, object]:
+        async with semaforo:
+            calendario = await cliente.calendario_de(papel, "cedear", None)
+        return calendario.como_dict()
+
+    calendarios = await asyncio.gather(*(_uno(papel) for papel in papeles))
+    return {"calendarios": list(calendarios)}

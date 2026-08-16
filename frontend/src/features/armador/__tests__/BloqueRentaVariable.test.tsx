@@ -106,16 +106,23 @@ function responderCon({
   cedears = [],
   especiesRentaFija = [],
   tipoDeCambio = { valor: 1500, disponible: true },
+  balances = [],
 }: {
   acciones?: EspecieRentaVariable[]
   cedears?: EspecieRentaVariable[]
   especiesRentaFija?: unknown[]
   tipoDeCambio?: { valor: number | null; disponible: boolean }
+  /** F-027: los calendarios que `POST /renta-variable/balances` devuelve. Vacío por defecto: los
+   *  tests que no le interesa el calendario siguen viendo la tarjeta sin dato, sin tener que
+   *  mockear nada extra. */
+  balances?: unknown[]
 } = {}) {
   const fetchMock = vi.fn((entrada: RequestInfo | URL) => {
     const url = typeof entrada === 'string' ? entrada : entrada.toString()
     let cuerpo: unknown
-    if (url.includes('/renta-variable/especies')) {
+    if (url.includes('/renta-variable/balances')) {
+      cuerpo = { calendarios: balances }
+    } else if (url.includes('/renta-variable/especies')) {
       const clase = new URL(url, 'http://localhost').searchParams.get('clase')
       cuerpo = { items: clase === 'accion' ? acciones : cedears, next_cursor: null }
     } else if (url.includes('/emisiones/especies')) {
@@ -701,5 +708,112 @@ describe('qué es cada papel', () => {
     const lista = await screen.findByRole('list', { name: /Resultados de CEDEARs/ })
     expect(within(lista).getByRole('button', { name: 'GGAL' })).toBeInTheDocument()
     expect(within(lista).queryByText(/Manufactura|Electronic/)).not.toBeInTheDocument()
+  })
+})
+
+// --- F-027: el patrón de balances, sólo CEDEARs ------------------------------------------------
+
+function calendarioDisponible(papel: string, meses: number[], extra: Record<string, unknown> = {}) {
+  return {
+    papel,
+    fuente: 'SEC EDGAR',
+    disponible: true,
+    motivo_ausente: null,
+    solo_anual: false,
+    nota_solo_anual: null,
+    cik: '320193',
+    ventana: { desde: '2024-01-01', hasta: '2026-08-01' },
+    meses: meses.map((mes) => ({ mes, presentaciones: 1, formularios: ['10-K'] })),
+    capturado_en: '2026-08-16T00:00:00Z',
+    ...extra,
+  }
+}
+
+function calendarioAusente(papel: string, motivo: string) {
+  return {
+    papel,
+    fuente: 'SEC EDGAR',
+    disponible: false,
+    motivo_ausente: motivo,
+    solo_anual: false,
+    nota_solo_anual: null,
+    cik: null,
+    ventana: null,
+    meses: [],
+    capturado_en: '2026-08-16T00:00:00Z',
+  }
+}
+
+function huboLlamadaABalances(fetchMock: ReturnType<typeof vi.fn>): boolean {
+  return fetchMock.mock.calls.some(([entrada]) =>
+    (typeof entrada === 'string' ? entrada : entrada.toString()).includes('/renta-variable/balances'),
+  )
+}
+
+describe('F-027: el patrón de balances de un CEDEAR', () => {
+  it('con calendario disponible, marca sus celdas y muestra la leyenda del bloque', async () => {
+    responderCon({ cedears: [cedear()], balances: [calendarioDisponible('AAPL', [2, 5, 8, 11])] })
+    renderizar()
+    await screen.findAllByRole('listitem')
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar AAPL a la cartera' }))
+    const tarjeta = await screen.findByRole('article', { name: 'AAPL' })
+
+    const bloqueBalances = within(tarjeta).getByText('Balances').closest('div') as HTMLElement
+    expect(
+      within(bloqueBalances).getByRole('img', { name: /presenta en 4 de 12 meses/ }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/patrón histórico de presentaciones ante la SEC/),
+    ).toBeInTheDocument()
+  })
+
+  it('un emisor privado extranjero (solo_anual) muestra la nota, sin ocultar el patrón anual', async () => {
+    responderCon({
+      cedears: [cedear({ ticker: 'VALE', emision: 'VALE' })],
+      balances: [calendarioDisponible('VALE', [3], { solo_anual: true, nota_solo_anual: 'sólo anual' })],
+    })
+    renderizar()
+    await screen.findAllByRole('listitem')
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar VALE a la cartera' }))
+    const tarjeta = await screen.findByRole('article', { name: 'VALE' })
+
+    expect(within(tarjeta).getByText('sólo patrón anual')).toBeInTheDocument()
+  })
+
+  it('sin patrón detectable en la SEC, declara el motivo y no inventa un patrón', async () => {
+    responderCon({
+      cedears: [cedear({ ticker: 'XXXX', emision: 'XXXX' })],
+      balances: [calendarioAusente('XXXX', 'la SEC no lista este papel: no tiene CIK asociado')],
+    })
+    renderizar()
+    await screen.findAllByRole('listitem')
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar XXXX a la cartera' }))
+    const tarjeta = await screen.findByRole('article', { name: 'XXXX' })
+
+    const bloqueBalances = within(tarjeta).getByText('Balances').closest('div') as HTMLElement
+    expect(within(bloqueBalances).getByText('s/d')).toBeInTheDocument()
+  })
+
+  it('una acción heredada (no CEDEAR) no tiene fila de balances y no le pide nada a la SEC', async () => {
+    const fetchMock = responderCon({ acciones: [accion()] })
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar GGAL directo' }))
+    const tarjeta = await screen.findByRole('article', { name: 'GGAL' })
+
+    expect(within(tarjeta).queryByText('Balances')).not.toBeInTheDocument()
+    expect(huboLlamadaABalances(fetchMock)).toBe(false)
+  })
+
+  it('sin ninguna posición de renta variable, no se le pide nada a la SEC', async () => {
+    const fetchMock = responderCon({ acciones: [accion()] })
+    renderizar()
+
+    await screen.findByText(/Sin acciones ni CEDEARs en la cartera/)
+
+    expect(huboLlamadaABalances(fetchMock)).toBe(false)
   })
 })
