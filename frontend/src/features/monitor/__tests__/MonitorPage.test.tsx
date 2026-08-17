@@ -57,6 +57,8 @@ function especie(extra: Partial<Especie> = {}): Especie {
     volumen: 1_000_000,
     volumen_usd: 1_000_000,
     paridad: 0.875,
+    residual: 100.0,
+    valor_tecnico: 71.4,
     sector: null,
     calificacion: null,
     dato_sano: true,
@@ -261,6 +263,24 @@ describe('rendimiento y paridad: fracción en el dato, puntos porcentuales en la
 
     expect(screen.queryByText(/no están en la curva/)).not.toBeInTheDocument()
     expect(screen.queryByText(/no hay curva que dibujar/)).not.toBeInTheDocument()
+  })
+})
+
+describe('residual: cuánto capital queda vivo (relevamiento de confiabilidad de datos, 17/08/2026)', () => {
+  it('muestra el residual calculado en la fila de la especie', async () => {
+    mockearApiConUnaEspecie(especie({ residual: 60.0, valor_tecnico: 62.3 }))
+    renderizar()
+
+    const fila = await screen.findByText('AL30').then((el) => el.closest('div[role="button"]'))
+    expect(fila).toHaveTextContent('60,0')
+  })
+
+  it('sin cronograma o con residual incoherente, declara sin dato en vez de 100 o de 0', async () => {
+    mockearApiConUnaEspecie(especie({ residual: null, valor_tecnico: null }))
+    renderizar()
+
+    const fila = await screen.findByText('AL30').then((el) => el.closest('div[role="button"]'))
+    expect(fila).toHaveTextContent('s/d')
   })
 })
 

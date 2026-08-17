@@ -34,6 +34,8 @@ function especie(extra: Partial<Especie> = {}): Especie {
     volumen: 1_000_000,
     volumen_usd: 1_000_000,
     paridad: 0.875,
+    residual: 100.0,
+    valor_tecnico: 71.4,
     sector: 'Soberano',
     calificacion: null,
     dato_sano: true,

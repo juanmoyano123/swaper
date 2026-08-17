@@ -30,6 +30,13 @@ export const esquemaEspecie = z.object({
   volumen_usd: z.number().nullable(),
   /** Adimensional y ronda 1.0 (`cupones.py` del backend): 0.875 es un bono bajo la par. */
   paridad: z.number().nullable(),
+  /** Cuánto capital queda vivo hoy, cada 100 nominales — cálculo propio desde el 17/08/2026
+   *  (`componentes_valor_tecnico`, contractual). `null` sin cronograma, vencido, o cuando el
+   *  residual que declara la fuente contradice la suma de amortizaciones ya pagadas. */
+  residual: z.number().nullable(),
+  /** Residual vigente + cupón corrido, cada 100 nominales — denominador de `paridad`. Mismas
+   *  condiciones de `null` que `residual`. */
+  valor_tecnico: z.number().nullable(),
   /** Rubro declarado por la fuente curada (`data/condiciones_emision.csv`). `null` = sin dato: no
    *  se infiere de ningún parecido con otra especie (regla 1). Agregado 14/08/2026 para el
    *  facetado de la barra de filtros — el mismo campo que ya usa el armador. */

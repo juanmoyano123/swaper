@@ -98,6 +98,12 @@ MOTIVO_MONEDA_CRUZADA = "moneda_cruzada"
 MOTIVO_SIN_PRECIO = "sin_precio"
 MOTIVO_SIN_CRONOGRAMA = "sin_cronograma"
 MOTIVO_SIN_TIPO_TASA = "sin_tipo_de_tasa"
+MOTIVO_RESIDUAL_CONTRADICTORIO = "residual_contradictorio"
+"""Relevamiento de confiabilidad de datos (16/08/2026): el residual que declara el cronograma
+para el último pago pasado no coincide con `100 - Σ capital` de los pagos ya cobrados (ver
+`cupones.componentes_valor_tecnico`) — la fuente dejó el residual clavado en 100 mientras el bono
+amortizaba. Cae en el balde de "sin insumo" (no en `NATURALEZAS_FUERA_O_CRUCE`): es un faltante
+del dato de hoy, no una decisión de diseño."""
 
 # Cuánto pueden separarse el cálculo propio y lo publicado antes de que valga la pena mirarlo.
 # La TIR: 100 pb absolutos. El canje MEP/cable (~3,6 % de precio) sobre una duración de 5 a 7 años

@@ -286,3 +286,28 @@ def test_una_especie_sin_capturado_en_no_se_marca_huerfana_por_default() -> None
     assert resultado.huerfanas == []
     por_ticker = {e.ticker: e.capturado_en for e in resultado.especies}
     assert por_ticker["SINFECHAO"] is None
+
+
+# --- Residual y valor técnico (relevamiento de confiabilidad de datos, 17/08/2026) ----------------
+
+
+def test_residual_y_valor_tecnico_se_leen_de_la_vista() -> None:
+    resultado = segmentar(
+        [fila("AL30O", "hard-dollar", residualValue=60.0, valor_tecnico=62.3)]
+    )
+
+    especie = resultado.especies[0]
+    assert especie.residual == 60.0
+    assert especie.valor_tecnico == 62.3
+    assert especie.como_dict()["residual"] == 60.0
+    assert especie.como_dict()["valor_tecnico"] == 62.3
+
+
+def test_sin_columnas_de_residual_quedan_en_none_y_no_en_cero() -> None:
+    """Filas de un test viejo, o una vista de una corrida sin cronograma para esa especie: no se
+    les inventa un residual de 0 ni de 100."""
+    resultado = segmentar([fila("VIEJOO", "hard-dollar")])
+
+    especie = resultado.especies[0]
+    assert especie.residual is None
+    assert especie.valor_tecnico is None

@@ -15,6 +15,7 @@ import pytest
 
 from app.calendario.cupones import (
     RESIDUAL_ENTERO,
+    componentes_valor_tecnico,
     flujos_por_peso,
     indexar_cronograma,
     indexar_paridades,
@@ -129,6 +130,68 @@ def test_un_bono_con_el_residual_en_cero_no_proyecta_nada() -> None:
         ]
     )
     assert valor_tecnico(cronograma.pagos_de("CERO"), HOY) is None
+
+
+# --- componentes_valor_tecnico: desglose y chequeo de coherencia (16/08/2026) ------------------
+
+
+def test_los_componentes_abren_residual_vigente_y_cupon_corrido_por_separado() -> None:
+    cronograma = indexar_cronograma(
+        [
+            pago("LINEO", "2026-06-08", interes=4.0, residual=100.0, emision=None),
+            pago("LINEO", "2026-10-07", interes=4.0, residual=100.0, emision=None),
+        ]
+    )
+    c = componentes_valor_tecnico(cronograma.pagos_de("LINE"), HOY)
+    assert c.coherente is True
+    assert c.residual_vigente == 100.0
+    assert c.cupon_corrido == pytest.approx(4.0 * 60 / 121)
+    assert c.valor_tecnico == pytest.approx(100.0 + 4.0 * 60 / 121)
+
+
+def test_un_residual_clavado_en_100_mientras_el_bono_amortiza_es_incoherente() -> None:
+    """El caso real: BDC33 amortiza 33,33 en un pago pasado y la fuente sigue declarando 100.
+
+    100 - 33,33 de capital ya pagado != 100 declarado: la fuente se contradice en la misma tabla.
+    Regla 1 — se deja vacío en vez de publicar un valor técnico sobreestimado.
+    """
+    cronograma = indexar_cronograma(
+        [
+            pago("BDC33", "2026-01-01", capital=33.33, residual=100.0, emision=None),
+            pago("BDC33", "2027-01-01", interes=5.0, residual=100.0, emision=None),
+        ]
+    )
+    c = componentes_valor_tecnico(cronograma.pagos_de("BDC33"), HOY)
+    assert c.coherente is False
+    assert c.residual_vigente is None
+    assert c.cupon_corrido is None
+    assert c.valor_tecnico is None
+    assert valor_tecnico(cronograma.pagos_de("BDC33"), HOY) is None
+
+
+def test_un_bullet_que_no_cierra_en_cero_al_vencimiento_no_dispara_el_chequeo() -> None:
+    """El otro caso medido (80 tickers): la última fila no pone el residual en 0. Es inocuo porque
+    esa fila no tiene pagos futuros — `componentes_valor_tecnico` corta antes de llegar al chequeo
+    de coherencia, con el mismo criterio que "bono vencido no proyecta nada"."""
+    cronograma = indexar_cronograma(
+        [pago("BULLETO", "2025-01-01", capital=100.0, residual=5.0, emision=None)]
+    )
+    c = componentes_valor_tecnico(cronograma.pagos_de("BULLET"), HOY)
+    assert c.coherente is True
+    assert c.valor_tecnico is None  # vencido, no incoherente
+
+
+def test_una_pequena_diferencia_de_redondeo_no_cuenta_como_incoherencia() -> None:
+    """Tolerancia 0,01: la fuente redondea, y eso no es lo mismo que contradecirse."""
+    cronograma = indexar_cronograma(
+        [
+            pago("REDO", "2026-01-01", capital=25.0, residual=75.005, emision=None),
+            pago("REDO", "2027-01-01", interes=5.0, residual=75.0, emision=None),
+        ]
+    )
+    c = componentes_valor_tecnico(cronograma.pagos_de("RED"), HOY)
+    assert c.coherente is True
+    assert c.residual_vigente == 75.005
 
 
 # --- El cronograma se indexa por raíz, y lo incompleto se cuenta ----------------------------------

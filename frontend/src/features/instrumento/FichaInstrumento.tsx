@@ -17,12 +17,13 @@ import { nombreSegmento, unidadDeNaturaleza } from '@/components/SelectorSegment
 import { ApiError } from '@/lib/api/errors'
 import { etiquetaClase } from '@/lib/claseActivo'
 import { fmtCompacto, fmtFecha, fmtMonto, fmtNumero, fmtPct, NO_APLICA, SIN_DATO } from '@/lib/fmt'
+import { colorDeParidad } from '@/lib/paridad'
 
 import { useCondicionesInstrumento } from './hooks/useCondicionesInstrumento'
 import { useCronogramaInstrumento } from './hooks/useCronogramaInstrumento'
 import { useFichaInstrumento } from './hooks/useFichaInstrumento'
 import { useSensibilidadInstrumento } from './hooks/useSensibilidadInstrumento'
-import type { CondicionesDetalle, EspecieFicha } from './lib/schema'
+import type { CondicionesDetalle, EspecieFicha, ResumenCronograma } from './lib/schema'
 
 /**
  * "no informado" es distinto de `SIN_DATO` ('s/d'): un campo de condiciones ausente no es un dato
@@ -298,24 +299,33 @@ function BloqueCronograma({ query }: { query: ReturnType<typeof useCronogramaIns
   }
 
   const filas = pagos.flatMap((pago) => {
-    const items: { fecha: string; tipo: string; monto: number }[] = []
-    if (pago.interes > 0) items.push({ fecha: pago.fecha, tipo: 'renta', monto: pago.interes })
+    const items: { fecha: string; tipo: string; monto: number; residual: number | null }[] = []
+    if (pago.interes > 0) {
+      items.push({ fecha: pago.fecha, tipo: 'renta', monto: pago.interes, residual: pago.residual })
+    }
     if (pago.amortizacion > 0) {
-      items.push({ fecha: pago.fecha, tipo: 'amortización', monto: pago.amortizacion })
+      items.push({
+        fecha: pago.fecha,
+        tipo: 'amortización',
+        monto: pago.amortizacion,
+        residual: pago.residual,
+      })
     }
     return items
   })
 
   return (
     <div>
+      <LecturaValorTecnico resumen={query.data.resumen} />
       <table className="mono" style={{ width: '100%', fontSize: 11.5, borderCollapse: 'collapse' }}>
         <thead>
           <tr style={{ color: 'var(--dim)', textAlign: 'left' }}>
             <th style={{ fontWeight: 400, padding: '2px 6px 4px 0' }}>fecha</th>
             <th style={{ fontWeight: 400, padding: '2px 6px 4px' }}>tipo</th>
-            <th style={{ fontWeight: 400, padding: '2px 0 4px', textAlign: 'right' }}>
+            <th style={{ fontWeight: 400, padding: '2px 6px 4px', textAlign: 'right' }}>
               monto / 100 VN
             </th>
+            <th style={{ fontWeight: 400, padding: '2px 0 4px', textAlign: 'right' }}>residual</th>
           </tr>
         </thead>
         <tbody>
@@ -323,16 +333,57 @@ function BloqueCronograma({ query }: { query: ReturnType<typeof useCronogramaIns
             <tr key={`${fila.fecha}-${fila.tipo}-${indice}`} style={{ borderTop: '1px solid var(--lin)' }}>
               <td style={{ padding: '3px 6px 3px 0' }}>{fmtFecha(fila.fecha)}</td>
               <td style={{ padding: '3px 6px', textTransform: 'capitalize' }}>{fila.tipo}</td>
-              <td style={{ padding: '3px 0', textAlign: 'right' }}>{fmtNumero(fila.monto, 4)}</td>
+              <td style={{ padding: '3px 6px', textAlign: 'right' }}>{fmtNumero(fila.monto, 4)}</td>
+              <td style={{ padding: '3px 0', textAlign: 'right' }}>{fmtNumero(fila.residual, 1)}</td>
             </tr>
           ))}
         </tbody>
       </table>
       <p style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 8, textWrap: 'pretty' }}>
-        Montos por cada 100 de valor nominal; el flujo en plata del cliente depende del nominal que
-        tenga asignado.
+        Montos y residual por cada 100 de valor nominal; el flujo en plata del cliente depende del
+        nominal que tenga asignado.
       </p>
     </div>
+  )
+}
+
+/**
+ * Residual vigente, valor técnico y paridad, todos abiertos — nunca una etiqueta ("caro"/"barato").
+ * El color del porcentaje es el mismo criterio del monitor (`lib/paridad.ts`): un dato duro hecho
+ * legible de un vistazo, no un juicio sobre el papel.
+ */
+function LecturaValorTecnico({ resumen }: { resumen: ResumenCronograma }) {
+  if (resumen.residual_vigente === null) {
+    return (
+      <p style={{ fontSize: 11.5, color: 'var(--dim)', marginBottom: 10 }}>
+        Valor técnico: {SIN_DATO}
+        {resumen.motivo_ausente && ` — ${resumen.motivo_ausente}.`}
+      </p>
+    )
+  }
+
+  return (
+    <p className="mono" style={{ fontSize: 11.5, marginBottom: 10 }}>
+      <span style={{ color: 'var(--dim)' }}>Residual vigente:</span>{' '}
+      {fmtNumero(resumen.residual_vigente, 1)} de 100
+      {' · '}
+      <span style={{ color: 'var(--dim)' }}>Valor técnico:</span>{' '}
+      {fmtNumero(resumen.valor_tecnico, 2)}
+      {resumen.paridad !== null ? (
+        <>
+          {' · '}
+          <span style={{ color: 'var(--dim)' }}>cotiza al</span>{' '}
+          <span style={{ color: colorDeParidad(resumen.paridad) }}>
+            {fmtPct(resumen.paridad * 100)}
+          </span>{' '}
+          <span style={{ color: 'var(--dim)' }}>del técnico</span>
+        </>
+      ) : (
+        resumen.motivo_ausente && (
+          <span style={{ color: 'var(--dim)' }}> · sin paridad: {resumen.motivo_ausente}</span>
+        )
+      )}
+    </p>
   )
 }
 

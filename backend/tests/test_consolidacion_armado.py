@@ -24,6 +24,7 @@ from app.ingesta.consolidacion.clasificacion import (
 )
 from app.ingesta.consolidacion.metricas import (
     CODIGO_METRICAS_FUERA_DE_NATURALEZA,
+    CODIGO_METRICAS_SIN_INSUMO,
 )
 from app.ingesta.iamc.parser import FilaInforme
 
@@ -77,8 +78,16 @@ def informe(ticker: str, **overrides) -> FilaInforme:
 
 
 def cashflow(
-    ticker: str, tipo: str, payment_date=date(2027, 1, 1), *, capital: float = 0.0
+    ticker: str,
+    tipo: str,
+    payment_date=date(2027, 1, 1),
+    *,
+    capital: float = 0.0,
+    residual_value: float | None = None,
 ) -> dict[str, object]:
+    """`residual_value=None` (default) lo deriva de `capital`, coherente. Pasarlo explícito es
+    para simular el caso real de fuente: 29 emisiones lo declaran clavado en 100 mientras
+    amortizan (ver `test_calendario_cupones.py`)."""
     return {
         "ticker": ticker,
         "type": tipo,
@@ -87,7 +96,7 @@ def cashflow(
         "capital": capital,
         "interest_rate": 5.0,
         "interest_amount": 2.5,
-        "residual_value": 100.0 - capital,
+        "residual_value": (100.0 - capital) if residual_value is None else residual_value,
         "cash_flow": 2.5 + capital,
         "days_convention": "30/360",
     }
@@ -624,6 +633,87 @@ def test_una_especie_sin_metricas_ni_previas_queda_vacia() -> None:
     assert precio["tir"] is None
     assert precio["fecha_metricas"] is None
     assert precio["fuente"] == "byma"
+
+
+# --- Residual y valor técnico, calculados (relevamiento de confiabilidad de datos, 16/08/2026) --
+
+
+def test_el_residual_calculado_gana_sobre_iamc_en_una_especie_calculable() -> None:
+    """PLC7O ya amortizó 40 antes de hoy: el residual calculado (60) tiene que ganarle al 100 que
+    IAMC declara — es cálculo propio, no arrastre, igual que tir/duration/paridad desde F-051."""
+    resultado = armar_consolidacion(
+        hoy=HOY,
+        especies_por_endpoint={
+            "negociable-obligations": [especie("PLC7O", moneda="USD", ultimo=60.0)]
+        },
+        filas_iamc=[informe("PLC7O", tir=7.92, valor_residual=100.0)],
+        filas_cashflow=[
+            cashflow("PLC7", "ON", payment_date=date(2026, 1, 1), capital=40.0),
+            cashflow("PLC7", "ON", payment_date=date(2027, 1, 1), capital=0.0),
+        ],
+        fecha_informe=FECHA_INFORME,
+    )
+
+    (precio,) = resultado.filas_precios
+    assert precio["residual_value"] == pytest.approx(60.0)
+    assert precio["valor_tecnico"] is not None
+
+
+def test_el_residual_se_calcula_aunque_quede_fuera_del_calculo_por_moneda_cruzada() -> None:
+    """AL30 en pesos con flujo en dólares no calcula tir ni paridad (moneda cruzada), pero el
+    residual es contractual —no depende de en qué moneda cotiza la especie— y se calcula igual."""
+    resultado = armar_consolidacion(
+        hoy=HOY,
+        especies_por_endpoint={"public-bonds": [especie("AL30", moneda="ARS", ultimo=86_320.0)]},
+        filas_cashflow=[
+            cashflow("AL30", "HARD_DOLLAR", payment_date=date(2026, 1, 1), capital=25.0),
+            cashflow("AL30", "HARD_DOLLAR", payment_date=date(2029, 1, 9)),
+        ],
+    )
+
+    (precio,) = resultado.filas_precios
+    assert precio["tir"] is None and precio["paridad"] is None, "sigue sin tir ni paridad"
+    assert precio["residual_value"] == pytest.approx(75.0), "pero el residual sí se calcula"
+    assert precio["valor_tecnico"] is not None
+
+
+def test_un_residual_incoherente_queda_vacio_y_se_alerta() -> None:
+    """El caso real (29 de 816 tickers): la fuente declara el residual clavado en 100 después de
+    un pago que sí amortizó. Regla 1 — se prefiere vacío antes que un valor técnico sobreestimado.
+    """
+    resultado = armar_consolidacion(
+        hoy=HOY,
+        especies_por_endpoint={
+            "negociable-obligations": [especie("BDC33", moneda="USD", ultimo=60.0)]
+        },
+        filas_cashflow=[
+            cashflow(
+                "BDC33", "ON", payment_date=date(2026, 1, 1), capital=33.33, residual_value=100.0
+            ),
+            cashflow(
+                "BDC33", "ON", payment_date=date(2027, 1, 1), capital=0.0, residual_value=100.0
+            ),
+        ],
+    )
+
+    (precio,) = resultado.filas_precios
+    assert precio["residual_value"] is None
+    assert precio["valor_tecnico"] is None
+    alerta = next(a for a in resultado.alertas if a.codigo == CODIGO_METRICAS_SIN_INSUMO)
+    assert "BDC33" in alerta.detalle["por_motivo"]["residual_contradictorio"]
+
+
+def test_sin_cronograma_el_residual_no_se_inventa() -> None:
+    """Una especie sin cronograma no tiene de dónde derivar el residual: queda vacío, no en 100."""
+    resultado = armar_consolidacion(
+        hoy=HOY,
+        especies_por_endpoint={"negociable-obligations": [especie("SINCRO")]},
+        filas_cashflow=[],
+    )
+
+    (precio,) = resultado.filas_precios
+    assert precio["residual_value"] is None
+    assert precio["valor_tecnico"] is None
 
 
 # --- Cierre anterior (F-052) -------------------------------------------------------------------

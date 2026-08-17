@@ -94,8 +94,9 @@ FILAS_UNIVERSO: list[dict[str, Any]] = [
 ]
 
 # Dos pagos futuros de AL30 (raíz de AL30/AL30D/AL30C): uno de renta pura y uno de capital+renta al
-# vencimiento. `residual_value` no importa para estos endpoints — no calculan valor técnico, sólo
-# listan los pagos tal como vienen.
+# vencimiento. Los dos son futuros respecto de `date.today()` en cualquier fecha en que corra este
+# test, así que el residual vigente cae siempre en `RESIDUAL_ENTERO` (100.0): sin pagos pasados no
+# hay nada que contradiga la fuente, y el `resumen` del cronograma sale coherente.
 FILAS_CASHFLOW: list[dict[str, Any]] = [
     {
         "ticker": "AL30",
@@ -281,6 +282,9 @@ async def test_cronograma_con_pagos_distingue_interes_de_amortizacion(app_con_in
     assert capital_y_renta["interes"] == 1.5
     # La moneda sale del universo (couponCurrency), no se infiere del sufijo del ticker.
     assert cuerpo["pagos"][0]["moneda"] == "USD"
+    # El residual declarado por la fuente viaja por pago: coherente acá (sin pagos pasados).
+    assert solo_renta["residual"] == 100.0
+    assert capital_y_renta["residual"] == 0.0
 
 
 async def test_cronograma_vacio_no_es_404(app_con_instrumentos) -> None:
@@ -289,7 +293,18 @@ async def test_cronograma_vacio_no_es_404(app_con_instrumentos) -> None:
         respuesta = await http.get(CRONOGRAMA.format(ticker="S30J6"))
 
     assert respuesta.status_code == 200
-    assert respuesta.json() == {"ticker": "S30J6", "pagos": []}
+    assert respuesta.json() == {
+        "ticker": "S30J6",
+        "pagos": [],
+        "resumen": {
+            "residual_vigente": None,
+            "valor_tecnico": None,
+            "cupon_corrido": None,
+            "paridad": None,
+            "coherente": True,
+            "motivo_ausente": "sin cronograma de pagos en la fuente",
+        },
+    }
 
 
 async def test_cronograma_sin_universo_declara_moneda_nula(app_con_instrumentos) -> None:
@@ -301,6 +316,80 @@ async def test_cronograma_sin_universo_declara_moneda_nula(app_con_instrumentos)
     cuerpo = respuesta.json()
     assert len(cuerpo["pagos"]) == 2
     assert all(pago["moneda"] is None for pago in cuerpo["pagos"])
+    # Sin especie no hay precio con qué comparar: el residual sigue siendo contractual y se
+    # calcula igual, pero la paridad no.
+    assert cuerpo["resumen"]["residual_vigente"] == 100.0
+    assert cuerpo["resumen"]["paridad"] is None
+    assert "no está en el universo" in cuerpo["resumen"]["motivo_ausente"]
+
+
+async def test_cronograma_resumen_calcula_paridad_con_moneda_que_coincide(
+    app_con_instrumentos,
+) -> None:
+    """AL30D cotiza en USD y su flujo (hard-dollar) paga en USD: el gate de F-051 deja pasar la
+    paridad — mismo criterio que `fuente_de_metricas`, no uno nuevo para la ficha."""
+    async with cliente(app_con_instrumentos()) as http:
+        respuesta = await http.get(CRONOGRAMA.format(ticker="AL30D"))
+
+    resumen = respuesta.json()["resumen"]
+    assert resumen["coherente"] is True
+    assert resumen["residual_vigente"] == 100.0
+    assert resumen["valor_tecnico"] is not None
+    # precio 43.0 / valor técnico (≈100 + corridos)
+    assert resumen["paridad"] == pytest.approx(43.0 / resumen["valor_tecnico"])
+    assert resumen["motivo_ausente"] is None
+
+
+async def test_cronograma_resumen_declara_moneda_cruzada_sin_paridad(
+    app_con_instrumentos,
+) -> None:
+    """AL30 cotiza en pesos pero su flujo paga en dólares: el residual es contractual y se calcula
+    igual, pero la paridad mezclaría monedas y se declara sin calcular, no se inventa un TC."""
+    async with cliente(app_con_instrumentos()) as http:
+        respuesta = await http.get(CRONOGRAMA.format(ticker="AL30"))
+
+    resumen = respuesta.json()["resumen"]
+    assert resumen["residual_vigente"] == 100.0
+    assert resumen["paridad"] is None
+    assert "moneda distinta" in resumen["motivo_ausente"]
+
+
+async def test_cronograma_resumen_vacio_con_residual_incoherente(
+    app_con_instrumentos,
+) -> None:
+    """El caso real (29 de 816 tickers): la fuente declara el residual clavado en 100 después de un
+    pago que sí amortizó. El resumen y el residual de cada pago quedan vacíos, con el motivo."""
+    cashflow_incoherente = [
+        {
+            "ticker": "AL30",
+            "issue_date": date(2020, 1, 9),
+            "payment_date": date(2024, 1, 9),
+            "capital": 40.0,
+            "interest_amount": 1.5,
+            "residual_value": 100.0,
+            "cash_flow": 41.5,
+        },
+        {
+            "ticker": "AL30",
+            "issue_date": date(2020, 1, 9),
+            "payment_date": date(2030, 7, 9),
+            "capital": 60.0,
+            "interest_amount": 1.5,
+            "residual_value": 0.0,
+            "cash_flow": 61.5,
+        },
+    ]
+    async with cliente(app_con_instrumentos(cashflow=cashflow_incoherente)) as http:
+        respuesta = await http.get(CRONOGRAMA.format(ticker="AL30D"))
+
+    cuerpo = respuesta.json()
+    assert all(pago["residual"] is None for pago in cuerpo["pagos"])
+    resumen = cuerpo["resumen"]
+    assert resumen["coherente"] is False
+    assert resumen["residual_vigente"] is None
+    assert resumen["valor_tecnico"] is None
+    assert resumen["paridad"] is None
+    assert "contradice" in resumen["motivo_ausente"]
 
 
 async def test_cronograma_sin_base_de_datos_responde_503(crear_app) -> None:

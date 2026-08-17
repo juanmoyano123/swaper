@@ -124,6 +124,11 @@ COLUMNAS: tuple[str, ...] = (
     "effectiveVolume",
     # F-038: el monitor la muestra.
     "paridad",
+    # Valor residual y valor técnico, calculados (17/08/2026): cuánto capital queda vivo y el
+    # denominador de la paridad, para poder leer si un bono cotiza caro o barato contra su propio
+    # valor técnico. Ver el docstring de `EspecieUniverso.residual`.
+    "residualValue",
+    "valor_tecnico",
     # Experimento data912: de dónde salió el precio de esta fila. La vista la expone desde
     # `20260808120000_data912_fuente_resumen.sql`; antes de esa migración `resumen` la descartaba.
     "fuente",

@@ -177,6 +177,66 @@ async def test_una_emision_sin_cronograma_no_inventa_periodicidad(crear_app) -> 
     assert all(i["periodicidad"] is None for i in items)
 
 
+# --- Residual y valor técnico, en vivo (relevamiento de confiabilidad de datos, 17/08/2026) ------
+
+
+async def test_la_vista_viva_calcula_residual_aunque_lo_persistido_este_vacio(crear_app) -> None:
+    """`fila()` no trae `residualValue` ni `valor_tecnico` (como una especie recién migrada, antes
+    de la primera corrida que los persista): la vista los calcula igual, del cronograma que ya lee
+    para la periodicidad. Sin esto la columna queda en s/d hasta la próxima corrida programada."""
+    app = app_con(crear_app, cashflow=cronograma_de_prueba())
+    async with cliente(app) as http:
+        items = (await http.get(ESPECIES)).json()["items"]
+
+    por_ticker = {i["ticker"]: i for i in items}
+    assert por_ticker["MR46O"]["residual"] is not None
+    assert por_ticker["MR46O"]["valor_tecnico"] is not None
+    # Comparte cronograma por raíz, mismo criterio que la periodicidad de sus hermanas.
+    assert por_ticker["MR46D"]["residual"] == por_ticker["MR46O"]["residual"]
+
+
+async def test_una_emision_sin_cronograma_no_inventa_residual(crear_app) -> None:
+    """Mismo criterio que la periodicidad: sin cronograma, sin dato — no se rellena con 100."""
+    async with cliente(app_con(crear_app)) as http:
+        items = (await http.get(ESPECIES)).json()["items"]
+
+    assert all(i["residual"] is None for i in items)
+    assert all(i["valor_tecnico"] is None for i in items)
+
+
+async def test_la_vista_viva_declara_vacio_el_residual_incoherente(crear_app) -> None:
+    """El caso real: la fuente declara el residual clavado en 100 después de un pago que sí
+    amortizó. La vista viva no publica un valor técnico sobreestimado."""
+    hoy = date.today()
+    cashflow_incoherente = [
+        {
+            "ticker": "MR46O",
+            "issue_date": date(2020, 1, 9),
+            "payment_date": hoy - timedelta(days=30),
+            "capital": 40.0,
+            "interest_amount": 2.5,
+            "residual_value": 100.0,
+            "cash_flow": 42.5,
+        },
+        {
+            "ticker": "MR46O",
+            "issue_date": date(2020, 1, 9),
+            "payment_date": hoy + timedelta(days=180),
+            "capital": 0.0,
+            "interest_amount": 2.5,
+            "residual_value": 100.0,
+            "cash_flow": 2.5,
+        },
+    ]
+    app = app_con(crear_app, cashflow=cashflow_incoherente)
+    async with cliente(app) as http:
+        items = (await http.get(ESPECIES)).json()["items"]
+
+    por_ticker = {i["ticker"]: i for i in items}
+    assert por_ticker["MR46O"]["residual"] is None
+    assert por_ticker["MR46O"]["valor_tecnico"] is None
+
+
 async def test_cada_especie_viva_lleva_su_clave_de_emision_y_sus_hermanas(crear_app) -> None:
     """La clave va en las dos vistas: quien mira la viva tiene que poder ver que MR46O y MR46D son
     el mismo bono sin volver a cortar el ticker."""

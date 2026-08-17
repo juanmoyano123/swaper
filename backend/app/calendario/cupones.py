@@ -59,6 +59,12 @@ from app.universo.segmentacion import EspecieUniverso, a_numero
 # arbitrario: un bono que no amortizó nada tiene sus 100 vivos.
 RESIDUAL_ENTERO = 100.0
 
+# Relevamiento de confiabilidad de datos (16/08/2026): tolerancia entre el residual que declara
+# el cronograma y el que se deriva de sumar las amortizaciones ya pagadas, cada 100 nominales.
+# Medido contra los 6.111 pagos del cronograma versionado: 707 de 816 tickers coinciden exacto en
+# toda su vida; 0,01 alcanza para no marcar redondeo de la fuente como contradicción.
+TOLERANCIA_RESIDUAL = 0.01
+
 
 @dataclass(frozen=True, slots=True)
 class Pago:
@@ -259,8 +265,30 @@ def indexar_cronograma(filas: Sequence[Mapping[str, object]]) -> Cronograma:
     )
 
 
-def valor_tecnico(pagos: Sequence[Pago], hoy: date) -> float | None:
-    """Residual vivo + intereses corridos, cada 100 nominales. `None` si el bono no proyecta nada.
+@dataclass(frozen=True, slots=True)
+class ComponentesValorTecnico:
+    """El valor técnico abierto en sus dos piezas, más si el residual de la fuente es confiable.
+
+    `residual_vigente` y `cupon_corrido` viajan separados porque miden cosas distintas: uno es
+    capital vivo (contractual, no depende del precio) y el otro es renta devengada. Sumados dan
+    `valor_tecnico`, el denominador de la paridad.
+    """
+
+    residual_vigente: float | None
+    cupon_corrido: float | None
+    valor_tecnico: float | None
+
+    coherente: bool
+    """`False` cuando el residual que declara el cronograma para el último pago pasado no coincide
+    con `100 - Σ capital` de los pagos ya cobrados (tolerancia `TOLERANCIA_RESIDUAL`) — la fuente
+    dejó el residual clavado en 100 mientras el bono amortizaba. Medido el 16/08/2026: 29 de 816
+    tickers. Con `coherente=False` los tres campos van `None`: la regla 1 pide dejar vacío antes
+    que publicar un valor técnico sobreestimado (y por lo tanto una paridad subestimada) a partir
+    de un dato que la propia fuente contradice en la misma tabla."""
+
+
+def componentes_valor_tecnico(pagos: Sequence[Pago], hoy: date) -> ComponentesValorTecnico:
+    """El valor técnico abierto en residual vigente + cupón corrido, con el chequeo de coherencia.
 
     Los corridos se devengan **linealmente** entre el último pago y el próximo. Es una convención y
     no la exactitud del bono —que depende de su base de cálculo de días, que la fuente no publica—
@@ -271,15 +299,23 @@ def valor_tecnico(pagos: Sequence[Pago], hoy: date) -> float | None:
     nunca lo infla**, y por lo tanto sobreestima levemente la fracción que representa cada cupón. Es
     el lado prudente para caer: el error es visible en el sentido de "este bono rinde menos de lo
     que dice la grilla", que es el que un asesor puede corregir mirando.
+
+    Un bono ya vencido (sin pagos futuros) no tiene valor técnico que proyectar, y eso no es una
+    incoherencia: `coherente=True` con los tres campos en `None`.
     """
     pasados = [p for p in pagos if p.fecha <= hoy]
     futuros = [p for p in pagos if p.fecha > hoy]
     if not futuros:
-        return None  # bono ya vencido: no proyecta nada
+        return ComponentesValorTecnico(None, None, None, coherente=True)  # bono vencido
 
-    residual = pasados[-1].residual if pasados else RESIDUAL_ENTERO
-    if residual is None or residual <= 0:
-        return None
+    residual_declarado = pasados[-1].residual if pasados else RESIDUAL_ENTERO
+    residual_derivado = RESIDUAL_ENTERO - sum(p.capital for p in pasados)
+    coherente = (
+        residual_declarado is None
+        or abs(residual_declarado - residual_derivado) <= TOLERANCIA_RESIDUAL
+    )
+    if residual_declarado is None or residual_declarado <= 0 or not coherente:
+        return ComponentesValorTecnico(None, None, None, coherente)
 
     proximo = futuros[0]
     # De dónde arranca el devengamiento: el último cupón cobrado, o la emisión si no cobró ninguno.
@@ -291,7 +327,19 @@ def valor_tecnico(pagos: Sequence[Pago], hoy: date) -> float | None:
         total = (proximo.fecha - desde).days
         if total > 0 and transcurrido > 0:
             corridos = proximo.interes * min(transcurrido / total, 1.0)
-    return residual + corridos
+
+    return ComponentesValorTecnico(
+        residual_vigente=residual_declarado,
+        cupon_corrido=corridos,
+        valor_tecnico=residual_declarado + corridos,
+        coherente=True,
+    )
+
+
+def valor_tecnico(pagos: Sequence[Pago], hoy: date) -> float | None:
+    """Residual vivo + intereses corridos, cada 100 nominales. `None` si el bono no proyecta nada
+    o si su residual es incoherente (ver `componentes_valor_tecnico`)."""
+    return componentes_valor_tecnico(pagos, hoy).valor_tecnico
 
 
 def flujos_por_peso(

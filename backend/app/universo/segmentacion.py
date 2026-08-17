@@ -210,11 +210,27 @@ class EspecieUniverso:
     sin ninguna marca de antigüedad."""
 
     fecha_metricas: date | None = None
-    """La fecha del informe de IAMC del que salieron `tir`/`duration`/`paridad`/`convexidad`/
-    `residual_value` de esta fila, cuando esas métricas vinieron de IAMC y no del cálculo propio de
-    F-051 (`_metricas_de` en `armado.py` rotula así el arrastre). `None` cuando la especie se
-    calcula sola o cuando nunca hubo informe. No se usa para decidir nada acá: es la fecha que la
-    regla 11 exige que viaje junto a cualquier métrica que no sea de hoy."""
+    """La fecha del informe de IAMC del que salieron `tir`/`duration`/`paridad`/`convexidad` de
+    esta fila, cuando esas métricas vinieron de IAMC y no del cálculo propio de F-051 (`_metricas_
+    de` en `armado.py` rotula así el arrastre). `None` cuando la especie se calcula sola o cuando
+    nunca hubo informe. No se usa para decidir nada acá: es la fecha que la regla 11 exige que
+    viaje junto a cualquier métrica que no sea de hoy. **No cubre `residual`**: desde el
+    17/08/2026 ese campo es cálculo propio para toda especie con cronograma, nunca arrastre."""
+
+    residual: float | None = None
+    """Cuánto capital queda vivo hoy, cada 100 nominales — `residualValue` de la vista, cálculo
+    propio desde el 17/08/2026 (`componentes_valor_tecnico` sobre el cronograma contractual). Es
+    contractual y no depende de la moneda de cotización, así que puede tener valor aunque
+    `rendimiento` sea `None` por otro motivo (CER, moneda cruzada). `None` cuando la especie no
+    tiene cronograma, cuando ya venció, o cuando su residual declarado contradice la suma de
+    amortizaciones ya pagadas (regla 1 — se prefiere vacío antes que un dato que la propia fuente
+    contradice; ver `ComponentesValorTecnico.coherente` en `cupones.py`)."""
+
+    valor_tecnico: float | None = None
+    """Residual vigente + cupón corrido, cada 100 nominales — el denominador de `paridad`. Cálculo
+    propio, sin equivalente en IAMC (el informe trae un campo VT que se parsea y se descarta, ver
+    `iamc/parser.py`). Mismas condiciones de `None` que `residual`: sin cronograma, vencido, o
+    residual incoherente."""
 
     @property
     def naturaleza(self) -> str:
@@ -264,6 +280,8 @@ class EspecieUniverso:
             "calificacion": self.calificacion,
             "capturado_en": self.capturado_en.isoformat() if self.capturado_en else None,
             "fecha_metricas": self.fecha_metricas.isoformat() if self.fecha_metricas else None,
+            "residual": self.residual,
+            "valor_tecnico": self.valor_tecnico,
         }
 
 
@@ -377,6 +395,8 @@ def segmentar(filas: Iterable[Mapping[str, object]]) -> Segmentacion:
                 calificacion=_texto(fila.get("calificacion")),
                 capturado_en=capturado_en,
                 fecha_metricas=_fecha(fila.get("fecha_metricas")),
+                residual=a_numero(fila.get("residualValue")),
+                valor_tecnico=a_numero(fila.get("valor_tecnico")),
             )
         )
 

@@ -18,6 +18,7 @@ import { useMemo, useRef, useState } from 'react'
 import { unidadDeNaturaleza } from '@/components/SelectorSegmento'
 import { etiquetaClase } from '@/lib/claseActivo'
 import { fmtCompacto, fmtFecha, fmtNumero, fmtPct, SIN_DATO } from '@/lib/fmt'
+import { colorDeParidad } from '@/lib/paridad'
 
 import { useAbrirInstrumento } from '@/features/instrumento/useAbrirInstrumento'
 
@@ -34,6 +35,7 @@ type Campo =
   | 'rendimiento'
   | 'duracion'
   | 'paridad'
+  | 'residual'
   | 'volumen'
   | 'vencimiento'
 
@@ -45,33 +47,17 @@ interface Orden {
 }
 
 /**
- * ticker · tipo · ley · emisor · precio · rendimiento · duración · paridad · volumen ·
+ * ticker · tipo · ley · emisor · precio · rendimiento · duración · paridad · residual · volumen ·
  * vencimiento · relleno. El emisor tiene techo (240px) para que un nombre corto no deje un bloque
  * de blanco en el medio de la fila: el espacio sobrante se junta en la columna final vacía. TIPO
  * son 108px porque "ON corporativa" —la etiqueta más larga— mide ~101px con padding; LEY son 96px
  * porque "Ley Argentina" —el valor más largo de la fuente— entra completo sin truncar; PRECIO son
  * 104px, dieciséis menos que antes: dejó de llevar la moneda pegada al número (ver abajo).
  */
-const PLANTILLA_COLUMNAS = '64px 108px 96px minmax(120px,240px) 104px 108px 68px 72px 92px 96px 1fr'
+const PLANTILLA_COLUMNAS =
+  '64px 108px 96px minmax(120px,240px) 104px 108px 68px 72px 72px 92px 96px 1fr'
 const ALTO_FILA = 32
 const ALTO_CONTENEDOR = 520
-
-/**
- * Umbrales de color de la paridad, en fracción del valor técnico. No son un juicio sobre el papel:
- * la paridad es un dato duro —precio sucio sobre valor técnico— y esto sólo la hace legible de un
- * vistazo sobre setecientas filas. Los cortes están en los dos lugares obvios, la par (1,00) y el
- * descuento fuerte, y no en percentiles del universo: un corte relativo movería el color de un bono
- * sin que el bono se moviera.
- */
-const PARIDAD_SOBRE_LA_PAR = 1
-const PARIDAD_DESCUENTO_FUERTE = 0.8
-
-function colorDeParidad(paridad: number | null): string {
-  if (paridad === null) return 'var(--tx)'
-  if (paridad >= PARIDAD_SOBRE_LA_PAR) return 'var(--pos)'
-  if (paridad < PARIDAD_DESCUENTO_FUERTE) return 'var(--neg)'
-  return 'var(--tx)'
-}
 
 /**
  * Compara dos especies por un campo, con `null` **siempre al final** sin importar la dirección:
@@ -170,6 +156,7 @@ export function TablaUniverso({
         </Cabecera>
         <Cabecera campo="duracion" orden={orden} onClick={alternarOrden} alinear="right">duración</Cabecera>
         <Cabecera campo="paridad" orden={orden} onClick={alternarOrden} alinear="right">paridad</Cabecera>
+        <Cabecera campo="residual" orden={orden} onClick={alternarOrden} alinear="right">residual</Cabecera>
         <Cabecera campo="volumen" orden={orden} onClick={alternarOrden} alinear="right">volumen</Cabecera>
         <Cabecera campo="vencimiento" orden={orden} onClick={alternarOrden} alinear="right">vencimiento</Cabecera>
         {/* Relleno: la cabecera son botones con fondo y borde propios, así que la columna vacía
@@ -299,6 +286,11 @@ function FilaEspecie({ especie, top, alto, onClick }: { especie: Especie; top: n
         style={{ padding: '0 8px', fontSize: 12, textAlign: 'right', color: colorDeParidad(especie.paridad) }}
       >
         {fmtPct(especie.paridad === null ? null : especie.paridad * 100)}
+      </span>
+      {/* Cuánto capital queda vivo, cada 100 nominales — cálculo propio, contractual: no tiene el
+          mismo color de paridad, porque no mide precio contra técnico, mide si el bono amortizó. */}
+      <span className="mono" style={{ padding: '0 8px', fontSize: 12, textAlign: 'right' }}>
+        {fmtNumero(especie.residual, 1)}
       </span>
       {/* El volumen crudo, en la moneda del selector. No es `volumen_usd`: convertirlo exigía saber
           en qué moneda está, y para las especies `EXT` eso no consta (regla 11). Con una sola

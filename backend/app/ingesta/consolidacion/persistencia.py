@@ -78,6 +78,7 @@ COLUMNAS_PRECIOS: tuple[str, ...] = (
     "precio_maximo",
     "precio_minimo",
     "vwap",
+    "valor_tecnico",
 )
 
 # Por ticker, las métricas del informe más reciente que se haya llegado a guardar. Lo consulta la

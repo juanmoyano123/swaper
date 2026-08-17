@@ -25,7 +25,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import get_db
-from app.calendario.cupones import indexar_cronograma
+from app.calendario.cupones import componentes_valor_tecnico, indexar_cronograma
 from app.calendario.lectura import leer_cashflow
 from app.core.pagination import CursorParams, Page, build_page
 from app.ingesta.raiz import raiz_emision
@@ -246,6 +246,17 @@ async def vista_viva(
     `al vencimiento` en vez de "anual": la ventana no alcanza para afirmar una frecuencia y
     suponerla sería inventar (regla 1). Una emisión sin cronograma no trae el campo — es faltante
     declarado, no `irregular`.
+
+    **`residual` y `valor_tecnico` se recalculan en vivo, sobre este mismo cronograma, y pisan lo
+    que trae `especie.como_dict()`** (relevamiento de confiabilidad de datos, 17/08/2026). Esas
+    dos columnas persistidas las escribe una corrida (matinal o refresh), y ninguna de las dos
+    depende del precio del día — sólo del cronograma y de la fecha de hoy — así que quedarían en
+    `None` para todo el universo entre el deploy de la feature y la próxima corrida, un fin de
+    semana entero en el peor caso. Recalcularlas acá es la misma cuenta que ya hace la ficha del
+    instrumento (`api/v1/instrumentos.py::_resumen_del_cronograma`) y nunca deja un dato viejo: el
+    chequeo de coherencia (`componentes_valor_tecnico`) corre de nuevo cada vez. Sin cronograma
+    para la raíz se conserva lo que ya traía la especie (persistido, o `None`) — no se pisa un
+    dato con otro peor.
     """
     saneado = await sanear_universo(conn)
     dedup = saneado.emisiones()
@@ -262,21 +273,26 @@ async def vista_viva(
     # El cronograma entero por página: es la misma lectura completa que ya hace `sanear_universo`
     # de su lado, así que no cambia el orden de magnitud del request. Si alguna vez pesa, lo que
     # corresponde es cachear las dos, no dejar el campo afuera.
-    frecuencias = frecuencia_por_raiz(
-        indexar_cronograma(await leer_cashflow(conn)), datetime.now(UTC).date()
-    )
+    hoy = datetime.now(UTC).date()
+    cronograma = indexar_cronograma(await leer_cashflow(conn))
+    frecuencias = frecuencia_por_raiz(cronograma, hoy)
 
     filas = []
     for especie in listado[: params.limit + 1]:
-        frecuencia = frecuencias.get(raiz_emision(especie.ticker))
-        filas.append(
-            {
-                **especie.como_dict(),
-                "dato_sano": especie.ticker not in descartados,
-                "hermanas": [h.ticker for h in dedup.hermanas(especie.ticker)],
-                "periodicidad": frecuencia[0] if frecuencia else None,
-            }
-        )
+        raiz = raiz_emision(especie.ticker)
+        frecuencia = frecuencias.get(raiz)
+        fila = {
+            **especie.como_dict(),
+            "dato_sano": especie.ticker not in descartados,
+            "hermanas": [h.ticker for h in dedup.hermanas(especie.ticker)],
+            "periodicidad": frecuencia[0] if frecuencia else None,
+        }
+        pagos = cronograma.pagos_de(raiz)
+        if pagos:
+            componentes = componentes_valor_tecnico(pagos, hoy)
+            fila["residual"] = componentes.residual_vigente
+            fila["valor_tecnico"] = componentes.valor_tecnico
+        filas.append(fila)
     return build_page(filas, params.limit, lambda f: {"ticker": f["ticker"]})
 
 

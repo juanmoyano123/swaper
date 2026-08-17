@@ -62,7 +62,18 @@ function condiciones(): Condiciones {
 }
 
 function cronograma(): Cronograma {
-  return { ticker: 'AL30D', pagos: [] }
+  return {
+    ticker: 'AL30D',
+    pagos: [],
+    resumen: {
+      residual_vigente: null,
+      valor_tecnico: null,
+      cupon_corrido: null,
+      paridad: null,
+      coherente: true,
+      motivo_ausente: 'sin cronograma de pagos en la fuente',
+    },
+  }
 }
 
 function sensibilidad(extra: Partial<Sensibilidad> = {}): Sensibilidad {

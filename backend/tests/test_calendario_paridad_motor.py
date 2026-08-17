@@ -30,8 +30,14 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from app.calendario.cupones import flujos_por_peso, indexar_cronograma, indexar_paridades
+from app.calendario.cupones import (
+    componentes_valor_tecnico,
+    flujos_por_peso,
+    indexar_cronograma,
+    indexar_paridades,
+)
 from app.calendario.grilla import armar_calendario
+from app.ingesta.raiz import raiz_emision
 from app.universo.segmentacion import segmentar
 
 RAIZ_REPO = Path(__file__).resolve().parents[2]
@@ -115,10 +121,37 @@ def _indexado_motor(df: pd.DataFrame) -> dict[tuple[str, pd.Timestamp], tuple[fl
 def test_el_backend_produce_exactamente_los_mismos_pagos_que_el_motor(
     flujos_del_backend, flujos_del_motor
 ) -> None:
-    """Mismo conjunto de (ticker, fecha): ni un pago de más ni uno de menos."""
-    mios, _ = flujos_del_backend
+    """Mismo conjunto de (ticker, fecha), con una salvedad declarada y verificada, no asumida.
+
+    Relevamiento de confiabilidad de datos (16/08/2026): el backend suma un chequeo que el motor
+    de `tools/` nunca tuvo — `componentes_valor_tecnico` descarta una emisión cuando el residual
+    que declara el cronograma para el último pago pasado contradice `100 - Σ capital` (la fuente
+    lo dejó clavado en 100 mientras el bono amortizaba). El motor no lo detecta y calcula esas
+    emisiones igual, con un valor técnico sobreestimado. Por eso el backend queda **subconjunto**
+    del motor, nunca al revés, y cada raíz que falta tiene que ser, verificablemente, una de las
+    incoherentes — no una divergencia sin explicar.
+    """
+    mios, cronograma = flujos_del_backend
     del_motor, _ = flujos_del_motor
-    assert set(_indexado(mios)) == set(_indexado_motor(del_motor))
+
+    propios = set(_indexado(mios))
+    del_motor_completo = set(_indexado_motor(del_motor))
+
+    assert propios <= del_motor_completo, (
+        "el backend calculó pagos que el motor no tiene — eso no lo explica la incoherencia de "
+        "residual, que sólo puede sacar emisiones, nunca agregarlas"
+    )
+
+    raices_faltantes = {raiz_emision(ticker) for ticker, _ in del_motor_completo - propios}
+    incoherentes = {
+        raiz
+        for raiz in raices_faltantes
+        if not componentes_valor_tecnico(cronograma.pagos_de(raiz), HOY).coherente
+    }
+    assert raices_faltantes == incoherentes, (
+        "hay emisiones que el motor calcula y el backend no, sin que sea por residual "
+        f"incoherente: {sorted(raices_faltantes - incoherentes)}"
+    )
 
 
 def test_cada_pago_vale_lo_mismo_en_los_dos(flujos_del_backend, flujos_del_motor) -> None:

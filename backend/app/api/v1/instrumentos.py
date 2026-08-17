@@ -16,16 +16,18 @@ eso acá también son cuatro endpoints y no uno que junte todo: una ficha de pre
 mostrar aunque el cronograma no cargue no puede depender de un solo request que falle entero.
 """
 
+from collections.abc import Sequence
 from datetime import date
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.deps import get_db
-from app.calendario.cupones import indexar_cronograma
+from app.calendario.cupones import Pago, componentes_valor_tecnico, indexar_cronograma
 from app.calendario.lectura import leer_cashflow
-from app.calendario.metricas import retorno_por_tir
+from app.calendario.metricas import paridad_de, retorno_por_tir
 from app.condiciones.persistencia import COLUMNAS, TABLA, fila_para_api
+from app.ingesta.consolidacion.metricas import FUENTE_CALCULO, fuente_de_metricas
 from app.ingesta.raiz import raiz_emision
 from app.instrumentos import ficha_de
 from app.universo.segmentacion import NOMBRE_NATURALEZA, EspecieUniverso
@@ -96,10 +98,19 @@ async def cronograma(ticker: str, conn: Annotated[object, Depends(get_db)]) -> d
 
     Sin cronograma para la raíz de este ticker: `pagos: []`, declarado y no 404 — puede ser
     legítimamente un instrumento sin cashflow cargado en la fuente.
+
+    **`resumen`** suma el residual vigente, el valor técnico y —cuando la moneda del flujo y la
+    de cotización coinciden— la paridad, calculados en vivo sobre estos mismos pagos (17/08/2026).
+    Si el residual que declara la fuente contradice la suma de amortizaciones ya pagadas, los tres
+    números y el residual de cada pago van vacíos: se prefiere declarar el motivo antes que
+    publicar un valor técnico sobreestimado (ver `cupones.componentes_valor_tecnico`).
     """
     filas = await leer_cashflow(conn)
     pagos = indexar_cronograma(filas).pagos_de(raiz_emision(ticker))
-    moneda = await _moneda_de_emision(conn, ticker)
+    especie = await _especie_de(conn, ticker)
+    moneda = especie.moneda_cupon if especie is not None else None
+    hoy = date.today()
+    resumen = _resumen_del_cronograma(pagos, especie, hoy)
     return {
         "ticker": ticker,
         "pagos": [
@@ -108,9 +119,68 @@ async def cronograma(ticker: str, conn: Annotated[object, Depends(get_db)]) -> d
                 "interes": pago.interes,
                 "amortizacion": pago.capital,
                 "moneda": moneda,
+                "residual": pago.residual if resumen["coherente"] else None,
             }
             for pago in pagos
         ],
+        "resumen": resumen,
+    }
+
+
+def _resumen_del_cronograma(
+    pagos: Sequence[Pago], especie: EspecieUniverso | None, hoy: date
+) -> dict[str, object]:
+    """Residual vigente, valor técnico, cupón corrido y paridad, todos derivados de estos mismos
+    pagos — nunca de lo que ya quedó persistido en la última corrida, para que la ficha muestre
+    exactamente lo que puede probar con el cronograma que tiene adelante.
+
+    `paridad` respeta el mismo gate de moneda que F-051 (`fuente_de_metricas`): sin eso, comparar
+    el precio contra el valor técnico mezclaría monedas (regla 3).
+    """
+    if not pagos:
+        return {
+            "residual_vigente": None,
+            "valor_tecnico": None,
+            "cupon_corrido": None,
+            "paridad": None,
+            "coherente": True,
+            "motivo_ausente": "sin cronograma de pagos en la fuente",
+        }
+
+    componentes = componentes_valor_tecnico(pagos, hoy)
+    paridad: float | None = None
+    motivo_ausente: str | None = None
+
+    if not componentes.coherente:
+        motivo_ausente = (
+            "el residual que declara la fuente contradice la suma de amortizaciones ya pagadas: "
+            "no se calcula un valor técnico sobreestimado"
+        )
+    elif componentes.valor_tecnico is None:
+        motivo_ausente = (
+            "sin pagos futuros: la emisión ya venció"
+            if not any(p.fecha > hoy for p in pagos)
+            else "sin residual vivo"
+        )
+    elif especie is None:
+        motivo_ausente = "el ticker no está en el universo de hoy: no hay precio con qué comparar"
+    elif especie.precio is None:
+        motivo_ausente = "sin precio de mercado hoy"
+    elif fuente_de_metricas(especie.tipo_tasa, especie.moneda_cotizacion) != FUENTE_CALCULO:
+        motivo_ausente = (
+            "cotiza en una moneda distinta de la que paga el flujo: comparar sin convertir "
+            "mezclaría monedas, y convertir inventaría un tipo de cambio (regla 3)"
+        )
+    else:
+        paridad = paridad_de(especie.precio, componentes.valor_tecnico)
+
+    return {
+        "residual_vigente": componentes.residual_vigente,
+        "valor_tecnico": componentes.valor_tecnico,
+        "cupon_corrido": componentes.cupon_corrido,
+        "paridad": paridad,
+        "coherente": componentes.coherente,
+        "motivo_ausente": motivo_ausente,
     }
 
 
@@ -118,17 +188,6 @@ async def _especie_de(conn: Any, ticker: str) -> EspecieUniverso | None:
     """La especie del universo saneado de hoy, o `None` si el ticker no está."""
     saneado = await sanear_universo(conn)
     return next((e for e in saneado.especies if e.ticker == ticker), None)
-
-
-async def _moneda_de_emision(conn: Any, ticker: str) -> str | None:
-    """La moneda de emisión del ticker, o `None` si ninguna fuente la da.
-
-    El cronograma no trae moneda (`COLUMNAS_CASHFLOW` no la tiene), así que se busca en el universo
-    saneado: es lo único de acá que puede contestar en qué moneda paga el bono. No se infiere del
-    sufijo del ticker ni de ninguna otra convención — la regla 1 del proyecto.
-    """
-    especie = await _especie_de(conn, ticker)
-    return especie.moneda_cupon if especie is not None else None
 
 
 @router.get(

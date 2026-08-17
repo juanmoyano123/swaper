@@ -13,7 +13,9 @@ fuente posible y ninguna se completa desde otra:
 | law, coupon_currency, underlying, estructura     | IAMC (pausado)  | emisión (raíz) |
 | tir, duration, paridad — especies calculables    | cálculo propio  | especie        |
 | tir, duration, paridad — el resto                | IAMC (pausado)  | ticker exacto  |
-| convexidad, residual_value                       | IAMC (pausado)  | ticker exacto  |
+| residual_value, valor_tecnico — con cronograma   | cálculo propio  | especie        |
+| residual_value — el resto (sin cronograma)       | IAMC (pausado)  | ticker exacto  |
+| convexidad                                       | IAMC (pausado)  | ticker exacto  |
 | clase_activo, tipo_tasa                          | cronograma      | emisión (raíz) |
 | el cronograma entero                             | `public.cashflow` | ticker exacto |
 | tna                                              | ninguna         | —              |
@@ -22,10 +24,12 @@ fuente posible y ninguna se completa desde otra:
 llegaba por subida manual y envejecía sin que nada lo declarara: el universo mostraba una TIR de
 ocho días antes al lado de un precio de hoy. Con la pausa, `corrida.py` no lee el informe **y
 además no arrastra las métricas guardadas** —lo segundo es lo que hace que la pausa signifique
-algo—, así que `tir`, `duration` y `paridad` salen sólo del cálculo propio, y `convexidad` y
-`residual_value` quedan vacías en todo el universo. Los atributos de la emisión ya escritos
-sobreviven porque el upsert los protege con COALESCE: la ley de un bono no envejece. Prender
-`IAMC_HABILITADO=true` devuelve las filas de arriba a su fuente original sin más cambios.
+algo—, así que `tir`, `duration` y `paridad` salen sólo del cálculo propio, y `convexidad` queda
+vacía en todo el universo. `residual_value` **no** queda vacía: desde el 16/08/2026 se calcula
+del propio cronograma para toda especie que tenga uno, sea o no calculable por moneda — es
+contractual y no dependía de IAMC más que porque nadie lo había expuesto antes. Los atributos de
+la emisión ya escritos sobreviven porque el upsert los protege con COALESCE: la ley de un bono no
+envejece. Prender `IAMC_HABILITADO=true` devuelve `convexidad` a su fuente original.
 
 **El cronograma ya no tiene fuente viva.** Docta era la única que lo publicaba y se dio de baja el
 12/08/2026 por costo: el flujo contractual sale de lo que quedó persistido en `public.cashflow`, que
@@ -60,7 +64,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date
 
-from app.calendario.cupones import Cronograma, indexar_cronograma
+from app.calendario.cupones import Cronograma, componentes_valor_tecnico, indexar_cronograma
 from app.calendario.metricas import MetricasEspecie, metricas_de
 from app.ingesta.alertas import (
     Alerta,
@@ -82,6 +86,7 @@ from app.ingesta.consolidacion.clasificacion import (
 from app.ingesta.consolidacion.metricas import (
     FUENTE_CALCULO,
     FUENTE_FUERA,
+    MOTIVO_RESIDUAL_CONTRADICTORIO,
     MOTIVO_SIN_CRONOGRAMA,
     MOTIVO_SIN_PRECIO,
     ContrasteMetricas,
@@ -341,6 +346,8 @@ def _metricas_de(
     previas: dict[str, object] | None,
     *,
     propias: MetricasEspecie | None = None,
+    residual: float | None = None,
+    valor_tecnico: float | None = None,
 ) -> dict[str, object]:
     """Las métricas de una especie: las propias si se calcularon, y las de IAMC para el resto.
 
@@ -352,8 +359,16 @@ def _metricas_de(
     **Cuando la especie se calcula, `propias` gana y no hay arrastre que la pise.** Las tres
     columnas calculadas salen del cálculo o quedan vacías —aunque IAMC las publique y aunque la
     corrida anterior las tuviera—, porque una TIR es de un precio: la de ayer con el precio de hoy
-    no es de nadie. `convexidad` y `residual_value` siguen viniendo de IAMC en todos los casos, y
-    con ellas viaja `fecha_metricas`, que rotula sólo lo publicado.
+    no es de nadie. `convexidad` sigue viniendo de IAMC en todos los casos.
+
+    **`residual_value` y `valor_tecnico` son cálculo propio siempre que haya cronograma** —
+    relevamiento de confiabilidad de datos, 16/08/2026: `componentes_valor_tecnico` no necesita
+    que la moneda del flujo y la de cotización coincidan (a diferencia de `tir`/`paridad`, que sí
+    la necesitan para poder comparar contra el precio), así que se calculan aunque `propias` sea
+    `None` — un CER o un bono en moneda cruzada declaran su residual igual. El llamador ya decidió
+    esto: acá sólo se prioriza cálculo propio sobre IAMC cuando `residual` no es `None`. `IAMC`
+    nunca alimentó `valor_tecnico` (parsea el campo VT y lo descarta, ver `iamc/parser.py`), así
+    que ese campo no tiene arrastre: es `None` hasta que hay cálculo propio.
     """
     if propias is not None:
         de_iamc = _metricas_de(del_informe, fecha_informe, previas)
@@ -362,6 +377,8 @@ def _metricas_de(
             "tir": propias.tir,
             "duration": propias.duration,
             "paridad": propias.paridad,
+            "residual_value": residual,
+            "valor_tecnico": valor_tecnico,
         }
 
     del_hoy: dict[str, object] = {}
@@ -375,12 +392,18 @@ def _metricas_de(
     # Que el informe de hoy sea más viejo que el guardado no debería pasar, pero si pasa gana el
     # más reciente: nunca se retrocede a una métrica anterior a la que ya está publicada.
     if del_hoy and (fecha_previa is None or fecha_informe >= fecha_previa):
-        return del_hoy
-    if previas:
-        return {
+        resultado = del_hoy
+    elif previas:
+        resultado = {
             columna: previas.get(columna) for columna in (*METRICAS_POR_TICKER, "fecha_metricas")
         }
-    return dict.fromkeys((*METRICAS_POR_TICKER, "fecha_metricas"))
+    else:
+        resultado = dict.fromkeys((*METRICAS_POR_TICKER, "fecha_metricas"))
+
+    if residual is not None:
+        resultado = {**resultado, "residual_value": residual}
+    resultado["valor_tecnico"] = valor_tecnico
+    return resultado
 
 
 def _calcular_metricas(
@@ -624,11 +647,23 @@ def armar_consolidacion(
             hoy=hoy,
             resultado=resultado_metricas,
         )
+        # Residual y valor técnico son contractuales: no exigen que la moneda del flujo y la de
+        # cotización coincidan (a diferencia de tir/paridad, que sí), así que se calculan del
+        # cronograma de la raíz para toda especie de renta fija, la use o no `_calcular_metricas`.
+        componentes = (
+            componentes_valor_tecnico(cronograma.pagos_de(raiz), hoy)
+            if clase_activo not in CLASES_RENTA_VARIABLE
+            else None
+        )
+        if componentes is not None and not componentes.coherente:
+            resultado_metricas.anotar(MOTIVO_RESIDUAL_CONTRADICTORIO, ticker)
         metricas = _metricas_de(
             iamc_por_ticker.get(ticker),
             fecha_informe,
             (metricas_previas or {}).get(ticker),
             propias=propias,
+            residual=componentes.residual_vigente if componentes else None,
+            valor_tecnico=componentes.valor_tecnico if componentes else None,
         )
         _registrar_contraste(
             ticker=ticker,

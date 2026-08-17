@@ -18,7 +18,14 @@ vi.mock('@/lib/supabase', () => ({
 import { crearQueryClient } from '@/app/queryClient'
 
 import { FichaInstrumento } from '../FichaInstrumento'
-import type { Condiciones, Cronograma, EspecieFicha, Ficha, PagoCronograma } from '../lib/schema'
+import type {
+  Condiciones,
+  Cronograma,
+  EspecieFicha,
+  Ficha,
+  PagoCronograma,
+  ResumenCronograma,
+} from '../lib/schema'
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -85,11 +92,23 @@ function condicionDetalleVacia(): NonNullable<Condiciones['condiciones']> {
 }
 
 function pago(extra: Partial<PagoCronograma> = {}): PagoCronograma {
-  return { fecha: '2028-01-09', interes: 1.5, amortizacion: 0, moneda: 'USD', ...extra }
+  return { fecha: '2028-01-09', interes: 1.5, amortizacion: 0, moneda: 'USD', residual: 100.0, ...extra }
 }
 
-function cronograma(pagos: PagoCronograma[]): Cronograma {
-  return { ticker: 'AL30D', pagos }
+function resumenCronograma(extra: Partial<ResumenCronograma> = {}): ResumenCronograma {
+  return {
+    residual_vigente: 100.0,
+    valor_tecnico: 101.2,
+    cupon_corrido: 1.2,
+    paridad: 0.875,
+    coherente: true,
+    motivo_ausente: null,
+    ...extra,
+  }
+}
+
+function cronograma(pagos: PagoCronograma[], resumen: Partial<ResumenCronograma> = {}): Cronograma {
+  return { ticker: 'AL30D', pagos, resumen: resumenCronograma(resumen) }
 }
 
 const CONTRATO_ERROR = (mensaje: string) => ({
@@ -310,6 +329,84 @@ describe('el cronograma', () => {
     expect(
       await screen.findByText('Sin cronograma cargado para esta emisión.'),
     ).toBeInTheDocument()
+  })
+})
+
+// --- Residual y valor técnico (relevamiento de confiabilidad de datos, 17/08/2026) ---------------
+
+describe('residual y valor técnico', () => {
+  it('muestra el residual de cada pago y la lectura de valor técnico contra la paridad', async () => {
+    const pagos = [pago({ fecha: '2028-01-09', interes: 1.5, amortizacion: 0, residual: 100.0 })]
+    mockearRutas(
+      rutasOk('AL30D', {
+        [RUTA_CRONOGRAMA('AL30D')]: {
+          body: cronograma(pagos, {
+            residual_vigente: 100.0,
+            valor_tecnico: 101.2,
+            paridad: 0.875,
+            motivo_ausente: null,
+          }),
+        },
+      }),
+    )
+
+    renderizar('AL30D')
+
+    await screen.findByText('AL30D')
+    const lectura = (await screen.findByText('Residual vigente:')).closest('p')
+    expect(lectura).toHaveTextContent('Residual vigente: 100,0 de 100')
+    expect(lectura).toHaveTextContent('Valor técnico: 101,20')
+    expect(lectura).toHaveTextContent('cotiza al 87,50% del técnico')
+    // El residual de la única fila del cronograma, no sólo el de la lectura de arriba.
+    const filas = await screen.findAllByRole('row')
+    expect(filas[1]).toHaveTextContent('100,0')
+  })
+
+  it('sin residual coherente, declara sin dato y el motivo en vez de un número', async () => {
+    const pagos = [pago({ residual: null })]
+    mockearRutas(
+      rutasOk('AL30D', {
+        [RUTA_CRONOGRAMA('AL30D')]: {
+          body: cronograma(pagos, {
+            residual_vigente: null,
+            valor_tecnico: null,
+            paridad: null,
+            coherente: false,
+            motivo_ausente:
+              'el residual que declara la fuente contradice la suma de amortizaciones ya pagadas: no se calcula un valor técnico sobreestimado',
+          }),
+        },
+      }),
+    )
+
+    renderizar('AL30D')
+
+    await screen.findByText('AL30D')
+    expect(screen.getByText(/Valor técnico: s\/d/)).toBeInTheDocument()
+    expect(screen.getByText(/contradice la suma de amortizaciones/)).toBeInTheDocument()
+    // El residual de la fila también se declara vacío, nunca un número contradictorio.
+    const filas = await screen.findAllByRole('row')
+    expect(filas[1]).toHaveTextContent('s/d')
+  })
+
+  it('con moneda cruzada, declara la paridad sin calcular y no la esconde del todo', async () => {
+    mockearRutas(
+      rutasOk('AL30D', {
+        [RUTA_CRONOGRAMA('AL30D')]: {
+          body: cronograma([pago()], {
+            residual_vigente: 100.0,
+            valor_tecnico: 101.2,
+            paridad: null,
+            motivo_ausente: 'cotiza en una moneda distinta de la que paga el flujo',
+          }),
+        },
+      }),
+    )
+
+    renderizar('AL30D')
+
+    await screen.findByText('AL30D')
+    expect(screen.getByText(/sin paridad: cotiza en una moneda distinta/)).toBeInTheDocument()
   })
 })
 
