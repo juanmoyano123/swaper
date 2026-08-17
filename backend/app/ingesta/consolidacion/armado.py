@@ -400,6 +400,12 @@ def _calcular_metricas(
     Devolver `None` no es un error: significa "esta columna la sigue llenando IAMC". Cada motivo se
     anota en `resultado` para que la alerta pueda nombrar a la especie, que es lo que la regla 1
     pide — un faltante sin nombre es un faltante que nadie va a buscar.
+
+    **Un precio `data912-arrastre` se calcula igual, a propósito**: el arrastre es el último cierre
+    conocido de una fecha que la fuente no declara, y el caso típico es un sábado con el cierre del
+    viernes — no hay una punta "más de hoy" que esa, y negarle la métrica sería peor que calcularla
+    con el mejor precio disponible. Ver `test_un_arrastre_de_data912_con_calculo_se_rotula_
+    data912_arrastre_mas_calculo`. Se distingue de un precio ausente (`None`), que sí se declara.
     """
     if clase_activo in CLASES_RENTA_VARIABLE:
         return None  # una acción no tiene TIR, y no es un faltante que haya que declarar

@@ -26,12 +26,14 @@ export interface PosicionValuada {
   /** En la moneda de cotización de la especie. */
   invertido: number
   invertidoUsd: number
-  /** `invertidoUsd / Σ invertidoUsd * 100`, sobre las valuadas únicamente. */
-  pesoReal: number
+  /** `invertidoUsd / Σ invertidoUsd * 100`, sobre las valuadas únicamente. `null` si el total no
+   *  se pudo determinar (mismo criterio que `resolver.ts::pesoReal`): no hay de qué ser un
+   *  porcentaje, y no es 0. */
+  pesoReal: number | null
   /** Igual a `pesoReal`. Así `PosicionValuada` encaja sin adaptar como `PosicionPonderada` de
    *  `@/lib/cartera/metricas` (`{ ticker, peso, pesoReal }`), que es la forma que piden
    *  `rendimientosPorNaturaleza` y `plazoPromedio`. */
-  peso: number
+  peso: number | null
 }
 
 export interface PosicionExcluidaValuacion {
@@ -115,7 +117,7 @@ export function valuarCartera(
   const totalInvertidoUsd = conInvertidoUsd.reduce((acumulado, i) => acumulado + i.invertidoUsd, 0)
 
   const valuadas: PosicionValuada[] = conInvertidoUsd.map((i) => {
-    const pesoReal = totalInvertidoUsd > 0 ? (i.invertidoUsd / totalInvertidoUsd) * 100 : 0
+    const pesoReal = totalInvertidoUsd > 0 ? (i.invertidoUsd / totalInvertidoUsd) * 100 : null
     return {
       ticker: i.ticker,
       invertido: i.invertido,

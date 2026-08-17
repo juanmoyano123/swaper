@@ -8,14 +8,15 @@ sin levantar Postgres.
 mal: quedarse con la fila de precios más reciente de cada ticker, entera y del mismo instante. Un
 JOIN propio contra `precios` mezclaría métricas de capturas distintas en la misma fila.
 
-Las columnas se piden por nombre y no con `SELECT *`. Hoy son doce: las cuatro que la sanidad
-necesita, la clase de activo —que es lo que saca a la renta variable antes de segmentar—, las cinco
-que F-011 agregó para decidir qué especie representa a una emisión (`duration` para el chequeo de
-sanidad del colapso, y `maturity`, `law`, `couponCurrency` y `underlying` para medir completitud de
-datos) y las dos de F-012: `lastPrice` y `effectiveVolume`. El precio es la punta del cociente del
-que sale el tipo de cambio implícito y el volumen es lo que ese tipo de cambio permite comparar
-entre especies de distinta moneda. Agregar una columna de la vista es agregarla a `COLUMNAS` y al
-`EspecieUniverso`; nada más de este módulo cambia.
+Las columnas se piden por nombre y no con `SELECT *`. Empezaron siendo doce: las cuatro que la
+sanidad necesita, la clase de activo —que es lo que saca a la renta variable antes de segmentar—,
+las cinco que F-011 agregó para decidir qué especie representa a una emisión (`duration` para el
+chequeo de sanidad del colapso, y `maturity`, `law`, `couponCurrency` y `underlying` para medir
+completitud de datos) y las dos de F-012: `lastPrice` y `effectiveVolume`. El precio es la punta del
+cociente del que sale el tipo de cambio implícito y el volumen es lo que ese tipo de cambio permite
+comparar entre especies de distinta moneda. Después se sumaron `fuente`, `capturado_en` y
+`fecha_metricas` (ver sus propios docstrings en `EspecieUniverso`). Agregar una columna de la vista
+es agregarla a `COLUMNAS` y al `EspecieUniverso`; nada más de este módulo cambia.
 
 ## La moneda de cotización no está en la vista, y por eso hay un JOIN
 
@@ -126,6 +127,11 @@ COLUMNAS: tuple[str, ...] = (
     # Experimento data912: de dónde salió el precio de esta fila. La vista la expone desde
     # `20260808120000_data912_fuente_resumen.sql`; antes de esa migración `resumen` la descartaba.
     "fuente",
+    # Relevamiento de confiabilidad de datos (16/08/2026): la antigüedad de la fila, para detectar
+    # especies huérfanas (`Segmentacion.huerfanas`) y la fecha del informe de IAMC cuando la métrica
+    # vino de ahí. La vista las expone desde `20260816200000_capturado_en_resumen.sql`.
+    "capturado_en",
+    "fecha_metricas",
 )
 
 # Lo que la vista no tiene y hay que ir a buscar a la tabla. Ver el porqué en el docstring.

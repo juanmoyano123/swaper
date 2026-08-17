@@ -27,6 +27,9 @@ DIAS_CUPON = 45  # CLI --dias-cupon default
 ESCENARIOS_TIR: tuple[float, ...] = (-0.05, -0.04, -0.03, -0.02, -0.01, 0.0, 0.01, 0.02)
 
 # Costo real de rotar — F-035.
+# Parámetro asumido del motor, no un dato de mercado ni publicado por el bróker: es el default que
+# ya traía `tools/detectar_swaps.py` (`--arancel`), sin una fuente que lo declare. El frontend lo
+# rotula "estimado" (ver `NotaCosto` en `compartidos.tsx`) para no presentarlo como una medición.
 ARANCEL_POR_PATA = 0.0075  # 0,75% en fracción — CLI --arancel default (0.75/100)
 UMBRAL_COSTO_ELEVADO = 0.05  # 5% — GWT-2 de F-035: por encima de esto, la propuesta queda marcada
 MAX_RELACION_PUNTAS = 3.0  # ver tools/mercado.py: bid/ask con esta relación son escalas distintas,
@@ -34,11 +37,15 @@ MAX_RELACION_PUNTAS = 3.0  # ver tools/mercado.py: bid/ask con esta relación so
 
 TOPE_DISTRESS_DEFAULT: dict[str, float] = {"usd_hard": 0.15}
 
-# La fuente publica dos leyes: Argentina y N.Y. En el archivo cargado a mano sobreviven cuatro
-# tickers con "Extranjera" y "Ley Europea" de una carga previa; se los cuenta como extranjera
-# porque para el tenedor el punto es la jurisdicción (un default se litiga afuera).
+# La fuente publica dos leyes y el CHECK de `instrumentos.law` (`mercado.sql`) sólo admite esas
+# dos: "Ley Argentina" y "Ley N.Y." — el mismo vocabulario cerrado que `LEYES_VALIDAS` en
+# `condiciones/semilla.py`. "Extranjera" y "Ley Europea" venían de un archivo cargado a mano de
+# `tools/detectar_swaps.py`, previo al pipeline curado actual: ninguna de las dos puede llegar a
+# `EspecieUniverso.ley` hoy (relevamiento de confiabilidad de datos, 16/08/2026 — verificado contra
+# `data/condiciones_emision.csv`, cero ocurrencias). Se sacan del set en vez de quedar como una
+# rama que nunca se ejecuta y que alguien podría leer como vigente.
 LEY_LOCAL = "Ley Argentina"
-LEYES_EXTRANJERAS = frozenset({"Ley N.Y.", "Ley Europea", "Extranjera"})
+LEYES_EXTRANJERAS = frozenset({"Ley N.Y."})
 
 
 def es_extranjera(ley: str | None) -> bool:

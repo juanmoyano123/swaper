@@ -174,6 +174,54 @@ def test_como_dict_no_arrastra_la_coleccion_de_descartes(saneado) -> None:
     assert "descartes" not in payload
 
 
+# --- Especies huérfanas (relevamiento de confiabilidad de datos, 16/08/2026) ---------------------
+
+UNIVERSO_CON_HUERFANA: list[dict[str, Any]] = [
+    {
+        "ticker": "AL30O",
+        "clase_activo": "bono_soberano",
+        "tipo_tasa": "hard-dollar",
+        "tir": 0.13,
+        "tna": None,
+        "capturado_en": "2026-08-16T11:30:00+00:00",
+    },
+    {
+        "ticker": "VIEJOO",
+        "clase_activo": "on_corporativo",
+        "tipo_tasa": "hard-dollar",
+        "tir": 0.10,
+        "tna": None,
+        "capturado_en": "2026-08-14T11:30:00+00:00",
+    },
+]
+
+
+def test_una_huerfana_no_se_excluye_del_universo_ni_de_operables() -> None:
+    """No se filtra, se declara: dejó de cotizar y sigue siendo auditable, mismo criterio que un
+    descarte de sanidad."""
+    saneado_huerfana = sanear(segmentar(UNIVERSO_CON_HUERFANA), leidos=len(UNIVERSO_CON_HUERFANA))
+
+    assert saneado_huerfana.huerfanas == ["VIEJOO"]
+    assert {e.ticker for e in saneado_huerfana.especies} == {"AL30O", "VIEJOO"}
+    assert "VIEJOO" in {e.ticker for e in saneado_huerfana.operables()}
+
+
+def test_una_huerfana_agrega_la_alerta_precio_desactualizado() -> None:
+    saneado_huerfana = sanear(segmentar(UNIVERSO_CON_HUERFANA), leidos=len(UNIVERSO_CON_HUERFANA))
+
+    alertas = {a.codigo: a for a in saneado_huerfana.alertas}
+    assert "precio_desactualizado" in alertas
+    assert alertas["precio_desactualizado"].detalle["tickers"] == ["VIEJOO"]
+    assert saneado_huerfana.resumen()["huerfanas"] == 1
+
+
+def test_sin_huerfanas_no_hay_alerta_de_precio_desactualizado(saneado) -> None:
+    """`UNIVERSO` no trae `capturado_en` en ninguna fila: nada se marca por default."""
+    assert saneado.huerfanas == []
+    codigos = {a.codigo for a in saneado.alertas}
+    assert "precio_desactualizado" not in codigos
+
+
 # --- La lectura ---------------------------------------------------------------------------------
 
 

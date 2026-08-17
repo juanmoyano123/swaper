@@ -34,6 +34,7 @@ CODIGO_CAMPO_SIN_COBERTURA = "campo_sin_cobertura"
 CODIGO_CONDICIONES_EN_CONFLICTO = "condiciones_en_conflicto"
 CODIGO_ESPECIE_INCOHERENTE = "especie_incoherente"
 CODIGO_RENDIMIENTO_FUERA_DE_RANGO = "rendimiento_fuera_de_rango"
+CODIGO_PRECIO_DESACTUALIZADO = "precio_desactualizado"
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,6 +165,28 @@ def especie_incoherente(cantidad: int, tickers: list[str], **detalle: object) ->
             f"del mismo bono ({', '.join(tickers[:6])}): su precio está mal escalado en la fuente."
         ),
         severidad=Severidad.ADVERTENCIA,
+        accion_requerida=None,
+        detalle={"cantidad": cantidad, "tickers": tickers, **detalle},
+    )
+
+
+def precio_desactualizado(cantidad: int, tickers: list[str], **detalle: object) -> Alerta:
+    """Especies cuya última fila de precios no es de la corrida más reciente — F-010, relevamiento
+    de confiabilidad de datos del 16/08/2026.
+
+    No es un error de la corrida: la poda de `precios` es por-ticker, así que un ticker que dejó de
+    cotizar conserva su última fila para siempre y `resumen` la sigue sirviendo. Antes de esta
+    alerta esa antigüedad era invisible; ahora se declara con el motivo, nunca se oculta la fila ni
+    se la excluye del universo.
+    """
+    return Alerta(
+        codigo=CODIGO_PRECIO_DESACTUALIZADO,
+        mensaje=(
+            f"{cantidad} especies muestran precio y métricas de una corrida anterior, no de la más "
+            f"reciente ({', '.join(tickers[:6])}): dejaron de cotizar y la última fila conocida "
+            "se sigue mostrando."
+        ),
+        severidad=Severidad.INFO,
         accion_requerida=None,
         detalle={"cantidad": cantidad, "tickers": tickers, **detalle},
     )

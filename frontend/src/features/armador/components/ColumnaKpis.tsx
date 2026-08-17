@@ -31,7 +31,7 @@ import { useArmador, useArmadorAcciones } from '../store/carteraStore'
 export function ColumnaKpis({ meses }: { meses: MesDelCalendario[] }) {
   const { pos, objetivoRv } = useArmador()
   const { alternarMes } = useArmadorAcciones()
-  const { resueltas, porTicker, posicionesParaCalendario } = useCarteraResuelta()
+  const { resueltas, porTicker, posicionesParaCalendario, tipoDeCambio } = useCarteraResuelta()
   const calendario = useCalendarioCartera(posicionesParaCalendario)
 
   // Mismo criterio que `CoberturaSeleccion`: un mes sin_renta no es accionable (nadie en el
@@ -55,7 +55,7 @@ export function ColumnaKpis({ meses }: { meses: MesDelCalendario[] }) {
   let rentaUsd: RentaAnualPorMoneda | null = null
   let porMoneda: RentaAnualPorMoneda[] = []
   if (calendario.data) {
-    const invertidoMapa = invertidoPorMoneda(calendario.data.meses, resueltas)
+    const invertidoMapa = invertidoPorMoneda(calendario.data.meses, resueltas, tipoDeCambio)
     const rentaAnual = calendario.data.resumen.renta_anual ?? {}
     porMoneda = calcularRentaAnualPorMoneda(calendario.data.meses, rentaAnual, invertidoMapa)
     rentaUsd = porMoneda.find((r) => r.moneda === 'usd') ?? null

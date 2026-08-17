@@ -25,7 +25,10 @@ const ORDEN_NATURALEZA = ['tir_usd', 'tir_dolar_linked', 'tasa_real_cer', 'tna_n
 /** Lo que estas funciones necesitan de una posición resuelta, sin importar de dónde salió. */
 export interface PosicionPonderada {
   ticker: string
-  peso: number
+  /** `number | null` porque `PosicionValuada` (diagnóstico) no tiene un "peso pedido" propio y
+   *  mirrorea `pesoReal` acá: si no hay con qué ponderar, no hay ninguno de los dos. En el armador
+   *  siempre es un número (el pedido nunca falta). */
+  peso: number | null
   pesoReal: number | null
 }
 

@@ -75,8 +75,14 @@ export function CarteraEditable() {
   // `resolverRentaVariable` sobre el bloque de acciones—, y apilar las dos bases bajo la misma
   // columna haría que un 25% de un lado y un 25% del otro se leyeran como la misma porción de
   // plata sin serlo. La cuenta es aritmética sobre lo invertido, no una estimación.
-  const totalCarteraUsd = sumaInvertidoUsd + (rv.subtotalUsd ?? 0)
-  const hayTotalDeCartera = (hayAlgunaResuelta || rv.hayAlgunaResuelta) && totalCarteraUsd > 0
+  // `rv.subtotalUsd` sólo se foldea a 0 si la renta variable genuinely no tiene posiciones: con
+  // posiciones de RV pendientes de resolver, foldear a 0 subdeclararía el total y el "% real" de
+  // cada fila de renta fija saldría inflado (bug detectado en el relevamiento de confiabilidad de
+  // datos del 16/08/2026).
+  const contribucionRv = rv.subtotalUsd !== null ? rv.subtotalUsd : rv.posiciones.length === 0 ? 0 : null
+  const totalCarteraUsd = contribucionRv !== null ? sumaInvertidoUsd + contribucionRv : null
+  const hayTotalDeCartera =
+    totalCarteraUsd !== null && (hayAlgunaResuelta || rv.hayAlgunaResuelta) && totalCarteraUsd > 0
   const pesoRealDeCartera = (invertidoUsd: number | null | undefined): number | null =>
     hayTotalDeCartera && invertidoUsd !== null && invertidoUsd !== undefined
       ? (invertidoUsd / totalCarteraUsd) * 100

@@ -200,6 +200,22 @@ class EspecieUniverso:
     usa como filtro**. Son 359 de 823 tickers curados (39 %); el faltante se declara donde se
     muestre (F-031, eje de crédito) y ahí también se declaran los proxies que lo reemplazan."""
 
+    capturado_en: datetime | None = None
+    """El instante de la corrida que escribió la última fila de precios de esta especie —
+    `precios.capturado_en` de la vista, desde `20260816200000_capturado_en_resumen.sql`. `None` en
+    cualquier corrida anterior a esa migración, o si la especie nunca tuvo una fila de precios.
+    Comparado contra el máximo del universo leído es lo que distingue a una especie huérfana (ver
+    `Segmentacion.huerfanas`): la poda es por-ticker (`persistencia.py::sql_poda`), así que una
+    especie que dejó de cotizar conserva su última fila para siempre y `resumen` la sigue sirviendo
+    sin ninguna marca de antigüedad."""
+
+    fecha_metricas: date | None = None
+    """La fecha del informe de IAMC del que salieron `tir`/`duration`/`paridad`/`convexidad`/
+    `residual_value` de esta fila, cuando esas métricas vinieron de IAMC y no del cálculo propio de
+    F-051 (`_metricas_de` en `armado.py` rotula así el arrastre). `None` cuando la especie se
+    calcula sola o cuando nunca hubo informe. No se usa para decidir nada acá: es la fecha que la
+    regla 11 exige que viaje junto a cualquier métrica que no sea de hoy."""
+
     @property
     def naturaleza(self) -> str:
         return NATURALEZA_TASA[self.segmento]
@@ -246,6 +262,8 @@ class EspecieUniverso:
             "fuente": self.fuente,
             "tipo_tasa": self.tipo_tasa,
             "calificacion": self.calificacion,
+            "capturado_en": self.capturado_en.isoformat() if self.capturado_en else None,
+            "fecha_metricas": self.fecha_metricas.isoformat() if self.fecha_metricas else None,
         }
 
 
@@ -272,6 +290,16 @@ class Segmentacion:
     No es conflicto y no vacía nada: gana la vista, que es lo que ya se mostraba. Se cuenta para que
     la divergencia sea visible sin tener que ir a mirarla."""
 
+    huerfanas: list[str] = field(default_factory=list)
+    """Especies cuya última fila de precios no es de la corrida más reciente del universo leído.
+
+    No se filtran ni se ocultan —el mismo criterio que sostiene toda la sanidad—, sólo se declaran:
+    dejaron de cotizar y la poda por-ticker conserva su última fila para siempre (regla 11). Se
+    calcula comparando `capturado_en` de cada especie contra el máximo de **todas** las filas leídas
+    de la vista, no sólo las de renta fija: la corrida es un evento único y comparte el mismo
+    instante en toda la tabla, así que el máximo de renta variable es el mismo que el de renta fija
+    cuando la corrida tocó a las dos."""
+
 
 def segmentar(filas: Iterable[Mapping[str, object]]) -> Segmentacion:
     """Segmenta las filas de la vista `resumen` y separa lo que no entra al universo comparable.
@@ -279,11 +307,19 @@ def segmentar(filas: Iterable[Mapping[str, object]]) -> Segmentacion:
     Recibe mappings y no un tipo propio para que el mismo código sirva sobre los `Record` de asyncpg
     y sobre los diccionarios de un test, que es lo que permite probar toda la sanidad sin Postgres.
     """
+    # Materializado porque `ultima_corrida` necesita ver todas las filas antes del loop que arma
+    # las especies: con un generador de un solo uso, esa primera pasada dejaría el segundo `for`
+    # sin nada que recorrer.
+    filas = list(filas)
     especies: list[EspecieUniverso] = []
     renta_variable = 0
     sin_segmento: list[str] = []
     ley_en_conflicto: list[str] = []
     emisor_escrito_distinto: list[str] = []
+    huerfanas: list[str] = []
+
+    capturas = [c for fila in filas if (c := _fechahora(fila.get("capturado_en"))) is not None]
+    ultima_corrida = max(capturas) if capturas else None
 
     for fila in filas:
         clase = str(fila["clase_activo"])
@@ -306,6 +342,15 @@ def segmentar(filas: Iterable[Mapping[str, object]]) -> Segmentacion:
         )
         if escrito_distinto:
             emisor_escrito_distinto.append(ticker)
+
+        capturado_en = _fechahora(fila.get("capturado_en"))
+        es_huerfana = (
+            ultima_corrida is not None
+            and capturado_en is not None
+            and capturado_en != ultima_corrida
+        )
+        if es_huerfana:
+            huerfanas.append(ticker)
 
         especies.append(
             EspecieUniverso(
@@ -330,6 +375,8 @@ def segmentar(filas: Iterable[Mapping[str, object]]) -> Segmentacion:
                 fuente=_texto(fila.get("fuente")),
                 tipo_tasa=_texto(tipo_tasa) if tipo_tasa else None,
                 calificacion=_texto(fila.get("calificacion")),
+                capturado_en=capturado_en,
+                fecha_metricas=_fecha(fila.get("fecha_metricas")),
             )
         )
 
@@ -339,6 +386,7 @@ def segmentar(filas: Iterable[Mapping[str, object]]) -> Segmentacion:
         sin_segmento=sin_segmento,
         ley_en_conflicto=ley_en_conflicto,
         emisor_escrito_distinto=emisor_escrito_distinto,
+        huerfanas=sorted(huerfanas),
     )
 
 
@@ -444,6 +492,27 @@ def _fecha(valor: object) -> date | None:
     if isinstance(valor, str):
         try:
             return date.fromisoformat(valor[:10])
+        except ValueError:
+            return None
+    return None
+
+
+def _fechahora(valor: object) -> datetime | None:
+    """`capturado_en` como `datetime`, o `None`.
+
+    A diferencia de `_fecha`, acá no se trunca a la fecha: dos corridas del mismo día tienen que
+    poder distinguirse (el refresh corre cada 15 minutos), y es justo esa precisión la que permite
+    comparar contra el máximo del universo para detectar una especie huérfana. Acepta el `datetime`
+    que devuelve asyncpg y la cadena ISO de un test; no interpreta ningún otro formato, mismo
+    criterio que `_fecha`.
+    """
+    if valor is None or valor != valor:  # `None` o `NaN`
+        return None
+    if isinstance(valor, datetime):
+        return valor
+    if isinstance(valor, str):
+        try:
+            return datetime.fromisoformat(valor)
         except ValueError:
             return None
     return None

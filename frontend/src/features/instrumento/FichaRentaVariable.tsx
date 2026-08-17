@@ -7,8 +7,10 @@
  * procedencia real del precio de cada corrida (BYMA o data912), ver `textoFuentePropia()` acá
  * abajo — el OHLC sí es siempre de BYMA, el overlay no lo toca.
  *
- * **El histórico de cierres es de data912.** **El paquete de estados contables es de la SEC**,
- * sólo para CEDEARs: activos, pasivos, patrimonio, ROE, márgenes y links a los filings reales.
+ * **El histórico de cierres es de data912.** **El paquete de ratios es de la SEC**, sólo para
+ * CEDEARs: ROE, margen operativo, crecimiento de ingresos, EPS, deuda/patrimonio y liquidez
+ * corriente, calculados sobre XBRL de `companyfacts` (no se muestra activos/pasivos/patrimonio
+ * crudos, sólo lo que el backend serializa — ver `ratios_sec.py`).
  *
  * **Los paneles de Yahoo Finance (valuación y perfil) se sacaron de la ficha (14/08/2026):
  * decisión del dueño del producto, no los va a usar.** El backend sigue pidiéndole a Yahoo el

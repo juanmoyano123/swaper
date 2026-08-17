@@ -78,7 +78,7 @@ export const PRESETS_TEMATICOS: PresetTematico[] = [
     filtrosRf: { sector: 'Energias Renovables' },
     rubroRv: null,
     nota:
-      'Renta fija del sector Energias Renovables (9 emisiones). No filtra la renta variable: ' +
+      'Renta fija del sector Energias Renovables (9 emisiones, medido 10/08/2026). No filtra la renta variable: ' +
       'la SEC no tiene un rubro de renovables — las reparte según la actividad de cada empresa, ' +
       'y elegir uno de sus rubros sería decidir por la fuente.',
   },
@@ -98,7 +98,7 @@ export const PRESETS_TEMATICOS: PresetTematico[] = [
     filtrosRf: { sector: 'Alimentos y Consumo' },
     rubroRv: null,
     nota:
-      'Renta fija del sector Alimentos y Consumo (8 emisiones). No filtra la renta variable: la ' +
+      'Renta fija del sector Alimentos y Consumo (8 emisiones, medido 10/08/2026). No filtra la renta variable: la ' +
       'SEC no separa el consumo masivo del resto del comercio — su oficina de Trade & Services ' +
       'junta supermercados, ropa, restaurantes y alquiler de autos.',
   },
@@ -118,7 +118,7 @@ export const PRESETS_TEMATICOS: PresetTematico[] = [
     filtrosRf: { sector: 'Agro' },
     rubroRv: null,
     nota:
-      'Renta fija del sector Agro (26 emisiones). No filtra la renta variable: la SEC reparte el ' +
+      'Renta fija del sector Agro (26 emisiones, medido 10/08/2026). No filtra la renta variable: la SEC reparte el ' +
       'agro entre manufactura de alimentos y comercio, sin un rubro propio.',
   },
   {

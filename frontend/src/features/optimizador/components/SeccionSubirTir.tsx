@@ -19,7 +19,7 @@ import { EstadoCarga } from '@/components/EstadoCarga'
 import { EstadoError } from '@/components/EstadoError'
 import type { NombreDePerfil } from '@/lib/cartera/esquemaConcentracion'
 import type { PosicionConPeso } from '@/lib/cartera/hooks/useConcentracion'
-import { fmtPct } from '@/lib/fmt'
+import { fmtPct, SIN_DATO } from '@/lib/fmt'
 import { NOMBRES_EJE } from '@/lib/rotaciones/ejes'
 import { useSubirTir } from '@/lib/rotaciones/hooks/useSubirTir'
 import type { PosicionConMonto } from '@/lib/rotaciones/plan'
@@ -223,10 +223,15 @@ function textoContrapartida(eje: EvaluacionEje): string {
   return eje.nota ? `${nombre} ${movimiento} (${eje.nota})` : `${nombre} ${movimiento}`
 }
 
-/** GWT-4: el delta se muestra, y al lado se declara sobre qué parte de la cartera está medido. */
+/** GWT-4: el delta se muestra, y al lado se declara sobre qué parte de la cartera está medido.
+ *
+ * Un porcentaje sin medir es `SIN_DATO`, nunca "0%": un 0% real diría que no hay cobertura, y acá
+ * lo que hay es la ausencia de la medición misma. */
 function textoCobertura(eje: EvaluacionEje): string {
   const nombre = NOMBRES_EJE[eje.eje].toLowerCase()
   const actual = eje.cobertura?.pctActual
   const simulada = eje.cobertura?.pctSimulada
-  return `cobertura parcial: ${nombre} medida sobre el ${actual ?? 0}% del peso actual y el ${simulada ?? 0}% del simulado`
+  const actualTexto = actual !== null && actual !== undefined ? `${actual}%` : SIN_DATO
+  const simuladaTexto = simulada !== null && simulada !== undefined ? `${simulada}%` : SIN_DATO
+  return `cobertura parcial: ${nombre} medida sobre el ${actualTexto} del peso actual y el ${simuladaTexto} del simulado`
 }

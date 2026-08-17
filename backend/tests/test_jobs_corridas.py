@@ -313,6 +313,64 @@ async def test_refresh_no_llama_a_iamc_ni_a_docta(settings_de_prueba) -> None:
     assert corrida["estado"] in {"completa", "parcial", "fallida"}
 
 
+async def test_refresh_con_iamc_pausado_no_arrastra_metricas_previas(settings_de_prueba) -> None:
+    """La pausa de IAMC (`iamc_habilitado=False`, el default) corta el arrastre en la matinal
+    (`corrida.py::consolidar`, línea del gate) y tiene que cortarlo también acá: sin este gate el
+    refresh cada 15 minutos re-publicaría la TIR del último informe de IAMC como si fuera de hoy,
+    exactamente lo que la pausa busca evitar. `PLC7O` no tiene cronograma persistido en este fake
+    (F-051 no puede calcular sus propias métricas), así que el único origen posible de `tir` es
+    `metricas_previas` -si aparece en la fila, el gate no está funcionando."""
+    conn = _FakeConexionRefresh(
+        tickers_existentes=["PLC7O"],
+        metricas_previas=[
+            {
+                "ticker": "PLC7O",
+                "tir": 0.055,
+                "duration": 2.1,
+                "paridad": 0.98,
+                "convexidad": None,
+                "residual_value": None,
+                "fecha_metricas": None,
+            }
+        ],
+    )
+    assert settings_de_prueba.iamc_habilitado is False
+    with respx.mock:
+        _montar_byma({"negociable-obligations": [ESPECIE_ON]})
+
+        await refresh_intra_rueda(conn, settings_de_prueba, dormir=_no_dormir)
+
+    fila = next(fila for fila in conn.filas_de("precios") if fila[0] == "PLC7O")
+    assert fila[3] is None  # tir
+
+
+async def test_refresh_con_iamc_habilitado_arrastra_metricas_previas(settings_de_prueba) -> None:
+    """El contraste del test anterior: con `iamc_habilitado=True` el arrastre sigue vigente -es
+    el comportamiento que existía antes de la pausa y el que la matinal ya prueba."""
+    conn = _FakeConexionRefresh(
+        tickers_existentes=["PLC7O"],
+        metricas_previas=[
+            {
+                "ticker": "PLC7O",
+                "tir": 0.055,
+                "duration": 2.1,
+                "paridad": 0.98,
+                "convexidad": None,
+                "residual_value": None,
+                "fecha_metricas": None,
+            }
+        ],
+    )
+    settings_habilitado = settings_de_prueba.model_copy(update={"iamc_habilitado": True})
+    with respx.mock:
+        _montar_byma({"negociable-obligations": [ESPECIE_ON]})
+
+        await refresh_intra_rueda(conn, settings_habilitado, dormir=_no_dormir)
+
+    fila = next(fila for fila in conn.filas_de("precios") if fila[0] == "PLC7O")
+    assert fila[3] == 0.055  # tir
+
+
 async def test_refresh_estado_completa_cuando_byma_responde_bien(settings_de_prueba) -> None:
     conn = _FakeConexionRefresh(tickers_existentes=["PLC7O"])
     with respx.mock:

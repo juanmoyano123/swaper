@@ -71,6 +71,23 @@ function tickersConMontoDistinto(a: PosicionConMonto[], b: PosicionConMonto[]): 
   return distintos
 }
 
+/** `PosicionConMonto.monto` viaja en la moneda de cotización (ver `plan.ts`); `invertidoPorMoneda`
+ *  necesita el monto normalizado a dólares para no mezclar cotización con moneda de cobro (regla
+ *  3, mismo criterio que `costoAcumulado` de `plan.ts`). Sin moneda declarada o sin tipo de
+ *  cambio para una posición en pesos, esa posición no aporta — no se le adivina nada. */
+function aInvertidoUsd(
+  posiciones: PosicionConMonto[],
+  monedaDe: (ticker: string) => 'usd' | 'ars' | null,
+  tipoDeCambio: number | null,
+): { ticker: string; invertidoUsd: number | null }[] {
+  return posiciones.map((p) => {
+    const moneda = monedaDe(p.ticker)
+    const invertidoUsd =
+      moneda === 'usd' ? p.monto : moneda === 'ars' && tipoDeCambio !== null ? p.monto / tipoDeCambio : null
+    return { ticker: p.ticker, invertidoUsd }
+  })
+}
+
 function fmtMontoMoneda(valor: number, moneda: string): string {
   if (moneda === 'usd' || moneda === 'ars') return fmtMonto(valor, moneda)
   return `${moneda.toUpperCase()} ${fmtNumero(valor)}`
@@ -142,16 +159,16 @@ export function ComparacionCarteras({
   const rentaOriginal = useMemo(() => {
     if (!calendarioOriginal.data) return []
     const { meses, resumen } = calendarioOriginal.data
-    const invertidoMapa = invertidoPorMoneda(meses, montosOriginales.map((m) => ({ ticker: m.ticker, invertido: m.monto })))
+    const invertidoMapa = invertidoPorMoneda(meses, aInvertidoUsd(montosOriginales, monedaDe, tipoDeCambio), tipoDeCambio)
     return calcularRentaAnualPorMoneda(meses, resumen.renta_anual ?? {}, invertidoMapa)
-  }, [calendarioOriginal.data, montosOriginales])
+  }, [calendarioOriginal.data, montosOriginales, monedaDe, tipoDeCambio])
 
   const rentaPropuesta = useMemo(() => {
     if (!calendarioPropuesto.data) return []
     const { meses, resumen } = calendarioPropuesto.data
-    const invertidoMapa = invertidoPorMoneda(meses, montos.map((m) => ({ ticker: m.ticker, invertido: m.monto })))
+    const invertidoMapa = invertidoPorMoneda(meses, aInvertidoUsd(montos, monedaDe, tipoDeCambio), tipoDeCambio)
     return calcularRentaAnualPorMoneda(meses, resumen.renta_anual ?? {}, invertidoMapa)
-  }, [calendarioPropuesto.data, montos])
+  }, [calendarioPropuesto.data, montos, monedaDe, tipoDeCambio])
 
   const costo = useMemo(
     () => costoAcumulado(montosOriginales, plan.aceptadas, monedaDe, tipoDeCambio),
@@ -436,7 +453,8 @@ function ResultadoNeto({
               {despuesPct !== null ? fmtPct(despuesPct) : SIN_DATO}
               {delta !== null && ` (${delta > 0 ? '+' : ''}${fmtPct(delta)})`}
               {' · '}
-              {antes?.mesesCubiertos ?? 0}/12 → {despues?.mesesCubiertos ?? 0}/12 meses cubiertos
+              {antes !== null ? `${antes.mesesCubiertos}/12` : SIN_DATO} →{' '}
+              {despues !== null ? `${despues.mesesCubiertos}/12` : SIN_DATO} meses cubiertos
             </p>
           )
         })}

@@ -149,7 +149,9 @@ const esquemaValuadaGuardada = z.strictObject({
   moneda: esquemaMoneda.nullable(),
   invertido: z.number(),
   invertidoUsd: z.number(),
-  pesoReal: z.number(),
+  /** `null` cuando el total invertido de la cartera no se pudo determinar: no hay con qué
+   *  ponderar, y no es 0 (regla 1). */
+  pesoReal: z.number().nullable(),
 })
 
 const esquemaExcluidaGuardada = z.strictObject({

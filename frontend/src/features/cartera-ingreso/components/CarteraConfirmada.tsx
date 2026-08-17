@@ -82,8 +82,13 @@ function BloqueOptimizador({
   // F-042 — los mismos atributos de mercado que el armador congela, para que el export tenga algo
   // que declarar (naturaleza, lámina, vector de seis ejes, calendario, fuente del dato). Las mismas
   // claves que ya pide `DiagnosticoCartera` más arriba: cache-hit de TanStack Query, sin pedido extra.
+  // `pesoReal` sólo es `null` cuando el total invertido no se pudo determinar: sin denominador no
+  // hay con qué ponderar, y se excluye en vez de mandar un peso inventado.
   const posicionesConPeso = useMemo(
-    () => (valuacion?.valuadas ?? []).map((v) => ({ ticker: v.ticker, peso: v.pesoReal })),
+    () =>
+      (valuacion?.valuadas ?? [])
+        .filter((v): v is (typeof v) & { pesoReal: number } => v.pesoReal !== null)
+        .map((v) => ({ ticker: v.ticker, peso: v.pesoReal })),
     [valuacion],
   )
   const posicionesParaCalendario = useMemo(
@@ -197,7 +202,9 @@ export function CarteraConfirmada({
   const invalidas = posiciones.filter((p) => !p.valida).length
 
   const { valuacion, porTicker, tipoDeCambio } = useCarteraCargadaValuada(posiciones)
-  const posicionesConPeso: PosicionConPeso[] = (valuacion?.valuadas ?? []).map((v) => ({ ticker: v.ticker, peso: v.pesoReal }))
+  const posicionesConPeso: PosicionConPeso[] = (valuacion?.valuadas ?? [])
+    .filter((v): v is (typeof v) & { pesoReal: number } => v.pesoReal !== null)
+    .map((v) => ({ ticker: v.ticker, peso: v.pesoReal }))
   const montosOriginales: PosicionConMonto[] = (valuacion?.valuadas ?? []).map((v) => ({ ticker: v.ticker, monto: v.invertido }))
   const [perfil, setPerfil] = useState<NombreDePerfil>('moderado')
 

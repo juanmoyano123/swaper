@@ -109,6 +109,20 @@ describe('una posición que se puede valuar entera', () => {
     expect(porTicker.get('AL30D')!.pesoReal).toBeCloseTo(25, 6)
     expect(porTicker.get('GD30D')!.pesoReal).toBeCloseTo(75, 6)
   })
+
+  it('sin invertido total (nominal 0, no excluida), pesoReal es null y no 0', () => {
+    // Regla 1: un denominador inválido no es un porcentaje 0, es "no hay con qué dividir". Mismo
+    // criterio que `resolver.ts::pesoReal` — hallazgo del relevamiento de confiabilidad de datos
+    // del 16/08/2026 (antes se devolvía 0 acá, distinto del null que devuelve el armador en el
+    // caso equivalente).
+    const universo = new Map([['AL30D', especie({ precio: 100 })]])
+    const { valuadas } = valuarCartera([posicion({ nominal: 0 })], universo, null)
+
+    expect(valuadas).toHaveLength(1)
+    expect(valuadas[0].invertidoUsd).toBe(0)
+    expect(valuadas[0].pesoReal).toBeNull()
+    expect(valuadas[0].peso).toBeNull()
+  })
 })
 
 describe('conversión ARS → USD', () => {

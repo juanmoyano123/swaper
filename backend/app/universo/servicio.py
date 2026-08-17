@@ -37,7 +37,7 @@ from typing import Any
 
 import structlog
 
-from app.ingesta.alertas import Alerta, Severidad
+from app.ingesta.alertas import Alerta, Severidad, precio_desactualizado
 from app.ingesta.byma.normalizacion import FilaIndice
 from app.universo.cambio import TipoDeCambio, derivar_tipo_de_cambio, normalizar_volumen
 from app.universo.emisiones import UniversoDeduplicado, deduplicar
@@ -87,6 +87,11 @@ class UniversoSaneado:
     emisor_escrito_distinto: list[str] = field(default_factory=list)
     """Especies cuyo emisor las dos fuentes escriben distinto. No vacía nada: gana la vista."""
 
+    huerfanas: list[str] = field(default_factory=list)
+    """Especies cuya última fila de precios no es de la corrida más reciente (F-010, relevamiento
+    de confiabilidad de datos del 16/08/2026). No se excluyen del universo ni de `operables()`: se
+    declaran con la alerta `precio_desactualizado`, mismo criterio que el resto de la sanidad."""
+
     @property
     def alertas(self) -> list[Alerta]:
         """Las de la sanidad, las del tipo de cambio y las del cruce de fuentes, juntas.
@@ -101,6 +106,10 @@ class UniversoSaneado:
             alertas.append(_alerta_ley_en_conflicto(self.ley_en_conflicto))
         if self.emisor_escrito_distinto:
             alertas.append(_alerta_emisor_escrito_distinto(self.emisor_escrito_distinto))
+        if self.huerfanas:
+            alertas.append(
+                precio_desactualizado(cantidad=len(self.huerfanas), tickers=self.huerfanas)
+            )
         return alertas
 
     @property
@@ -145,6 +154,7 @@ class UniversoSaneado:
             },
             "evaluados": len(self.especies),
             "descartados": len(descartados),
+            "huerfanas": len(self.huerfanas),
             "operables": len(self.operables()),
             "tipo_de_cambio": self.cambio.como_dict(),
             "por_capa": {
@@ -193,6 +203,7 @@ def sanear(
         cambio=cambio,
         ley_en_conflicto=segmentacion.ley_en_conflicto,
         emisor_escrito_distinto=segmentacion.emisor_escrito_distinto,
+        huerfanas=segmentacion.huerfanas,
     )
 
 

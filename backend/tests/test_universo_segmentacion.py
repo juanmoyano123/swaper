@@ -228,3 +228,61 @@ def test_sin_columnas_curadas_la_segmentacion_sigue_funcionando() -> None:
     assert resultado.especies[0].emisor == "ACME"
     assert resultado.ley_en_conflicto == []
     assert resultado.emisor_escrito_distinto == []
+
+
+# --- Especies huérfanas (relevamiento de confiabilidad de datos, 16/08/2026) ---------------------
+
+
+def test_una_especie_con_la_captura_mas_vieja_que_el_resto_es_huerfana() -> None:
+    """El caso central: dejó de cotizar, la poda por-ticker conserva su última fila y esa fila es
+    de una corrida anterior a la que trajo a sus vecinas."""
+    resultado = segmentar(
+        [
+            fila("AL30O", "hard-dollar", capturado_en="2026-08-16T11:30:00+00:00"),
+            fila("VIEJOO", "hard-dollar", capturado_en="2026-08-14T11:30:00+00:00"),
+        ]
+    )
+
+    assert resultado.huerfanas == ["VIEJOO"]
+    por_ticker = {e.ticker: e.capturado_en for e in resultado.especies}
+    assert por_ticker["AL30O"].isoformat() == "2026-08-16T11:30:00+00:00"
+
+
+def test_todas_las_especies_de_la_misma_corrida_no_tienen_huerfanas() -> None:
+    """El contraste: mismo `capturado_en` en todas, ninguna se marca."""
+    resultado = segmentar(
+        [
+            fila("AL30O", "hard-dollar", capturado_en="2026-08-16T11:30:00+00:00"),
+            fila("GD30O", "hard-dollar", capturado_en="2026-08-16T11:30:00+00:00"),
+        ]
+    )
+
+    assert resultado.huerfanas == []
+
+
+def test_sin_capturado_en_en_ninguna_fila_no_hay_con_que_comparar_y_no_se_marca_nada() -> None:
+    """Una corrida anterior a la migración que expone la columna: `capturado_en` es `None` en toda
+    la vista, y sin un máximo contra el que comparar no se inventa ninguna huérfana."""
+    resultado = segmentar(
+        [
+            fila("AL30O", "hard-dollar"),
+            fila("GD30O", "hard-dollar"),
+        ]
+    )
+
+    assert resultado.huerfanas == []
+
+
+def test_una_especie_sin_capturado_en_no_se_marca_huerfana_por_default() -> None:
+    """Sin su propio dato no hay con qué comparar esa especie puntual, aunque el resto del universo
+    sí tenga `capturado_en`: no se le adivina que está vieja, se declara sin dato en su lugar."""
+    resultado = segmentar(
+        [
+            fila("AL30O", "hard-dollar", capturado_en="2026-08-16T11:30:00+00:00"),
+            fila("SINFECHAO", "hard-dollar", capturado_en=None),
+        ]
+    )
+
+    assert resultado.huerfanas == []
+    por_ticker = {e.ticker: e.capturado_en for e in resultado.especies}
+    assert por_ticker["SINFECHAO"] is None

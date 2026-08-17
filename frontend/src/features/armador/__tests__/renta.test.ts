@@ -119,26 +119,43 @@ describe('picoDeColumnas', () => {
 })
 
 describe('invertidoPorMoneda', () => {
-  it('suma el invertido de las posiciones según la moneda de cobro que declara el calendario', () => {
+  it('convierte a la moneda de cobro de cada bucket con el mismo TC implícito (regla 3)', () => {
+    // TX26 cobra en pesos pero `invertidoUsd` llega ya normalizado a dólares (como cualquier
+    // posición, sea cual sea su moneda de cotización): el bucket ars se arma reconvirtiendo con el
+    // mismo TC, nunca sumando el invertido crudo de la cotización.
     const meses = docesMeses({
       0: {
         instrumentos: [instrumento({ ticker: 'AL30', moneda: 'usd' }), instrumento({ ticker: 'TX26', moneda: 'ars' })],
       },
     })
-    const totales = invertidoPorMoneda(meses, [
-      { ticker: 'AL30', invertido: 1000 },
-      { ticker: 'TX26', invertido: 200000 },
-    ])
-    expect(totales).toEqual({ usd: 1000, ars: 200000 })
+    const totales = invertidoPorMoneda(
+      meses,
+      [
+        { ticker: 'AL30', invertidoUsd: 1000 },
+        { ticker: 'TX26', invertidoUsd: 200 },
+      ],
+      1000,
+    )
+    expect(totales).toEqual({ usd: 1000, ars: 200_000 })
   })
 
-  it('ignora las posiciones sin invertido resuelto y las que no aparecen en ningún mes del calendario', () => {
+  it('ignora las posiciones sin invertidoUsd resuelto y las que no aparecen en ningún mes del calendario', () => {
     const meses = docesMeses({ 0: { instrumentos: [instrumento({ ticker: 'AL30', moneda: 'usd' })] } })
-    const totales = invertidoPorMoneda(meses, [
-      { ticker: 'AL30', invertido: null },
-      // FUERA_DEL_UNIVERSO: no se le adivina la moneda, no aporta a ningún total.
-      { ticker: 'DESCONOCIDO', invertido: 500 },
-    ])
+    const totales = invertidoPorMoneda(
+      meses,
+      [
+        { ticker: 'AL30', invertidoUsd: null },
+        // FUERA_DEL_UNIVERSO: no se le adivina la moneda, no aporta a ningún total.
+        { ticker: 'DESCONOCIDO', invertidoUsd: 500 },
+      ],
+      1000,
+    )
+    expect(totales).toEqual({})
+  })
+
+  it('sin tipo de cambio, una posición que cobra en pesos no aporta: no se inventa el TC (regla 3)', () => {
+    const meses = docesMeses({ 0: { instrumentos: [instrumento({ ticker: 'TX26', moneda: 'ars' })] } })
+    const totales = invertidoPorMoneda(meses, [{ ticker: 'TX26', invertidoUsd: 200 }], null)
     expect(totales).toEqual({})
   })
 })

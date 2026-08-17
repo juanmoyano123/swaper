@@ -71,8 +71,9 @@ export interface FilaPosicionExport {
   invertido: number | null
   invertidoUsd: number | null
   /** Lo pedido — para origen armador, el peso del mandato; para origen cargada, no existe un
-   *  "pedido" separado del real, así que coincide con `pesoReal`. */
-  pesoPedido: number
+   *  "pedido" separado del real, así que coincide con `pesoReal` (incluido su `null` cuando el
+   *  total invertido no se pudo determinar). */
+  pesoPedido: number | null
   /** `null` cuando la posición no se pudo resolver a peso real. */
   pesoReal: number | null
 }

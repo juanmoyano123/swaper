@@ -64,14 +64,23 @@ export function picoDeColumnas(columnas: ColumnaCordillera[]): number {
  * Cuánto está invertido en las posiciones que cobran en cada moneda — el denominador de A9.
  *
  * La moneda de cobro de un ticker sale del propio calendario (`instrumento.moneda`, derivada del
- * segmento), no de `moneda_cotizacion` de la especie: son dos clasificaciones distintas y la que
- * importa para "sobre lo invertido en lo que cobra en esta moneda" es la del cupón. Un ticker que
- * no aparece en ningún mes del calendario (fuera del universo de flujos) no aporta a ningún
- * denominador: no se le adivina la moneda.
+ * segmento), no de `moneda_cotizacion` de la especie: son dos clasificaciones distintas — un bono
+ * hard-dollar cobra en USD tanto si se lo compró en su variante en pesos como en la que cotiza en
+ * dólares. Por eso lo que se suma es `invertidoUsd` (ya normalizado al dólar con el mismo TC
+ * implícito que el resto de la cartera, sea cual sea la moneda de cotización de la especie) y no
+ * `invertido` crudo: sumar el monto en la moneda de cotización mezclaría pesos y dólares en el
+ * mismo denominador (regla 3) apenas la cartera tuviera una posición en pesos que cobra en
+ * dólares. Para un bucket en pesos, `invertidoUsd` se vuelve a convertir con el mismo TC — nunca
+ * con uno externo.
+ *
+ * Un ticker que no aparece en ningún mes del calendario (fuera del universo de flujos), sin
+ * `invertidoUsd`, o en un bucket en pesos sin tipo de cambio disponible, no aporta a ningún
+ * denominador: no se le adivina la moneda ni se inventa un tipo de cambio.
  */
 export function invertidoPorMoneda(
   meses: MesDelCalendario[],
-  resueltas: { ticker: string; invertido: number | null }[],
+  resueltas: { ticker: string; invertidoUsd: number | null }[],
+  tipoDeCambio: number | null,
 ): Record<string, number> {
   const monedaPorTicker = new Map<string, string>()
   for (const mes of meses) {
@@ -82,10 +91,20 @@ export function invertidoPorMoneda(
 
   const totales: Record<string, number> = {}
   for (const r of resueltas) {
-    if (r.invertido === null) continue
+    if (r.invertidoUsd === null) continue
     const moneda = monedaPorTicker.get(r.ticker)
     if (moneda === undefined) continue
-    totales[moneda] = (totales[moneda] ?? 0) + r.invertido
+
+    let monto: number
+    if (moneda === 'usd') {
+      monto = r.invertidoUsd
+    } else if (moneda === 'ars') {
+      if (tipoDeCambio === null) continue
+      monto = r.invertidoUsd * tipoDeCambio
+    } else {
+      continue
+    }
+    totales[moneda] = (totales[moneda] ?? 0) + monto
   }
   return totales
 }

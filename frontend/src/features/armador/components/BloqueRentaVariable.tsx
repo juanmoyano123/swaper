@@ -101,7 +101,11 @@ export function BloqueRentaVariable() {
   // Sólo lectura: F-021/F-020 ya extrajeron este hook para no repetir el pipeline. Se usa acá
   // únicamente para declarar cómo se compone el monto total (GWT-4) — este bloque no recalcula
   // nada de renta fija.
-  const { totalInvertidoUsd: subtotalRfUsd, hayAlgunaResuelta: hayRfResuelta } = useCarteraResuelta()
+  const {
+    totalInvertidoUsd: subtotalRfUsd,
+    hayAlgunaResuelta: hayRfResuelta,
+    resueltas: resueltasRf,
+  } = useCarteraResuelta()
 
   const [busqueda, setBusqueda] = useState('')
   // Para que "reemplazar" deje el cursor donde se elige el sustituto: sacar la posición y dejar al
@@ -150,8 +154,18 @@ export function BloqueRentaVariable() {
 
   // GWT-4: el monto total incluye las dos porciones, cada una con su subtotal identificado. Sin
   // ninguna de las dos resuelta no hay total que declarar — no es 0, es sin dato.
+  //
+  // Un lado sin resolver sólo aporta 0 si genuinely no tiene posiciones: con posiciones pendientes
+  // de resolver, foldearlo a 0 inflaría el mix del otro lado al 100% (bug detectado en el
+  // relevamiento de confiabilidad de datos del 16/08/2026) — acá se propaga `null` en su lugar.
+  const contribucionRf = hayRfResuelta ? subtotalRfUsd : resueltasRf.length === 0 ? 0 : null
+  const contribucionRv = subtotalRvUsd !== null ? subtotalRvUsd : posicionesRv.length === 0 ? 0 : null
   const totalUsd =
-    hayRfResuelta || hayAlgunaRvResuelta ? (hayRfResuelta ? subtotalRfUsd : 0) + (subtotalRvUsd ?? 0) : null
+    hayRfResuelta || hayAlgunaRvResuelta
+      ? contribucionRf !== null && contribucionRv !== null
+        ? contribucionRf + contribucionRv
+        : null
+      : null
 
   // Mix pedido: sobre `peso` (puntos porcentuales sobre la cartera entera), sin pasar por precio
   // ni tipo de cambio — siempre calculable si hay posiciones.

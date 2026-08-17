@@ -144,10 +144,12 @@ async def ficha(
     contrato que `externo`: rotulado, y declarado ausente sin romper el resto de la ficha si
     data912 no tiene la serie de este ticker.
 
-    **El cuarto bloque, `sec`**, es el paquete de estados contables (14/08/2026): activos,
-    pasivos, patrimonio, ROE, márgenes y links a los filings reales — **sólo para CEDEARs**
-    (decisión del dueño del producto: las acciones argentinas se sacaron de la UI). Para las
-    empresas que reportan ante la SEC como emisor privado extranjero (la mayoría de los CEDEARs
+    **El cuarto bloque, `sec`**, es el paquete de ratios financieros (14/08/2026): ROE, margen
+    operativo, crecimiento de ingresos, EPS, deuda/patrimonio y liquidez corriente, calculados
+    sobre XBRL de `companyfacts` — **sólo para CEDEARs** (decisión del dueño del producto: las
+    acciones argentinas se sacaron de la UI). `assets`/`liabilities`/`equity` se parsean para el
+    cálculo pero no se serializan acá (ver `sec_ficha.py::_ratios_como_dict`). Para las empresas
+    que reportan ante la SEC como emisor privado extranjero (la mayoría de los CEDEARs
     sudamericanos) declara `solo_anual=true`: la fuente no publica trimestral para ellas, y se
     dice en vez de esconderse.
 

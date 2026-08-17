@@ -228,8 +228,9 @@ describe('costo de rotar en la fila', () => {
 
     const nota = await screen.findByText(/no verificable/)
     expect(nota).toHaveTextContent(/falta punta de mercado/)
-    // El único número que aparece es el arancel, declarado como piso: nunca un total supuesto.
-    expect(nota).toHaveTextContent(/arancel 0,75% por pata/)
+    // El único número que aparece es el arancel, declarado como piso y rotulado "estimado" —
+    // nunca un total supuesto ni presentado como una medición.
+    expect(nota).toHaveTextContent(/arancel estimado 0,75% por pata/)
   })
 })
 

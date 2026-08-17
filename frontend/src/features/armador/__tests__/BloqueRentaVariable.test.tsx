@@ -147,11 +147,16 @@ function FichaFalsa() {
 
 /** Expone las acciones del store que en la pantalla real dispara el bloque mismo. */
 function Arnes() {
-  const { alternarRentaVariable, fijarMontoTotal } = useArmadorAcciones()
+  const { alternarRentaVariable, alternarPapel, fijarMontoTotal } = useArmadorAcciones()
   return (
     <div>
       <button type="button" onClick={() => alternarRentaVariable('GGAL')}>
         agregar GGAL directo
+      </button>
+      {/* Sólo para el test del mix con renta fija resuelta y renta variable pendiente (bug del
+       *  relevamiento del 16/08/2026): el arnés no expone RF en ningún otro lado. */}
+      <button type="button" onClick={() => alternarPapel('AL30')}>
+        agregar AL30 directo
       </button>
       <button type="button" onClick={() => fijarMontoTotal(1000)}>
         monto 1.000
@@ -363,6 +368,65 @@ describe('el mix RF/RV de la cabecera', () => {
 
     // El mix real necesita renta fija resuelta, que acá no hay (s/d, no 0): no se muestra un mix
     // a medias que sugeriría que la renta fija pesa 0% cuando en realidad no se sabe.
+    const campoMixReal = (await screen.findByText('Mix real RF/RV (sobre invertido)')).closest('div')
+    expect(within(campoMixReal as HTMLElement).getByText('s/d')).toBeInTheDocument()
+  })
+
+  it('con renta fija resuelta y renta variable pendiente de resolver, el total y el mix no inflan al 100% de RF', async () => {
+    // Bug del relevamiento de confiabilidad de datos del 16/08/2026: `subtotalRvUsd ?? 0` hacía
+    // que una posición de RV que TODAVÍA no resolvió (PAMP en ARS, sin tipo de cambio) se tratara
+    // como si aportara 0 al total, y el mix mostraba 100% de renta fija cuando en realidad la
+    // porción de RV es desconocida, no nula.
+    responderCon({
+      cedears: [cedear({ ticker: 'PAMP', moneda_cotizacion: 'ARS' })],
+      tipoDeCambio: { valor: null, disponible: false },
+      especiesRentaFija: [
+        {
+          ticker: 'AL30',
+          emision: 'AL30',
+          sufijo_liquidacion: null,
+          clase_activo: 'bono_soberano',
+          segmento: 'usd_hard',
+          naturaleza: 'tir_usd',
+          naturaleza_nombre: 'TIR en dólares (hard dollar)',
+          rendimiento: 0.1123,
+          duracion: 3.2,
+          vencimiento: '2030-07-09',
+          periodicidad: 'semestral',
+          ley: 'ARG',
+          moneda_cupon: 'USD',
+          emisor: 'República Argentina',
+          precio: 105,
+          moneda_cotizacion: 'USD',
+          volumen: 100_000,
+          volumen_usd: 100_000,
+          paridad: 0.98,
+          lamina: null,
+          sector: null,
+          calificacion: null,
+          dato_sano: true,
+          hermanas: [],
+        },
+      ],
+    })
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar AL30 directo' }))
+    await screen.findByRole('listitem')
+    await userEvent.click(screen.getByRole('button', { name: 'agregar PAMP a la cartera' }))
+    await userEvent.click(screen.getByRole('button', { name: 'monto 1.000' }))
+
+    await screen.findByRole('article', { name: 'PAMP' })
+
+    // Renta fija sí resolvió (AL30 tiene precio en USD): su subtotal no es s/d.
+    const campoRf = (await screen.findByText('Renta fija (USD)')).closest('div')
+    expect(within(campoRf as HTMLElement).queryByText('s/d')).not.toBeInTheDocument()
+
+    // Pero el total de la cartera no puede sumar sólo la RF: la porción de RV existe (hay una
+    // posición) y no se sabe cuánto vale, así que el total entero es sin dato.
+    const campoTotal = (await screen.findByText('Total de la cartera (USD)')).closest('div')
+    expect(within(campoTotal as HTMLElement).getByText('s/d')).toBeInTheDocument()
+
     const campoMixReal = (await screen.findByText('Mix real RF/RV (sobre invertido)')).closest('div')
     expect(within(campoMixReal as HTMLElement).getByText('s/d')).toBeInTheDocument()
   })

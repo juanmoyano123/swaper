@@ -39,9 +39,14 @@ export function formatoValor(valor: number | null, unidad: EjeDeRiesgo['unidad']
  *
  * Tres estados, y la diferencia entre ellos es la feature: con las dos patas cotizando se muestra
  * el costo y en cuánto tiempo lo paga la mejora; sin alguna punta viva **no se muestra un costo**,
- * se declara que no es verificable y se nombra el único piso que sí se conoce (el arancel, que es
- * una constante del broker y no un dato de mercado). Un spread ausente contado como cero haría que
- * una rotación cara se leyera como barata — regla 1: el hueco no se rellena.
+ * se declara que no es verificable y se nombra el único piso que sí se conoce (el arancel). Un
+ * spread ausente contado como cero haría que una rotación cara se leyera como barata — regla 1: el
+ * hueco no se rellena.
+ *
+ * **El arancel no es un dato de mercado, ni siquiera un valor publicado por el bróker**: es un
+ * parámetro asumido del motor (`ARANCEL_POR_PATA` en `rotaciones/constantes.py`, heredado del
+ * default de un flag de CLI). Por eso se rotula "estimado" en vez de mostrarse como si fuera una
+ * medición — a diferencia del spread, que sí sale de una punta viva del mercado.
  */
 export function NotaCosto({ costo }: { costo: CostoRotacion | null }) {
   const estilo = { margin: 0, fontSize: 10.5 } as const
@@ -57,16 +62,19 @@ export function NotaCosto({ costo }: { costo: CostoRotacion | null }) {
   if (!costo.verificable || costo.total_pct === null) {
     return (
       <p className="mono" style={{ ...estilo, color: 'var(--sd)' }}>
-        Costo de rotar no verificable: falta punta de mercado en alguna pata. Piso conocido: arancel{' '}
-        {fmtPct(costo.arancel_pct_por_pata, 2)} por pata.
+        Costo de rotar no verificable: falta punta de mercado en alguna pata. Piso conocido: arancel
+        estimado {fmtPct(costo.arancel_pct_por_pata, 2)} por pata.
       </p>
     )
   }
 
   return (
     <p className="mono" style={{ ...estilo, color: costo.elevado === true ? 'var(--neg)' : 'var(--sd)' }}>
-      Costo de rotar {fmtPct(costo.total_pct, 2)} (arancel {fmtPct(costo.arancel_pct_por_pata, 2)} por pata + spread de
-      las dos patas)
+      Costo de rotar {fmtPct(costo.total_pct, 2)} (arancel estimado{' '}
+      <span title="Parámetro asumido por el motor, no un dato de mercado ni publicado por el bróker: no varía por cuenta ni por volumen. Se declara como estimado y no como medido.">
+        {fmtPct(costo.arancel_pct_por_pata, 2)}
+      </span>{' '}
+      por pata + spread de las dos patas)
       {costo.payback_meses !== null && ` · lo paga en ${fmtNumero(costo.payback_meses, 1)} meses`}
       {costo.elevado === true && ' · costo elevado'}
     </p>

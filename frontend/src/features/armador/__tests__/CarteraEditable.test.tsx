@@ -555,6 +555,27 @@ describe('bloques por clase de activo', () => {
     expect(await screen.findByText('Sin clasificar')).toBeInTheDocument()
     expect(screen.getByRole('row', { name: 'AL30' })).toBeInTheDocument()
   })
+
+  it('con renta fija resuelta y renta variable pendiente de resolver, el % real no infla al 100%', async () => {
+    // Bug del relevamiento de confiabilidad de datos del 16/08/2026: `rv.subtotalUsd ?? 0` hacía
+    // que `totalCarteraUsd` ignorara la porción de RV pendiente (GGAL en ARS, sin tipo de cambio)
+    // y el % real de AL30 —que es la ÚNICA posición de RF— saliera 100% en vez de sin dato: el
+    // denominador correcto todavía no se conoce, no es "0 de renta variable".
+    responderCon({
+      especies: [especie()],
+      acciones: [accionGgal({ moneda_cotizacion: 'ARS' })],
+      tipoDeCambio: { valor: null, disponible: false },
+    })
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar AL30' }))
+    await userEvent.click(screen.getByRole('button', { name: 'agregar GGAL' }))
+    await userEvent.click(screen.getByRole('button', { name: 'monto 10.000' }))
+
+    const fila = await screen.findByRole('row', { name: 'AL30' })
+    expect(within(fila).queryByText('100,00%')).not.toBeInTheDocument()
+    expect(within(fila).getByText('s/d')).toBeInTheDocument()
+  })
 })
 
 

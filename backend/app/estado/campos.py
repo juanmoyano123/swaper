@@ -89,8 +89,8 @@ CAMPOS_CRITICOS: tuple[CampoCritico, ...] = (
         rotulo="Moneda de cotización",
         por_que=(
             "Dice en qué unidad están el precio y el volumen. Sin ella el número existe pero no se "
-            "sabe con qué se puede comparar, y se deduce del sufijo del ticker sólo como último "
-            "recurso, declarándolo."
+            "sabe con qué se puede comparar: no se deduce del sufijo del ticker (regla 11), así "
+            "que una especie sin moneda declarada queda fuera de toda comparación."
         ),
     ),
     CampoCritico(

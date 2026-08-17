@@ -31,7 +31,7 @@ import { PanelRentaAnual } from './PanelRentaAnual'
 import { PanelRentaCordillera } from './PanelRentaCordillera'
 
 export function PanelRenta() {
-  const { posicionesParaCalendario, resueltas } = useCarteraResuelta()
+  const { posicionesParaCalendario, resueltas, tipoDeCambio } = useCarteraResuelta()
   const calendario = useCalendarioCartera(posicionesParaCalendario)
 
   if (posicionesParaCalendario.length === 0) {
@@ -59,7 +59,7 @@ export function PanelRenta() {
 
   const { meses, resumen } = calendario.data
   const rentaAnual = resumen.renta_anual ?? {}
-  const invertidoMapa = invertidoPorMoneda(meses, resueltas)
+  const invertidoMapa = invertidoPorMoneda(meses, resueltas, tipoDeCambio)
   const porMoneda = calcularRentaAnualPorMoneda(meses, rentaAnual, invertidoMapa)
 
   const columnasUsd = columnasDeCordillera(meses, 'usd')

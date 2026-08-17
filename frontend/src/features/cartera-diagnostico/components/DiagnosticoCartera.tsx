@@ -62,7 +62,7 @@ const MOTIVO_LABEL: Record<MotivoExclusionValuacion, string> = {
 }
 
 export function DiagnosticoCartera({ posiciones }: { posiciones: PosicionCruda[] }) {
-  const { resolucion, valuacion, porTicker, cargando, error } = useCarteraCargadaValuada(posiciones)
+  const { resolucion, valuacion, porTicker, tipoDeCambio, cargando, error } = useCarteraCargadaValuada(posiciones)
 
   // `useMemo` y no `?? []` suelto: sin memoizar, el fallback crea un array nuevo en cada render y
   // los `useMemo` de abajo, que dependen de esta referencia, se recalculan siempre.
@@ -73,8 +73,14 @@ export function DiagnosticoCartera({ posiciones }: { posiciones: PosicionCruda[]
     () => valuadas.map((v) => ({ ticker: v.ticker, monto: v.invertido })),
     [valuadas],
   )
+  // `pesoReal` sólo es `null` cuando el total invertido no se pudo determinar (denominador
+  // inválido) — en ese caso no hay con qué ponderar ninguna posición, así que se excluyen en vez
+  // de mandar un peso inventado a `/concentracion`.
   const posicionesConPeso = useMemo(
-    () => valuadas.map((v) => ({ ticker: v.ticker, peso: v.pesoReal })),
+    () =>
+      valuadas
+        .filter((v): v is typeof v & { pesoReal: number } => v.pesoReal !== null)
+        .map((v) => ({ ticker: v.ticker, peso: v.pesoReal })),
     [valuadas],
   )
 
@@ -129,7 +135,7 @@ export function DiagnosticoCartera({ posiciones }: { posiciones: PosicionCruda[]
 
       <SeccionRendimientosYPlazo rendimientos={rendimientos} plazo={plazo} />
 
-      <SeccionRenta calendario={calendario} valuadas={valuadas} />
+      <SeccionRenta calendario={calendario} valuadas={valuadas} tipoDeCambio={tipoDeCambio} />
 
       <SeccionConcentracion perfil={perfil} onPerfil={setPerfil} posiciones={posicionesConPeso} consulta={concentracion} />
 
@@ -195,9 +201,11 @@ function TarjetaRendimiento({ datos }: { datos: RendimientoPorNaturaleza }) {
 function SeccionRenta({
   calendario,
   valuadas,
+  tipoDeCambio,
 }: {
   calendario: ReturnType<typeof useCalendarioCartera>
   valuadas: PosicionValuada[]
+  tipoDeCambio: number | null
 }) {
   if (calendario.isPending) return <EstadoCarga que="el calendario de la cartera" />
   if (calendario.isError) {
@@ -207,8 +215,8 @@ function SeccionRenta({
 
   const { meses, resumen } = calendario.data
   const rentaAnual = resumen.renta_anual ?? {}
-  const resueltasParaInvertido = valuadas.map((v) => ({ ticker: v.ticker, invertido: v.invertido }))
-  const invertidoMapa = invertidoPorMoneda(meses, resueltasParaInvertido)
+  const resueltasParaInvertido = valuadas.map((v) => ({ ticker: v.ticker, invertidoUsd: v.invertidoUsd }))
+  const invertidoMapa = invertidoPorMoneda(meses, resueltasParaInvertido, tipoDeCambio)
   const porMoneda = calcularRentaAnualPorMoneda(meses, rentaAnual, invertidoMapa)
 
   const columnasUsd = columnasDeCordillera(meses, 'usd')

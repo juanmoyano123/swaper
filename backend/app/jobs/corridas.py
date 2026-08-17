@@ -127,8 +127,12 @@ async def refresh_intra_rueda(
     # **y** las métricas propias de F-051. Con las dos columnas que este refresh leía antes, cada
     # pasada intradiaria dejaría la fila de precios sin TIR y la vista —que toma una sola fila por
     # ticker— publicaría el universo sin rendimiento hasta la matinal siguiente.
+    #
+    # `metricas_previas` sólo se lee con IAMC habilitado — mismo corte que `corrida.py::consolidar`.
+    # Sin este gate el refresh re-arrastraría la TIR del último informe de IAMC durante la pausa,
+    # que es exactamente lo que la pausa busca cortar. F-051 no depende de esto: se recalcula solo.
     cronograma = await leer_cronograma(conn)
-    metricas_previas = await leer_metricas_previas(conn)
+    metricas_previas = await leer_metricas_previas(conn) if settings.iamc_habilitado else {}
     consolidacion = armar_consolidacion(
         especies_por_endpoint=rueda.especies_por_endpoint,
         cronograma_persistido=cronograma,
