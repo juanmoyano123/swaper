@@ -35,7 +35,12 @@ from app.calendario.metricas import paridad_de, retorno_por_tir
 from app.condiciones.persistencia import COLUMNAS, TABLA, fila_para_api
 from app.core.config import Settings, get_settings
 from app.externos.cnv import DocumentoCnv, RespuestaInesperadaDeCnv, cliente_cnv, url_emisor
-from app.externos.emisores_cuit import leer_emisores_cuit, ruta_emisores_cuit
+from app.externos.emisores_cuit import (
+    leer_emisores_arca,
+    leer_emisores_cuit,
+    ruta_emisores_arca,
+    ruta_emisores_cuit,
+)
 from app.ingesta.consolidacion.metricas import FUENTE_CALCULO, fuente_de_metricas
 from app.ingesta.raiz import raiz_emision
 from app.instrumentos import ficha_de
@@ -290,14 +295,24 @@ async def sensibilidad(ticker: str, conn: Annotated[object, Depends(get_db)]) ->
     }
 
 
+FUENTE_CUIT_ARCA = "ARCA"
+FUENTE_CUIT_CNV = "CNV listado"
+
+
 def _sin_prospecto(
-    ticker: str, motivo: str, *, emisor: str | None = None, cuit: str | None = None
+    ticker: str,
+    motivo: str,
+    *,
+    emisor: str | None = None,
+    cuit: str | None = None,
+    cuit_fuente: str | None = None,
 ) -> dict[str, object]:
     return {
         "ticker": ticker,
         "aplica": False,
         "emisor": emisor,
         "cuit": cuit,
+        "cuit_fuente": cuit_fuente,
         "url_emisor_cnv": url_emisor(cuit) if cuit else None,
         "grupos": [],
         "motivo_ausente": motivo,
@@ -361,6 +376,14 @@ async def prospecto(
     para Cresud, no para IRSA), y un mismo Suplemento puede cubrir varias clases a la vez. Los
     documentos van todos, agrupados por tipo, y el asesor elige a ojo cuál corresponde.
 
+    **El CUIT se resuelve en cascada, y de dónde salió viaja en `cuit_fuente`.** Primero por raíz de
+    emisión contra la tabla de valuación de ARCA (`"ARCA"`): la clave es el código de especie, así
+    que resuelve incluso emisiones que no traen emisor declarado en ninguna fuente, y cuando las dos
+    fuentes discrepan gana ésta porque identifica la sociedad que emitió *esta* emisión. Si no está
+    ahí, por nombre de emisor contra el listado de la CNV (`"CNV listado"`), que cubre lo que ARCA
+    no puede traer — valúa al 31/12, así que una emisión posterior no figura. Si ninguno resuelve,
+    el motivo va declarado.
+
     `url_emisor_cnv` viaja siempre que hay CUIT resuelto, incluso si la CNV no responde o el parseo
     falla: es la salida de emergencia que no depende de nada más que el CUIT.
     """
@@ -369,20 +392,35 @@ async def prospecto(
         return _sin_prospecto(ticker, "no está en el universo de hoy")
     if especie.clase_activo != CLASE_ON:
         return _sin_prospecto(ticker, "no es una obligación negociable")
-    if especie.emisor is None:
-        return _sin_prospecto(ticker, "sin emisor declarado en el universo de hoy")
 
-    cuit = leer_emisores_cuit(ruta_emisores_cuit(settings)).get(especie.emisor)
-    if cuit is None:
+    arca = leer_emisores_arca(ruta_emisores_arca(settings)).get(raiz_emision(ticker))
+    if arca is not None:
+        cuit, cuit_fuente = arca.cuit, FUENTE_CUIT_ARCA
+        # El nombre que ya trae el universo gana como etiqueta —es el que el asesor ve en el resto
+        # de la app— y la denominación de ARCA rellena sólo cuando no hay ninguno. El CUIT, en
+        # cambio, sale siempre de ARCA: es lo que se le pregunta a la CNV.
+        emisor = especie.emisor or arca.denominacion
+    elif especie.emisor is None:
         return _sin_prospecto(
             ticker,
-            f"el emisor {especie.emisor!r} todavía no tiene CUIT curado "
-            "(ver tools/curar_emisores_cuit.py y data/emisores_cuit_pendientes.csv)",
-            emisor=especie.emisor,
+            "sin emisor declarado en el universo de hoy, y sin CUIT por código de especie en la "
+            "tabla de ARCA (que valúa al 31/12: una emisión posterior no figura)",
         )
+    else:
+        cuit_por_nombre = leer_emisores_cuit(ruta_emisores_cuit(settings)).get(especie.emisor)
+        if cuit_por_nombre is None:
+            return _sin_prospecto(
+                ticker,
+                f"el emisor {especie.emisor!r} todavía no tiene CUIT curado "
+                "(ver tools/curar_emisores_cuit.py y data/emisores_cuit_pendientes.csv)",
+                emisor=especie.emisor,
+            )
+        cuit, cuit_fuente, emisor = cuit_por_nombre, FUENTE_CUIT_CNV, especie.emisor
+
+    declarado = {"emisor": emisor, "cuit": cuit, "cuit_fuente": cuit_fuente}
 
     if not settings.cnv_habilitado:
-        return _sin_prospecto(ticker, MOTIVO_PAUSA_CNV, emisor=especie.emisor, cuit=cuit)
+        return _sin_prospecto(ticker, MOTIVO_PAUSA_CNV, **declarado)
 
     try:
         documentos = await cliente_cnv().documentos_de(cuit)
@@ -391,23 +429,22 @@ async def prospecto(
         return _sin_prospecto(
             ticker,
             "la CNV no respondió — probá de nuevo en un momento, o abrí el link a la CNV",
-            emisor=especie.emisor,
-            cuit=cuit,
+            **declarado,
         )
 
     if documentos is None:
         return _sin_prospecto(
             ticker,
             "la CNV no confirmó los resultados de este emisor — probá el link directo a la CNV",
-            emisor=especie.emisor,
-            cuit=cuit,
+            **declarado,
         )
 
     return {
         "ticker": ticker,
         "aplica": True,
-        "emisor": especie.emisor,
+        "emisor": emisor,
         "cuit": cuit,
+        "cuit_fuente": cuit_fuente,
         "url_emisor_cnv": url_emisor(cuit),
         "grupos": _agrupar_documentos(documentos),
         "motivo_ausente": None if documentos else "el emisor no tiene documentos filed",

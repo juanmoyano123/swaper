@@ -18,6 +18,7 @@ import pytest
 import app.api.v1.instrumentos as modulo_instrumentos
 from app.condiciones.semilla import CAMPOS
 from app.externos.cnv import ArchivoAdjunto, DocumentoCnv, RespuestaInesperadaDeCnv
+from app.externos.emisores_cuit import EmisorArca
 from tests.conftest import cliente
 
 FICHA = "/api/v1/instrumentos/{ticker}"
@@ -560,14 +561,19 @@ UN_DOCUMENTO = DocumentoCnv(
 
 @pytest.fixture
 def app_con_prospecto(crear_app, monkeypatch):
-    """`emisores_cuit.csv` se reemplaza en memoria (mismo criterio que el resto del archivo: el
+    """Los dos puentes al CUIT se reemplazan en memoria (mismo criterio que el resto del archivo: el
     contrato HTTP se prueba sin tocar disco), y `cliente_cnv()` se inyecta en el módulo del
-    endpoint. `CNV_HABILITADO=true` por default acá: la pausa tiene sus propios tests."""
+    endpoint. `CNV_HABILITADO=true` por default acá: la pausa tiene sus propios tests.
+
+    `emisores_arca` arranca vacío a propósito: así el default de la fixture ejerce el respaldo por
+    nombre, y los tests que quieren el camino de ARCA lo piden explícito.
+    """
 
     def _crear(
         *,
         universo: list[dict[str, Any]] | None = None,
         emisores_cuit: dict[str, str] | None = None,
+        emisores_arca: dict[str, EmisorArca] | None = None,
         cnv_habilitado: bool = True,
         **kwargs: Any,
     ):
@@ -580,6 +586,9 @@ def app_con_prospecto(crear_app, monkeypatch):
             {"TELECOM ARGENTINA S.A.": "30639453738"} if emisores_cuit is None else emisores_cuit
         )
         monkeypatch.setattr(modulo_instrumentos, "leer_emisores_cuit", lambda _ruta: emisores)
+        monkeypatch.setattr(
+            modulo_instrumentos, "leer_emisores_arca", lambda _ruta: emisores_arca or {}
+        )
 
         app = crear_app(FakeConexionInstrumentos(universo=universo, **kwargs))
         return app
@@ -700,6 +709,114 @@ async def test_prospecto_sin_cuit_curado_declara_el_motivo_y_no_pide_nada(
     assert cuerpo["cuit"] is None
     assert cuerpo["url_emisor_cnv"] is None
     assert "todavía no tiene CUIT curado" in cuerpo["motivo_ausente"]
+    assert fake.pedidos == []
+
+
+# --- la cascada al CUIT: ARCA por raíz de emisión, después el nombre contra la CNV ---------------
+
+# Una ON sin emisor declarado: exactamente el hueco que el puente por nombre no puede cubrir y ARCA
+# sí, porque su clave es el código de especie. 89 emisiones del universo real están así.
+ON_SIN_EMISOR: dict[str, Any] = {
+    "ticker": "MR35D",
+    "clase_activo": "on_corporativo",
+    "tipo_tasa": "hard-dollar",
+    "tir": 0.11,
+    "tna": None,
+    "duration": 2.0,
+    "maturity": date(2030, 3, 15),
+    "law": None,
+    "couponCurrency": "USD",
+    "underlying": None,
+    "lastPrice": 98.0,
+    "effectiveVolume": 0.0,
+    "moneda_cotizacion": "USD",
+    "paridad": None,
+}
+
+
+async def test_prospecto_resuelve_el_cuit_por_raiz_de_emision_contra_arca(
+    app_con_prospecto, monkeypatch
+) -> None:
+    """Sin nombre de emisor y sin entrada en el puente por nombre, ARCA igual resuelve: la clave es
+    la raíz de la especie. La denominación de ARCA queda de etiqueta porque no hay otra."""
+    fake = FakeClienteCnv(documentos=[UN_DOCUMENTO])
+    _inyectar_cliente(monkeypatch, fake)
+
+    app = app_con_prospecto(
+        universo=[ON_SIN_EMISOR],
+        emisores_cuit={},
+        emisores_arca={"MR35": EmisorArca(cuit="30604731018", denominacion="MSU S.A.")},
+    )
+    async with cliente(app) as http:
+        respuesta = await http.get(PROSPECTO.format(ticker="MR35D"))
+
+    cuerpo = respuesta.json()
+    assert cuerpo["aplica"] is True
+    assert cuerpo["cuit"] == "30604731018"
+    assert cuerpo["cuit_fuente"] == "ARCA"
+    assert cuerpo["emisor"] == "MSU S.A."
+    assert fake.pedidos == ["30604731018"]
+
+
+async def test_prospecto_prefiere_el_cuit_de_arca_sobre_el_del_nombre(
+    app_con_prospecto, monkeypatch
+) -> None:
+    """El caso PAN AMERICAN ENERGY: BYMA nombra a una sociedad del grupo y la emisión es de otra.
+    Gana ARCA —identifica la especie, no el nombre— pero el emisor que se muestra sigue siendo el
+    que el asesor ve en el resto de la app."""
+    fake = FakeClienteCnv(documentos=[UN_DOCUMENTO])
+    _inyectar_cliente(monkeypatch, fake)
+
+    app = app_con_prospecto(
+        emisores_cuit={"TELECOM ARGENTINA S.A.": "30695542476"},
+        emisores_arca={
+            "TLCM": EmisorArca(
+                cuit="30639453738", denominacion="TELECOM ARGENTINA SOCIEDAD ANONIMA"
+            )
+        },
+    )
+    async with cliente(app) as http:
+        respuesta = await http.get(PROSPECTO.format(ticker="TLCMO"))
+
+    cuerpo = respuesta.json()
+    assert cuerpo["cuit"] == "30639453738"
+    assert cuerpo["cuit_fuente"] == "ARCA"
+    assert cuerpo["emisor"] == "TELECOM ARGENTINA S.A."
+    assert fake.pedidos == ["30639453738"]
+
+
+async def test_prospecto_cae_al_puente_por_nombre_cuando_arca_no_trae_la_emision(
+    app_con_prospecto, monkeypatch
+) -> None:
+    """Lo que ARCA no puede traer: la tabla valúa al 31/12 y una emisión posterior no figura."""
+    fake = FakeClienteCnv(documentos=[UN_DOCUMENTO])
+    _inyectar_cliente(monkeypatch, fake)
+
+    async with cliente(app_con_prospecto(emisores_arca={})) as http:
+        respuesta = await http.get(PROSPECTO.format(ticker="TLCMO"))
+
+    cuerpo = respuesta.json()
+    assert cuerpo["cuit"] == "30639453738"
+    assert cuerpo["cuit_fuente"] == "CNV listado"
+    assert cuerpo["emisor"] == "TELECOM ARGENTINA S.A."
+
+
+async def test_prospecto_sin_emisor_ni_entrada_en_arca_declara_las_dos_ausencias(
+    app_con_prospecto, monkeypatch
+) -> None:
+    fake = FakeClienteCnv()
+    _inyectar_cliente(monkeypatch, fake)
+
+    app = app_con_prospecto(universo=[ON_SIN_EMISOR], emisores_cuit={}, emisores_arca={})
+    async with cliente(app) as http:
+        respuesta = await http.get(PROSPECTO.format(ticker="MR35D"))
+
+    cuerpo = respuesta.json()
+    assert cuerpo["aplica"] is False
+    assert cuerpo["cuit"] is None
+    assert cuerpo["cuit_fuente"] is None
+    assert "sin emisor declarado en el universo de hoy" in cuerpo["motivo_ausente"]
+    assert "ARCA" in cuerpo["motivo_ausente"]
     assert fake.pedidos == []
 
 

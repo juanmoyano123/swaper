@@ -134,10 +134,21 @@ class Settings(BaseSettings):
 
     # F-072 — el puente emisor -> CUIT para pedirle documentos a la CNV. Igual criterio que
     # `condiciones_csv`: dato curado, versionado, sin fuente de origen viva por request (se cura
-    # una vez con `tools/curar_emisores_cuit.py` contra el buscador de la CNV). A diferencia de
-    # `condiciones_csv`, cubre parcialmente el universo de ONs a propósito — 13 de 82 emisores al
-    # 17/08/2026 — y eso está bien: lo que no está resuelto se declara, no bloquea la feature.
+    # una vez con `tools/curar_emisores_cuit.py`, contra el listado oficial de emisoras de la CNV
+    # más su buscador). A diferencia de `condiciones_csv`, cubre parcialmente el universo de ONs a
+    # propósito — 105 nombres de emisor, 80 CUITs distintos, que resuelven 277 de las 373 emisiones
+    # ON al 17/08/2026 — y eso está bien: lo que no está resuelto se declara, no bloquea la feature.
+    # El grueso de lo que falta no es del puente sino de más arriba: 89 emisiones no tienen emisor
+    # declarado en ninguna fuente, así que no hay nombre con el cual buscar un CUIT.
     emisores_cuit_csv: str = "data/emisores_cuit.csv"
+
+    # F-072 — el otro puente al CUIT, el fuerte: raíz de emisión -> CUIT, curado desde la tabla de
+    # valuación de Bienes Personales de ARCA con `tools/curar_emisores_arca.py`. La clave es el
+    # código de especie y no el nombre, así que resuelve también las emisiones que no traen emisor
+    # declarado en ninguna fuente: 233 de las 373 emisiones ON al 18/08/2026, 38 de ellas sin
+    # emisor. El endpoint lo consulta primero y cae al de por nombre cuando no está — la tabla
+    # valúa al 31/12 y no puede traer una emisión que salió a cotizar después.
+    emisores_arca_csv: str = "data/emisores_arca.csv"
 
     # F-010 no declara settings a propósito. Los topes de sanidad (300 % hard-dollar, 100 % de tasa
     # real CER, 500 % de TNA nominal) y el umbral de discordancia entre especies son criterio de
