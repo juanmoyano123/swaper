@@ -49,7 +49,13 @@ BASE_AIF = "https://aif2.cnv.gov.ar"
 BASE_BLOB = "https://blob.cnv.gov.ar/BlobWebService.svc"
 
 USER_AGENT = "10-Swaper (asesor ALyC Argentina) moyanojjeronimo@gmail.com"
-TIMEOUT_SEGUNDOS = 15.0
+
+# 30 s y no 15: la página de un emisor grande pesa cientos de KB y la CNV la sirve lenta. Con 15 s
+# los emisores más pesados daban ReadTimeout de a ratos —verificado con Telecom (508 documentos),
+# que falla y al reintentar responde—, y el bloque mostraba "la CNV no respondió" por un límite
+# nuestro, no por un problema de la fuente. Esperar el doble es barato: el bloque carga aparte del
+# resto de la ficha y no bloquea nada más de la pantalla.
+TIMEOUT_SEGUNDOS = 30.0
 
 # La ventana vieja está tolerada (verificado: 307 documentos de un emisor real con esta fecha,
 # contra 185 con la ventana de 4 años). Fija y amplia: no hay razón de negocio para acotarla, y
