@@ -523,7 +523,10 @@ class FakeClienteCnv:
 
     def __init__(
         self,
-        documentos: list[DocumentoCnv] | Exception | None = None,
+        documentos: list[DocumentoCnv]
+        | dict[str, list[DocumentoCnv] | None]
+        | Exception
+        | None = None,
         archivo: ArchivoAdjunto | Exception | None = None,
         contenido: bytes | Exception = b"%PDF-1.7 contenido",
     ) -> None:
@@ -536,6 +539,8 @@ class FakeClienteCnv:
         self.pedidos.append(cuit)
         if isinstance(self._documentos, Exception):
             raise self._documentos
+        if isinstance(self._documentos, dict):
+            return self._documentos.get(cuit)
         return self._documentos
 
     async def archivo_de(self, uuid: str) -> ArchivoAdjunto | None:
@@ -799,6 +804,50 @@ async def test_prospecto_cae_al_puente_por_nombre_cuando_arca_no_trae_la_emision
     assert cuerpo["cuit"] == "30639453738"
     assert cuerpo["cuit_fuente"] == "CNV listado"
     assert cuerpo["emisor"] == "TELECOM ARGENTINA S.A."
+
+
+async def test_prospecto_prueba_el_cuit_por_nombre_si_la_cnv_no_reconoce_el_de_arca(
+    app_con_prospecto, monkeypatch
+) -> None:
+    """El caso PAE Sucursal: ARCA identifica bien la sociedad emisora, pero esa sociedad no tiene
+    ficha de emisora en la CNV y el buscador devuelve su página genérica. Se prueba el otro CUIT
+    curado, que es dato de fuente igual, y la respuesta declara cuál terminó usando."""
+    fake = FakeClienteCnv(documentos={"30695542476": [UN_DOCUMENTO], "30714813583": None})
+    _inyectar_cliente(monkeypatch, fake)
+
+    app = app_con_prospecto(
+        emisores_cuit={"TELECOM ARGENTINA S.A.": "30695542476"},
+        emisores_arca={"TLCM": EmisorArca(cuit="30714813583", denominacion="OTRA DEL GRUPO S.A.")},
+    )
+    async with cliente(app) as http:
+        respuesta = await http.get(PROSPECTO.format(ticker="TLCMO"))
+
+    cuerpo = respuesta.json()
+    assert cuerpo["aplica"] is True
+    assert cuerpo["cuit"] == "30695542476"
+    assert cuerpo["cuit_fuente"] == "CNV listado"
+    assert fake.pedidos == ["30714813583", "30695542476"]
+
+
+async def test_prospecto_no_reintenta_si_el_cuit_por_nombre_es_el_mismo(
+    app_con_prospecto, monkeypatch
+) -> None:
+    """Sin CUIT alternativo distinto no hay nada que probar: se declara y no se pide dos veces."""
+    fake = FakeClienteCnv(documentos=None)
+    _inyectar_cliente(monkeypatch, fake)
+
+    app = app_con_prospecto(
+        emisores_cuit={"TELECOM ARGENTINA S.A.": "30639453738"},
+        emisores_arca={"TLCM": EmisorArca(cuit="30639453738", denominacion="TELECOM ARG. S.A.")},
+    )
+    async with cliente(app) as http:
+        respuesta = await http.get(PROSPECTO.format(ticker="TLCMO"))
+
+    cuerpo = respuesta.json()
+    assert cuerpo["aplica"] is False
+    assert cuerpo["cuit_fuente"] == "ARCA"
+    assert "no confirmó los resultados" in cuerpo["motivo_ausente"]
+    assert fake.pedidos == ["30639453738"]
 
 
 async def test_prospecto_sin_emisor_ni_entrada_en_arca_declara_las_dos_ausencias(

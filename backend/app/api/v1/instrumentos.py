@@ -382,7 +382,8 @@ async def prospecto(
     fuentes discrepan gana ésta porque identifica la sociedad que emitió *esta* emisión. Si no está
     ahí, por nombre de emisor contra el listado de la CNV (`"CNV listado"`), que cubre lo que ARCA
     no puede traer — valúa al 31/12, así que una emisión posterior no figura. Si ninguno resuelve,
-    el motivo va declarado.
+    el motivo va declarado. Y si la CNV no reconoce el CUIT de ARCA pero el emisor tiene otro
+    curado por nombre, se prueba ése antes de darse por vencido (ver el comentario más abajo).
 
     `url_emisor_cnv` viaja siempre que hay CUIT resuelto, incluso si la CNV no responde o el parseo
     falla: es la salida de emergencia que no depende de nada más que el CUIT.
@@ -417,26 +418,56 @@ async def prospecto(
             )
         cuit, cuit_fuente, emisor = cuit_por_nombre, FUENTE_CUIT_CNV, especie.emisor
 
-    declarado = {"emisor": emisor, "cuit": cuit, "cuit_fuente": cuit_fuente}
-
     if not settings.cnv_habilitado:
-        return _sin_prospecto(ticker, MOTIVO_PAUSA_CNV, **declarado)
+        return _sin_prospecto(
+            ticker, MOTIVO_PAUSA_CNV, emisor=emisor, cuit=cuit, cuit_fuente=cuit_fuente
+        )
 
+    cliente = cliente_cnv()
     try:
-        documentos = await cliente_cnv().documentos_de(cuit)
+        documentos = await cliente.documentos_de(cuit)
+
+        # La CNV no reconoce todos los CUITs que ARCA declara: una sucursal de sociedad extranjera
+        # o una sociedad del grupo que no es la que presenta pueden no tener ficha de emisora, y
+        # ahí el buscador devuelve su página genérica en vez de un "no hay resultados". Verificado
+        # el 18/08/2026 en los cuatro CUITs donde pasa —PAE Sucursal, CLISA, 360 Energy y el
+        # consorcio Gen. Mediterránea— contra los 88 restantes, que responden bien. Cuando pasa y
+        # el emisor tiene otro CUIT curado por nombre, se prueba ése: los dos son dato de fuente,
+        # y se usa el que la CNV sabe contestar. Sin esto se pierden 15 emisiones que el puente
+        # por nombre ya resolvía, PAE sola son 11.
+        if documentos is None and cuit_fuente == FUENTE_CUIT_ARCA and especie.emisor is not None:
+            alternativo = leer_emisores_cuit(ruta_emisores_cuit(settings)).get(especie.emisor)
+            if alternativo is not None and alternativo != cuit:
+                documentos_alternativos = await cliente.documentos_de(alternativo)
+                if documentos_alternativos is not None:
+                    logger.info(
+                        "cnv_prospecto_respaldo_por_nombre",
+                        ticker=ticker,
+                        cuit_arca=cuit,
+                        cuit_usado=alternativo,
+                    )
+                    cuit, cuit_fuente, documentos = (
+                        alternativo,
+                        FUENTE_CUIT_CNV,
+                        documentos_alternativos,
+                    )
     except httpx.HTTPError as exc:
         logger.warning("cnv_prospecto_fallo_de_red", ticker=ticker, cuit=cuit, error=str(exc))
         return _sin_prospecto(
             ticker,
             "la CNV no respondió — probá de nuevo en un momento, o abrí el link a la CNV",
-            **declarado,
+            emisor=emisor,
+            cuit=cuit,
+            cuit_fuente=cuit_fuente,
         )
 
     if documentos is None:
         return _sin_prospecto(
             ticker,
             "la CNV no confirmó los resultados de este emisor — probá el link directo a la CNV",
-            **declarado,
+            emisor=emisor,
+            cuit=cuit,
+            cuit_fuente=cuit_fuente,
         )
 
     return {
