@@ -9,6 +9,7 @@
 
 import { QueryClientProvider } from '@tanstack/react-query'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/lib/supabase', () => ({
@@ -119,6 +120,7 @@ function prospecto(ticker: string, extra: Partial<Prospecto> = {}): Prospecto {
     aplica: false,
     emisor: null,
     cuit: null,
+    cuit_fuente: null,
     url_emisor_cnv: null,
     grupos: [],
     motivo_ausente: 'no es una obligación negociable',
@@ -141,6 +143,21 @@ function grupoDocumentos(grupo: string, extra: Partial<GrupoDocumentos['document
         ...extra,
       },
     ],
+  }
+}
+
+/** Un grupo con historial: el primero es el más reciente, que es el orden en que la CNV los sirve. */
+function grupoConHistorial(grupo: string, descripciones: string[]): GrupoDocumentos {
+  return {
+    grupo,
+    documentos: descripciones.map((descripcion, i) => ({
+      fecha: `2026-0${8 - i}-11`,
+      hora: '15:34',
+      descripcion,
+      documento_id: `355719${i}`,
+      uuid: `uuid-${grupo}-${i}`,
+      url_publicview: `https://aif2.cnv.gov.ar/presentations/publicview/uuid-${grupo}-${i}`,
+    })),
   }
 }
 
@@ -521,6 +538,72 @@ describe('prospecto de emisión', () => {
     expect(await screen.findByText('Un documento de prueba')).toBeInTheDocument()
     expect(await screen.findByText('Ver en CNV')).toBeInTheDocument()
     expect(await screen.findByText('Ver todos los documentos del emisor en CNV')).toBeInTheDocument()
+  })
+
+  it('por defecto muestra sólo lo último de cada grupo, con el conteo del historial', async () => {
+    const especieOn = especie('TLCMO', { clase_activo: 'on_corporativo', emisor: 'TELECOM ARGENTINA S.A.' })
+    mockearRutas(
+      rutasOk('TLCMO', {
+        [RUTA_FICHA('TLCMO')]: { body: { ...ficha('TLCMO'), especie: especieOn } },
+        [RUTA_PROSPECTO('TLCMO')]: {
+          body: prospecto('TLCMO', {
+            aplica: true,
+            emisor: 'TELECOM ARGENTINA S.A.',
+            cuit: '30639453738',
+            cuit_fuente: 'ARCA',
+            url_emisor_cnv: 'https://www.cnv.gov.ar/SitioWeb/Empresas/Empresa/30639453738',
+            grupos: [
+              grupoConHistorial('Prospectos', ['Prospecto de hoy', 'Prospecto viejo']),
+              grupoConHistorial('Suplementos', ['Suplemento de hoy', 'Suplemento viejo']),
+            ],
+            motivo_ausente: null,
+          }),
+        },
+      }),
+    )
+
+    renderizar('TLCMO')
+
+    expect(await screen.findByText('Prospecto de hoy')).toBeInTheDocument()
+    expect(await screen.findByText('Suplemento de hoy')).toBeInTheDocument()
+    expect(screen.queryByText('Prospecto viejo')).not.toBeInTheDocument()
+    expect(screen.queryByText('Suplemento viejo')).not.toBeInTheDocument()
+    // El conteo por grupo avisa que hay historial detrás; el link a la CNV está desde el arranque.
+    expect(screen.getAllByText('· 2')).toHaveLength(2)
+    expect(await screen.findByText('Ver todos los documentos del emisor en CNV')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Ver historial completo (4 documentos)' }))
+
+    expect(await screen.findByText('Prospecto viejo')).toBeInTheDocument()
+    expect(await screen.findByText('Suplemento viejo')).toBeInTheDocument()
+    expect(await screen.findByText('Ver todos los documentos del emisor en CNV')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Mostrar menos' }))
+
+    expect(screen.queryByText('Prospecto viejo')).not.toBeInTheDocument()
+  })
+
+  it('con un solo documento por grupo no ofrece historial', async () => {
+    const especieOn = especie('TLCMO', { clase_activo: 'on_corporativo', emisor: 'TELECOM ARGENTINA S.A.' })
+    mockearRutas(
+      rutasOk('TLCMO', {
+        [RUTA_FICHA('TLCMO')]: { body: { ...ficha('TLCMO'), especie: especieOn } },
+        [RUTA_PROSPECTO('TLCMO')]: {
+          body: prospecto('TLCMO', {
+            aplica: true,
+            cuit: '30639453738',
+            url_emisor_cnv: 'https://www.cnv.gov.ar/SitioWeb/Empresas/Empresa/30639453738',
+            grupos: [grupoDocumentos('Suplementos')],
+            motivo_ausente: null,
+          }),
+        },
+      }),
+    )
+
+    renderizar('TLCMO')
+
+    expect(await screen.findByText('Un documento de prueba')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Ver historial completo/ })).not.toBeInTheDocument()
   })
 
   it('sin documentos, declara el motivo en vez de una tabla vacía', async () => {

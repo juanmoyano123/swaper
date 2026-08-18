@@ -193,12 +193,17 @@ export type GrupoDocumentos = z.infer<typeof esquemaGrupoDocumentos>
  * el universo de hoy — no se esconde el bloque, se declara por qué no corresponde. `cuit`/`emisor`
  * viajan cuando se pudieron resolver aunque `grupos` venga vacío (fuente pausada o sin confirmar):
  * `url_emisor_cnv` es la salida de emergencia que no depende del parser.
+ *
+ * `cuit_fuente` dice cuál de los dos puentes resolvió el CUIT — `"ARCA"` (por código de especie) o
+ * `"CNV listado"` (por nombre del emisor). No se muestra en la ficha: es para que el dato quede
+ * auditable desde la respuesta cuando haya que explicar de dónde salió un prospecto.
  */
 export const esquemaProspecto = z.object({
   ticker: z.string(),
   aplica: z.boolean(),
   emisor: z.string().nullable(),
   cuit: z.string().nullable(),
+  cuit_fuente: z.string().nullable(),
   url_emisor_cnv: z.string().nullable(),
   grupos: z.array(esquemaGrupoDocumentos),
   motivo_ausente: z.string().nullable(),

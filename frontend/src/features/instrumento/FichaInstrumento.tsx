@@ -478,9 +478,15 @@ function descargarBlob(blob: Blob, nombreArchivo: string): void {
   URL.revokeObjectURL(url)
 }
 
+/** Un emisor grande presenta cientos de documentos —Telecom tiene 508— y volcarlos todos hace que
+ *  lo último presentado, que es lo que el asesor busca, quede enterrado. Por defecto se muestra el
+ *  documento más reciente de cada grupo y el resto queda detrás del botón de historial. Que el
+ *  primero de cada lista sea el más reciente no es un supuesto nuestro: es el orden en que la CNV
+ *  los sirve, y el backend lo conserva (`_agrupar_documentos` no reordena por fecha). */
 function BloqueProspecto({ query }: { query: ReturnType<typeof useProspectoInstrumento> }) {
   const [descargando, setDescargando] = useState<string | null>(null)
   const [errorDescarga, setErrorDescarga] = useState<string | null>(null)
+  const [verHistorial, setVerHistorial] = useState(false)
 
   if (query.isPending) return <EstadoCarga que="el prospecto de emisión" />
   if (query.isError) {
@@ -488,6 +494,8 @@ function BloqueProspecto({ query }: { query: ReturnType<typeof useProspectoInstr
   }
 
   const data = query.data
+  const totalDocumentos = data.grupos.reduce((suma, grupo) => suma + grupo.documentos.length, 0)
+  const hayHistorial = totalDocumentos > data.grupos.length
 
   async function descargar(ticker: string, uuid: string, nombreFallback: string) {
     setErrorDescarga(null)
@@ -515,9 +523,17 @@ function BloqueProspecto({ query }: { query: ReturnType<typeof useProspectoInstr
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {data.grupos.map((grupo) => (
             <div key={grupo.grupo}>
-              <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 6 }}>{grupo.grupo}</div>
+              <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 6 }}>
+                {grupo.grupo}
+                {grupo.documentos.length > 1 && (
+                  <span className="mono" style={{ color: 'var(--dim)', fontWeight: 400 }}>
+                    {' · '}
+                    {grupo.documentos.length}
+                  </span>
+                )}
+              </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {grupo.documentos.map((doc) => (
+                {(verHistorial ? grupo.documentos : grupo.documentos.slice(0, 1)).map((doc) => (
                   <div
                     key={doc.uuid}
                     style={{
@@ -566,6 +582,18 @@ function BloqueProspecto({ query }: { query: ReturnType<typeof useProspectoInstr
               </div>
             </div>
           ))}
+          {hayHistorial && (
+            <button
+              type="button"
+              className="mono"
+              onClick={() => setVerHistorial((abierto) => !abierto)}
+              style={{ fontSize: 11, alignSelf: 'flex-start', cursor: 'pointer' }}
+            >
+              {verHistorial
+                ? 'Mostrar menos'
+                : `Ver historial completo (${totalDocumentos} documentos)`}
+            </button>
+          )}
         </div>
       )}
       {errorDescarga && (
