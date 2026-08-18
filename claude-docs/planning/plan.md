@@ -3184,6 +3184,80 @@ THEN nunca quedan en el repositorio de código
 
 ---
 
+#### F-071 — Calculadora de canjes y prorrateo de órdenes a mesa
+
+**Etiqueta:** Stage 2 · **Traza a:** herramienta operativa real del asesor (Excel de canjes/ops),
+relevada el 17/08/2026 — no viene de una F1-F13 del `product-definition.md` ni del análisis Docta,
+sino de cómo el asesor ya arma y comunica operaciones hoy.
+
+**Descripción.** Dos calculadoras chicas, hoy en un Excel personal, que el asesor usa para pasarle
+operaciones a la mesa más rápido y con menos error de cálculo a mano. Se relevaron celda por celda
+(fórmulas reales, no sólo los valores) contra el archivo `Libro.xlsx` del asesor y se verificaron
+contra sus propios resultados.
+
+**1) Canje MEP↔Cable.** Dos bloques espejados (MEP a Cable / Cable a MEP). El asesor carga el monto
+en USD, el precio que da la mesa (spread, puede ser negativo) y la comisión del IFA; la calculadora
+devuelve el precio final al cliente (mesa + comisión) y cuánto USD del otro tipo se le acredita:
+`Monto × (1 − precio final)` en el sentido MEP→Cable, `Monto × (1 + precio final)` en el sentido
+inverso — el signo se invierte porque la operación va para el otro lado. La comisión bruta del IFA
+sale aparte, sin componer con el precio: `Monto × Comisión`.
+
+**2) Prorrateo de una orden entre cuentas ("Ops").** El asesor carga, por ticker, el precio de mesa
+y la comisión (de ahí sale el precio cliente); carga cada cuenta con su comitente y su disponible en
+ARS; y para cada combinación cuenta+activo asigna un % del disponible de esa cuenta. La calculadora
+trunca — nunca redondea para arriba — cuántos VN entran en ese monto (`REDONDEAR.MENOS(monto /
+precio cliente, 0)`), declara el remanente en pesos que quedó sin poder colocarse por el truncamiento,
+y sólo corre la cuenta si está marcada para operar. Al final suma el VN de todas las cuentas que
+operan un mismo ticker, arma el texto de la orden ("Comprar 6.657 VN AO28") para pasarle a la mesa, y
+al lado desglosa cuánto de ese total le corresponde a cada cuenta, para poder verificar el reparto
+antes de mandarlo.
+
+**El dato de cuentas es dato de cliente real.** El bloque de "Cuentas y Disponible" del prorrateador
+carga número de comitente, razón social/cuenta y disponible en ARS de clientes reales — exactamente
+el tipo de dato que la regla del proyecto excluye del repositorio. La feature se diseña para que ese
+bloque **viva sólo en el estado de la sesión del navegador, sin persistirse en la base**: se carga a
+mano cada vez que se arma una orden, igual que hoy en el Excel, y desaparece al cerrar. Si en algún
+momento se quiere guardar una lista de cuentas recurrente, eso es una extensión posterior que primero
+necesita resolver dónde viven esos datos (la misma pregunta abierta que tiene F-043), no algo que esta
+feature resuelve de arranque.
+
+**Input:** precio de mesa, comisión y monto cargados a mano por el asesor (dato operativo del momento,
+no viene del universo de mercado); comitente, cuenta y disponible ARS cargados a mano por sesión.
+**Output:** precio final al cliente y monto acreditado en el canje; VN a comprar por cuenta y por
+ticker, remanente declarado, y el texto de la orden consolidada para la mesa.
+**Depende de:** F-014 (aislamiento por asesor: cada sesión es de un único asesor)
+**Habilita:** —
+
+**RICE:** R = 350 · I = 3 · C = 90 % · E = 6 → **Score 157,5**
+*Confidence 90 %: la lógica entera —cada fórmula— ya está validada en el Excel que el asesor usa a
+diario en producción; lo que no está probado es la UI y, sobre todo, no persistir el dato de cliente.*
+
+```
+GIVEN un canje MEP a Cable con precio mesa -2,00 % y comisión 1,50 %
+WHEN se calcula
+THEN el precio final al cliente es -0,50 % y el USD Cable a acreditar es el monto multiplicado por
+     (1 - precio final), igual que en el Excel de referencia
+
+GIVEN una orden de un ticker repartida entre varias cuentas con % asignado distinto
+WHEN se calcula el VN por cuenta
+THEN cada cuenta trunca su propio VN hacia abajo, nunca hacia arriba, y el remanente en pesos que
+     no se pudo colocar por el truncamiento queda declarado, no descartado en silencio
+
+GIVEN una cuenta no marcada para operar
+WHEN se agrega el total de VN a comprar de ese ticker
+THEN esa cuenta no suma al total ni aparece en la orden para la mesa
+
+GIVEN el total de VN a comprar de un ticker entre todas las cuentas que operan
+WHEN se arma el texto para pasarle a la mesa
+THEN el desglose por cuenta al lado sigue sumando exactamente ese total
+
+GIVEN comitente, cuenta y disponible ARS de un cliente real cargados en el prorrateador
+WHEN se cierra la sesión o se recarga la página
+THEN esos datos no quedan persistidos en la base ni en ningún archivo del repositorio
+```
+
+---
+
 ## 4. Tabla de RICE ordenada
 
 | # | ID | Feature | Etiqueta | R | I | C | E | Score |
@@ -3213,51 +3287,52 @@ THEN nunca quedan en el repositorio de código
 | 23 | F-022 | Rendimientos por naturaleza y plazo | Stage 1 | 350 | 2 | 100 % | 4 | 175,0 |
 | 24 | F-007 | Consolidador multi-fuente | Stage 1 | 400 | 3 | 80 % | 6 | 160,0 |
 | 25 | F-051 | Métricas propias: TIR, duración y paridad | Stage 1 | 400 | 2 | 80 % | 4 | 160,0 |
-| 26 | F-030 | Valuación y diagnóstico de cartera | Stage 1 | 200 | 3 | 100 % | 4 | 150,0 |
-| 27 | F-064 | Watchlist | Stage 2 | 300 | 1 | 100 % | 2 | 150,0 |
-| 28 | F-069 | Top ganadores y perdedores | Stage 2 | 300 | 1 | 100 % | 2 | 150,0 |
-| 29 | F-018 | Cartera editable y ponderación | Stage 1 | 350 | 3 | 80 % | 6 | 140,0 |
-| 30 | F-053 | Ficha del activo de renta variable | Stage 1 | 300 | 2 | 70 % | 3 | 140,0 |
-| 31 | F-016 | Grilla-selector de doce meses | Stage 1 | 380 | 3 | 80 % | 8 | 114,0 |
-| 32 | F-056 | Índice CER del BCRA: tasa real | Stage 2 | 250 | 2 | 90 % | 4 | 112,5 |
-| 33 | F-017 | Filtros de la grilla | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
-| 34 | F-039 | Ficha de instrumento | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
-| 35 | F-029 | Resolución de tickers | Stage 1 | 200 | 2 | 80 % | 3 | 106,7 |
-| 36 | F-038 | Monitor de mercado | Stage 1 | 400 | 2 | 80 % | 6 | 106,7 |
-| 37 | F-052 | Renta variable en el monitor | Stage 1 | 400 | 1 | 80 % | 3 | 106,7 |
-| 38 | F-031 | Vector de riesgo de seis ejes | Stage 1 | 250 | 3 | 80 % | 6 | 100,0 |
-| 39 | F-032 | Motor de rotaciones intra-segmento | Stage 1 | 200 | 3 | 100 % | 6 | 100,0 |
-| 40 | F-042 | Exportación a Excel y PDF | Stage 1 | 250 | 2 | 80 % | 4 | 100,0 |
-| 41 | F-028 | Ingreso de cartera por tres vías | Stage 1 | 200 | 3 | 80 % | 5 | 96,0 |
-| 42 | F-034 | Modo subir TIR con contrapartida | Stage 1 | 180 | 3 | 80 % | 5 | 86,4 |
-| 43 | F-057 | FCI en el monitor (CAFCI) | Stage 2 | 300 | 2 | 85 % | 6 | 85,0 |
-| 44 | F-067 | FCI: comparador, categorías y gestoras | Stage 2 | 250 | 2 | 85 % | 5 | 85,0 |
-| 45 | F-019 | Armado asistido | Stage 1 | 250 | 2 | 100 % | 6 | 83,3 |
-| 46 | F-026 | Bloque de renta variable | Stage 1 | 300 | 2 | 80 % | 6 | 80,0 |
-| 47 | F-050 | API Market Data oficial de BYMA | Stage 2 | 400 | 2 | 50 % | 5 | 80,0 |
-| 48 | F-058 | Carry trade: calculadora y breakeven | Stage 2 | 300 | 3 | 70 % | 8 | 78,8 |
-| 49 | F-062 | Curva histórica del segmento | Stage 2 | 250 | 2 | 60 % | 4 | 75,0 |
-| 50 | F-063 | Heatmap del panel | Stage 2 | 250 | 1 | 90 % | 3 | 75,0 |
-| 51 | F-037 | Comparación original contra propuesta | Stage 1 | 180 | 2 | 80 % | 4 | 72,0 |
-| 52 | F-061 | Rendimientos históricos por ventana | Stage 2 | 300 | 2 | 60 % | 5 | 72,0 |
-| 53 | F-040 | Sensibilidad por repricing completo | Stage 1 | 200 | 1 | 100 % | 3 | 66,7 |
-| 54 | F-054 | Info pública del emisor (CNV y SEC) | Stage 2 | 300 | 2 | 80 % | 8 | 60,0 |
-| 55 | F-033 | Modo bajar riesgo | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
-| 56 | F-036 | Aceptación rotación por rotación | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
-| 57 | F-025 | Carga asistida de lámina | Stage 1 | 200 | 1 | 80 % | 3 | 53,3 |
-| 58 | F-005 | Parser del informe diario de IAMC | Stage 1 | 400 | 2 | 50 % | 8 | 50,0 |
-| 59 | F-023 | Composición y curva TIR/duración | Stage 1 | 300 | 1 | 80 % | 5 | 48,0 |
-| 60 | F-048 | Alertas y notificaciones | Stage 2 | 300 | 1 | 80 % | 6 | 40,0 |
-| 61 | F-049 | Comparación de carteras entre sí | Stage 2 | 200 | 1 | 80 % | 4 | 40,0 |
-| 62 | F-046 | FCI valuables en cartera | Stage 2 | 200 | 2 | 60 % | 8 | 30,0 |
-| 63 | F-065 | Cauciones | Stage 2 | 200 | 1 | 60 % | 4 | 30,0 |
-| 64 | F-044 | Historial de propuestas | Stage 2 | 250 | 2 | 50 % | 10 | 25,0 |
-| 65 | F-066 | Futuros de dólar | Stage 2 | 200 | 1 | 50 % | 4 | 25,0 |
-| 66 | F-043 | Gestión de clientes y CRM | Stage 2 | 300 | 2 | 50 % | 15 | 20,0 |
-| 67 | F-027 | Calendario de balances (sólo CEDEARs, vía SEC) | Stage 1 | 200 | 1 | 85 % | 4 | 42,5 |
-| 68 | F-045 | Colocaciones primarias | Stage 2 | 150 | 2 | 50 % | 10 | 15,0 |
-| 69 | F-070 | Tenencias con P&L por lote | Stage 2 | 200 | 2 | 40 % | 12 | 13,3 |
-| 70 | F-047 | Opciones | Stage 2 | 80 | 1 | 50 % | 10 | 4,0 |
+| 26 | F-071 | Calculadora de canjes y prorrateo de órdenes a mesa | Stage 2 | 350 | 3 | 90 % | 6 | 157,5 |
+| 27 | F-030 | Valuación y diagnóstico de cartera | Stage 1 | 200 | 3 | 100 % | 4 | 150,0 |
+| 28 | F-064 | Watchlist | Stage 2 | 300 | 1 | 100 % | 2 | 150,0 |
+| 29 | F-069 | Top ganadores y perdedores | Stage 2 | 300 | 1 | 100 % | 2 | 150,0 |
+| 30 | F-018 | Cartera editable y ponderación | Stage 1 | 350 | 3 | 80 % | 6 | 140,0 |
+| 31 | F-053 | Ficha del activo de renta variable | Stage 1 | 300 | 2 | 70 % | 3 | 140,0 |
+| 32 | F-016 | Grilla-selector de doce meses | Stage 1 | 380 | 3 | 80 % | 8 | 114,0 |
+| 33 | F-056 | Índice CER del BCRA: tasa real | Stage 2 | 250 | 2 | 90 % | 4 | 112,5 |
+| 34 | F-017 | Filtros de la grilla | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
+| 35 | F-039 | Ficha de instrumento | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
+| 36 | F-029 | Resolución de tickers | Stage 1 | 200 | 2 | 80 % | 3 | 106,7 |
+| 37 | F-038 | Monitor de mercado | Stage 1 | 400 | 2 | 80 % | 6 | 106,7 |
+| 38 | F-052 | Renta variable en el monitor | Stage 1 | 400 | 1 | 80 % | 3 | 106,7 |
+| 39 | F-031 | Vector de riesgo de seis ejes | Stage 1 | 250 | 3 | 80 % | 6 | 100,0 |
+| 40 | F-032 | Motor de rotaciones intra-segmento | Stage 1 | 200 | 3 | 100 % | 6 | 100,0 |
+| 41 | F-042 | Exportación a Excel y PDF | Stage 1 | 250 | 2 | 80 % | 4 | 100,0 |
+| 42 | F-028 | Ingreso de cartera por tres vías | Stage 1 | 200 | 3 | 80 % | 5 | 96,0 |
+| 43 | F-034 | Modo subir TIR con contrapartida | Stage 1 | 180 | 3 | 80 % | 5 | 86,4 |
+| 44 | F-057 | FCI en el monitor (CAFCI) | Stage 2 | 300 | 2 | 85 % | 6 | 85,0 |
+| 45 | F-067 | FCI: comparador, categorías y gestoras | Stage 2 | 250 | 2 | 85 % | 5 | 85,0 |
+| 46 | F-019 | Armado asistido | Stage 1 | 250 | 2 | 100 % | 6 | 83,3 |
+| 47 | F-026 | Bloque de renta variable | Stage 1 | 300 | 2 | 80 % | 6 | 80,0 |
+| 48 | F-050 | API Market Data oficial de BYMA | Stage 2 | 400 | 2 | 50 % | 5 | 80,0 |
+| 49 | F-058 | Carry trade: calculadora y breakeven | Stage 2 | 300 | 3 | 70 % | 8 | 78,8 |
+| 50 | F-062 | Curva histórica del segmento | Stage 2 | 250 | 2 | 60 % | 4 | 75,0 |
+| 51 | F-063 | Heatmap del panel | Stage 2 | 250 | 1 | 90 % | 3 | 75,0 |
+| 52 | F-037 | Comparación original contra propuesta | Stage 1 | 180 | 2 | 80 % | 4 | 72,0 |
+| 53 | F-061 | Rendimientos históricos por ventana | Stage 2 | 300 | 2 | 60 % | 5 | 72,0 |
+| 54 | F-040 | Sensibilidad por repricing completo | Stage 1 | 200 | 1 | 100 % | 3 | 66,7 |
+| 55 | F-054 | Info pública del emisor (CNV y SEC) | Stage 2 | 300 | 2 | 80 % | 8 | 60,0 |
+| 56 | F-033 | Modo bajar riesgo | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
+| 57 | F-036 | Aceptación rotación por rotación | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
+| 58 | F-025 | Carga asistida de lámina | Stage 1 | 200 | 1 | 80 % | 3 | 53,3 |
+| 59 | F-005 | Parser del informe diario de IAMC | Stage 1 | 400 | 2 | 50 % | 8 | 50,0 |
+| 60 | F-023 | Composición y curva TIR/duración | Stage 1 | 300 | 1 | 80 % | 5 | 48,0 |
+| 61 | F-048 | Alertas y notificaciones | Stage 2 | 300 | 1 | 80 % | 6 | 40,0 |
+| 62 | F-049 | Comparación de carteras entre sí | Stage 2 | 200 | 1 | 80 % | 4 | 40,0 |
+| 63 | F-046 | FCI valuables en cartera | Stage 2 | 200 | 2 | 60 % | 8 | 30,0 |
+| 64 | F-065 | Cauciones | Stage 2 | 200 | 1 | 60 % | 4 | 30,0 |
+| 65 | F-044 | Historial de propuestas | Stage 2 | 250 | 2 | 50 % | 10 | 25,0 |
+| 66 | F-066 | Futuros de dólar | Stage 2 | 200 | 1 | 50 % | 4 | 25,0 |
+| 67 | F-043 | Gestión de clientes y CRM | Stage 2 | 300 | 2 | 50 % | 15 | 20,0 |
+| 68 | F-027 | Calendario de balances (sólo CEDEARs, vía SEC) | Stage 1 | 200 | 1 | 85 % | 4 | 42,5 |
+| 69 | F-045 | Colocaciones primarias | Stage 2 | 150 | 2 | 50 % | 10 | 15,0 |
+| 70 | F-070 | Tenencias con P&L por lote | Stage 2 | 200 | 2 | 40 % | 12 | 13,3 |
+| 71 | F-047 | Opciones | Stage 2 | 80 | 1 | 50 % | 10 | 4,0 |
 
 **Cómo se lee esta tabla.** El RICE ordena por eficiencia, no por secuencia. Las features de más
 score son las Foundation y las de ingesta: mucho alcance sobre poco esfuerzo, porque reusan lógica ya
@@ -3573,7 +3648,7 @@ Al final de este ciclo **Stage 1 está completo**: los tres flujos funcionan de 
 | 3 — RV, carga y diagnóstico | 9 | 41 | ~8 | ~28,5 |
 | 4 — Optimizador y persistencia | 9 | 42 | ~8,5 | ~37 |
 | **Stage 1** | **42** | **185** | **~37 semanas** | |
-| Stage 2 (25 features) | 25 | 149 | ~30 | |
+| Stage 2 (26 features) | 26 | 155 | ~31 | |
 
 **~37 semanas de un desarrollador a tiempo completo para Stage 1.** El camino crítico son 73 pd de esos
 185: con un segundo desarrollador, el piso teórico de compresión es **~15 semanas**, y el cuello real
