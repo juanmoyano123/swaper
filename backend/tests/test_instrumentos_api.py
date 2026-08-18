@@ -13,11 +13,18 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
+import httpx
 import pytest
 
 import app.api.v1.instrumentos as modulo_instrumentos
 from app.condiciones.semilla import CAMPOS
-from app.externos.cnv import ArchivoAdjunto, DocumentoCnv, RespuestaInesperadaDeCnv
+from app.externos.cnv import (
+    ArchivoAdjunto,
+    DocumentoCnv,
+    DocumentoDeSerieCnv,
+    RespuestaInesperadaDeCnv,
+    SerieDeclarada,
+)
 from app.externos.emisores_cuit import EmisorArca
 from tests.conftest import cliente
 
@@ -27,6 +34,7 @@ CRONOGRAMA = "/api/v1/instrumentos/{ticker}/cronograma"
 SENSIBILIDAD = "/api/v1/instrumentos/{ticker}/sensibilidad"
 PROSPECTO = "/api/v1/instrumentos/{ticker}/prospecto"
 PROSPECTO_ARCHIVO = "/api/v1/instrumentos/{ticker}/prospecto/{uuid}/archivo"
+PROSPECTO_SERIE = "/api/v1/instrumentos/{ticker}/prospecto/{uuid}/serie"
 
 # AL30 / AL30D / AL30C: la misma emisión en pesos, MEP y cable — mismas duraciones, así que
 # deduplica en una sola emisión con dos hermanas por especie. S30J6 no comparte raíz con nadie:
@@ -529,11 +537,19 @@ class FakeClienteCnv:
         | None = None,
         archivo: ArchivoAdjunto | Exception | None = None,
         contenido: bytes | Exception = b"%PDF-1.7 contenido",
+        series: list[SerieDeclarada] | Exception | None = None,
+        documentos_de_serie: list[DocumentoDeSerieCnv]
+        | dict[str, list[DocumentoDeSerieCnv] | None]
+        | Exception
+        | None = None,
     ) -> None:
         self._documentos = documentos
         self._archivo = archivo
         self._contenido = contenido
+        self._series = series
+        self._documentos_de_serie = documentos_de_serie
         self.pedidos: list[str] = []
+        self.series_pedidas: list[str] = []
 
     async def documentos_de(self, cuit: str) -> list[DocumentoCnv] | None:
         self.pedidos.append(cuit)
@@ -552,6 +568,21 @@ class FakeClienteCnv:
         if isinstance(self._contenido, Exception):
             raise self._contenido
         return self._contenido
+
+    async def series_de(self, uuid: str) -> list[SerieDeclarada]:
+        if isinstance(self._series, Exception):
+            raise self._series
+        return self._series or []
+
+    async def documentos_de_la_serie(
+        self, serie_id: str, **_kwargs: Any
+    ) -> list[DocumentoDeSerieCnv] | None:
+        self.series_pedidas.append(serie_id)
+        if isinstance(self._documentos_de_serie, Exception):
+            raise self._documentos_de_serie
+        if isinstance(self._documentos_de_serie, dict):
+            return self._documentos_de_serie.get(serie_id)
+        return self._documentos_de_serie
 
 
 UN_DOCUMENTO = DocumentoCnv(
@@ -993,3 +1024,174 @@ async def test_archivo_cuando_la_cnv_no_devuelve_un_pdf_da_502(
         respuesta = await http.get(PROSPECTO_ARCHIVO.format(ticker="TLCMO", uuid=UUID_VALIDO))
 
     assert respuesta.status_code == 502
+
+
+# --- GET /instrumentos/{ticker}/prospecto/{uuid}/serie — F-072 ----------------------------------
+
+CLASE_29 = SerieDeclarada(serie_id="88539", nombre="Clase 29")
+CLASE_30 = SerieDeclarada(serie_id="88540", nombre="Clase 30")
+
+UN_DOCUMENTO_DE_SERIE = DocumentoDeSerieCnv(
+    fecha=date(2026, 5, 26),
+    hora="08:52 Hs",
+    documento_id="3527952",
+    formulario="Suplemento",
+    uuid="ac613ae1-04ae-4d55-aa2a-88f3a7db9f29",
+)
+
+
+async def test_serie_devuelve_los_pocos_documentos_de_la_serie_del_documento(
+    app_con_prospecto, monkeypatch
+) -> None:
+    fake = FakeClienteCnv(series=[CLASE_29], documentos_de_serie=[UN_DOCUMENTO_DE_SERIE])
+    _inyectar_cliente(monkeypatch, fake)
+
+    async with cliente(app_con_prospecto()) as http:
+        respuesta = await http.get(PROSPECTO_SERIE.format(ticker="TLCMO", uuid=UUID_VALIDO))
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["aplica"] is True
+    assert cuerpo["motivo_ausente"] is None
+    assert len(cuerpo["series"]) == 1
+    serie = cuerpo["series"][0]
+    assert serie["serie_id"] == "88539"
+    assert serie["nombre"] == "Clase 29"
+    assert serie["motivo_ausente"] is None
+    # El link a la CNV lleva el `serieID` —lo único que filtra— y el emisor que se pudo resolver.
+    assert "serieID=88539" in serie["url_detalles_formulario"]
+    assert "idfiscal=30639453738" in serie["url_detalles_formulario"]
+    assert serie["documentos"] == [
+        {
+            "fecha": "2026-05-26",
+            "hora": "08:52 Hs",
+            "formulario": "Suplemento",
+            "documento_id": "3527952",
+            "uuid": "ac613ae1-04ae-4d55-aa2a-88f3a7db9f29",
+            "url_publicview": (
+                "https://aif2.cnv.gov.ar/presentations/publicview/"
+                "ac613ae1-04ae-4d55-aa2a-88f3a7db9f29"
+            ),
+        }
+    ]
+
+
+async def test_serie_devuelve_las_dos_clases_cuando_el_documento_declara_dos(
+    app_con_prospecto, monkeypatch
+) -> None:
+    """Un Suplemento puede cubrir dos clases a la vez. Se piden las dos y se muestran las dos:
+    quedarse con una sería elegir por el asesor cuál importa (regla 1)."""
+    fake = FakeClienteCnv(
+        series=[CLASE_29, CLASE_30], documentos_de_serie=[UN_DOCUMENTO_DE_SERIE]
+    )
+    _inyectar_cliente(monkeypatch, fake)
+
+    async with cliente(app_con_prospecto()) as http:
+        respuesta = await http.get(PROSPECTO_SERIE.format(ticker="TLCMO", uuid=UUID_VALIDO))
+
+    cuerpo = respuesta.json()
+    assert [s["serie_id"] for s in cuerpo["series"]] == ["88539", "88540"]
+    assert fake.series_pedidas == ["88539", "88540"]
+
+
+async def test_serie_declara_cuando_el_documento_no_dice_a_que_serie_corresponde(
+    app_con_prospecto, monkeypatch
+) -> None:
+    """Hay formularios que no traen la serie. Se declara ausente; no se le supone la del documento
+    de al lado."""
+    fake = FakeClienteCnv(series=[])
+    _inyectar_cliente(monkeypatch, fake)
+
+    async with cliente(app_con_prospecto()) as http:
+        respuesta = await http.get(PROSPECTO_SERIE.format(ticker="TLCMO", uuid=UUID_VALIDO))
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["aplica"] is False
+    assert cuerpo["series"] == []
+    assert "no declara" in cuerpo["motivo_ausente"]
+    assert fake.series_pedidas == []
+
+
+async def test_serie_declara_cuando_la_cnv_no_devuelve_la_tabla(
+    app_con_prospecto, monkeypatch
+) -> None:
+    """La serie se resolvió pero la tabla no vino: el link a la CNV viaja igual, que es la salida
+    que no depende del parser."""
+    fake = FakeClienteCnv(series=[CLASE_29], documentos_de_serie=None)
+    _inyectar_cliente(monkeypatch, fake)
+
+    async with cliente(app_con_prospecto()) as http:
+        respuesta = await http.get(PROSPECTO_SERIE.format(ticker="TLCMO", uuid=UUID_VALIDO))
+
+    cuerpo = respuesta.json()
+    assert cuerpo["aplica"] is True
+    serie = cuerpo["series"][0]
+    assert serie["documentos"] == []
+    assert "no devolvió la tabla" in serie["motivo_ausente"]
+    assert "serieID=88539" in serie["url_detalles_formulario"]
+
+
+async def test_serie_distingue_la_tabla_vacia_del_fallo_de_la_fuente(
+    app_con_prospecto, monkeypatch
+) -> None:
+    """Lista vacía es la respuesta de la fuente ("no listé documentos"), no un fallo — y se declara
+    distinto que el caso en que la tabla no vino."""
+    fake = FakeClienteCnv(series=[CLASE_29], documentos_de_serie=[])
+    _inyectar_cliente(monkeypatch, fake)
+
+    async with cliente(app_con_prospecto()) as http:
+        respuesta = await http.get(PROSPECTO_SERIE.format(ticker="TLCMO", uuid=UUID_VALIDO))
+
+    serie = respuesta.json()["series"][0]
+    assert serie["documentos"] == []
+    assert "no listó documentos" in serie["motivo_ausente"]
+
+
+async def test_serie_con_la_fuente_pausada_no_pide_nada_a_la_red(
+    app_con_prospecto, monkeypatch
+) -> None:
+    fake = FakeClienteCnv(series=[CLASE_29], documentos_de_serie=[UN_DOCUMENTO_DE_SERIE])
+    _inyectar_cliente(monkeypatch, fake)
+
+    async with cliente(app_con_prospecto(cnv_habilitado=False)) as http:
+        respuesta = await http.get(PROSPECTO_SERIE.format(ticker="TLCMO", uuid=UUID_VALIDO))
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["aplica"] is False
+    assert "pausada" in cuerpo["motivo_ausente"]
+    assert fake.series_pedidas == []
+
+
+async def test_serie_declara_un_fallo_de_red_sin_romper_el_endpoint(
+    app_con_prospecto, monkeypatch
+) -> None:
+    fake = FakeClienteCnv(series=httpx.ConnectError("sin red"))
+    _inyectar_cliente(monkeypatch, fake)
+
+    async with cliente(app_con_prospecto()) as http:
+        respuesta = await http.get(PROSPECTO_SERIE.format(ticker="TLCMO", uuid=UUID_VALIDO))
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["aplica"] is False
+    assert "no respondió" in cuerpo["motivo_ausente"]
+
+
+async def test_serie_de_un_ticker_fuera_del_universo_sigue_sirviendo_la_serie(
+    app_con_prospecto, monkeypatch
+) -> None:
+    """El emisor sólo rotula el encabezado de la página de la CNV: sin él el drill-down igual sirve,
+    y los parámetros cosméticos van vacíos en vez de completarse con algo supuesto."""
+    fake = FakeClienteCnv(series=[CLASE_29], documentos_de_serie=[UN_DOCUMENTO_DE_SERIE])
+    _inyectar_cliente(monkeypatch, fake)
+
+    async with cliente(app_con_prospecto(universo=[])) as http:
+        respuesta = await http.get(PROSPECTO_SERIE.format(ticker="NOEXISTE", uuid=UUID_VALIDO))
+
+    assert respuesta.status_code == 200
+    serie = respuesta.json()["series"][0]
+    assert serie["documentos"] != []
+    assert "serieID=88539" in serie["url_detalles_formulario"]
+    assert "idfiscal=&" in serie["url_detalles_formulario"]

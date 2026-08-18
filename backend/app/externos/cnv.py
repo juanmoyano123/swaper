@@ -23,19 +23,40 @@ en vivo el 17/08/2026 con un PDF real de 1,33 MB bajado por `curl` puro, sin ses
 5. `POST blob.cnv.gov.ar/BlobWebService.svc/DownloadBlob/{guid}` con ese token como body
    **form-urlencoded** (`ValetKey=...`) — no JSON, eso da 400 — devuelve el PDF crudo.
 
+## El drill-down a la serie, en el sentido que sí se puede recorrer
+
+Sigue sin haber forma de derivar la serie desde el ticker. Pero **cada documento declara la suya**:
+dentro de la misma `publicview` que ya se lee para el adjunto hay una grilla de filas con
+`DesplegableSerie` (el id numérico) y `DescripcionDeLaSerie` (cómo la nombra la fuente). Con ese id,
+`Empresas/DetallesDeFormularios?serieID={id}` lista los 3-5 documentos de esa serie sola en vez de
+la carpeta entera del emisor.
+
+La dirección importa: no resuelve "qué serie es mi ticker" —eso seguiría siendo un invento— sino
+"qué serie es este documento que el asesor ya tiene delante". De ahí en adelante es una cadena de
+ids sin ambigüedad. Verificado el 18/08/2026 contra Telecom: el Suplemento del 26/05/2026 declara
+**dos** series a la vez (Clase 29 = 88539 y Clase 30 = 88540), lo que confirma desde la fuente lo
+que la investigación original ya sospechaba de los "Clase XIX & XX". Por eso se devuelven todas las
+que el documento declare y nunca "la primera": elegir una sería exactamente el juicio inventado que
+la regla 1 prohíbe.
+
+`serieID` es la única clave real de `DetallesDeFormularios` — verificado pasando un `serieID` con el
+`idfiscal`/`nombresociedad` de otro emisor: la página igual devuelve los documentos del `serieID`
+pedido. Los otros tres parámetros sólo arman el encabezado que se ve en pantalla.
+
 ## Contrato de `app/externos/`
 
 Todo esto se consulta en vivo y nunca se persiste (ver `sec.py`, el mismo contrato). No se
 adivina qué documento corresponde a qué clase/serie de ON: la investigación original ya midió que no
-hay una regla general para derivarlo del ticker (funciona para Cresud, no para IRSA), y acá se suma
-evidencia nueva — un mismo Suplemento puede cubrir varias clases a la vez ("Clase XIX & XX"). Los
-documentos se listan tal como la CNV los agrupa, y el asesor elige a ojo cuál corresponde.
+hay una regla general para derivarlo del ticker (funciona para Cresud, no para IRSA). Los documentos
+se listan tal como la CNV los agrupa, y el asesor elige a ojo cuál corresponde.
 """
 
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import date
 from functools import lru_cache
+from urllib.parse import urlencode
 
 import httpx
 import structlog
@@ -100,6 +121,46 @@ _MARCADOR_RESULTADOS = '<div class="panel">'
 # todas y se toma la primera que aparezca con al menos un archivo.
 _PROPIEDADES_CON_ARCHIVO = ("ArchSupCom", "ArchSupRes", "ArchProsp", "Archivo")
 
+# La serie viene declarada en dos formas distintas según el tipo de formulario, las dos verificadas
+# el 18/08/2026 contra Telecom: un Aviso de Pago (una sola serie) la trae como propiedades sueltas
+# dentro de su entidad, y un Suplemento que cubre dos clases la trae en una entidad `Grilla` con una
+# `<fila>` por serie. Por eso se recorre bloque a bloque en vez de buscar las propiedades sueltas en
+# todo el XML: con dos ids y dos descripciones, buscarlas por separado las emparejaría por orden de
+# aparición en vez de por pertenencia.
+_ENTIDAD_XML_RE = re.compile(r"<entidad\b[^>]*>(.*?)</entidad>", re.S)
+_FILA_XML_RE = re.compile(r"<fila\b[^>]*>(.*?)</fila>", re.S)
+
+# El valor de una propiedad del XML. `[^<]*` y no `.*?` a propósito: una propiedad sin valor viene
+# autocerrada (`<propiedad id="X" claveinformativa="X" />`) y sin esto el `.*?` se comería el tag
+# siguiente hasta el próximo `</propiedad>`, devolviendo el valor de otra propiedad como si fuera
+# de ésta. Es el mismo bug que ya se corrigió con los corchetes del nombre de archivo.
+_VALOR_PROPIEDAD_TPL = r'<propiedad id="{clave}"(?:\s[^>]*?)?>([^<]*)</propiedad>'
+
+# El id se pide con la comilla de cierre pegada: sin eso `DesplegableSerie` también matchearía
+# `DesplegableSerieIndividual`, que es otra propiedad (vale -1 en las filas verificadas).
+_SERIE_ID_RE = re.compile(_VALOR_PROPIEDAD_TPL.format(clave="DesplegableSerie"))
+_SERIE_NOMBRE_RE = re.compile(_VALOR_PROPIEDAD_TPL.format(clave="DescripcionDeLaSerie"))
+
+# El encabezado de `DetallesDeFormularios`, en el orden exacto en que la página sirve las columnas.
+# Es el marcador de que la respuesta es la tabla esperada **y** la licencia para leer las celdas por
+# posición: si la CNV reordena o renombra una columna esto deja de matchear y el parseo se declara
+# fallido en vez de devolver la hora en el lugar de la fecha.
+_ENCABEZADO_DETALLES_RE = re.compile(
+    r"<thead>.*?>\s*Fecha\s*</th>.*?>\s*Hora\s*</th>.*?>\s*Documento\s*</th>"
+    r".*?>\s*Formulario\s*</th>.*?>\s*Ver\s*</th>.*?</thead>",
+    re.S,
+)
+
+# Una fila de esa tabla. `<tr class="text-center">` y no el `<tr>` pelado de la página del emisor:
+# son dos plantillas distintas de la CNV, con distinto orden de columnas y distinto formato de
+# fecha.
+_FILA_DETALLES_RE = re.compile(
+    r'<tr class="text-center">\s*<td>\s*(?P<fecha>[^<]*?)\s*</td>\s*<td>\s*(?P<hora>[^<]*?)\s*</td>'
+    r"\s*<td>\s*(?P<documento_id>[^<]*?)\s*</td>\s*<td>\s*(?P<formulario>[^<]*?)\s*</td>\s*"
+    r'<td[^>]*>\s*<a href="(?P<href>[^"]+)"',
+    re.S,
+)
+
 
 class RespuestaInesperadaDeCnv(Exception):
     """La CNV respondió 200 pero no con lo que se pidió (fallo silencioso de la fuente)."""
@@ -146,6 +207,39 @@ class ArchivoAdjunto:
 
 
 @dataclass(frozen=True, slots=True)
+class SerieDeclarada:
+    """Una serie/clase que **este documento** declara cubrir, tal como la CNV la nombra.
+
+    Un mismo documento puede declarar varias (verificado: el Suplemento de Telecom del 26/05/2026
+    declara Clase 29 y Clase 30). Nunca se elige una como "la" serie del documento.
+    """
+
+    serie_id: str
+    nombre: str | None
+    """`None` cuando la fila trae el id pero no la descripción — se muestra el id pelado antes que
+    inventarle un nombre."""
+
+
+@dataclass(frozen=True, slots=True)
+class DocumentoDeSerieCnv:
+    """Una fila de `DetallesDeFormularios`: un documento de una serie puntual.
+
+    No es un `DocumentoCnv`: esa otra tabla trae `descripcion` (el texto largo que arma la CNV con
+    fechas y programa) y ésta trae `formulario` (el tipo, corto). Son campos distintos de plantillas
+    distintas y no se normalizan a uno solo.
+    """
+
+    fecha: date | None
+    hora: str
+    documento_id: str
+    formulario: str
+    uuid: str
+
+    def url_publicview(self) -> str:
+        return f"{BASE_AIF}/presentations/publicview/{self.uuid}"
+
+
+@dataclass(frozen=True, slots=True)
 class PdfDescargado:
     contenido: bytes
     nombre_archivo: str
@@ -165,6 +259,39 @@ def _fecha_es(texto: str) -> date | None:
         return date(int(anio), mes, int(dia))
     except ValueError:
         return None
+
+
+def _fecha_dmy(texto: str) -> date | None:
+    """"24-05-2026" -> date(2026, 5, 24). `None` si no matchea — no se adivina.
+
+    `DetallesDeFormularios` sirve la fecha en numérico con guiones, no en el "24 may. 2026" de la
+    página del emisor que lee `_fecha_es`. Son dos plantillas distintas de la misma fuente.
+    """
+    m = re.match(r"(\d{1,2})-(\d{1,2})-(\d{4})$", texto.strip())
+    if not m:
+        return None
+    dia, mes, anio = m.groups()
+    try:
+        return date(int(anio), int(mes), int(dia))
+    except ValueError:
+        return None
+
+
+def url_detalles_formulario(
+    serie_id: str, nombre_serie: str | None, cuit: str | None, nombre_sociedad: str | None
+) -> str:
+    """La página de la CNV con los documentos de esta serie sola.
+
+    Sólo `serieID` filtra; los otros tres arman el encabezado. Van igual —y vacíos cuando no se
+    pudieron resolver— para que el asesor caiga en una página que se identifica, no en una anónima.
+    """
+    parametros = {
+        "serieID": serie_id,
+        "nombreserie": nombre_serie or "",
+        "idfiscal": re.sub(r"\D", "", cuit) if cuit else "",
+        "nombresociedad": nombre_sociedad or "",
+    }
+    return f"{BASE_SITIO}/Empresas/DetallesDeFormularios?{urlencode(parametros)}"
 
 
 def _limpiar_html(bruto: str) -> str:
@@ -224,6 +351,17 @@ class ClienteCnv:
         """El primer archivo adjunto de una presentación, leyendo su `publicview`. `None` si la
         presentación no tiene ningún archivo adjunto (hay formularios que son sólo datos, sin
         documento — un Aviso puede no traer PDF propio)."""
+        return _extraer_primer_archivo(await self._publicview(uuid))
+
+    async def series_de(self, uuid: str) -> list[SerieDeclarada]:
+        """Las series/clases que este documento declara cubrir, leyendo su `publicview`.
+
+        Lista vacía cuando el formulario no trae la grilla de series: hay tipos que no la declaran,
+        y eso se informa como ausente río arriba en vez de suponerle una.
+        """
+        return _extraer_series(await self._publicview(uuid))
+
+    async def _publicview(self, uuid: str) -> str:
         if not _UUID_RE.fullmatch(uuid):
             raise ValueError(f"uuid con formato inesperado: {uuid!r}")
 
@@ -231,7 +369,46 @@ class ClienteCnv:
         async with httpx.AsyncClient(timeout=self._timeout) as cliente:
             respuesta = await cliente.get(url, headers={"User-Agent": USER_AGENT})
         respuesta.raise_for_status()
-        return _extraer_primer_archivo(respuesta.text)
+        return respuesta.text
+
+    async def documentos_de_la_serie(
+        self,
+        serie_id: str,
+        *,
+        nombre_serie: str | None = None,
+        cuit: str | None = None,
+        nombre_sociedad: str | None = None,
+    ) -> list[DocumentoDeSerieCnv] | None:
+        """Los documentos de una serie puntual. `None` cuando la respuesta no es la tabla esperada.
+
+        Ojo con la diferencia entre `None` y `[]`: un `serieID` inexistente devuelve **200 con la
+        tabla vacía**, no un error ni una página distinta (verificado con `serieID=0` y con uno de
+        nueve dígitos). Así que la lista vacía es la respuesta de la fuente —"no listé documentos
+        para esta serie"— y no se puede leer como "esta serie no existe". El `None` queda para el
+        caso en que la CNV sirva algo que no es esta tabla, que es cuando el parseo no puede
+        afirmar nada.
+        """
+        if not serie_id.isdigit():
+            raise ValueError(f"serie_id con formato inesperado: {serie_id!r}")
+
+        async with httpx.AsyncClient(timeout=self._timeout, follow_redirects=True) as cliente:
+            respuesta = await cliente.get(
+                f"{BASE_SITIO}/Empresas/DetallesDeFormularios",
+                params={
+                    "serieID": serie_id,
+                    "nombreserie": nombre_serie or "",
+                    "idfiscal": re.sub(r"\D", "", cuit) if cuit else "",
+                    "nombresociedad": nombre_sociedad or "",
+                },
+                headers={"User-Agent": USER_AGENT},
+            )
+        respuesta.raise_for_status()
+        html = respuesta.text
+
+        if _ENCABEZADO_DETALLES_RE.search(html) is None:
+            logger.warning("cnv_detalles_sin_encabezado_esperado", serie_id=serie_id)
+            return None
+        return _parsear_documentos_de_serie(html)
 
     async def descargar(self, guid: str) -> bytes:
         """El PDF crudo, por el intercambio de dos pasos verificado en vivo. Nunca se cachea: es
@@ -297,11 +474,67 @@ def _parsear_documentos(html: str) -> list[DocumentoCnv]:
     return documentos
 
 
-def _extraer_primer_archivo(html_publicview: str) -> ArchivoAdjunto | None:
+def _parsear_documentos_de_serie(html: str) -> list[DocumentoDeSerieCnv]:
+    documentos: list[DocumentoDeSerieCnv] = []
+    for fila in _FILA_DETALLES_RE.finditer(html):
+        uuid_match = _UUID_RE.search(fila.group("href"))
+        if uuid_match is None:
+            logger.warning("cnv_fila_serie_sin_uuid_valido", href=fila.group("href"))
+            continue
+        documentos.append(
+            DocumentoDeSerieCnv(
+                fecha=_fecha_dmy(fila.group("fecha")),
+                hora=fila.group("hora").strip(),
+                documento_id=fila.group("documento_id").strip(),
+                formulario=_limpiar_html(fila.group("formulario")),
+                uuid=uuid_match.group(0),
+            )
+        )
+    return documentos
+
+
+def _xml_de_la_presentacion(html_publicview: str) -> str | None:
     m = re.search(r"var presentation ='(.*?)';", html_publicview, re.S)
-    if m is None:
+    return m.group(1) if m is not None else None
+
+
+def _bloques_con_serie(xml: str) -> Iterator[str]:
+    """Los fragmentos donde un id de serie y una descripción son de la misma serie: cada `<fila>` de
+    una entidad con grilla, o el cuerpo entero de la entidad cuando no tiene grilla."""
+    for entidad in _ENTIDAD_XML_RE.finditer(xml):
+        cuerpo = entidad.group(1)
+        filas = _FILA_XML_RE.findall(cuerpo)
+        yield from (filas or [cuerpo])
+
+
+def _extraer_series(html_publicview: str) -> list[SerieDeclarada]:
+    xml = _xml_de_la_presentacion(html_publicview)
+    if xml is None:
+        return []
+
+    series: list[SerieDeclarada] = []
+    vistas: set[str] = set()
+    for bloque in _bloques_con_serie(xml):
+        id_match = _SERIE_ID_RE.search(bloque)
+        if id_match is None:
+            continue
+        serie_id = id_match.group(1).strip()
+        # La grilla usa -1 y 0 como "ninguna" en los desplegables que quedaron sin elegir
+        # (verificado en `DesplegableSerieIndividual`). Un id que no es un número positivo no
+        # identifica ninguna serie y no se re-emite como si lo hiciera.
+        if not serie_id.isdigit() or int(serie_id) <= 0 or serie_id in vistas:
+            continue
+        vistas.add(serie_id)
+        nombre_match = _SERIE_NOMBRE_RE.search(bloque)
+        nombre = _limpiar_html(nombre_match.group(1)) if nombre_match is not None else ""
+        series.append(SerieDeclarada(serie_id=serie_id, nombre=nombre or None))
+    return series
+
+
+def _extraer_primer_archivo(html_publicview: str) -> ArchivoAdjunto | None:
+    xml = _xml_de_la_presentacion(html_publicview)
+    if xml is None:
         return None
-    xml = m.group(1)
 
     for propiedad in _PROPIEDADES_CON_ARCHIVO:
         idx = xml.find(f'id="{propiedad}"')

@@ -56,6 +56,9 @@ export const claves = {
     // F-072: los documentos de la CNV son dato externo consultado en vivo, no de mercado — un
     // refresh de precios no lo invalida, mismo criterio que `condiciones`.
     prospecto: (ticker: string) => ['referencia', 'prospecto', ticker] as const,
+    // La serie cuelga del `uuid` del documento y no del ticker: es el documento el que declara a
+    // qué serie corresponde, no la especie.
+    serieProspecto: (uuid: string) => ['referencia', 'prospecto', 'serie', uuid] as const,
   },
 
   carteras: {

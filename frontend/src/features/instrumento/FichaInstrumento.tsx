@@ -25,6 +25,7 @@ import { useCronogramaInstrumento } from './hooks/useCronogramaInstrumento'
 import { useFichaInstrumento } from './hooks/useFichaInstrumento'
 import { useProspectoInstrumento } from './hooks/useProspectoInstrumento'
 import { useSensibilidadInstrumento } from './hooks/useSensibilidadInstrumento'
+import { useSerieProspecto } from './hooks/useSerieProspecto'
 import type { CondicionesDetalle, EspecieFicha, ResumenCronograma } from './lib/schema'
 
 /**
@@ -122,7 +123,7 @@ export function FichaInstrumento({ ticker }: { ticker: string | undefined }) {
 
       {especie.clase_activo === CLASE_ON && (
         <Panel rotulo="Prospecto de emisión">
-          <BloqueProspecto query={prospectoQuery} />
+          <BloqueProspecto query={prospectoQuery} ticker={ticker} />
         </Panel>
       )}
     </div>
@@ -478,15 +479,137 @@ function descargarBlob(blob: Blob, nombreArchivo: string): void {
   URL.revokeObjectURL(url)
 }
 
+/**
+ * Los grupos que se ven sin desplegar el historial: los de la colocación de la emisión, que es lo
+ * que el asesor busca cuando abre un prospecto. Los administrativos —Aviso de Pago, Informe
+ * Trimestral ON, Otra Información, Programas Globales— son la mayoría del volumen (245 de los 508
+ * documentos de Telecom son avisos de pago) y entierran a los otros cuatro.
+ *
+ * Los nombres van tal como la CNV los declara, verificados contra la respuesta real: "Avisos de
+ * Resultado" en plural pero "Aviso de Suscripción" en singular. No se normalizan ni se matchean por
+ * parecido — un grupo que no esté en esta lista no desaparece, queda en el historial completo, que
+ * sigue mostrando todo sin filtrar.
+ */
+const GRUPOS_DESTACADOS = new Set([
+  'Prospectos',
+  'Suplementos',
+  'Aviso de Suscripción',
+  'Avisos de Resultado',
+])
+
+/**
+ * El drill-down a una serie puntual: los pocos documentos de esa clase en vez de la carpeta entera
+ * del emisor. Se listan todas las series que el documento declara —un Suplemento puede cubrir dos
+ * clases a la vez— porque quedarse con una sería decidir por el asesor cuál importa.
+ */
+function PanelSerie({
+  query,
+  descargando,
+  onDescargar,
+}: {
+  query: ReturnType<typeof useSerieProspecto>
+  descargando: string | null
+  onDescargar: (uuid: string, nombre: string) => void
+}) {
+  const marco = {
+    marginTop: 6,
+    marginLeft: 12,
+    paddingLeft: 10,
+    borderLeft: '2px solid var(--lin)',
+  } as const
+
+  if (query.isPending) {
+    return (
+      <div style={marco}>
+        <p style={{ fontSize: 11, color: 'var(--dim)' }}>Buscando la serie en la CNV…</p>
+      </div>
+    )
+  }
+
+  if (query.isError) {
+    return (
+      <div style={marco}>
+        <p role="alert" style={{ fontSize: 11, color: 'var(--neg)' }}>
+          No se pudo consultar la serie en la CNV.
+        </p>
+      </div>
+    )
+  }
+
+  const data = query.data
+  if (!data.aplica) {
+    return (
+      <div style={marco}>
+        <p style={{ fontSize: 11, color: 'var(--dim)' }}>{data.motivo_ausente}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ ...marco, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {data.series.map((serie) => (
+        <div key={serie.serie_id}>
+          <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 4 }}>
+            {serie.nombre ?? `Serie ${serie.serie_id}`}
+          </div>
+          {serie.motivo_ausente !== null ? (
+            <p style={{ fontSize: 11, color: 'var(--dim)' }}>{serie.motivo_ausente}</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {serie.documentos.map((doc) => (
+                <div
+                  key={doc.uuid}
+                  style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontSize: 11.5 }}
+                >
+                  <span className="mono" style={{ color: 'var(--dim)', flexShrink: 0 }}>
+                    {fmtFecha(doc.fecha)}
+                  </span>
+                  <span style={{ flex: 1 }}>{doc.formulario}</span>
+                  <button
+                    type="button"
+                    className="mono"
+                    disabled={descargando === doc.uuid}
+                    onClick={() => onDescargar(doc.uuid, doc.formulario)}
+                    style={{ fontSize: 10.5, flexShrink: 0, cursor: 'pointer' }}
+                  >
+                    {descargando === doc.uuid ? 'descargando…' : 'Descargar PDF'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <a
+            href={serie.url_detalles_formulario}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mono"
+            style={{ fontSize: 10.5, display: 'inline-block', marginTop: 4 }}
+          >
+            Abrir en CNV
+          </a>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /** Un emisor grande presenta cientos de documentos —Telecom tiene 508— y volcarlos todos hace que
  *  lo último presentado, que es lo que el asesor busca, quede enterrado. Por defecto se muestra el
  *  documento más reciente de cada grupo y el resto queda detrás del botón de historial. Que el
  *  primero de cada lista sea el más reciente no es un supuesto nuestro: es el orden en que la CNV
  *  los sirve, y el backend lo conserva (`_agrupar_documentos` no reordena por fecha). */
-function BloqueProspecto({ query }: { query: ReturnType<typeof useProspectoInstrumento> }) {
+function BloqueProspecto({
+  query,
+  ticker,
+}: {
+  query: ReturnType<typeof useProspectoInstrumento>
+  ticker: string
+}) {
   const [descargando, setDescargando] = useState<string | null>(null)
   const [errorDescarga, setErrorDescarga] = useState<string | null>(null)
   const [verHistorial, setVerHistorial] = useState(false)
+  const [serieAbierta, setSerieAbierta] = useState<string | null>(null)
+  const serieQuery = useSerieProspecto(ticker, serieAbierta)
 
   if (query.isPending) return <EstadoCarga que="el prospecto de emisión" />
   if (query.isError) {
@@ -495,7 +618,11 @@ function BloqueProspecto({ query }: { query: ReturnType<typeof useProspectoInstr
 
   const data = query.data
   const totalDocumentos = data.grupos.reduce((suma, grupo) => suma + grupo.documentos.length, 0)
-  const hayHistorial = totalDocumentos > data.grupos.length
+  const destacados = data.grupos.filter((grupo) => GRUPOS_DESTACADOS.has(grupo.grupo))
+  const gruposVisibles = verHistorial ? data.grupos : destacados
+  // Por defecto se ve un documento por grupo destacado: si hay más documentos que eso —o grupos
+  // enteros escondidos— el historial tiene algo que agregar.
+  const hayHistorial = totalDocumentos > destacados.length
 
   async function descargar(ticker: string, uuid: string, nombreFallback: string) {
     setErrorDescarga(null)
@@ -521,7 +648,13 @@ function BloqueProspecto({ query }: { query: ReturnType<typeof useProspectoInstr
         />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {data.grupos.map((grupo) => (
+          {gruposVisibles.length === 0 && (
+            <p style={{ fontSize: 11, color: 'var(--dim)' }}>
+              Este emisor no presentó prospectos, suplementos ni avisos de colocación. Lo que hay es
+              documentación de seguimiento, en el historial completo.
+            </p>
+          )}
+          {gruposVisibles.map((grupo) => (
             <div key={grupo.grupo}>
               <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 6 }}>
                 {grupo.grupo}
@@ -534,49 +667,68 @@ function BloqueProspecto({ query }: { query: ReturnType<typeof useProspectoInstr
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {(verHistorial ? grupo.documentos : grupo.documentos.slice(0, 1)).map((doc) => (
-                  <div
-                    key={doc.uuid}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'baseline',
-                      gap: 8,
-                      fontSize: 12,
-                      borderTop: '1px solid var(--lin)',
-                      paddingTop: 6,
-                    }}
-                  >
-                    <span className="mono" style={{ color: 'var(--dim)', flexShrink: 0 }}>
-                      {fmtFecha(doc.fecha)}
-                    </span>
-                    <span
-                      title={doc.descripcion}
+                  <div key={doc.uuid}>
+                    <div
                       style={{
-                        flex: 1,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
+                        display: 'flex',
+                        alignItems: 'baseline',
+                        gap: 8,
+                        fontSize: 12,
+                        borderTop: '1px solid var(--lin)',
+                        paddingTop: 6,
                       }}
                     >
-                      {doc.descripcion}
-                    </span>
-                    <button
-                      type="button"
-                      className="mono"
-                      disabled={descargando === doc.uuid}
-                      onClick={() => void descargar(data.ticker, doc.uuid, doc.descripcion)}
-                      style={{ fontSize: 11, flexShrink: 0, cursor: 'pointer' }}
-                    >
-                      {descargando === doc.uuid ? 'descargando…' : 'Descargar PDF'}
-                    </button>
-                    <a
-                      href={doc.url_publicview}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mono"
-                      style={{ fontSize: 11, flexShrink: 0 }}
-                    >
-                      Ver en CNV
-                    </a>
+                      <span className="mono" style={{ color: 'var(--dim)', flexShrink: 0 }}>
+                        {fmtFecha(doc.fecha)}
+                      </span>
+                      <span
+                        title={doc.descripcion}
+                        style={{
+                          flex: 1,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {doc.descripcion}
+                      </span>
+                      <button
+                        type="button"
+                        className="mono"
+                        disabled={descargando === doc.uuid}
+                        onClick={() => void descargar(data.ticker, doc.uuid, doc.descripcion)}
+                        style={{ fontSize: 11, flexShrink: 0, cursor: 'pointer' }}
+                      >
+                        {descargando === doc.uuid ? 'descargando…' : 'Descargar PDF'}
+                      </button>
+                      <a
+                        href={doc.url_publicview}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mono"
+                        style={{ fontSize: 11, flexShrink: 0 }}
+                      >
+                        Ver en CNV
+                      </a>
+                      <button
+                        type="button"
+                        className="mono"
+                        aria-expanded={serieAbierta === doc.uuid}
+                        onClick={() =>
+                          setSerieAbierta((abierto) => (abierto === doc.uuid ? null : doc.uuid))
+                        }
+                        style={{ fontSize: 11, flexShrink: 0, cursor: 'pointer' }}
+                      >
+                        {serieAbierta === doc.uuid ? 'Ocultar serie' : 'Ver serie'}
+                      </button>
+                    </div>
+                    {serieAbierta === doc.uuid && (
+                      <PanelSerie
+                        query={serieQuery}
+                        descargando={descargando}
+                        onDescargar={(uuid, nombre) => void descargar(data.ticker, uuid, nombre)}
+                      />
+                    )}
                   </div>
                 ))}
               </div>

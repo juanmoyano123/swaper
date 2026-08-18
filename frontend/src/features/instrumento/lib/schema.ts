@@ -211,3 +211,48 @@ export const esquemaProspecto = z.object({
 })
 
 export type Prospecto = z.infer<typeof esquemaProspecto>
+
+/**
+ * Una fila de `DetallesDeFormularios`: un documento de una serie puntual. No comparte forma con
+ * `esquemaDocumentoCnv` — aquella trae `descripcion` (el texto largo que arma la CNV) y ésta
+ * `formulario` (el tipo, corto). Son campos distintos de plantillas distintas de la fuente.
+ */
+export const esquemaDocumentoDeSerie = z.object({
+  fecha: z.string().nullable(),
+  hora: z.string(),
+  formulario: z.string(),
+  documento_id: z.string(),
+  uuid: z.string(),
+  url_publicview: z.string(),
+})
+
+export const esquemaSerieDeclarada = z.object({
+  serie_id: z.string(),
+  /** `null` cuando la fuente declara el id pero no le pone nombre: se muestra el id pelado. */
+  nombre: z.string().nullable(),
+  url_detalles_formulario: z.string(),
+  documentos: z.array(esquemaDocumentoDeSerie),
+  motivo_ausente: z.string().nullable(),
+})
+
+export type SerieDeclarada = z.infer<typeof esquemaSerieDeclarada>
+
+/**
+ * La serie que declara un documento del prospecto, con sus pocos documentos — la carpeta chica en
+ * vez de los cientos del emisor.
+ *
+ * `series` es un array porque **un documento puede declarar más de una clase a la vez** (un
+ * Suplemento de Telecom cubre la Clase 29 y la Clase 30). Se muestran todas: quedarse con la
+ * primera sería elegir por el asesor cuál importa. `aplica: false` cuando el documento no declara
+ * ninguna, cuando la fuente está pausada o cuando la CNV no respondió — con el motivo declarado.
+ */
+export const esquemaSerieCnv = z.object({
+  ticker: z.string(),
+  uuid: z.string(),
+  aplica: z.boolean(),
+  series: z.array(esquemaSerieDeclarada),
+  motivo_ausente: z.string().nullable(),
+  fuente: z.string(),
+})
+
+export type SerieCnv = z.infer<typeof esquemaSerieCnv>

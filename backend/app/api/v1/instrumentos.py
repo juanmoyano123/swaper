@@ -2,7 +2,7 @@
 
 Vive separado de `universo.py` porque responde una pregunta distinta — "todo lo que se sabe de ESTE
 ticker" contra "el universo entero paginado" — y de `condiciones.py` porque ese es el dato curado
-como colección y acá se pide por especie. Seis recursos de sólo lectura, cada uno independiente:
+como colección y acá se pide por especie. Siete recursos de sólo lectura, cada uno independiente:
 - `/{ticker}`: la especie más sus hermanas de liquidación (F-011), vía `ficha_de`.
 - `/{ticker}/condiciones`: el mismo triplete `campo/campo_origen/campo_fecha` que ya devuelve
   `GET /condiciones`, filtrado a un ticker.
@@ -13,13 +13,16 @@ como colección y acá se pide por especie. Seis recursos de sólo lectura, cada
 - `/{ticker}/prospecto`: los documentos que el emisor de una ON presentó ante la CNV —prospectos,
   suplementos, avisos—, agrupados tal como la fuente los declara (F-072).
 - `/{ticker}/prospecto/{uuid}/archivo`: el PDF real de uno de esos documentos.
+- `/{ticker}/prospecto/{uuid}/serie`: los pocos documentos de la serie que ese documento declara —
+  la carpeta chica en vez de los cientos del emisor.
 
-Los seis pueden fallar por separado en el frontend (F-039, Parte 2: queries independientes) y por
-eso acá también son seis endpoints y no uno que junte todo: una ficha de precios que se puede
+Los siete pueden fallar por separado en el frontend (F-039, Parte 2: queries independientes) y por
+eso acá también son siete endpoints y no uno que junte todo: una ficha de precios que se puede
 mostrar aunque el cronograma no cargue no puede depender de un solo request que falle entero.
 """
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import date
 from typing import Annotated, Any
 
@@ -34,7 +37,13 @@ from app.calendario.lectura import leer_cashflow
 from app.calendario.metricas import paridad_de, retorno_por_tir
 from app.condiciones.persistencia import COLUMNAS, TABLA, fila_para_api
 from app.core.config import Settings, get_settings
-from app.externos.cnv import DocumentoCnv, RespuestaInesperadaDeCnv, cliente_cnv, url_emisor
+from app.externos.cnv import (
+    DocumentoCnv,
+    RespuestaInesperadaDeCnv,
+    cliente_cnv,
+    url_detalles_formulario,
+    url_emisor,
+)
 from app.externos.emisores_cuit import (
     leer_emisores_arca,
     leer_emisores_cuit,
@@ -299,6 +308,43 @@ FUENTE_CUIT_ARCA = "ARCA"
 FUENTE_CUIT_CNV = "CNV listado"
 
 
+@dataclass(frozen=True, slots=True)
+class _EmisorResuelto:
+    """Quién emitió este ticker y con qué CUIT, o por qué no se pudo saber."""
+
+    emisor: str | None = None
+    cuit: str | None = None
+    fuente: str | None = None
+    motivo: str | None = None
+
+
+def _resolver_emisor(especie: EspecieUniverso, settings: Settings) -> _EmisorResuelto:
+    """El CUIT en cascada: por raíz de emisión contra ARCA, y si no está, por nombre de emisor
+    contra el listado curado de la CNV. De dónde salió viaja en `fuente` (ver el docstring de
+    `prospecto`, que explica por qué gana ARCA cuando las dos fuentes discrepan)."""
+    arca = leer_emisores_arca(ruta_emisores_arca(settings)).get(raiz_emision(especie.ticker))
+    if arca is not None:
+        # El nombre que ya trae el universo gana como etiqueta —es el que el asesor ve en el resto
+        # de la app— y la denominación de ARCA rellena sólo cuando no hay ninguno. El CUIT, en
+        # cambio, sale siempre de ARCA: es lo que se le pregunta a la CNV.
+        return _EmisorResuelto(especie.emisor or arca.denominacion, arca.cuit, FUENTE_CUIT_ARCA)
+
+    if especie.emisor is None:
+        return _EmisorResuelto(
+            motivo="sin emisor declarado en el universo de hoy, y sin CUIT por código de especie "
+            "en la tabla de ARCA (que valúa al 31/12: una emisión posterior no figura)"
+        )
+
+    cuit_por_nombre = leer_emisores_cuit(ruta_emisores_cuit(settings)).get(especie.emisor)
+    if cuit_por_nombre is None:
+        return _EmisorResuelto(
+            emisor=especie.emisor,
+            motivo=f"el emisor {especie.emisor!r} todavía no tiene CUIT curado "
+            "(ver tools/curar_emisores_cuit.py y data/emisores_cuit_pendientes.csv)",
+        )
+    return _EmisorResuelto(especie.emisor, cuit_por_nombre, FUENTE_CUIT_CNV)
+
+
 def _sin_prospecto(
     ticker: str,
     motivo: str,
@@ -394,29 +440,10 @@ async def prospecto(
     if especie.clase_activo != CLASE_ON:
         return _sin_prospecto(ticker, "no es una obligación negociable")
 
-    arca = leer_emisores_arca(ruta_emisores_arca(settings)).get(raiz_emision(ticker))
-    if arca is not None:
-        cuit, cuit_fuente = arca.cuit, FUENTE_CUIT_ARCA
-        # El nombre que ya trae el universo gana como etiqueta —es el que el asesor ve en el resto
-        # de la app— y la denominación de ARCA rellena sólo cuando no hay ninguno. El CUIT, en
-        # cambio, sale siempre de ARCA: es lo que se le pregunta a la CNV.
-        emisor = especie.emisor or arca.denominacion
-    elif especie.emisor is None:
-        return _sin_prospecto(
-            ticker,
-            "sin emisor declarado en el universo de hoy, y sin CUIT por código de especie en la "
-            "tabla de ARCA (que valúa al 31/12: una emisión posterior no figura)",
-        )
-    else:
-        cuit_por_nombre = leer_emisores_cuit(ruta_emisores_cuit(settings)).get(especie.emisor)
-        if cuit_por_nombre is None:
-            return _sin_prospecto(
-                ticker,
-                f"el emisor {especie.emisor!r} todavía no tiene CUIT curado "
-                "(ver tools/curar_emisores_cuit.py y data/emisores_cuit_pendientes.csv)",
-                emisor=especie.emisor,
-            )
-        cuit, cuit_fuente, emisor = cuit_por_nombre, FUENTE_CUIT_CNV, especie.emisor
+    resuelto = _resolver_emisor(especie, settings)
+    if resuelto.motivo is not None:
+        return _sin_prospecto(ticker, resuelto.motivo, emisor=resuelto.emisor)
+    emisor, cuit, cuit_fuente = resuelto.emisor, resuelto.cuit, resuelto.fuente
 
     if not settings.cnv_habilitado:
         return _sin_prospecto(
@@ -479,6 +506,127 @@ async def prospecto(
         "url_emisor_cnv": url_emisor(cuit),
         "grupos": _agrupar_documentos(documentos),
         "motivo_ausente": None if documentos else "el emisor no tiene documentos filed",
+        "fuente": "CNV",
+    }
+
+
+def _sin_serie(ticker: str, uuid: str, motivo: str) -> dict[str, object]:
+    return {
+        "ticker": ticker,
+        "uuid": uuid,
+        "aplica": False,
+        "series": [],
+        "motivo_ausente": motivo,
+        "fuente": "CNV",
+    }
+
+
+@router.get(
+    "/{ticker}/prospecto/{uuid}/serie",
+    summary="Los documentos de la serie que declara un documento del prospecto",
+    responses={503: {"description": "La base de datos no está disponible"}},
+)
+async def prospecto_serie(
+    ticker: str,
+    uuid: str,
+    conn: Annotated[object, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> dict[str, object]:
+    """La carpeta chica: los 3-5 documentos de la serie puntual que **este documento** declara, en
+    vez de los cientos que presentó el emisor.
+
+    La cadena es de ids y no tiene heurística: el asesor mira un documento cuya descripción ya
+    nombra la clase, lo elige, y la `publicview` de ese documento declara su `DesplegableSerie`. Con
+    ese id, `Empresas/DetallesDeFormularios` devuelve los documentos de esa serie sola. En ningún
+    paso se infiere qué serie corresponde al ticker — esa pregunta sigue sin respuesta derivable, y
+    no se contesta acá.
+
+    **`series` es una lista porque un documento puede declarar más de una** (verificado: un
+    Suplemento de Telecom cubre la Clase 29 y la Clase 30 a la vez). Se devuelven todas; elegir una
+    sería inventar cuál importa (regla 1).
+
+    Siempre 200 con el estado declarado, mismo contrato que el resto de la feature: sin serie
+    declarada en el documento, con la fuente pausada o con la CNV sin responder, `aplica` sale
+    `false` con su motivo.
+
+    `ticker` no participa del pedido —el `uuid` ya identifica la presentación, y el `serieID` sale
+    de ella— y viaja en la ruta sólo para resolver el emisor con que se rotula el link a la CNV.
+    """
+    if not settings.cnv_habilitado:
+        return _sin_serie(ticker, uuid, MOTIVO_PAUSA_CNV)
+
+    cliente = cliente_cnv()
+    try:
+        series = await cliente.series_de(uuid)
+    except ValueError as exc:
+        return _sin_serie(ticker, uuid, str(exc))
+    except httpx.HTTPError as exc:
+        logger.warning("cnv_serie_fallo_de_red", ticker=ticker, uuid=uuid, error=str(exc))
+        return _sin_serie(
+            ticker,
+            uuid,
+            "la CNV no respondió — probá de nuevo en un momento, o abrí el link a la CNV",
+        )
+
+    if not series:
+        return _sin_serie(ticker, uuid, "este documento no declara a qué serie corresponde")
+
+    # El emisor sólo rotula el encabezado de la página de la CNV: `serieID` es la única clave que
+    # filtra (verificado). Si no se pudo resolver, el drill-down igual se sirve — el link queda con
+    # el encabezado vacío, que es lo que la fuente muestra, y no se completa con nada supuesto.
+    especie = await _especie_de(conn, ticker)
+    resuelto = _resolver_emisor(especie, settings) if especie is not None else _EmisorResuelto()
+
+    resueltas: list[dict[str, object]] = []
+    for serie in series:
+        try:
+            documentos = await cliente.documentos_de_la_serie(
+                serie.serie_id,
+                nombre_serie=serie.nombre,
+                cuit=resuelto.cuit,
+                nombre_sociedad=resuelto.emisor,
+            )
+        except httpx.HTTPError as exc:
+            logger.warning(
+                "cnv_detalles_fallo_de_red", ticker=ticker, serie_id=serie.serie_id, error=str(exc)
+            )
+            documentos = None
+
+        if documentos is None:
+            motivo = "la CNV no devolvió la tabla de esta serie — probá el link directo"
+        elif not documentos:
+            motivo = "la CNV no listó documentos para esta serie"
+        else:
+            motivo = None
+
+        resueltas.append(
+            {
+                "serie_id": serie.serie_id,
+                "nombre": serie.nombre,
+                "url_detalles_formulario": url_detalles_formulario(
+                    serie.serie_id, serie.nombre, resuelto.cuit, resuelto.emisor
+                ),
+                "documentos": [
+                    {
+                        "fecha": doc.fecha.isoformat() if doc.fecha is not None else None,
+                        "hora": doc.hora,
+                        "formulario": doc.formulario,
+                        "documento_id": doc.documento_id,
+                        "uuid": doc.uuid,
+                        "url_publicview": doc.url_publicview(),
+                    }
+                    for doc in (documentos or [])
+                ],
+                "motivo_ausente": motivo,
+            }
+        )
+
+    return {
+        "ticker": ticker,
+        "uuid": uuid,
+        "aplica": True,
+        "series": resueltas,
+        "motivo_ausente": None,
         "fuente": "CNV",
     }
 

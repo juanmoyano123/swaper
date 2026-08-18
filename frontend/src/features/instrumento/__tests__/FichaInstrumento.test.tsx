@@ -28,6 +28,7 @@ import type {
   PagoCronograma,
   Prospecto,
   ResumenCronograma,
+  SerieCnv,
 } from '../lib/schema'
 
 afterEach(() => {
@@ -161,6 +162,48 @@ function grupoConHistorial(grupo: string, descripciones: string[]): GrupoDocumen
   }
 }
 
+/** Una serie con sus pocos documentos: el drill-down de F-072. Los uuid vienen en mayúsculas porque
+ *  así los sirve `DetallesDeFormularios` —la otra plantilla de la CNV los da en minúscula— y el
+ *  backend los reemite tal cual, sin normalizarlos. */
+function serieCnv(uuid: string): SerieCnv {
+  return {
+    ticker: 'TLCMO',
+    uuid,
+    aplica: true,
+    series: [
+      {
+        serie_id: '88539',
+        nombre: 'Clase 29',
+        url_detalles_formulario:
+          'https://www.cnv.gov.ar/SitioWeb/Empresas/DetallesDeFormularios?serieID=88539&nombreserie=Clase+29&idfiscal=30639453738&nombresociedad=TELECOM',
+        documentos: [
+          {
+            fecha: '2026-05-24',
+            hora: '10:16 Hs',
+            formulario: 'Aviso de Suscripción',
+            documento_id: '3527921',
+            uuid: 'BC077304-DF6B-4B0E-8320-EE82DFDF520C',
+            url_publicview:
+              'https://aif2.cnv.gov.ar/presentations/publicview/BC077304-DF6B-4B0E-8320-EE82DFDF520C',
+          },
+          {
+            fecha: '2026-05-26',
+            hora: '08:52 Hs',
+            formulario: 'Suplemento',
+            documento_id: '3527952',
+            uuid: 'AC613AE1-04AE-4D55-AA2A-88F3A7DB9F29',
+            url_publicview:
+              'https://aif2.cnv.gov.ar/presentations/publicview/AC613AE1-04AE-4D55-AA2A-88F3A7DB9F29',
+          },
+        ],
+        motivo_ausente: null,
+      },
+    ],
+    motivo_ausente: null,
+    fuente: 'CNV',
+  }
+}
+
 const CONTRATO_ERROR = (mensaje: string) => ({
   error: { code: 'not_found', message: mensaje, details: null, request_id: null },
 })
@@ -206,6 +249,8 @@ const RUTA_CONDICIONES = (t: string) => `/api/v1/instrumentos/${t}/condiciones`
 const RUTA_CRONOGRAMA = (t: string) => `/api/v1/instrumentos/${t}/cronograma`
 const RUTA_SENSIBILIDAD = (t: string) => `/api/v1/instrumentos/${t}/sensibilidad`
 const RUTA_PROSPECTO = (t: string) => `/api/v1/instrumentos/${t}/prospecto`
+const RUTA_SERIE = (t: string, uuid: string) =>
+  `/api/v1/instrumentos/${t}/prospecto/${uuid}/serie`
 
 /** Las cinco rutas resolviendo en éxito, con datos mínimos — el punto de partida de la mayoría de
  * los tests, que después pisan sólo la que les interesa.
@@ -637,6 +682,118 @@ describe('prospecto de emisión', () => {
 
     expect(await screen.findByText('TLCMO')).toBeInTheDocument()
     expect(await screen.findByRole('alert')).toBeInTheDocument()
+  })
+
+  it('esconde los grupos administrativos hasta que se pide el historial completo', async () => {
+    const especieOn = especie('TLCMO', { clase_activo: 'on_corporativo' })
+    mockearRutas(
+      rutasOk('TLCMO', {
+        [RUTA_FICHA('TLCMO')]: { body: { ...ficha('TLCMO'), especie: especieOn } },
+        [RUTA_PROSPECTO('TLCMO')]: {
+          body: prospecto('TLCMO', {
+            aplica: true,
+            cuit: '30639453738',
+            url_emisor_cnv: 'https://www.cnv.gov.ar/SitioWeb/Empresas/Empresa/30639453738',
+            grupos: [
+              grupoConHistorial('Suplementos', ['Suplemento de hoy']),
+              grupoConHistorial('Aviso de Pago', ['Un aviso de pago']),
+              grupoConHistorial('Informe Trimestral ON', ['Un informe trimestral']),
+              grupoConHistorial('Otra Información', ['Otra cosa']),
+            ],
+            motivo_ausente: null,
+          }),
+        },
+      }),
+    )
+
+    renderizar('TLCMO')
+
+    // Lo de la colocación se ve; lo administrativo —245 de los 508 documentos de Telecom son avisos
+    // de pago— no entierra al resto.
+    expect(await screen.findByText('Suplemento de hoy')).toBeInTheDocument()
+    expect(screen.queryByText('Un aviso de pago')).not.toBeInTheDocument()
+    expect(screen.queryByText('Un informe trimestral')).not.toBeInTheDocument()
+    expect(screen.queryByText('Otra cosa')).not.toBeInTheDocument()
+
+    // El historial completo sigue mostrando todo, sin filtrar: no se esconde nada, se posterga.
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Ver historial completo (4 documentos)' }),
+    )
+
+    expect(await screen.findByText('Un aviso de pago')).toBeInTheDocument()
+    expect(await screen.findByText('Un informe trimestral')).toBeInTheDocument()
+    expect(await screen.findByText('Otra cosa')).toBeInTheDocument()
+  })
+
+  it('al tocar "Ver serie" muestra los documentos de esa serie y el link a la CNV', async () => {
+    const especieOn = especie('TLCMO', { clase_activo: 'on_corporativo' })
+    const uuid = '96bad10a-713b-46e1-a9ac-04fa19f3a8cd'
+    mockearRutas(
+      rutasOk('TLCMO', {
+        [RUTA_FICHA('TLCMO')]: { body: { ...ficha('TLCMO'), especie: especieOn } },
+        [RUTA_PROSPECTO('TLCMO')]: {
+          body: prospecto('TLCMO', {
+            aplica: true,
+            cuit: '30639453738',
+            url_emisor_cnv: 'https://www.cnv.gov.ar/SitioWeb/Empresas/Empresa/30639453738',
+            grupos: [grupoDocumentos('Suplementos')],
+            motivo_ausente: null,
+          }),
+        },
+        [RUTA_SERIE('TLCMO', uuid)]: { body: serieCnv(uuid) },
+      }),
+    )
+
+    renderizar('TLCMO')
+
+    // La serie no se pide sola: recién al tocar el botón. Antes de eso no hay nada de la serie.
+    expect(await screen.findByText('Un documento de prueba')).toBeInTheDocument()
+    expect(screen.queryByText('Clase 29')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Ver serie' }))
+
+    expect(await screen.findByText('Clase 29')).toBeInTheDocument()
+    expect(await screen.findByText('Aviso de Suscripción')).toBeInTheDocument()
+    expect(await screen.findByText('Suplemento')).toBeInTheDocument()
+    const link = await screen.findByRole('link', { name: 'Abrir en CNV' })
+    expect(link).toHaveAttribute('href', expect.stringContaining('serieID=88539'))
+  })
+
+  it('declara cuando el documento no dice a qué serie corresponde', async () => {
+    const especieOn = especie('TLCMO', { clase_activo: 'on_corporativo' })
+    const uuid = '96bad10a-713b-46e1-a9ac-04fa19f3a8cd'
+    mockearRutas(
+      rutasOk('TLCMO', {
+        [RUTA_FICHA('TLCMO')]: { body: { ...ficha('TLCMO'), especie: especieOn } },
+        [RUTA_PROSPECTO('TLCMO')]: {
+          body: prospecto('TLCMO', {
+            aplica: true,
+            cuit: '30639453738',
+            url_emisor_cnv: 'https://www.cnv.gov.ar/SitioWeb/Empresas/Empresa/30639453738',
+            grupos: [grupoDocumentos('Suplementos')],
+            motivo_ausente: null,
+          }),
+        },
+        [RUTA_SERIE('TLCMO', uuid)]: {
+          body: {
+            ticker: 'TLCMO',
+            uuid,
+            aplica: false,
+            series: [],
+            motivo_ausente: 'este documento no declara a qué serie corresponde',
+            fuente: 'CNV',
+          },
+        },
+      }),
+    )
+
+    renderizar('TLCMO')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Ver serie' }))
+
+    expect(
+      await screen.findByText('este documento no declara a qué serie corresponde'),
+    ).toBeInTheDocument()
   })
 })
 

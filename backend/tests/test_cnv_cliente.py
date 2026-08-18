@@ -5,6 +5,8 @@ contractual y una suite que le pegara de verdad sería lenta y frágil. Los frag
 son shapes mínimos, recortados de páginas reales verificadas en vivo el 17/08/2026 — no inventados.
 """
 
+from urllib.parse import parse_qs, urlparse
+
 import pytest
 import respx
 from httpx import Response
@@ -15,6 +17,7 @@ from app.externos.cnv import (
     BASE_SITIO,
     ClienteCnv,
     RespuestaInesperadaDeCnv,
+    url_detalles_formulario,
     url_emisor,
 )
 
@@ -95,6 +98,93 @@ HTML_PUBLICVIEW_SIN_ARCHIVO = (
     '<propiedad id="FechPu" visible="true">2026-08-11</propiedad>'
     "</entidad></modeloDatos>';"
     "</script></head><body></body></html>"
+)
+
+# Un Suplemento que cubre dos clases a la vez: la serie viene en una entidad `Grilla`, una `<fila>`
+# por serie. Recortado del real de Telecom del 26/05/2026 (Clase 29 = 88539, Clase 30 = 88540).
+# `DesplegableSerieIndividual` va a propósito: empieza igual que `DesplegableSerie` y no tiene que
+# confundirse con ella, y su valor -1 tampoco tiene que colarse como si fuera un id de serie.
+HTML_PUBLICVIEW_DOS_SERIES = (
+    "<html><head><script>"
+    "var presentation ='<modeloDatos>"
+    '<entidad visibilidad="true" id="10004" clave="Grilla" grid="1" numeroelementos="2">'
+    '<fila identificador="1" orden="1">'
+    '<propiedad id="DesplegableSerie" claveinformativa="DesplegableSerie">88539</propiedad>'
+    '<propiedad id="DescripcionDeLaSerie" claveinformativa="DescripcionDeLaSerie">Clase 29'
+    "</propiedad>"
+    '<propiedad id="DesplegableSerieIndividual" claveinformativa="DesplegableSerieIndividual">-1'
+    "</propiedad>"
+    '<propiedad id="DescripcionDeLaSerieIndividual" claveinformativa="x" />'
+    "</fila>"
+    '<fila identificador="2" orden="2">'
+    '<propiedad id="DesplegableSerie" claveinformativa="DesplegableSerie">88540</propiedad>'
+    '<propiedad id="DescripcionDeLaSerie" claveinformativa="DescripcionDeLaSerie">Clase 30'
+    "</propiedad>"
+    "</fila>"
+    "</entidad></modeloDatos>';"
+    "</script></head><body></body></html>"
+)
+
+# Un Aviso de Pago: una sola serie, declarada suelta dentro de la entidad, sin grilla. La otra forma
+# real que trae la misma fuente — verificada el 18/08/2026 contra Telecom Clase 18.
+HTML_PUBLICVIEW_UNA_SERIE_SUELTA = (
+    "<html><head><script>"
+    "var presentation ='<modeloDatos>"
+    '<entidad visibilidad="true" id="10001" clave="Datos">'
+    '<propiedad id="DescripcionPrograma" visible="true">Res Nº19,481</propiedad>'
+    '<propiedad id="DesplegableSerie" visible="true" claveinformativa="DesplegableSerie">86337'
+    "</propiedad>"
+    '<propiedad id="DescripcionDeLaSerie" visible="true" claveinformativa="DescripcionDeLaSerie">'
+    "Clase 18</propiedad>"
+    "</entidad></modeloDatos>';"
+    "</script></head><body></body></html>"
+)
+
+UUID_DETALLES_A = "bc077304-df6b-4b0e-8320-ee82dfdf520c"
+UUID_DETALLES_B = "ac613ae1-04ae-4d55-aa2a-88f3a7db9f29"
+
+# `DetallesDeFormularios`: otra plantilla que la del emisor — `<tr class="text-center">`, fecha en
+# `DD-MM-YYYY` y una columna "Formulario" en lugar de la descripción larga.
+HTML_DETALLES = f"""
+<html><body>
+<table class="table container">
+<div class="text-center"><h1><b> TELECOM ARGENTINA S.A.</b></h1><h3>30-63945373-8</h3></div>
+<div><h3>Detalles De Formularios de <b>Clase 29</b></h3></div>
+<thead>
+    <tr class="text-uppercase fs-2">
+        <th class="text-center">Fecha</th>
+        <th class="text-center">Hora</th>
+        <th class="text-center">Documento</th>
+        <th class="text-center">Formulario</th>
+        <th class="text-center">Ver</th>
+    </tr>
+</thead>
+<tbody>
+    <tr class="text-center">
+        <td>24-05-2026</td>
+        <td>10:16 Hs</td>
+        <td>3527921</td>
+        <td>Aviso de Suscripción</td>
+        <td><a href="{BASE_AIF}/Presentations/publicview/{UUID_DETALLES_A}" target="_blank">
+            <i class="material-icons">add_circle_outline</i></a></td>
+    </tr>
+    <tr class="text-center">
+        <td>26-05-2026</td>
+        <td>08:52 Hs</td>
+        <td>3527952</td>
+        <td>Suplemento</td>
+        <td><a href="{BASE_AIF}/Presentations/publicview/{UUID_DETALLES_B}" target="_blank">
+            <i class="material-icons">add_circle_outline</i></a></td>
+    </tr>
+</tbody>
+</table>
+</body></html>
+"""
+
+# El mismo encabezado, cero filas: lo que devuelve un `serieID` inexistente. HTTP 200, no un error —
+# verificado en vivo con `serieID=0` y con uno de nueve dígitos.
+HTML_DETALLES_SIN_FILAS = (
+    HTML_DETALLES[: HTML_DETALLES.index("<tbody>")] + "<tbody></tbody></table>"
 )
 
 
@@ -249,3 +339,131 @@ async def test_descargar_detecta_cuando_la_cnv_devuelve_html_en_vez_del_archivo(
 def test_url_emisor_normaliza_el_cuit_y_fija_la_ventana_de_fecha() -> None:
     url = url_emisor("30-71412830-9")
     assert url == f"{BASE_SITIO}/Empresas/Empresa/30714128309?formType=EMISIO&fdesde=1/1/2015"
+
+
+# --- series_de ---------------------------------------------------------------------------------
+
+
+async def _series_desde(html: str) -> list:
+    with respx.mock:
+        respx.get(f"{BASE_AIF}/presentations/publicview/{UUID_PROSPECTO}").mock(
+            return_value=Response(200, text=html)
+        )
+        return await ClienteCnv().series_de(UUID_PROSPECTO)
+
+
+async def test_series_de_devuelve_las_dos_clases_que_un_suplemento_declara() -> None:
+    """Un documento puede cubrir varias clases a la vez y se devuelven todas: quedarse con la
+    primera sería elegir por el asesor cuál importa, que es el juicio inventado que prohíbe la
+    regla 1."""
+    series = await _series_desde(HTML_PUBLICVIEW_DOS_SERIES)
+
+    assert [(s.serie_id, s.nombre) for s in series] == [
+        ("88539", "Clase 29"),
+        ("88540", "Clase 30"),
+    ]
+
+
+async def test_series_de_lee_la_serie_declarada_suelta_en_la_entidad_sin_grilla() -> None:
+    """La otra forma real de la fuente: un Aviso de Pago no arma grilla y declara su única serie
+    como propiedades sueltas."""
+    series = await _series_desde(HTML_PUBLICVIEW_UNA_SERIE_SUELTA)
+
+    assert [(s.serie_id, s.nombre) for s in series] == [("86337", "Clase 18")]
+
+
+async def test_series_de_vacio_cuando_el_documento_no_declara_ninguna() -> None:
+    """No todos los formularios declaran serie. Se informa la ausencia; no se le supone la del
+    documento de al lado."""
+    assert await _series_desde(HTML_PUBLICVIEW_SIN_ARCHIVO) == []
+
+
+async def test_series_de_rechaza_un_uuid_con_formato_inesperado() -> None:
+    with pytest.raises(ValueError):
+        await ClienteCnv().series_de("'; DROP TABLE presentations;--")
+
+
+# --- documentos_de_la_serie --------------------------------------------------------------------
+
+
+async def test_documentos_de_la_serie_lee_la_tabla_con_su_propio_formato_de_fecha() -> None:
+    """`DD-MM-YYYY` con guiones, no el "24 may. 2026" de la página del emisor: son dos plantillas
+    distintas de la misma fuente y cada una se parsea con la suya."""
+    with respx.mock:
+        ruta = respx.get(f"{BASE_SITIO}/Empresas/DetallesDeFormularios").mock(
+            return_value=Response(200, text=HTML_DETALLES)
+        )
+        documentos = await ClienteCnv().documentos_de_la_serie(
+            "88539", nombre_serie="Clase 29", cuit="30-63945373-8", nombre_sociedad="TELECOM"
+        )
+
+    assert documentos is not None
+    assert len(documentos) == 2
+    primero = documentos[0]
+    assert primero.fecha is not None
+    assert primero.fecha.isoformat() == "2026-05-24"
+    assert primero.hora == "10:16 Hs"
+    assert primero.documento_id == "3527921"
+    assert primero.formulario == "Aviso de Suscripción"
+    assert primero.uuid == UUID_DETALLES_A
+    assert documentos[1].formulario == "Suplemento"
+    # El CUIT viaja sin guiones, igual que en el resto del módulo.
+    assert ruta.calls.last.request.url.params["idfiscal"] == "30639453738"
+
+
+async def test_documentos_de_la_serie_lista_vacia_cuando_la_fuente_no_lista_nada() -> None:
+    """Lista vacía y no `None`: un `serieID` inexistente devuelve 200 con la tabla vacía, así que
+    esto es lo que la fuente contestó — no se puede leer como "la serie no existe"."""
+    with respx.mock:
+        respx.get(f"{BASE_SITIO}/Empresas/DetallesDeFormularios").mock(
+            return_value=Response(200, text=HTML_DETALLES_SIN_FILAS)
+        )
+        documentos = await ClienteCnv().documentos_de_la_serie("999999999")
+
+    assert documentos == []
+
+
+async def test_documentos_de_la_serie_none_cuando_la_respuesta_no_es_la_tabla_esperada() -> None:
+    """Sin el encabezado en el orden conocido no hay licencia para leer las celdas por posición: se
+    declara que no se pudo, en vez de devolver la hora en el lugar de la fecha."""
+    with respx.mock:
+        respx.get(f"{BASE_SITIO}/Empresas/DetallesDeFormularios").mock(
+            return_value=Response(200, text="<html><body>Error</body></html>")
+        )
+        assert await ClienteCnv().documentos_de_la_serie("88539") is None
+
+
+async def test_documentos_de_la_serie_rechaza_un_serie_id_que_no_es_numerico() -> None:
+    with pytest.raises(ValueError):
+        await ClienteCnv().documentos_de_la_serie("88539 OR 1=1")
+
+
+# --- url_detalles_formulario -------------------------------------------------------------------
+
+
+def test_url_detalles_formulario_arma_la_url_con_los_cuatro_parametros() -> None:
+    url = url_detalles_formulario(
+        "88765",
+        "Obligaciones Negociables Clase XXIV",
+        "30-71412830-9",
+        "YPF ENERGÍA ELÉCTRICA S.A.",
+    )
+
+    assert url.startswith(f"{BASE_SITIO}/Empresas/DetallesDeFormularios?")
+    parametros = parse_qs(urlparse(url).query)
+    assert parametros["serieID"] == ["88765"]
+    assert parametros["nombreserie"] == ["Obligaciones Negociables Clase XXIV"]
+    assert parametros["idfiscal"] == ["30714128309"]
+    assert parametros["nombresociedad"] == ["YPF ENERGÍA ELÉCTRICA S.A."]
+
+
+def test_url_detalles_formulario_deja_vacio_lo_que_no_se_pudo_resolver() -> None:
+    """Sólo `serieID` filtra; los otros tres rotulan el encabezado. Si no se resolvió el emisor, el
+    link sigue sirviendo y el encabezado va vacío — no se completa con nada supuesto."""
+    parametros = parse_qs(
+        urlparse(url_detalles_formulario("88765", None, None, None)).query, keep_blank_values=True
+    )
+
+    assert parametros["serieID"] == ["88765"]
+    assert parametros["nombreserie"] == [""]
+    assert parametros["idfiscal"] == [""]
