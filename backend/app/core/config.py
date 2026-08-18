@@ -75,6 +75,13 @@ class Settings(BaseSettings):
     # declarado ausente en la ficha mientras dure la pausa.
     yahoo_habilitado: bool = False
 
+    # **El consumo de la CNV está pausado por default (F-072, 17/08/2026).** Documentos filed por
+    # un emisor —prospectos, suplementos, avisos— vía HTML servido, y el PDF real vía el
+    # intercambio de dos pasos con `blob.cnv.gov.ar` (`app/externos/cnv.py`). Mismo criterio que
+    # Yahoo: en `False` el bloque llega pausado, sin pegarle a la red, y el frontend no distingue
+    # ese caso de un fallo real.
+    cnv_habilitado: bool = False
+
     # F-008 — job programado. Los horarios son configurables para poder ejercitar el job en un
     # entorno de prueba sin esperar a la hora real, y para que un cambio de horario de la rueda
     # no sea un cambio de código. `ingesta_habilitada` en False deja el servicio sin scheduler:
@@ -124,6 +131,13 @@ class Settings(BaseSettings):
     # cree, y porque el CSV no tiene fuente de origen viva —se rescató después de que se borraran
     # los originales—, así que apuntar mal no da un error ruidoso: da una semilla vacía.
     condiciones_csv: str = "data/condiciones_emision.csv"
+
+    # F-072 — el puente emisor -> CUIT para pedirle documentos a la CNV. Igual criterio que
+    # `condiciones_csv`: dato curado, versionado, sin fuente de origen viva por request (se cura
+    # una vez con `tools/curar_emisores_cuit.py` contra el buscador de la CNV). A diferencia de
+    # `condiciones_csv`, cubre parcialmente el universo de ONs a propósito — 13 de 82 emisores al
+    # 17/08/2026 — y eso está bien: lo que no está resuelto se declara, no bloquea la feature.
+    emisores_cuit_csv: str = "data/emisores_cuit.csv"
 
     # F-010 no declara settings a propósito. Los topes de sanidad (300 % hard-dollar, 100 % de tasa
     # real CER, 500 % de TNA nominal) y el umbral de discordancia entre especies son criterio de

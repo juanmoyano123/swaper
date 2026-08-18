@@ -53,6 +53,9 @@ export const claves = {
   referencia: {
     todas: ['referencia'] as const,
     condiciones: (ticker: string) => ['referencia', 'condiciones', ticker] as const,
+    // F-072: los documentos de la CNV son dato externo consultado en vivo, no de mercado — un
+    // refresh de precios no lo invalida, mismo criterio que `condiciones`.
+    prospecto: (ticker: string) => ['referencia', 'prospecto', ticker] as const,
   },
 
   carteras: {

@@ -15,13 +15,17 @@ from typing import Any
 
 import pytest
 
+import app.api.v1.instrumentos as modulo_instrumentos
 from app.condiciones.semilla import CAMPOS
+from app.externos.cnv import ArchivoAdjunto, DocumentoCnv, RespuestaInesperadaDeCnv
 from tests.conftest import cliente
 
 FICHA = "/api/v1/instrumentos/{ticker}"
 CONDICIONES = "/api/v1/instrumentos/{ticker}/condiciones"
 CRONOGRAMA = "/api/v1/instrumentos/{ticker}/cronograma"
 SENSIBILIDAD = "/api/v1/instrumentos/{ticker}/sensibilidad"
+PROSPECTO = "/api/v1/instrumentos/{ticker}/prospecto"
+PROSPECTO_ARCHIVO = "/api/v1/instrumentos/{ticker}/prospecto/{uuid}/archivo"
 
 # AL30 / AL30D / AL30C: la misma emisión en pesos, MEP y cable — mismas duraciones, así que
 # deduplica en una sola emisión con dos hermanas por especie. S30J6 no comparte raíz con nadie:
@@ -90,6 +94,22 @@ FILAS_UNIVERSO: list[dict[str, Any]] = [
         "effectiveVolume": 9_000.0,
         "moneda_cotizacion": "ARS",
         "paridad": 0.98,
+    },
+    {
+        "ticker": "TLCMO",
+        "clase_activo": "on_corporativo",
+        "tipo_tasa": "hard-dollar",
+        "tir": 0.09,
+        "tna": None,
+        "duration": 4.0,
+        "maturity": date(2031, 7, 18),
+        "law": "Ley N.Y.",
+        "couponCurrency": "USD",
+        "underlying": "TELECOM ARGENTINA S.A.",
+        "lastPrice": 171_740.0,
+        "effectiveVolume": 0.0,
+        "moneda_cotizacion": "ARS",
+        "paridad": None,
     },
 ]
 
@@ -490,3 +510,320 @@ async def test_sensibilidad_sin_base_de_datos_responde_503(crear_app) -> None:
         respuesta = await http.get(SENSIBILIDAD.format(ticker="AL30D"))
 
     assert respuesta.status_code == 503
+
+
+# --- GET /instrumentos/{ticker}/prospecto — F-072 -----------------------------------------------
+
+
+class FakeClienteCnv:
+    """Reemplaza `cliente_cnv()` en el módulo del endpoint — mismo patrón que
+    `test_renta_variable_ficha_api.py` con `cliente_yahoo`/`cliente_sec_ficha`: la respuesta se
+    inyecta en vez de pegarle a la red."""
+
+    def __init__(
+        self,
+        documentos: list[DocumentoCnv] | Exception | None = None,
+        archivo: ArchivoAdjunto | Exception | None = None,
+        contenido: bytes | Exception = b"%PDF-1.7 contenido",
+    ) -> None:
+        self._documentos = documentos
+        self._archivo = archivo
+        self._contenido = contenido
+        self.pedidos: list[str] = []
+
+    async def documentos_de(self, cuit: str) -> list[DocumentoCnv] | None:
+        self.pedidos.append(cuit)
+        if isinstance(self._documentos, Exception):
+            raise self._documentos
+        return self._documentos
+
+    async def archivo_de(self, uuid: str) -> ArchivoAdjunto | None:
+        if isinstance(self._archivo, Exception):
+            raise self._archivo
+        return self._archivo
+
+    async def descargar(self, guid: str) -> bytes:
+        if isinstance(self._contenido, Exception):
+            raise self._contenido
+        return self._contenido
+
+
+UN_DOCUMENTO = DocumentoCnv(
+    grupo="Suplementos",
+    fecha=date(2026, 8, 11),
+    hora="15:34",
+    descripcion="Un suplemento de prueba",
+    documento_id="3557195",
+    uuid="96bad10a-713b-46e1-a9ac-04fa19f3a8cd",
+)
+
+
+@pytest.fixture
+def app_con_prospecto(crear_app, monkeypatch):
+    """`emisores_cuit.csv` se reemplaza en memoria (mismo criterio que el resto del archivo: el
+    contrato HTTP se prueba sin tocar disco), y `cliente_cnv()` se inyecta en el módulo del
+    endpoint. `CNV_HABILITADO=true` por default acá: la pausa tiene sus propios tests."""
+
+    def _crear(
+        *,
+        universo: list[dict[str, Any]] | None = None,
+        emisores_cuit: dict[str, str] | None = None,
+        cnv_habilitado: bool = True,
+        **kwargs: Any,
+    ):
+        monkeypatch.setenv("CNV_HABILITADO", "true" if cnv_habilitado else "false")
+        from app.core.config import get_settings
+
+        get_settings.cache_clear()
+
+        emisores = (
+            {"TELECOM ARGENTINA S.A.": "30639453738"} if emisores_cuit is None else emisores_cuit
+        )
+        monkeypatch.setattr(modulo_instrumentos, "leer_emisores_cuit", lambda _ruta: emisores)
+
+        app = crear_app(FakeConexionInstrumentos(universo=universo, **kwargs))
+        return app
+
+    return _crear
+
+
+def _inyectar_cliente(monkeypatch, fake: FakeClienteCnv) -> None:
+    monkeypatch.setattr(modulo_instrumentos, "cliente_cnv", lambda: fake)
+
+
+async def test_prospecto_de_una_on_agrupa_los_documentos(app_con_prospecto, monkeypatch) -> None:
+    fake = FakeClienteCnv(documentos=[UN_DOCUMENTO])
+    _inyectar_cliente(monkeypatch, fake)
+
+    async with cliente(app_con_prospecto()) as http:
+        respuesta = await http.get(PROSPECTO.format(ticker="TLCMO"))
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["aplica"] is True
+    assert cuerpo["emisor"] == "TELECOM ARGENTINA S.A."
+    assert cuerpo["cuit"] == "30639453738"
+    assert cuerpo["url_emisor_cnv"] == (
+        "https://www.cnv.gov.ar/SitioWeb/Empresas/Empresa/30639453738"
+        "?formType=EMISIO&fdesde=1/1/2015"
+    )
+    assert cuerpo["grupos"] == [
+        {
+            "grupo": "Suplementos",
+            "documentos": [
+                {
+                    "fecha": "2026-08-11",
+                    "hora": "15:34",
+                    "descripcion": "Un suplemento de prueba",
+                    "documento_id": "3557195",
+                    "uuid": "96bad10a-713b-46e1-a9ac-04fa19f3a8cd",
+                    "url_publicview": (
+                        "https://aif2.cnv.gov.ar/presentations/publicview/"
+                        "96bad10a-713b-46e1-a9ac-04fa19f3a8cd"
+                    ),
+                }
+            ],
+        }
+    ]
+    assert cuerpo["motivo_ausente"] is None
+    assert fake.pedidos == ["30639453738"]
+
+
+async def test_prospecto_pone_los_prospectos_primero(app_con_prospecto, monkeypatch) -> None:
+    suplemento = UN_DOCUMENTO
+    prospecto_doc = DocumentoCnv(
+        grupo="Prospectos",
+        fecha=date(2020, 1, 1),
+        hora="10:00",
+        descripcion="Prospecto original",
+        documento_id="1",
+        uuid="7024d6c5-9b2a-4a86-975d-7843a4cf9896",
+    )
+    fake = FakeClienteCnv(documentos=[suplemento, prospecto_doc])
+    _inyectar_cliente(monkeypatch, fake)
+
+    async with cliente(app_con_prospecto()) as http:
+        respuesta = await http.get(PROSPECTO.format(ticker="TLCMO"))
+
+    grupos = [g["grupo"] for g in respuesta.json()["grupos"]]
+    assert grupos == ["Prospectos", "Suplementos"]
+
+
+async def test_prospecto_de_un_ticker_que_no_es_on_declara_aplica_false(
+    app_con_prospecto, monkeypatch
+) -> None:
+    fake = FakeClienteCnv()
+    _inyectar_cliente(monkeypatch, fake)
+
+    async with cliente(app_con_prospecto()) as http:
+        respuesta = await http.get(PROSPECTO.format(ticker="AL30D"))
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["aplica"] is False
+    assert "no es una obligación negociable" in cuerpo["motivo_ausente"]
+    assert cuerpo["cuit"] is None
+    # Ni se intenta resolver el CUIT ni se pide nada a la CNV para algo que no aplica.
+    assert fake.pedidos == []
+
+
+async def test_prospecto_de_un_ticker_fuera_del_universo_da_200_no_404(
+    app_con_prospecto, monkeypatch
+) -> None:
+    """Mismo criterio que `/sensibilidad`: es un recurso derivado, el 404 de existencia lo da la
+    ficha."""
+    fake = FakeClienteCnv()
+    _inyectar_cliente(monkeypatch, fake)
+
+    async with cliente(app_con_prospecto()) as http:
+        respuesta = await http.get(PROSPECTO.format(ticker="NOEXISTE"))
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["aplica"] is False
+    assert "no está en el universo de hoy" in cuerpo["motivo_ausente"]
+
+
+async def test_prospecto_sin_cuit_curado_declara_el_motivo_y_no_pide_nada(
+    app_con_prospecto, monkeypatch
+) -> None:
+    fake = FakeClienteCnv()
+    _inyectar_cliente(monkeypatch, fake)
+
+    async with cliente(app_con_prospecto(emisores_cuit={})) as http:
+        respuesta = await http.get(PROSPECTO.format(ticker="TLCMO"))
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["aplica"] is False
+    assert cuerpo["emisor"] == "TELECOM ARGENTINA S.A."
+    assert cuerpo["cuit"] is None
+    assert cuerpo["url_emisor_cnv"] is None
+    assert "todavía no tiene CUIT curado" in cuerpo["motivo_ausente"]
+    assert fake.pedidos == []
+
+
+async def test_prospecto_con_la_fuente_pausada_no_pide_nada_a_la_red(
+    app_con_prospecto, monkeypatch
+) -> None:
+    fake = FakeClienteCnv()
+    _inyectar_cliente(monkeypatch, fake)
+
+    async with cliente(app_con_prospecto(cnv_habilitado=False)) as http:
+        respuesta = await http.get(PROSPECTO.format(ticker="TLCMO"))
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["aplica"] is False
+    # El CUIT sí se resuelve (es local) y la salida de emergencia sigue disponible aunque la
+    # fuente esté pausada.
+    assert cuerpo["cuit"] == "30639453738"
+    assert cuerpo["url_emisor_cnv"] is not None
+    assert "pausada" in cuerpo["motivo_ausente"]
+    assert fake.pedidos == []
+
+
+async def test_prospecto_declara_cuando_la_cnv_no_confirma_los_resultados(
+    app_con_prospecto, monkeypatch
+) -> None:
+    """`documentos_de` devuelve `None` cuando la fuente respondió con la página genérica en vez de
+    los resultados del emisor — un fallo silencioso que no se confunde con "sin documentos"."""
+    fake = FakeClienteCnv(documentos=None)
+    _inyectar_cliente(monkeypatch, fake)
+
+    async with cliente(app_con_prospecto()) as http:
+        respuesta = await http.get(PROSPECTO.format(ticker="TLCMO"))
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    # `aplica` es "hay una respuesta confirmada que mostrar", no "el ticker es una ON": mismo
+    # criterio que `calculable` en /sensibilidad, que junta bajo un solo booleano "no corresponde"
+    # y "no se pudo calcular".
+    assert cuerpo["aplica"] is False
+    assert cuerpo["grupos"] == []
+    assert "no confirmó" in cuerpo["motivo_ausente"]
+    # La salida de emergencia sigue viajando aunque el parseo no haya podido confirmar nada.
+    assert cuerpo["url_emisor_cnv"] is not None
+
+
+async def test_prospecto_declara_un_fallo_de_red_sin_romper_el_endpoint(
+    app_con_prospecto, monkeypatch
+) -> None:
+    import httpx
+
+    fake = FakeClienteCnv(documentos=httpx.ConnectError("sin red"))
+    _inyectar_cliente(monkeypatch, fake)
+
+    async with cliente(app_con_prospecto()) as http:
+        respuesta = await http.get(PROSPECTO.format(ticker="TLCMO"))
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["aplica"] is False
+    assert "no respondió" in cuerpo["motivo_ausente"]
+
+
+async def test_prospecto_sin_base_de_datos_responde_503(crear_app) -> None:
+    async with cliente(crear_app(None)) as http:
+        respuesta = await http.get(PROSPECTO.format(ticker="TLCMO"))
+
+    assert respuesta.status_code == 503
+
+
+# --- GET /instrumentos/{ticker}/prospecto/{uuid}/archivo — F-072 --------------------------------
+
+UUID_VALIDO = "96bad10a-713b-46e1-a9ac-04fa19f3a8cd"
+UN_ARCHIVO = ArchivoAdjunto(
+    guid="4ce6fe56-f5f7-428b-f6ac-ef4ece785218",
+    nombre_archivo="Suplemento de Prospecto.pdf",
+    tamano_declarado="1.33 MB",
+    total_en_la_presentacion=1,
+)
+
+
+async def test_archivo_descarga_el_pdf_con_el_nombre_real(app_con_prospecto, monkeypatch) -> None:
+    fake = FakeClienteCnv(archivo=UN_ARCHIVO, contenido=b"%PDF-1.7 contenido real")
+    _inyectar_cliente(monkeypatch, fake)
+
+    async with cliente(app_con_prospecto()) as http:
+        respuesta = await http.get(PROSPECTO_ARCHIVO.format(ticker="TLCMO", uuid=UUID_VALIDO))
+
+    assert respuesta.status_code == 200
+    assert respuesta.content == b"%PDF-1.7 contenido real"
+    assert respuesta.headers["content-type"] == "application/pdf"
+    assert 'filename="Suplemento de Prospecto.pdf"' in respuesta.headers["content-disposition"]
+
+
+async def test_archivo_sin_adjunto_da_404(app_con_prospecto, monkeypatch) -> None:
+    fake = FakeClienteCnv(archivo=None)
+    _inyectar_cliente(monkeypatch, fake)
+
+    async with cliente(app_con_prospecto()) as http:
+        respuesta = await http.get(PROSPECTO_ARCHIVO.format(ticker="TLCMO", uuid=UUID_VALIDO))
+
+    assert respuesta.status_code == 404
+
+
+async def test_archivo_con_la_fuente_pausada_da_503(app_con_prospecto, monkeypatch) -> None:
+    fake = FakeClienteCnv(archivo=UN_ARCHIVO)
+    _inyectar_cliente(monkeypatch, fake)
+
+    async with cliente(app_con_prospecto(cnv_habilitado=False)) as http:
+        respuesta = await http.get(PROSPECTO_ARCHIVO.format(ticker="TLCMO", uuid=UUID_VALIDO))
+
+    assert respuesta.status_code == 503
+
+
+async def test_archivo_cuando_la_cnv_no_devuelve_un_pdf_da_502(
+    app_con_prospecto, monkeypatch
+) -> None:
+    fake = FakeClienteCnv(
+        archivo=UN_ARCHIVO,
+        contenido=RespuestaInesperadaDeCnv("no era un PDF"),
+    )
+    _inyectar_cliente(monkeypatch, fake)
+
+    async with cliente(app_con_prospecto()) as http:
+        respuesta = await http.get(PROSPECTO_ARCHIVO.format(ticker="TLCMO", uuid=UUID_VALIDO))
+
+    assert respuesta.status_code == 502

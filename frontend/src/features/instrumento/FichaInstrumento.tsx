@@ -7,13 +7,14 @@
  * cronograma no tumba la ficha de precios, que es justamente el punto de tenerlas separadas.
  */
 
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
 import { EstadoCarga } from '@/components/EstadoCarga'
 import { EstadoError } from '@/components/EstadoError'
 import { EstadoVacio } from '@/components/EstadoVacio'
 import { Panel } from '@/components/Panel'
 import { nombreSegmento, unidadDeNaturaleza } from '@/components/SelectorSegmento'
+import { apiFetchBlob } from '@/lib/api/client'
 import { ApiError } from '@/lib/api/errors'
 import { etiquetaClase } from '@/lib/claseActivo'
 import { fmtCompacto, fmtFecha, fmtMonto, fmtNumero, fmtPct, NO_APLICA, SIN_DATO } from '@/lib/fmt'
@@ -22,6 +23,7 @@ import { colorDeParidad } from '@/lib/paridad'
 import { useCondicionesInstrumento } from './hooks/useCondicionesInstrumento'
 import { useCronogramaInstrumento } from './hooks/useCronogramaInstrumento'
 import { useFichaInstrumento } from './hooks/useFichaInstrumento'
+import { useProspectoInstrumento } from './hooks/useProspectoInstrumento'
 import { useSensibilidadInstrumento } from './hooks/useSensibilidadInstrumento'
 import type { CondicionesDetalle, EspecieFicha, ResumenCronograma } from './lib/schema'
 
@@ -33,6 +35,9 @@ import type { CondicionesDetalle, EspecieFicha, ResumenCronograma } from './lib/
 const NO_INFORMADO = 'no informado'
 
 const CLASES_RENTA_VARIABLE = new Set(['accion', 'cedear'])
+
+/** F-072: el bloque de prospecto sólo tiene sentido para una obligación negociable. */
+const CLASE_ON = 'on_corporativo'
 
 /**
  * Experimento data912: el primer término de `fuente` ("data912-arrastre+calculo" → "arrastre") es
@@ -53,6 +58,7 @@ export function FichaInstrumento({ ticker }: { ticker: string | undefined }) {
   const condicionesQuery = useCondicionesInstrumento(ticker)
   const cronogramaQuery = useCronogramaInstrumento(ticker)
   const sensibilidadQuery = useSensibilidadInstrumento(ticker)
+  const prospectoQuery = useProspectoInstrumento(ticker)
 
   if (ticker === undefined) {
     return (
@@ -113,6 +119,12 @@ export function FichaInstrumento({ ticker }: { ticker: string | undefined }) {
       <Panel rotulo="Sensibilidad">
         <BloqueSensibilidad query={sensibilidadQuery} />
       </Panel>
+
+      {especie.clase_activo === CLASE_ON && (
+        <Panel rotulo="Prospecto de emisión">
+          <BloqueProspecto query={prospectoQuery} />
+        </Panel>
+      )}
     </div>
   )
 }
@@ -444,6 +456,130 @@ function BloqueSensibilidad({ query }: { query: ReturnType<typeof useSensibilida
         <p style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 4, textWrap: 'pretty' }}>
           {data.omitidos_bps.length} escenarios omitidos: la TIR resultante quedaría en −99 % o
           menos y el descuento degenera.
+        </p>
+      )}
+    </div>
+  )
+}
+
+// --- Prospecto de emisión (F-072) --------------------------------------------------------------
+
+/** Igual patrón que `features/carteras/lib/exportar/descargar.ts` (F-042): `createObjectURL` + un
+ *  `<a download>` sintético, sin dependencias nuevas. Duplicado acá porque esa carpeta es de otra
+ *  feature — mismo criterio de aislamiento que ya aplica `features/monitor/` para ésta. */
+function descargarBlob(blob: Blob, nombreArchivo: string): void {
+  const url = URL.createObjectURL(blob)
+  const enlace = document.createElement('a')
+  enlace.href = url
+  enlace.download = nombreArchivo
+  document.body.appendChild(enlace)
+  enlace.click()
+  document.body.removeChild(enlace)
+  URL.revokeObjectURL(url)
+}
+
+function BloqueProspecto({ query }: { query: ReturnType<typeof useProspectoInstrumento> }) {
+  const [descargando, setDescargando] = useState<string | null>(null)
+  const [errorDescarga, setErrorDescarga] = useState<string | null>(null)
+
+  if (query.isPending) return <EstadoCarga que="el prospecto de emisión" />
+  if (query.isError) {
+    return <EstadoError error={query.error} onRetry={() => void query.refetch()} />
+  }
+
+  const data = query.data
+
+  async function descargar(ticker: string, uuid: string, nombreFallback: string) {
+    setErrorDescarga(null)
+    setDescargando(uuid)
+    try {
+      const { blob, nombreArchivo } = await apiFetchBlob(
+        `/api/v1/instrumentos/${ticker}/prospecto/${uuid}/archivo`,
+      )
+      descargarBlob(blob, nombreArchivo ?? `${nombreFallback}.pdf`)
+    } catch {
+      setErrorDescarga('No se pudo descargar el PDF. Probá el link a la CNV.')
+    } finally {
+      setDescargando(null)
+    }
+  }
+
+  return (
+    <div>
+      {data.grupos.length === 0 ? (
+        <EstadoVacio
+          titulo="Sin documentos para mostrar."
+          detalle={data.motivo_ausente ?? undefined}
+        />
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {data.grupos.map((grupo) => (
+            <div key={grupo.grupo}>
+              <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 6 }}>{grupo.grupo}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {grupo.documentos.map((doc) => (
+                  <div
+                    key={doc.uuid}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'baseline',
+                      gap: 8,
+                      fontSize: 12,
+                      borderTop: '1px solid var(--lin)',
+                      paddingTop: 6,
+                    }}
+                  >
+                    <span className="mono" style={{ color: 'var(--dim)', flexShrink: 0 }}>
+                      {fmtFecha(doc.fecha)}
+                    </span>
+                    <span
+                      title={doc.descripcion}
+                      style={{
+                        flex: 1,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {doc.descripcion}
+                    </span>
+                    <button
+                      type="button"
+                      className="mono"
+                      disabled={descargando === doc.uuid}
+                      onClick={() => void descargar(data.ticker, doc.uuid, doc.descripcion)}
+                      style={{ fontSize: 11, flexShrink: 0, cursor: 'pointer' }}
+                    >
+                      {descargando === doc.uuid ? 'descargando…' : 'Descargar PDF'}
+                    </button>
+                    <a
+                      href={doc.url_publicview}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mono"
+                      style={{ fontSize: 11, flexShrink: 0 }}
+                    >
+                      Ver en CNV
+                    </a>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {errorDescarga && (
+        <p role="alert" style={{ fontSize: 11, color: 'var(--neg)', marginTop: 8 }}>
+          {errorDescarga}
+        </p>
+      )}
+      {data.url_emisor_cnv && (
+        <p style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 10, textWrap: 'pretty' }}>
+          Fuente: {data.fuente}
+          {' · '}
+          <a href={data.url_emisor_cnv} target="_blank" rel="noopener noreferrer">
+            Ver todos los documentos del emisor en CNV
+          </a>
         </p>
       )}
     </div>

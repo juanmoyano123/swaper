@@ -139,14 +139,29 @@ const RUTA_FICHA = (t: string) => `/api/v1/instrumentos/${t}`
 const RUTA_CONDICIONES = (t: string) => `/api/v1/instrumentos/${t}/condiciones`
 const RUTA_CRONOGRAMA = (t: string) => `/api/v1/instrumentos/${t}/cronograma`
 const RUTA_SENSIBILIDAD = (t: string) => `/api/v1/instrumentos/${t}/sensibilidad`
+const RUTA_PROSPECTO = (t: string) => `/api/v1/instrumentos/${t}/prospecto`
 
-/** Las cuatro rutas resolviendo en éxito, con datos mínimos — pisadas por cada test según su caso. */
+/** Las cinco rutas resolviendo en éxito, con datos mínimos — pisadas por cada test según su caso.
+ *  El prospecto (F-072) se pide siempre, sin importar la clase del ticker — el panel no se
+ *  renderiza para un soberano, pero el hook igual dispara el fetch. */
 function rutasOk(ticker: string, overrides: Partial<Record<string, Ruta>> = {}) {
   return {
     [RUTA_FICHA(ticker)]: { body: ficha(ticker) },
     [RUTA_CONDICIONES(ticker)]: { body: condiciones() },
     [RUTA_CRONOGRAMA(ticker)]: { body: cronograma() },
     [RUTA_SENSIBILIDAD(ticker)]: { body: sensibilidad() },
+    [RUTA_PROSPECTO(ticker)]: {
+      body: {
+        ticker,
+        aplica: false,
+        emisor: null,
+        cuit: null,
+        url_emisor_cnv: null,
+        grupos: [],
+        motivo_ausente: 'no es una obligación negociable',
+        fuente: 'CNV',
+      },
+    },
     ...overrides,
   }
 }

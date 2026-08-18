@@ -163,3 +163,46 @@ export const esquemaSensibilidad = z.object({
 })
 
 export type Sensibilidad = z.infer<typeof esquemaSensibilidad>
+
+/**
+ * Un documento filed ante la CNV — F-072. `url_publicview` abre la página oficial de la
+ * presentación; el archivo real (PDF) se pide aparte, a demanda, por
+ * `GET /instrumentos/{ticker}/prospecto/{uuid}/archivo` (no viaja acá: puede pesar varios MB).
+ */
+export const esquemaDocumentoCnv = z.object({
+  fecha: z.string().nullable(),
+  hora: z.string(),
+  descripcion: z.string(),
+  documento_id: z.string(),
+  uuid: z.string(),
+  url_publicview: z.string(),
+})
+
+export type DocumentoCnv = z.infer<typeof esquemaDocumentoCnv>
+
+/** Un grupo del acordeón de la CNV, tal como la fuente lo declara (Prospectos, Suplementos...). */
+export const esquemaGrupoDocumentos = z.object({
+  grupo: z.string(),
+  documentos: z.array(esquemaDocumentoCnv),
+})
+
+export type GrupoDocumentos = z.infer<typeof esquemaGrupoDocumentos>
+
+/**
+ * Los documentos de la ON ante la CNV. `aplica: false` cuando el ticker no es una ON o no está en
+ * el universo de hoy — no se esconde el bloque, se declara por qué no corresponde. `cuit`/`emisor`
+ * viajan cuando se pudieron resolver aunque `grupos` venga vacío (fuente pausada o sin confirmar):
+ * `url_emisor_cnv` es la salida de emergencia que no depende del parser.
+ */
+export const esquemaProspecto = z.object({
+  ticker: z.string(),
+  aplica: z.boolean(),
+  emisor: z.string().nullable(),
+  cuit: z.string().nullable(),
+  url_emisor_cnv: z.string().nullable(),
+  grupos: z.array(esquemaGrupoDocumentos),
+  motivo_ausente: z.string().nullable(),
+  fuente: z.string(),
+})
+
+export type Prospecto = z.infer<typeof esquemaProspecto>

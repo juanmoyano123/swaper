@@ -3258,6 +3258,100 @@ THEN esos datos no quedan persistidos en la base ni en ningún archivo del repos
 
 ---
 
+#### F-072 — Prospecto de emisión de ONs, vía CNV
+
+**Etiqueta:** Stage 2 · **Traza a:** pedido del usuario del 17/08/2026 — subconjunto de F-054
+(información pública del emisor) promovido a feature propia, porque es otra fuente y otro cliente
+aunque comparta el puente emisor→CUIT.
+
+**Descripción.** En la ficha de una ON corporativa aparece el bloque de documentos que la CNV publica
+del emisor: prospectos, suplementos de prospecto, avisos de suscripción, avisos de resultado, avisos
+de pago, programas globales, informes trimestrales. El asesor los ve listados y se baja el PDF real
+—el mismo archivo que la CNV sirve—, sin salir de la aplicación.
+
+**El 503 estaba mal pedido, no cerrado.** La investigación previa
+(`claude-docs/planning/investigacion-cnv-sec.md`) había dejado el prospecto como pendiente por un HTTP
+503 en `blob.cnv.gov.ar`. Leyendo el `site.bo.min.js` del propio sitio de la CNV se reconstruyó el
+intercambio que usa la página, **público y sin login**: primero
+`GET aif2.cnv.gov.ar/api/ValetKeyProvider/GetPublicValetKey/{guid}?operation=DownloadBlob`, que
+devuelve un token temporal (`valetKeyData`), y después `POST blob.cnv.gov.ar/BlobWebService.svc/
+DownloadBlob/{guid}` con ese token **como body form-urlencoded** —en JSON contesta 400— que devuelve
+el PDF crudo. Verificado punta a punta con `curl` plano: el Suplemento de Prospecto de YPF Luz Clase
+XXIV bajó como PDF real de 1.398.576 bytes, que es el "1.33 MB" que la propia CNV declara en los
+metadatos del archivo. El `guid` que sirve es el del archivo adjunto, no el `uuid` de la presentación.
+
+**Dos detalles del listado que fallan en silencio.** El listado sale de
+`GET cnv.gov.ar/SitioWeb/Empresas/Empresa/{cuit}?formType=EMISIO&fdesde=1/1/2015`, HTML servido, sin
+navegador headless. El **CUIT va sin guiones** y **`fdesde` es obligatorio**: sin eso la ruta contesta
+HTTP 200 con la página genérica de últimas colocaciones en lugar de los documentos del emisor pedido
+—no es un error, es la página equivocada—. El cliente detecta ese caso y lo declara en vez de
+reportar "sin documentos", que sería mostrar un faltante inventado.
+
+**No se empareja documento con clase o serie del ticker.** La investigación original ya había medido
+que no hay regla general para derivar la clase del número de ticker (funciona para Cresud, no para
+IRSA), y se sumó evidencia nueva: un mismo suplemento puede cubrir varias clases a la vez ("Clase XIX
+& XX"). Los documentos van todos, **agrupados por tipo tal como la CNV los declara** (regla 11), y el
+asesor elige a ojo.
+
+**El puente emisor→CUIT.** Ninguna fuente que el producto ya consume trae el CUIT, así que se curó una
+vez a `data/emisores_cuit.csv` (105 nombres) con `tools/curar_emisores_cuit.py`, en tres fuentes en
+cascada: el **Listado Completo de Emisoras por Régimen** que la CNV publica como XLSX (~531 emisoras
+con CUIT, razón social y categoría — ojo: `openpyxl` en modo `read_only` ve sólo 4 filas porque el
+XLSX viene sin metadatos de dimensión, hay que abrirlo en modo normal para ver las 534); el
+`AutoComplete` del buscador, para las grafías que el listado escribe distinto; y confirmaciones
+manuales, **cada una verificada contra los documentos reales del CUIT candidato** —Cresud: 264 de 386
+documentos mencionan CRESUD; IRSA: 248 de 342—, nunca por parecido de nombre.
+
+**Estado: construida y verificada en vivo el 17/08/2026.** Cobertura medida sobre el universo vivo:
+**277 de 373 emisiones ON (74 %)** resuelven su CUIT y muestran documentos; sobre las emisiones que sí
+tienen emisor declarado, la cobertura es del **98 %**. La feature queda detrás del flag
+`CNV_HABILITADO`, **default apagado** —mismo patrón que `YAHOO_HABILITADO` e `IAMC_HABILITADO`—, con
+cache de 1 día por CUIT.
+
+**Lo que falta, declarado.** Las **89 emisiones sin emisor declarado en ninguna fuente** son la deuda
+vieja de `condiciones_emision.csv`, que se rescató incompleto: sin nombre no hay qué buscar en la CNV,
+así que no es un límite del puente. El camino para cerrarlo ya está identificado y es la **tabla de
+valuación de Bienes Personales de AFIP/ARCA**, que publica ticker, denominación y CUIT por especie y
+por lo tanto resuelve nombre y CUIT juntos, de fuente oficial y por ticker — la misma fuente que F-054
+necesita. Es la próxima tarea, separada de ésta. Aparte quedan **5 emisores con ambigüedad real** en
+`data/emisores_cuit_pendientes.csv`: EDESA y Havanna tienen dos sociedades cada uno en la CNV
+—distribuidora y holding— sin evidencia de cuál emite; BNA y Banco Provincia son bancos públicos sin
+ficha EMISIO consultable; y Farmacity no tiene candidato en ninguna de las tres fuentes. Ninguno se
+resuelve adivinando.
+
+**Input:** ticker de una ON corporativa desde la ficha de instrumento; `data/emisores_cuit.csv` para
+el puente emisor→CUIT.
+**Output:** listado de documentos del emisor agrupado por tipo, con fecha y link, y descarga del PDF
+con el nombre real del archivo tal como lo publica la CNV.
+**Depende de:** F-039 (la ficha de instrumento donde vive el bloque)
+**Habilita:** F-054 (comparte el puente emisor→CUIT y el cliente HTTP de la CNV)
+
+**RICE:** R = 350 · I = 3 · C = 100 % · E = 6 → **Score 175,0**
+*Confidence 100 %: no queda nada por descubrir — la feature está construida y verificada contra la
+fuente real, con el PDF bajado y contrastado contra el tamaño que la CNV declara.*
+
+```
+GIVEN una ON corporativa cuyo emisor tiene CUIT curado
+WHEN se abre su ficha de instrumento
+THEN los documentos aparecen agrupados por tipo tal como la CNV los declara, sin emparejarlos con la
+     clase ni la serie del ticker
+
+GIVEN un documento del listado
+WHEN el asesor lo descarga
+THEN baja el PDF real que sirve la CNV, con el nombre de archivo que la fuente le puso
+
+GIVEN una ON cuyo emisor no tiene CUIT curado, o la fuente está apagada por flag, o la CNV devolvió la
+      página genérica en vez de la del emisor
+WHEN se abre su ficha
+THEN el bloque declara la ausencia con su motivo y no dice "sin documentos"
+
+GIVEN un bono soberano o una letra
+WHEN se abre su ficha
+THEN el bloque de prospecto no se muestra, porque el Tesoro no presenta ante la CNV
+```
+
+---
+
 ## 4. Tabla de RICE ordenada
 
 | # | ID | Feature | Etiqueta | R | I | C | E | Score |
@@ -3285,54 +3379,55 @@ THEN esos datos no quedan persistidos en la base ni en ningún archivo del repos
 | 21 | F-055 | Descarga automática del informe de IAMC | Stage 2 | 300 | 2 | 90 % | 3 | 180,0 |
 | 22 | F-020 | Límites de concentración en vivo | Stage 1 | 350 | 2 | 100 % | 4 | 175,0 |
 | 23 | F-022 | Rendimientos por naturaleza y plazo | Stage 1 | 350 | 2 | 100 % | 4 | 175,0 |
-| 24 | F-007 | Consolidador multi-fuente | Stage 1 | 400 | 3 | 80 % | 6 | 160,0 |
-| 25 | F-051 | Métricas propias: TIR, duración y paridad | Stage 1 | 400 | 2 | 80 % | 4 | 160,0 |
-| 26 | F-071 | Calculadora de canjes y prorrateo de órdenes a mesa | Stage 2 | 350 | 3 | 90 % | 6 | 157,5 |
-| 27 | F-030 | Valuación y diagnóstico de cartera | Stage 1 | 200 | 3 | 100 % | 4 | 150,0 |
-| 28 | F-064 | Watchlist | Stage 2 | 300 | 1 | 100 % | 2 | 150,0 |
-| 29 | F-069 | Top ganadores y perdedores | Stage 2 | 300 | 1 | 100 % | 2 | 150,0 |
-| 30 | F-018 | Cartera editable y ponderación | Stage 1 | 350 | 3 | 80 % | 6 | 140,0 |
-| 31 | F-053 | Ficha del activo de renta variable | Stage 1 | 300 | 2 | 70 % | 3 | 140,0 |
-| 32 | F-016 | Grilla-selector de doce meses | Stage 1 | 380 | 3 | 80 % | 8 | 114,0 |
-| 33 | F-056 | Índice CER del BCRA: tasa real | Stage 2 | 250 | 2 | 90 % | 4 | 112,5 |
-| 34 | F-017 | Filtros de la grilla | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
-| 35 | F-039 | Ficha de instrumento | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
-| 36 | F-029 | Resolución de tickers | Stage 1 | 200 | 2 | 80 % | 3 | 106,7 |
-| 37 | F-038 | Monitor de mercado | Stage 1 | 400 | 2 | 80 % | 6 | 106,7 |
-| 38 | F-052 | Renta variable en el monitor | Stage 1 | 400 | 1 | 80 % | 3 | 106,7 |
-| 39 | F-031 | Vector de riesgo de seis ejes | Stage 1 | 250 | 3 | 80 % | 6 | 100,0 |
-| 40 | F-032 | Motor de rotaciones intra-segmento | Stage 1 | 200 | 3 | 100 % | 6 | 100,0 |
-| 41 | F-042 | Exportación a Excel y PDF | Stage 1 | 250 | 2 | 80 % | 4 | 100,0 |
-| 42 | F-028 | Ingreso de cartera por tres vías | Stage 1 | 200 | 3 | 80 % | 5 | 96,0 |
-| 43 | F-034 | Modo subir TIR con contrapartida | Stage 1 | 180 | 3 | 80 % | 5 | 86,4 |
-| 44 | F-057 | FCI en el monitor (CAFCI) | Stage 2 | 300 | 2 | 85 % | 6 | 85,0 |
-| 45 | F-067 | FCI: comparador, categorías y gestoras | Stage 2 | 250 | 2 | 85 % | 5 | 85,0 |
-| 46 | F-019 | Armado asistido | Stage 1 | 250 | 2 | 100 % | 6 | 83,3 |
-| 47 | F-026 | Bloque de renta variable | Stage 1 | 300 | 2 | 80 % | 6 | 80,0 |
-| 48 | F-050 | API Market Data oficial de BYMA | Stage 2 | 400 | 2 | 50 % | 5 | 80,0 |
-| 49 | F-058 | Carry trade: calculadora y breakeven | Stage 2 | 300 | 3 | 70 % | 8 | 78,8 |
-| 50 | F-062 | Curva histórica del segmento | Stage 2 | 250 | 2 | 60 % | 4 | 75,0 |
-| 51 | F-063 | Heatmap del panel | Stage 2 | 250 | 1 | 90 % | 3 | 75,0 |
-| 52 | F-037 | Comparación original contra propuesta | Stage 1 | 180 | 2 | 80 % | 4 | 72,0 |
-| 53 | F-061 | Rendimientos históricos por ventana | Stage 2 | 300 | 2 | 60 % | 5 | 72,0 |
-| 54 | F-040 | Sensibilidad por repricing completo | Stage 1 | 200 | 1 | 100 % | 3 | 66,7 |
-| 55 | F-054 | Info pública del emisor (CNV y SEC) | Stage 2 | 300 | 2 | 80 % | 8 | 60,0 |
-| 56 | F-033 | Modo bajar riesgo | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
-| 57 | F-036 | Aceptación rotación por rotación | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
-| 58 | F-025 | Carga asistida de lámina | Stage 1 | 200 | 1 | 80 % | 3 | 53,3 |
-| 59 | F-005 | Parser del informe diario de IAMC | Stage 1 | 400 | 2 | 50 % | 8 | 50,0 |
-| 60 | F-023 | Composición y curva TIR/duración | Stage 1 | 300 | 1 | 80 % | 5 | 48,0 |
-| 61 | F-048 | Alertas y notificaciones | Stage 2 | 300 | 1 | 80 % | 6 | 40,0 |
-| 62 | F-049 | Comparación de carteras entre sí | Stage 2 | 200 | 1 | 80 % | 4 | 40,0 |
-| 63 | F-046 | FCI valuables en cartera | Stage 2 | 200 | 2 | 60 % | 8 | 30,0 |
-| 64 | F-065 | Cauciones | Stage 2 | 200 | 1 | 60 % | 4 | 30,0 |
-| 65 | F-044 | Historial de propuestas | Stage 2 | 250 | 2 | 50 % | 10 | 25,0 |
-| 66 | F-066 | Futuros de dólar | Stage 2 | 200 | 1 | 50 % | 4 | 25,0 |
-| 67 | F-043 | Gestión de clientes y CRM | Stage 2 | 300 | 2 | 50 % | 15 | 20,0 |
-| 68 | F-027 | Calendario de balances (sólo CEDEARs, vía SEC) | Stage 1 | 200 | 1 | 85 % | 4 | 42,5 |
-| 69 | F-045 | Colocaciones primarias | Stage 2 | 150 | 2 | 50 % | 10 | 15,0 |
-| 70 | F-070 | Tenencias con P&L por lote | Stage 2 | 200 | 2 | 40 % | 12 | 13,3 |
-| 71 | F-047 | Opciones | Stage 2 | 80 | 1 | 50 % | 10 | 4,0 |
+| 24 | F-072 | Prospecto de emisión de ONs, vía CNV | Stage 2 | 350 | 3 | 100 % | 6 | 175,0 |
+| 25 | F-007 | Consolidador multi-fuente | Stage 1 | 400 | 3 | 80 % | 6 | 160,0 |
+| 26 | F-051 | Métricas propias: TIR, duración y paridad | Stage 1 | 400 | 2 | 80 % | 4 | 160,0 |
+| 27 | F-071 | Calculadora de canjes y prorrateo de órdenes a mesa | Stage 2 | 350 | 3 | 90 % | 6 | 157,5 |
+| 28 | F-030 | Valuación y diagnóstico de cartera | Stage 1 | 200 | 3 | 100 % | 4 | 150,0 |
+| 29 | F-064 | Watchlist | Stage 2 | 300 | 1 | 100 % | 2 | 150,0 |
+| 30 | F-069 | Top ganadores y perdedores | Stage 2 | 300 | 1 | 100 % | 2 | 150,0 |
+| 31 | F-018 | Cartera editable y ponderación | Stage 1 | 350 | 3 | 80 % | 6 | 140,0 |
+| 32 | F-053 | Ficha del activo de renta variable | Stage 1 | 300 | 2 | 70 % | 3 | 140,0 |
+| 33 | F-016 | Grilla-selector de doce meses | Stage 1 | 380 | 3 | 80 % | 8 | 114,0 |
+| 34 | F-056 | Índice CER del BCRA: tasa real | Stage 2 | 250 | 2 | 90 % | 4 | 112,5 |
+| 35 | F-017 | Filtros de la grilla | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
+| 36 | F-039 | Ficha de instrumento | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
+| 37 | F-029 | Resolución de tickers | Stage 1 | 200 | 2 | 80 % | 3 | 106,7 |
+| 38 | F-038 | Monitor de mercado | Stage 1 | 400 | 2 | 80 % | 6 | 106,7 |
+| 39 | F-052 | Renta variable en el monitor | Stage 1 | 400 | 1 | 80 % | 3 | 106,7 |
+| 40 | F-031 | Vector de riesgo de seis ejes | Stage 1 | 250 | 3 | 80 % | 6 | 100,0 |
+| 41 | F-032 | Motor de rotaciones intra-segmento | Stage 1 | 200 | 3 | 100 % | 6 | 100,0 |
+| 42 | F-042 | Exportación a Excel y PDF | Stage 1 | 250 | 2 | 80 % | 4 | 100,0 |
+| 43 | F-028 | Ingreso de cartera por tres vías | Stage 1 | 200 | 3 | 80 % | 5 | 96,0 |
+| 44 | F-034 | Modo subir TIR con contrapartida | Stage 1 | 180 | 3 | 80 % | 5 | 86,4 |
+| 45 | F-057 | FCI en el monitor (CAFCI) | Stage 2 | 300 | 2 | 85 % | 6 | 85,0 |
+| 46 | F-067 | FCI: comparador, categorías y gestoras | Stage 2 | 250 | 2 | 85 % | 5 | 85,0 |
+| 47 | F-019 | Armado asistido | Stage 1 | 250 | 2 | 100 % | 6 | 83,3 |
+| 48 | F-026 | Bloque de renta variable | Stage 1 | 300 | 2 | 80 % | 6 | 80,0 |
+| 49 | F-050 | API Market Data oficial de BYMA | Stage 2 | 400 | 2 | 50 % | 5 | 80,0 |
+| 50 | F-058 | Carry trade: calculadora y breakeven | Stage 2 | 300 | 3 | 70 % | 8 | 78,8 |
+| 51 | F-062 | Curva histórica del segmento | Stage 2 | 250 | 2 | 60 % | 4 | 75,0 |
+| 52 | F-063 | Heatmap del panel | Stage 2 | 250 | 1 | 90 % | 3 | 75,0 |
+| 53 | F-037 | Comparación original contra propuesta | Stage 1 | 180 | 2 | 80 % | 4 | 72,0 |
+| 54 | F-061 | Rendimientos históricos por ventana | Stage 2 | 300 | 2 | 60 % | 5 | 72,0 |
+| 55 | F-040 | Sensibilidad por repricing completo | Stage 1 | 200 | 1 | 100 % | 3 | 66,7 |
+| 56 | F-054 | Info pública del emisor (CNV y SEC) | Stage 2 | 300 | 2 | 80 % | 8 | 60,0 |
+| 57 | F-033 | Modo bajar riesgo | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
+| 58 | F-036 | Aceptación rotación por rotación | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
+| 59 | F-025 | Carga asistida de lámina | Stage 1 | 200 | 1 | 80 % | 3 | 53,3 |
+| 60 | F-005 | Parser del informe diario de IAMC | Stage 1 | 400 | 2 | 50 % | 8 | 50,0 |
+| 61 | F-023 | Composición y curva TIR/duración | Stage 1 | 300 | 1 | 80 % | 5 | 48,0 |
+| 62 | F-048 | Alertas y notificaciones | Stage 2 | 300 | 1 | 80 % | 6 | 40,0 |
+| 63 | F-049 | Comparación de carteras entre sí | Stage 2 | 200 | 1 | 80 % | 4 | 40,0 |
+| 64 | F-046 | FCI valuables en cartera | Stage 2 | 200 | 2 | 60 % | 8 | 30,0 |
+| 65 | F-065 | Cauciones | Stage 2 | 200 | 1 | 60 % | 4 | 30,0 |
+| 66 | F-044 | Historial de propuestas | Stage 2 | 250 | 2 | 50 % | 10 | 25,0 |
+| 67 | F-066 | Futuros de dólar | Stage 2 | 200 | 1 | 50 % | 4 | 25,0 |
+| 68 | F-043 | Gestión de clientes y CRM | Stage 2 | 300 | 2 | 50 % | 15 | 20,0 |
+| 69 | F-027 | Calendario de balances (sólo CEDEARs, vía SEC) | Stage 1 | 200 | 1 | 85 % | 4 | 42,5 |
+| 70 | F-045 | Colocaciones primarias | Stage 2 | 150 | 2 | 50 % | 10 | 15,0 |
+| 71 | F-070 | Tenencias con P&L por lote | Stage 2 | 200 | 2 | 40 % | 12 | 13,3 |
+| 72 | F-047 | Opciones | Stage 2 | 80 | 1 | 50 % | 10 | 4,0 |
 
 **Cómo se lee esta tabla.** El RICE ordena por eficiencia, no por secuencia. Las features de más
 score son las Foundation y las de ingesta: mucho alcance sobre poco esfuerzo, porque reusan lógica ya
@@ -3648,7 +3743,7 @@ Al final de este ciclo **Stage 1 está completo**: los tres flujos funcionan de 
 | 3 — RV, carga y diagnóstico | 9 | 41 | ~8 | ~28,5 |
 | 4 — Optimizador y persistencia | 9 | 42 | ~8,5 | ~37 |
 | **Stage 1** | **42** | **185** | **~37 semanas** | |
-| Stage 2 (26 features) | 26 | 155 | ~31 | |
+| Stage 2 (27 features) | 27 | 161 | ~32 | |
 
 **~37 semanas de un desarrollador a tiempo completo para Stage 1.** El camino crítico son 73 pd de esos
 185: con un segundo desarrollador, el piso teórico de compresión es **~15 semanas**, y el cuello real

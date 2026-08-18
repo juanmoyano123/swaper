@@ -129,3 +129,30 @@ export async function apiFetch<T>(
 
   return parseado.data
 }
+
+/**
+ * Igual que `apiFetch` pero para un recurso binario (F-072: el PDF de un documento de la CNV) —
+ * no hay esquema zod que validar contra un blob. Devuelve el `Blob` y el nombre de archivo real
+ * que el backend declaró en `Content-Disposition`, o `null` si no lo mandó.
+ */
+export async function apiFetchBlob(
+  ruta: string,
+): Promise<{ blob: Blob; nombreArchivo: string | null }> {
+  let respuesta: Response
+  try {
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    respuesta = await fetch(`${BASE}${ruta}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+  } catch (causa) {
+    throw new ErrorDeRed(causa)
+  }
+
+  if (!respuesta.ok) throw await comoApiError(respuesta)
+
+  const disposicion = respuesta.headers.get('Content-Disposition') ?? ''
+  const nombreMatch = /filename="([^"]+)"/.exec(disposicion)
+
+  return { blob: await respuesta.blob(), nombreArchivo: nombreMatch?.[1] ?? null }
+}

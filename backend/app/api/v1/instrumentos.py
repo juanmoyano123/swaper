@@ -1,8 +1,8 @@
-"""Endpoints de la ficha de instrumento — F-039, más sensibilidad — F-040.
+"""Endpoints de la ficha de instrumento — F-039, sensibilidad — F-040, prospecto de ONs — F-072.
 
 Vive separado de `universo.py` porque responde una pregunta distinta — "todo lo que se sabe de ESTE
 ticker" contra "el universo entero paginado" — y de `condiciones.py` porque ese es el dato curado
-como colección y acá se pide por especie. Cuatro recursos de sólo lectura, cada uno independiente:
+como colección y acá se pide por especie. Seis recursos de sólo lectura, cada uno independiente:
 - `/{ticker}`: la especie más sus hermanas de liquidación (F-011), vía `ficha_de`.
 - `/{ticker}/condiciones`: el mismo triplete `campo/campo_origen/campo_fecha` que ya devuelve
   `GET /condiciones`, filtrado a un ticker.
@@ -10,9 +10,12 @@ como colección y acá se pide por especie. Cuatro recursos de sólo lectura, ca
   — sin pasar por paridad, que es lo que hace F-016/F-021 para expresarlos como plata.
 - `/{ticker}/sensibilidad`: cuánto se movería el precio si la TIR vigente comprimiera o se abriera,
   por repricing completo del cashflow contractual (F-040) — nunca la aproximación por duración.
+- `/{ticker}/prospecto`: los documentos que el emisor de una ON presentó ante la CNV —prospectos,
+  suplementos, avisos—, agrupados tal como la fuente los declara (F-072).
+- `/{ticker}/prospecto/{uuid}/archivo`: el PDF real de uno de esos documentos.
 
-Los cuatro pueden fallar por separado en el frontend (F-039, Parte 2: queries independientes) y por
-eso acá también son cuatro endpoints y no uno que junte todo: una ficha de precios que se puede
+Los seis pueden fallar por separado en el frontend (F-039, Parte 2: queries independientes) y por
+eso acá también son seis endpoints y no uno que junte todo: una ficha de precios que se puede
 mostrar aunque el cronograma no cargue no puede depender de un solo request que falle entero.
 """
 
@@ -20,20 +23,34 @@ from collections.abc import Sequence
 from datetime import date
 from typing import Annotated, Any
 
+import httpx
+import structlog
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_db
 from app.calendario.cupones import Pago, componentes_valor_tecnico, indexar_cronograma
 from app.calendario.lectura import leer_cashflow
 from app.calendario.metricas import paridad_de, retorno_por_tir
 from app.condiciones.persistencia import COLUMNAS, TABLA, fila_para_api
+from app.core.config import Settings, get_settings
+from app.externos.cnv import DocumentoCnv, RespuestaInesperadaDeCnv, cliente_cnv, url_emisor
+from app.externos.emisores_cuit import leer_emisores_cuit, ruta_emisores_cuit
 from app.ingesta.consolidacion.metricas import FUENTE_CALCULO, fuente_de_metricas
 from app.ingesta.raiz import raiz_emision
 from app.instrumentos import ficha_de
 from app.universo.segmentacion import NOMBRE_NATURALEZA, EspecieUniverso
 from app.universo.servicio import sanear_universo
 
+logger = structlog.get_logger()
+
 router = APIRouter(prefix="/instrumentos", tags=["instrumentos"])
+
+CLASE_ON = "on_corporativo"
+
+MOTIVO_PAUSA_CNV = (
+    "La consulta a la CNV está pausada. Se activa con CNV_HABILITADO=true (ver app/core/config.py)."
+)
 
 # Escenarios de movimiento de la TIR, en bps. Los mismos del motor (tools/detectar_swaps.py:71):
 # cinco compresiones, el escenario nulo y dos aperturas. El 0 no es decorativo — es la
@@ -271,3 +288,176 @@ async def sensibilidad(ticker: str, conn: Annotated[object, Depends(get_db)]) ->
         "escenarios": escenarios,
         "omitidos_bps": omitidos_bps,
     }
+
+
+def _sin_prospecto(
+    ticker: str, motivo: str, *, emisor: str | None = None, cuit: str | None = None
+) -> dict[str, object]:
+    return {
+        "ticker": ticker,
+        "aplica": False,
+        "emisor": emisor,
+        "cuit": cuit,
+        "url_emisor_cnv": url_emisor(cuit) if cuit else None,
+        "grupos": [],
+        "motivo_ausente": motivo,
+        "fuente": "CNV",
+    }
+
+
+def _agrupar_documentos(documentos: list[DocumentoCnv]) -> list[dict[str, object]]:
+    """Los documentos agrupados tal como la CNV los declara, con "Prospectos" primero cuando
+    aparece — el resto queda en el orden en que la fuente los sirvió. Nunca se reordena por fecha
+    ni se elige uno como "el" prospecto: el asesor ve todo lo que hay y elige."""
+    orden: list[str] = []
+    por_grupo: dict[str, list[DocumentoCnv]] = {}
+    for doc in documentos:
+        if doc.grupo not in por_grupo:
+            orden.append(doc.grupo)
+            por_grupo[doc.grupo] = []
+        por_grupo[doc.grupo].append(doc)
+
+    if "Prospectos" in orden:
+        orden.remove("Prospectos")
+        orden.insert(0, "Prospectos")
+
+    return [
+        {
+            "grupo": grupo,
+            "documentos": [
+                {
+                    "fecha": doc.fecha.isoformat() if doc.fecha is not None else None,
+                    "hora": doc.hora,
+                    "descripcion": doc.descripcion,
+                    "documento_id": doc.documento_id,
+                    "uuid": doc.uuid,
+                    "url_publicview": doc.url_publicview(),
+                }
+                for doc in por_grupo[grupo]
+            ],
+        }
+        for grupo in orden
+    ]
+
+
+@router.get(
+    "/{ticker}/prospecto",
+    summary="Los documentos que el emisor de una ON presentó ante la CNV",
+    responses={503: {"description": "La base de datos no está disponible"}},
+)
+async def prospecto(
+    ticker: str,
+    conn: Annotated[object, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> dict[str, object]:
+    """Prospectos, suplementos y avisos de una ON, agrupados tal como la CNV los declara (F-072).
+
+    Siempre 200 con el estado declarado, mismo criterio que `/sensibilidad`: un ticker que no es ON
+    o que no está en el universo de hoy no es un 404 — es `aplica: false`, y el 404 de "el ticker no
+    existe" ya lo da la ficha del instrumento.
+
+    **No se intenta emparejar el documento con la clase/serie exacta del ticker**: la investigación
+    original ya midió que no hay una regla general para derivarla del número de ticker (funciona
+    para Cresud, no para IRSA), y un mismo Suplemento puede cubrir varias clases a la vez. Los
+    documentos van todos, agrupados por tipo, y el asesor elige a ojo cuál corresponde.
+
+    `url_emisor_cnv` viaja siempre que hay CUIT resuelto, incluso si la CNV no responde o el parseo
+    falla: es la salida de emergencia que no depende de nada más que el CUIT.
+    """
+    especie = await _especie_de(conn, ticker)
+    if especie is None:
+        return _sin_prospecto(ticker, "no está en el universo de hoy")
+    if especie.clase_activo != CLASE_ON:
+        return _sin_prospecto(ticker, "no es una obligación negociable")
+    if especie.emisor is None:
+        return _sin_prospecto(ticker, "sin emisor declarado en el universo de hoy")
+
+    cuit = leer_emisores_cuit(ruta_emisores_cuit(settings)).get(especie.emisor)
+    if cuit is None:
+        return _sin_prospecto(
+            ticker,
+            f"el emisor {especie.emisor!r} todavía no tiene CUIT curado "
+            "(ver tools/curar_emisores_cuit.py y data/emisores_cuit_pendientes.csv)",
+            emisor=especie.emisor,
+        )
+
+    if not settings.cnv_habilitado:
+        return _sin_prospecto(ticker, MOTIVO_PAUSA_CNV, emisor=especie.emisor, cuit=cuit)
+
+    try:
+        documentos = await cliente_cnv().documentos_de(cuit)
+    except httpx.HTTPError as exc:
+        logger.warning("cnv_prospecto_fallo_de_red", ticker=ticker, cuit=cuit, error=str(exc))
+        return _sin_prospecto(
+            ticker,
+            "la CNV no respondió — probá de nuevo en un momento, o abrí el link a la CNV",
+            emisor=especie.emisor,
+            cuit=cuit,
+        )
+
+    if documentos is None:
+        return _sin_prospecto(
+            ticker,
+            "la CNV no confirmó los resultados de este emisor — probá el link directo a la CNV",
+            emisor=especie.emisor,
+            cuit=cuit,
+        )
+
+    return {
+        "ticker": ticker,
+        "aplica": True,
+        "emisor": especie.emisor,
+        "cuit": cuit,
+        "url_emisor_cnv": url_emisor(cuit),
+        "grupos": _agrupar_documentos(documentos),
+        "motivo_ausente": None if documentos else "el emisor no tiene documentos filed",
+        "fuente": "CNV",
+    }
+
+
+@router.get(
+    "/{ticker}/prospecto/{uuid}/archivo",
+    summary="El PDF real de un documento del prospecto",
+    responses={
+        404: {"description": "El documento no tiene archivo adjunto en la CNV"},
+        502: {"description": "La CNV no devolvió el archivo esperado"},
+        503: {"description": "La consulta a la CNV está pausada"},
+    },
+)
+async def prospecto_archivo(ticker: str, uuid: str) -> StreamingResponse:
+    """El PDF real, bajado en vivo por el intercambio de dos pasos verificado el 17/08/2026
+    (`ClienteCnv.archivo_de` + `ClienteCnv.descargar`) — nunca cacheado ni persistido: es contenido
+    binario potencialmente grande, pedido a demanda por un clic del asesor.
+
+    `ticker` no participa del pedido en sí —el `uuid` ya identifica la presentación en la CNV, sin
+    ambigüedad— y viaja en la ruta sólo para que la URL sea legible y quede en el log de qué ficha
+    la pidió.
+    """
+    settings = get_settings()
+    if not settings.cnv_habilitado:
+        raise HTTPException(503, detail=MOTIVO_PAUSA_CNV)
+
+    try:
+        cliente = cliente_cnv()
+        archivo = await cliente.archivo_de(uuid)
+        if archivo is None:
+            raise HTTPException(
+                404, detail="este documento de la CNV no tiene un archivo adjunto para descargar"
+            )
+        contenido = await cliente.descargar(archivo.guid)
+    except ValueError as exc:
+        raise HTTPException(404, detail=str(exc)) from exc
+    except RespuestaInesperadaDeCnv as exc:
+        logger.warning("cnv_descarga_inesperada", ticker=ticker, uuid=uuid, error=str(exc))
+        raise HTTPException(502, detail="la CNV no devolvió el archivo esperado") from exc
+    except httpx.HTTPError as exc:
+        logger.warning("cnv_descarga_fallo_de_red", ticker=ticker, uuid=uuid, error=str(exc))
+        raise HTTPException(
+            502, detail="la CNV no respondió — probá de nuevo en un momento"
+        ) from exc
+
+    return StreamingResponse(
+        iter([contenido]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{archivo.nombre_archivo}"'},
+    )

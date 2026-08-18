@@ -23,7 +23,9 @@ import type {
   Cronograma,
   EspecieFicha,
   Ficha,
+  GrupoDocumentos,
   PagoCronograma,
+  Prospecto,
   ResumenCronograma,
 } from '../lib/schema'
 
@@ -111,6 +113,37 @@ function cronograma(pagos: PagoCronograma[], resumen: Partial<ResumenCronograma>
   return { ticker: 'AL30D', pagos, resumen: resumenCronograma(resumen) }
 }
 
+function prospecto(ticker: string, extra: Partial<Prospecto> = {}): Prospecto {
+  return {
+    ticker,
+    aplica: false,
+    emisor: null,
+    cuit: null,
+    url_emisor_cnv: null,
+    grupos: [],
+    motivo_ausente: 'no es una obligación negociable',
+    fuente: 'CNV',
+    ...extra,
+  }
+}
+
+function grupoDocumentos(grupo: string, extra: Partial<GrupoDocumentos['documentos'][number]> = {}): GrupoDocumentos {
+  return {
+    grupo,
+    documentos: [
+      {
+        fecha: '2026-08-11',
+        hora: '15:34',
+        descripcion: 'Un documento de prueba',
+        documento_id: '3557195',
+        uuid: '96bad10a-713b-46e1-a9ac-04fa19f3a8cd',
+        url_publicview: 'https://aif2.cnv.gov.ar/presentations/publicview/96bad10a-713b-46e1-a9ac-04fa19f3a8cd',
+        ...extra,
+      },
+    ],
+  }
+}
+
 const CONTRATO_ERROR = (mensaje: string) => ({
   error: { code: 'not_found', message: mensaje, details: null, request_id: null },
 })
@@ -155,14 +188,19 @@ const RUTA_FICHA = (t: string) => `/api/v1/instrumentos/${t}`
 const RUTA_CONDICIONES = (t: string) => `/api/v1/instrumentos/${t}/condiciones`
 const RUTA_CRONOGRAMA = (t: string) => `/api/v1/instrumentos/${t}/cronograma`
 const RUTA_SENSIBILIDAD = (t: string) => `/api/v1/instrumentos/${t}/sensibilidad`
+const RUTA_PROSPECTO = (t: string) => `/api/v1/instrumentos/${t}/prospecto`
 
-/** Las cuatro rutas resolviendo en éxito, con datos mínimos — el punto de partida de la mayoría de
+/** Las cinco rutas resolviendo en éxito, con datos mínimos — el punto de partida de la mayoría de
  * los tests, que después pisan sólo la que les interesa.
  *
  * La sensibilidad la agregó F-040 (tanda 8b): es la cuarta query independiente de la ficha, y sin
  * mockearla los tests de "las queries son independientes" veían dos alertas en pantalla en vez de
  * una — la del panel que el test rompe a propósito, más la de esta ruta cayendo en el `throw` de
- * ruta no mockeada. Se responde `calculable: false`, que es el caso más barato y no dibuja tabla. */
+ * ruta no mockeada. Se responde `calculable: false`, que es el caso más barato y no dibuja tabla.
+ *
+ * El prospecto lo agregó F-072: el hook se pide siempre (no depende de la clase del ticker que
+ * todavía no se conoce cuando se dispara), así que toda especie por defecto —`bono_soberano`—
+ * necesita esta ruta mockeada aunque el panel no la vaya a mostrar. */
 function rutasOk(ticker: string, overrides: Partial<Record<string, Ruta>> = {}) {
   return {
     [RUTA_FICHA(ticker)]: { body: ficha(ticker) },
@@ -180,6 +218,7 @@ function rutasOk(ticker: string, overrides: Partial<Record<string, Ruta>> = {}) 
         omitidos_bps: [],
       },
     },
+    [RUTA_PROSPECTO(ticker)]: { body: prospecto(ticker) },
     ...overrides,
   }
 }
@@ -441,6 +480,79 @@ describe('las tres queries son independientes', () => {
 
     expect(await screen.findByText('AL30D')).toBeInTheDocument()
     expect(await screen.findByText('renta')).toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toBeInTheDocument()
+  })
+})
+
+// --- Prospecto de emisión (F-072) -------------------------------------------------------------
+
+describe('prospecto de emisión', () => {
+  it('para un bono soberano no se muestra el panel, aunque la ruta responda', async () => {
+    mockearRutas(rutasOk('AL30D'))
+
+    renderizar('AL30D')
+
+    expect(await screen.findByText('AL30D')).toBeInTheDocument()
+    expect(screen.queryByText('Prospecto de emisión')).not.toBeInTheDocument()
+  })
+
+  it('para una ON con documentos, agrupa y muestra "Ver en CNV" por fila', async () => {
+    const especieOn = especie('TLCMO', { clase_activo: 'on_corporativo', emisor: 'TELECOM ARGENTINA S.A.' })
+    mockearRutas(
+      rutasOk('TLCMO', {
+        [RUTA_FICHA('TLCMO')]: { body: { ...ficha('TLCMO'), especie: especieOn } },
+        [RUTA_PROSPECTO('TLCMO')]: {
+          body: prospecto('TLCMO', {
+            aplica: true,
+            emisor: 'TELECOM ARGENTINA S.A.',
+            cuit: '30639453738',
+            url_emisor_cnv: 'https://www.cnv.gov.ar/SitioWeb/Empresas/Empresa/30639453738',
+            grupos: [grupoDocumentos('Suplementos')],
+            motivo_ausente: null,
+          }),
+        },
+      }),
+    )
+
+    renderizar('TLCMO')
+
+    expect(await screen.findByText('Prospecto de emisión')).toBeInTheDocument()
+    expect(await screen.findByText('Suplementos')).toBeInTheDocument()
+    expect(await screen.findByText('Un documento de prueba')).toBeInTheDocument()
+    expect(await screen.findByText('Ver en CNV')).toBeInTheDocument()
+    expect(await screen.findByText('Ver todos los documentos del emisor en CNV')).toBeInTheDocument()
+  })
+
+  it('sin documentos, declara el motivo en vez de una tabla vacía', async () => {
+    const especieOn = especie('TLCMO', { clase_activo: 'on_corporativo', emisor: 'TELECOM ARGENTINA S.A.' })
+    mockearRutas(
+      rutasOk('TLCMO', {
+        [RUTA_FICHA('TLCMO')]: { body: { ...ficha('TLCMO'), especie: especieOn } },
+        [RUTA_PROSPECTO('TLCMO')]: {
+          body: prospecto('TLCMO', {
+            emisor: 'TELECOM ARGENTINA S.A.',
+            motivo_ausente: 'el emisor todavía no tiene CUIT curado',
+          }),
+        },
+      }),
+    )
+
+    renderizar('TLCMO')
+
+    expect(await screen.findByText('Prospecto de emisión')).toBeInTheDocument()
+    expect(await screen.findByText('el emisor todavía no tiene CUIT curado')).toBeInTheDocument()
+  })
+
+  it('un prospecto que falla no tapa el resto de la ficha', async () => {
+    const especieOn = especie('TLCMO', { clase_activo: 'on_corporativo' })
+    mockearRutas({
+      ...rutasOk('TLCMO', { [RUTA_FICHA('TLCMO')]: { body: { ...ficha('TLCMO'), especie: especieOn } } }),
+      [RUTA_PROSPECTO('TLCMO')]: { status: 500, body: CONTRATO_ERROR('roto') },
+    })
+
+    renderizar('TLCMO')
+
+    expect(await screen.findByText('TLCMO')).toBeInTheDocument()
     expect(await screen.findByRole('alert')).toBeInTheDocument()
   })
 })
