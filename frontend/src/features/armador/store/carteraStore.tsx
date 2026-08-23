@@ -49,6 +49,11 @@ export interface PosicionArmador {
   peso: number
   /** De qué cálculos participa esta posición. Ver `ClasePosicion`. */
   clase: ClasePosicion
+  /** Sólo para `clase: 'fci'` (F-046). El código CAFCI identifica el fondo contra `public.fci`;
+   *  sin él, `ticker` es el nombre libre que escribió el asesor y la posición no se puede valuar
+   *  — un FCI legado sin este campo sigue sin resolver, declarado, nunca matcheado por nombre
+   *  (regla 11). Base común de la Tanda 2, agregado el 23/08/2026 antes de F-046. */
+  codigoCafci?: string
 }
 
 interface EstadoArmador {
@@ -87,7 +92,7 @@ type AccionArmador =
   | { tipo: 'fijarMontoTotal'; monto: number }
   | { tipo: 'equiponderar' }
   | { tipo: 'vaciar' }
-  | { tipo: 'agregarFci'; nombre: string; peso: number }
+  | { tipo: 'agregarFci'; nombre: string; peso: number; codigoCafci?: string }
   | { tipo: 'fijarFiltros'; filtros: FiltrosArmador }
   | { tipo: 'limpiarFiltros' }
   | { tipo: 'aplicarTematica'; id: string; filtros: FiltrosArmador }
@@ -152,7 +157,7 @@ function reducer(estado: EstadoArmador, accion: AccionArmador): EstadoArmador {
         ...estado,
         pos: agregarConProRata(
           estado.pos,
-          { ticker: accion.nombre, peso: accion.peso, clase: 'fci' },
+          { ticker: accion.nombre, peso: accion.peso, clase: 'fci', codigoCafci: accion.codigoCafci },
           accion.peso,
         ),
       }
@@ -205,9 +210,11 @@ interface AccionesArmador {
    *  (tres posiciones dan 33,4 / 33,3 / 33,3). */
   equiponderar: () => void
   vaciar: () => void
-  /** Agrega una línea de FCI con el peso pedido: tiene peso pero no precio (GWT-4 de F-018). Las
-   *  demás posiciones se achican pro-rata para hacerle lugar. */
-  agregarFci: (nombre: string, peso: number) => void
+  /** Agrega una línea de FCI con el peso pedido: tiene peso pero no precio hasta que F-046 lo
+   *  valúe (GWT-4 de F-018). Las demás posiciones se achican pro-rata para hacerle lugar.
+   *  `codigoCafci` es el identificador contra `public.fci` (F-046, picker sobre F-057); sin él la
+   *  posición queda como un FCI sin identificar, declarado y no valuable. */
+  agregarFci: (nombre: string, peso: number, codigoCafci?: string) => void
   /** Pisa el objeto de filtros entero: el llamador arma el objeto (mismo patrón `onCambio` del
    *  monitor). */
   fijarFiltros: (filtros: FiltrosArmador) => void
@@ -245,7 +252,8 @@ export function ArmadorProvider({ children }: { children: ReactNode }) {
       fijarMontoTotal: (monto: number) => dispatch({ tipo: 'fijarMontoTotal', monto }),
       equiponderar: () => dispatch({ tipo: 'equiponderar' }),
       vaciar: () => dispatch({ tipo: 'vaciar' }),
-      agregarFci: (nombre: string, peso: number) => dispatch({ tipo: 'agregarFci', nombre, peso }),
+      agregarFci: (nombre: string, peso: number, codigoCafci?: string) =>
+        dispatch({ tipo: 'agregarFci', nombre, peso, codigoCafci }),
       fijarFiltros: (filtros: FiltrosArmador) => dispatch({ tipo: 'fijarFiltros', filtros }),
       limpiarFiltros: () => dispatch({ tipo: 'limpiarFiltros' }),
       aplicarTematica: (id: string, filtros: FiltrosArmador) =>
