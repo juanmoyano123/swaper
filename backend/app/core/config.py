@@ -54,32 +54,18 @@ class Settings(BaseSettings):
     #
     # Lo que se pausa es **el consumo**, no el código: el parser, el almacén y `POST /iamc/informe`
     # quedan intactos, y poner esto en True devuelve el comportamiento anterior sin tocar nada más.
-    # Se reactiva en Stage 2, cuando la descarga del informe sea automática.
+    # Se reactiva cuando la descarga del informe sea automática (F-055, diferida a Stage 3 el
+    # 23/08/2026).
     #
     # Con la pausa activa también se corta el arrastre de las métricas ya guardadas (ver
     # `consolidacion/corrida.py`): sin eso la TIR del último informe seguiría publicándose para
     # siempre, que es exactamente lo que la pausa existe para evitar.
     iamc_habilitado: bool = False
 
-    # **El consumo de Yahoo Finance está pausado desde el 13/08/2026, y el default es la pausa.**
-    # Yahoo limita toda esta conexión con HTTP 429 sostenido desde el 08/08 — medido con `curl`
-    # puro, fuera de nuestro código: el mismo 429 aparece en el endpoint de cotización, en el de
-    # perfil y hasta en el que entrega el crumb sin pedir credencial, sin `Retry-After`. No es una
-    # credencial vencida ni un símbolo mal armado, y reintentar no lo destraba.
-    #
-    # Lo que se pausa es **el consumo**, no el código: el cliente, sus cachés y el job de
-    # enriquecimiento quedan intactos, y poner esto en True devuelve el comportamiento anterior sin
-    # tocar nada más. Casi todo lo que Yahoo aportaba ya tiene reemplazo propio (nombre, actividad y
-    # rubro desde la SEC; apertura/máximo/mínimo/VWAP desde BYMA; el histórico de precios desde
-    # data912) — lo que no se reemplaza (PER, valor libro, beta, país, empleados, sitio web) queda
-    # declarado ausente en la ficha mientras dure la pausa.
-    yahoo_habilitado: bool = False
-
     # **El consumo de la CNV está pausado por default (F-072, 17/08/2026).** Documentos filed por
     # un emisor —prospectos, suplementos, avisos— vía HTML servido, y el PDF real vía el
-    # intercambio de dos pasos con `blob.cnv.gov.ar` (`app/externos/cnv.py`). Mismo criterio que
-    # Yahoo: en `False` el bloque llega pausado, sin pegarle a la red, y el frontend no distingue
-    # ese caso de un fallo real.
+    # intercambio de dos pasos con `blob.cnv.gov.ar` (`app/externos/cnv.py`). En `False` el bloque
+    # llega pausado, sin pegarle a la red, y el frontend no distingue ese caso de un fallo real.
     cnv_habilitado: bool = False
 
     # F-008 — job programado. Los horarios son configurables para poder ejercitar el job en un
@@ -100,7 +86,11 @@ class Settings(BaseSettings):
     #
     # Ninguna spec fija esta hora: el plan sólo habla de "la corrida matinal programada".
     ingesta_hora_matinal: str = "11:30"
-    ingesta_refresh_minutos: int = 15
+    # 20 y no 15: es exactamente la demora que la API abierta declara (`byma_demora_minutos`).
+    # Refrescar cada 15 pedía tres veces por hora un dato que se renueva dos veces y media: una de
+    # cada seis corridas traía lo mismo que la anterior. Alinear los dos números hace que cada
+    # corrida traiga una foto nueva del mercado. Decisión del dueño del producto, 23/08/2026.
+    ingesta_refresh_minutos: int = 20
     ingesta_rueda_desde: str = "11:00"
     ingesta_rueda_hasta: str = "17:00"
 

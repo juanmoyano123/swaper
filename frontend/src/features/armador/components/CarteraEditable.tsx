@@ -364,7 +364,7 @@ function FilaRentaVariable({
           style={{ fontSize: 11.5, color: 'var(--tx)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
           title={especie?.nombre_largo ?? undefined}
         >
-          {especie?.nombre_corto ?? SIN_DATO}
+          {especie?.nombre_largo ?? SIN_DATO}
         </div>
         <div className="mono" style={{ fontSize: 10, color: 'var(--sd)' }}>
           <span title="Una acción no tiene valor nominal: se compra por unidad entera.">

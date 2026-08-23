@@ -123,7 +123,6 @@ export function papelCoincide(papel: PapelRentaVariable, busqueda: string): bool
   return papel.especies.some(({ especie }) => {
     return (
       especie.ticker.toLowerCase().includes(texto) ||
-      (especie.nombre_corto?.toLowerCase().includes(texto) ?? false) ||
       (especie.nombre_largo?.toLowerCase().includes(texto) ?? false)
     )
   })

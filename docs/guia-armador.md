@@ -90,12 +90,12 @@ lo que ya elegiste a mano.
 Debajo del botón queda una línea de resultado: cuántas posiciones se precargaron, con qué perfil,
 cuántos sectores quedaron representados y qué % de renta variable se aplicó efectivamente.
 
-**Un aviso que hoy vas a ver siempre**: la diversificación por sector de las acciones **todavía no
-puede aplicarse**, porque el enriquecimiento de datos de empresa contra Yahoo Finance nunca corrió
-y el universo de acciones no tiene sector cargado. Mientras tanto la selección se hace por liquidez
-pura y la pantalla lo declara con una alerta (`rv_sin_perfil_sectorial`). Es una tarea pendiente de
-carga de datos, no un error de armado. Lo mismo pasa con los filtros por sector y rubro del
-buscador de renta variable: hasta que ese job corra, no encuentran nada.
+**Un aviso que vas a ver mientras falte el dato**: la diversificación por rubro de las acciones
+**no puede aplicarse** cuando ninguno de los papeles elegidos tiene rubro informado. El rubro sale
+de la clasificación de la SEC, que cubre el 74 % de los CEDEARs y el 9 % de las acciones
+argentinas; para el resto no hay fuente todavía. Cuando falta, la selección se hace por liquidez
+pura y la pantalla lo declara con una alerta (`rv_sin_perfil_sectorial`). Es un faltante de dato
+declarado, no un error de armado.
 
 ---
 
@@ -155,9 +155,10 @@ Esta sección es **el buscador**: donde se eligen las acciones. Una vez cargadas
 pueden editar tanto acá como en la tabla de Cartera, que las muestra en su propio bloque.
 
 - **Buscador**: por ticker o por nombre de la empresa, con radio Acciones / CEDEARs para elegir el
-  universo, y filtros de **sector** y **rubro**. Esos dos filtros dependen del enriquecimiento
-  contra Yahoo Finance, que todavía no corrió: hasta que corra, sólo ofrecen "todos" y la pantalla
-  lo declara en vez de mostrar una lista vacía que se leería como "no hay papeles de este rubro".
+  universo, y filtros de **rubro (SEC)** y **eslabón productivo**. Los dos salen de la
+  clasificación de la SEC y sólo ofrecen los valores que los papeles de esa clase declaran: si
+  ninguno está clasificado, sólo ofrecen "todos" y la pantalla lo declara, en vez de mostrar una
+  lista vacía que se leería como "no hay papeles de este rubro".
 - **Cabecera**: subtotal de renta fija (USD), subtotal de renta variable (USD), total de la
   cartera, y el **mix RF/RV** — tanto el pedido (sobre los % que cargaste) como el real (sobre lo
   efectivamente invertido), que pueden no coincidir.

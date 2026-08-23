@@ -486,3 +486,35 @@ tablas —un `VACUUM` normal libera las filas para reuso pero no devuelve el arc
 Control post-borrado: los tickers que conservan cotización vieja (AXIA y BF47O del 08/08, BU3S6 y
 D10Y7 del 10/08 a las 14:30, entre otros) **siguen publicando su precio en `resumen`**, y el
 monitor mantiene los mismos 1.324 precios y 428 TIR que antes de podar.
+
+## 23/08/2026 — Yahoo Finance sale del proyecto
+
+Decisión del dueño del producto: *"yahoo quiero sacarlo del proyecto, no pude hacerlo funcionar. No
+quiero tener nada de yahoo en el proyecto hasta nuevo aviso."* Se eliminó la huella entera —cliente,
+variable de entorno, job de enriquecimiento, endpoint que lo disparaba, bloque `externo` de la ficha
+de renta variable, y los esquemas y componentes del frontend que lo consumían—. Lo que queda escrito
+de Yahoo en este documento y en `claude-docs/` es historia de cuándo y por qué se construyó, no
+estado actual.
+
+**El disparador es viejo y está medido.** `YAHOO_HABILITADO` estaba apagado desde el 08/08/2026 por
+HTTP 429 sostenido sobre toda la conexión —verificado con `curl` puro, fuera de nuestro código, en
+los tres endpoints, incluido el que entrega el crumb sin pedir credencial y sin `Retry-After`—. Es
+decir: al momento de sacarlo era código muerto que no aportaba un solo dato.
+
+**Qué se pierde, nombrado.** PER trailing y forward, precio sobre libros, beta, ganancia por acción,
+valor empresa, capitalización, país, sector, industria, empleados y sitio web. Ninguno se sustituye
+por otra fuente ni se estima: donde había un campo de Yahoo ahora no hay campo (regla 1).
+
+**Qué no se pierde.** El nombre de la empresa, la actividad y el rubro salen de la SEC; apertura,
+máximo, mínimo y VWAP de BYMA; el histórico de cierres de data912. La ficha de renta variable queda
+con tres bloques —propio (BYMA), histórico (data912) y estados contables (SEC)—, cada uno rotulado
+con su fuente.
+
+**Lo que la diversificación sectorial de renta variable usa hoy es `sic_oficina` de la SEC**, no el
+sector de Yahoo, y eso ya era así desde el 13/08/2026. Cuando ningún papel elegido tiene rubro
+informado, el armado lo declara con la alerta `rv_sin_perfil_sectorial` en vez de sustituirlo.
+
+**Columnas de base que quedaron huérfanas y NO se borraron:** en `public.perfil_renta_variable`,
+`nombre_corto`, `sector`, `industria` y `pais` — sólo las escribía el job de Yahoo, hoy nada las
+escribe y nada las lee. Están vacías en producción (la tabla nunca se pobló). Se dejan en su lugar
+a propósito: las migraciones ya aplicadas no se tocan.

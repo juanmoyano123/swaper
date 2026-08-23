@@ -1,8 +1,7 @@
 """Caché en memoria con vencimiento, compartida por los clientes de `app/externos/`.
 
-Nació en `yahoo.py` (F-053) y se extrajo acá cuando `data912.py` la necesitó igual: los dos clientes
-consultan por especie, al ritmo de los clics del asesor, y los dos necesitan recordar un acierto por
-un rato y un fallo por menos tiempo — mismo problema, misma solución.
+Los clientes de este paquete consultan por especie, al ritmo de los clics del asesor, y todos
+necesitan lo mismo: recordar un acierto por un rato y un fallo por menos tiempo.
 """
 
 import time

@@ -111,9 +111,7 @@ export function BloqueRentaVariable() {
   // Para que "reemplazar" deje el cursor donde se elige el sustituto: sacar la posición y dejar al
   // asesor buscando dónde estaba el scroll sería la mitad del trabajo.
   const refBuscador = useRef<HTMLInputElement>(null)
-  // Rubro y eslabón salen de la clasificación de la SEC (13/08/2026), no del perfil de Yahoo: ese
-  // job quedó bloqueado y la tabla nunca tuvo un solo sector cargado, así que los dos selects
-  // estaban siempre vacíos. Ver `app/renta_variable/clasificacion.py`.
+  // Rubro y eslabón salen de la clasificación de la SEC. Ver `app/renta_variable/clasificacion.py`.
   const [rubroFiltro, setRubroFiltro] = useState<string | null>(null)
   const [eslabonFiltro, setEslabonFiltro] = useState<string | null>(null)
 
@@ -635,14 +633,14 @@ function TarjetaRentaVariable({
             minWidth: 0,
           }}
           title={
-            especie?.nombre_corto
-              ? `Empresa según Yahoo Finance · capturado ${fmtFecha(especie.perfil_capturado_en)}`
+            especie?.nombre_largo
+              ? `Empresa según ${especie.perfil_fuente ?? 'una corrida anterior'} · capturado ${fmtFecha(especie.perfil_capturado_en)}`
               : undefined
           }
         >
-          {/* Sin perfil de empresa el espacio va vacío: el job de enriquecimiento todavía no pasó
+          {/* Sin perfil de empresa el espacio va vacío: el job de clasificación todavía no pasó
               por este ticker y no hay nombre que mostrar (regla 1). */}
-          {especie?.nombre_corto ?? SIN_DATO}
+          {especie?.nombre_largo ?? SIN_DATO}
         </span>
         <span className="mono" style={{ marginLeft: 'auto', fontSize: 12, color: colorVariacion }}>
           {textoVariacion}
@@ -754,7 +752,7 @@ function Metrica({ etiqueta, nota, children }: { etiqueta: string; nota?: string
  * de auditoría: hacen falta cuando alguien pregunta de dónde salió, no mientras se arma.
  */
 function FichaDelPapel({ especie }: { especie: EspecieRentaVariable }) {
-  const nombre = especie.nombre_largo ?? especie.nombre_corto
+  const nombre = especie.nombre_largo
   const esFondo = especie.estrategia_etf !== null
 
   const detalle = [

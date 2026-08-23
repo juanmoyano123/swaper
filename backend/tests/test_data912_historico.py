@@ -1,6 +1,6 @@
 """`ClienteData912Historico` — el histórico de cierres para el panel de la ficha.
 
-Mismo criterio que `test_yahoo_cliente.py`: `respx` mockea la red, nunca lanza, y todo fallo se
+`respx` mockea la red, nunca lanza, y todo fallo se
 verifica devuelto como bloque declarado, no como excepción.
 """
 

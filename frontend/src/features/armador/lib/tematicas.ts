@@ -25,12 +25,7 @@
  * **Los rubros de renta variable son los de la SEC** (`sic_oficina`), que llegan por la
  * clasificación (`app/renta_variable/clasificacion.py`) y cubren 870 especies al 13/08/2026.
  *
- * Hasta esa fecha eran los sectores de Yahoo Finance. Yahoo bloqueó el endpoint de perfil y la
- * tabla quedó con **cero** sectores cargados: cada preset temático filtraba contra un campo vacío y
- * devolvía cero papeles sin que se entendiera por qué. Las dos taxonomías no se mezclan — ver el
- * docstring de `app/armado/renta_variable.py`.
- *
- * **Dos presets perdieron su filtro de renta variable en el cambio, y es a propósito.** La SEC
+ * **Dos presets no tienen filtro de renta variable, y es a propósito.** La SEC
  * agrupa por oficina, y ninguna de sus oficinas dice "petróleo" ni "consumo masivo":
  * `Office of Energy & Transportation` mezcla petroleras (41 especies) con mineras de oro (46),
  * eléctricas (22) y aerolíneas (25) — medido el 13/08/2026 —, y `Office of Trade & Services` es

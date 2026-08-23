@@ -1,15 +1,9 @@
 """Cliente de la API pública de la SEC — a qué se dedica la empresa detrás de un CEDEAR.
 
-## Por qué esto y no Yahoo
-
-Yahoo era el único origen de perfil de empresa, y el 13/08/2026 cortó el acceso: su endpoint de
-perfil devuelve HTTP 429 sostenido desde esta conexión —medido con `curl` puro, fuera de nuestro
-código— mientras el de cotización sigue respondiendo 200. Reintentar no lo arregla.
-
-La SEC es una fuente de otra naturaleza, y esa es la razón de fondo para preferirla aunque Yahoo
-vuelva: **publica una API con contrato**. Los endpoints de `yahoo.py` son los que consume su propio
-sitio, sin documentación ni compromiso, y su docstring ya advertía que podían romperse cualquier
-día. Se rompieron.
+Es el único origen de perfil de empresa del proyecto desde el 13/08/2026, y se lo eligió por su
+naturaleza y no por su cobertura: **publica una API con contrato**, documentada y con política de
+acceso escrita. Cubre el 74 % de los CEDEARs y el 9 % de las acciones argentinas; lo que no alcanza
+queda declarado faltante y no se completa desde ningún otro lado.
 
 ## Los tres pedidos, y qué da cada uno
 
@@ -28,8 +22,7 @@ política de acceso publicada, y mandar uno falso sería usar la fuente en contr
 Va con el mail del dueño del producto, como la propia SEC indica.
 
 El límite es ~10 pedidos por segundo. Un 429 corta la corrida y se declara: la fuente está pidiendo
-que paremos, y seguir insistiendo ticker por ticker sólo alarga el bloqueo — mismo criterio que
-`renta_variable/enriquecimiento.py` aplica con Yahoo.
+que paremos, y seguir insistiendo ticker por ticker sólo alarga el bloqueo.
 """
 
 import asyncio

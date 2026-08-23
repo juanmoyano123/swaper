@@ -140,7 +140,7 @@ def test_rubro_none_se_admite_sin_tematica() -> None:
 
 def test_universo_real_sin_perfiles_arma_igual_por_liquidez_pura() -> None:
     """El estado real de hoy: `public.perfil_renta_variable` está vacía (0 filas, el job de
-    Yahoo nunca corrió), así que TODAS las especies de renta variable llegan con `rubro=None`.
+    clasificación no corrió), así que TODAS las especies de renta variable llegan con `rubro=None`.
     No es un caso borde raro -- es el camino que se ejecuta en cada corrida hasta que el job
     corra. La primera pasada (rubro nuevo) queda vacía siempre y todo se decide en la segunda,
     por orden de liquidez pura, sin romper nada."""

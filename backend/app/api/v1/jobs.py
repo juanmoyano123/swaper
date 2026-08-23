@@ -12,12 +12,10 @@ from fastapi import APIRouter, Depends
 
 from app.api.deps import get_db
 from app.core.config import Settings, get_settings
-from app.externos import MOTIVO_PAUSA, cliente_yahoo
 from app.externos.sec import ClienteSec
 from app.ingesta.byma.cedears import traer_lista
 from app.jobs.corridas import corrida_matinal, refresh_intra_rueda
 from app.jobs.registro import listar_corridas
-from app.renta_variable import enriquecer_perfiles
 from app.renta_variable.agrupamiento import agrupar
 from app.renta_variable.clasificacion import (
     LIMITE_POR_CORRIDA as LIMITE_CLASIFICACION,
@@ -26,7 +24,6 @@ from app.renta_variable.clasificacion import (
     DatosDeBymaPorPapel,
     clasificar_renta_variable,
 )
-from app.renta_variable.enriquecimiento import LIMITE_POR_CORRIDA
 from app.renta_variable.lectura import leer_renta_variable
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -77,34 +74,6 @@ async def disparar_refresh(
 
 
 @router.post(
-    "/perfiles-renta-variable",
-    summary=(
-        "Enriquece nombre, sector, industria y país de acciones y CEDEARs pendientes, contra "
-        "Yahoo Finance"
-    ),
-    responses={503: {"description": "La base de datos no está disponible"}},
-)
-async def disparar_enriquecimiento_renta_variable(
-    conn: Annotated[asyncpg.Connection, Depends(get_db)],
-    settings: Annotated[Settings, Depends(get_settings)],
-    limite: int = LIMITE_POR_CORRIDA,
-) -> dict[str, object]:
-    """Incremental: procesa hasta `limite` tickers pendientes por corrida, corta al primer 429 de
-    la fuente y deja el resto para la próxima invocación (ver
-    `app/renta_variable/enriquecimiento.py`).
-
-    **Con `settings.yahoo_habilitado` en `False` (el default desde el 13/08/2026) no corre nada**:
-    ni se lee la base ni se le pide un solo ticker a Yahoo. La respuesta tiene una forma distinta a
-    la del resumen normal —`{"pausado": True, "motivo": ...}` en vez de `ResumenEnriquecimiento.
-    como_dict()`— porque no es una corrida de cero resultados, es una corrida que no ocurrió.
-    """
-    if not settings.yahoo_habilitado:
-        return {"pausado": True, "motivo": MOTIVO_PAUSA}
-    resumen = await enriquecer_perfiles(conn, cliente_yahoo(), limite=limite)
-    return resumen.como_dict()
-
-
-@router.post(
     "/clasificar-renta-variable",
     summary=(
         "Clasifica acciones y CEDEARs contra la SEC: actividad, eslabón de la cadena productiva "
@@ -116,7 +85,7 @@ async def disparar_clasificacion_renta_variable(
     conn: Annotated[asyncpg.Connection, Depends(get_db)],
     limite: int = LIMITE_CLASIFICACION,
 ) -> dict[str, object]:
-    """Incremental, como el de Yahoo: procesa hasta `limite` papeles por corrida y retoma después.
+    """Incremental: procesa hasta `limite` papeles por corrida y retoma después.
 
     Se clasifica **por papel y no por especie** — `AAPL` una vez, y `AAPLC`/`AAPLD` heredan su
     clasificación—, así que primero se arma el mapa de especie a papel con el mismo agrupamiento

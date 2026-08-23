@@ -64,7 +64,6 @@ interface EspecieRentaFijaParaCongelar {
 
 /** Lo que hace falta de una especie de renta variable para congelarla — F-042. */
 interface EspecieRentaVariableParaCongelar {
-  nombre_corto: string | null
   nombre_largo: string | null
 }
 
@@ -124,7 +123,7 @@ export function armarMercadoCongelado(entrada: EntradaMercado): MercadoCongelado
     }
     const rv = entrada.porTickerRentaVariable?.get(ticker)
     if (rv) {
-      return { ticker, ...ESPECIE_VACIA, denominacion: rv.nombre_largo ?? rv.nombre_corto }
+      return { ticker, ...ESPECIE_VACIA, denominacion: rv.nombre_largo }
     }
     // FCI (no cotiza, sin especie por construcción) o ticker fuera de los dos universos.
     return { ticker, ...ESPECIE_VACIA, denominacion: null }

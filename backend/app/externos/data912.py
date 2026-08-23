@@ -8,13 +8,12 @@ cosa: se consulta **por especie, al hacer clic**, se muestra rotulado con su fue
 **nunca se persiste ni se mezcla con nuestro dato** — mismo contrato que el resto de `app/externos/`
 (ver el docstring de `app/externos/__init__.py`).
 
-## Por qué data912 y no Yahoo, acá
+## Qué cubre la serie
 
-El sparkline de la ficha le pedía a Yahoo un año de cierres diarios. Yahoo está pausado
-(`Settings.yahoo_habilitado`, ver `app/core/config.py`) y de todos modos data912 da más: cubre el
-88 % de las acciones argentinas que operan (hasta 23 años de historia) y el 53 % de los CEDEARs
-(mediana ~6 años) — medido el 13/08/2026 sobre los papeles de mayor volumen, con una serie continua
-(cero saltos diarios mayores al 30 % en 14 años de AAPL; el split 4:1 de Apple de 2020 no la parte).
+Cubre el 88 % de las acciones argentinas que operan (hasta 23 años de historia) y el 53 % de los
+CEDEARs (mediana ~6 años) — medido el 13/08/2026 sobre los papeles de mayor volumen, con una serie
+continua (cero saltos diarios mayores al 30 % en 14 años de AAPL; el split 4:1 de Apple de 2020 no
+la parte).
 
 ## El endpoint, y sus dos formas de decir "no hay serie"
 
@@ -52,7 +51,6 @@ import httpx
 import structlog
 
 from app.externos.cache import CacheConTTL
-from app.externos.yahoo import PuntoHistorico
 from app.ingesta.http import ErrorDeFuente, Reintentos, con_reintentos, crear_cliente, pedir
 
 logger = structlog.get_logger()
@@ -77,6 +75,17 @@ TTL_SERIE_SEGUNDOS = 3600.0
 TTL_FALLO_SEGUNDOS = 60.0
 
 MOTIVO_SIN_TRAMO = "esta especie no es una acción ni un CEDEAR: no hay tramo de data912 que pedir"
+
+
+@dataclass(frozen=True, slots=True)
+class PuntoHistorico:
+    """Un cierre diario de la serie. `fecha` en ISO, `cierre` en la moneda que declara la fuente."""
+
+    fecha: str
+    cierre: float
+
+    def como_dict(self) -> dict[str, object]:
+        return {"fecha": self.fecha, "cierre": self.cierre}
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,8 +146,7 @@ def _puntos_de(crudo: object, *, desde: date) -> tuple[PuntoHistorico, ...]:
 
 
 class ClienteData912Historico:
-    """El histórico de cierres, por ticker y por clase. Nunca lanza: todo fallo vuelve declarado —
-    mismo contrato que `ClienteYahoo.bloque_externo`.
+    """El histórico de cierres, por ticker y por clase. Nunca lanza: todo fallo vuelve declarado.
 
     `dormir` y `ahora` son inyectables para que los tests no esperen de verdad ni dependan del
     reloj de pared.

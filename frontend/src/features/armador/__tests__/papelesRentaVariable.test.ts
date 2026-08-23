@@ -21,11 +21,7 @@ function especie(extra: Partial<EspecieRentaVariable> = {}): EspecieRentaVariabl
     sufijo_liquidacion: null,
     hermanas: [],
     no_identificado: false,
-    nombre_corto: null,
     nombre_largo: null,
-    sector: null,
-    industria: null,
-    pais: null,
     perfil_fuente: null,
     perfil_capturado_en: null,
     sic_codigo: null,
@@ -126,7 +122,7 @@ describe('papelCoincide', () => {
   })
 
   it('busca también por nombre de empresa', () => {
-    const [papel] = agruparEnPapeles([especie({ nombre_corto: 'Apple Inc.' })])
+    const [papel] = agruparEnPapeles([especie({ nombre_largo: 'Apple Inc.' })])
     expect(papelCoincide(papel, 'apple')).toBe(true)
   })
 

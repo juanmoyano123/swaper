@@ -1,8 +1,7 @@
 """Job de clasificación de renta variable contra la SEC — 13/08/2026.
 
-Hermano de `enriquecimiento.py` (el de Yahoo) y con el mismo diseño incremental: procesa hasta
-`limite` papeles por corrida, persiste uno por uno, y retoma donde quedó. Lo que cambia es de dónde
-sale el dato y qué se hace con él.
+Incremental: procesa hasta `limite` papeles por corrida, persiste uno por uno, y retoma donde
+quedó. Un corte a mitad de camino no pierde lo que ya se trajo.
 
 ## Se clasifica por papel, no por especie
 
@@ -40,9 +39,9 @@ logger = structlog.get_logger()
 
 FUENTE = "SEC EDGAR"
 
-# Cuántos papeles procesa una corrida. Más alto que el de Yahoo (50) porque la SEC no limita por
-# cuota sino por ritmo, y el cliente ya pausa entre pedidos: lo que acota acá es cuánto puede
-# tardar un solo POST, no cuánto tolera la fuente.
+# Cuántos papeles procesa una corrida. La SEC no limita por cuota sino por ritmo, y el cliente ya
+# pausa entre pedidos: lo que acota acá es cuánto puede tardar un solo POST, no cuánto tolera la
+# fuente.
 LIMITE_POR_CORRIDA = 100
 
 

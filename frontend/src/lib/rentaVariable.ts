@@ -65,14 +65,10 @@ export const esquemaEspecieRentaVariable = z.object({
   /** En qué mercado cotiza el subyacente: `NASDAQ`, `NYSE`, `B3`. */
   mercado_origen: z.string().nullable().default(null),
 
-  // Perfil de empresa (Etapa 4 del rediseño del armador): `null` hasta que el job de
-  // enriquecimiento pase por este ticker (`app/renta_variable/enriquecimiento.py`, backend). De
-  // Yahoo Finance, tal como la fuente los declara — nunca se traducen (regla 11).
-  nombre_corto: z.string().nullable(),
+  // Perfil de empresa: `null` hasta que el job de clasificación pase por este ticker
+  // (`app/renta_variable/clasificacion.py`, backend). Tal como la fuente lo declara — nunca se
+  // traduce (regla 11).
   nombre_largo: z.string().nullable(),
-  sector: z.string().nullable(),
-  industria: z.string().nullable(),
-  pais: z.string().nullable(),
   perfil_fuente: z.string().nullable(),
   perfil_capturado_en: z.string().nullable(),
 })

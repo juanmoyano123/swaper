@@ -19,13 +19,9 @@ import { crearQueryClient } from '@/app/queryClient'
 
 import { FichaDelActivo } from '../FichaDelActivo'
 import type {
-  BloqueExterno,
   BloqueHistorico as TipoBloqueHistorico,
   BloquePropio,
-  CotizacionExterna,
   FichaRentaVariable as Ficha,
-  PerfilExterno,
-  ValuacionExterna,
 } from '../lib/schemaRentaVariable'
 
 afterEach(() => {
@@ -61,7 +57,6 @@ function propio(extra: Partial<BloquePropio> = {}): BloquePropio {
     vwap: 4990,
     // Sin clasificar por defecto: es el caso más común (la SEC cubre 74 % de los CEDEARs y 9 %
     // de las acciones argentinas). Los tests de "La empresa" lo sobreescriben.
-    nombre_corto: null,
     nombre_largo: null,
     perfil_fuente: null,
     perfil_capturado_en: null,
@@ -72,73 +67,6 @@ function propio(extra: Partial<BloquePropio> = {}): BloquePropio {
     estrategia_etf: null,
     ratio_conversion: null,
     mercado_origen: null,
-    ...extra,
-  }
-}
-
-function cotizacion(extra: Partial<CotizacionExterna> = {}): CotizacionExterna {
-  return {
-    simbolo: 'GGAL.BA',
-    bolsa: 'BUE',
-    bolsa_nombre: 'Buenos Aires',
-    moneda: 'ARS',
-    nombre_largo: 'Grupo Financiero Galicia S.A.',
-    nombre_corto: 'GRUPO FINANCIERO GALICIA',
-    tipo_instrumento: 'EQUITY',
-    precio: 5010,
-    cierre_previo: 4850,
-    maximo_dia: 5100,
-    minimo_dia: 4900,
-    maximo_52_semanas: 7000,
-    minimo_52_semanas: 3000,
-    volumen: 1_500_000,
-    historico: [
-      { fecha: '2026-08-05', cierre: 4800 },
-      { fecha: '2026-08-06', cierre: 4850 },
-      { fecha: '2026-08-07', cierre: 5000 },
-    ],
-    capturado_en: '2026-08-08T14:30:00+00:00',
-    ...extra,
-  }
-}
-
-function perfil(extra: Partial<PerfilExterno> = {}): PerfilExterno {
-  return {
-    pais: 'Argentina',
-    sector: 'Financial Services',
-    industria: 'Banks - Regional',
-    sitio: 'https://www.gfgsa.com',
-    empleados: 12000,
-    capturado_en: '2026-08-08T14:30:00+00:00',
-    ...extra,
-  }
-}
-
-function valuacion(extra: Partial<ValuacionExterna> = {}): ValuacionExterna {
-  return {
-    per_trailing: 8.4,
-    per_forward: 7.7,
-    precio_sobre_libros: 1.37,
-    beta: 0.315,
-    ganancia_por_accion: { valor: 53.4, moneda: 'ARS' },
-    valor_empresa: { valor: 4.66e15, moneda: 'ARS' },
-    capitalizacion: null,
-    montos_sin_moneda: [],
-    capturado_en: '2026-08-08T14:30:00+00:00',
-    ...extra,
-  }
-}
-
-function externo(extra: Partial<BloqueExterno> = {}): BloqueExterno {
-  return {
-    fuente: 'Yahoo Finance',
-    simbolo_consultado: 'GGAL.BA',
-    disponible: true,
-    motivo: null,
-    cotizacion: cotizacion(),
-    perfil: perfil(),
-    valuacion: valuacion(),
-    perfil_motivo: null,
     ...extra,
   }
 }
@@ -158,8 +86,15 @@ function historico(extra: Partial<TipoBloqueHistorico> = {}): TipoBloqueHistoric
 }
 
 function fichaRV(extra: Partial<Ficha> = {}): Ficha {
-  return { ticker: TICKER, propio: propio(), externo: externo(), historico: historico(), ...extra }
+  return { ticker: TICKER, propio: propio(), historico: historico(), ...extra }
 }
+
+/** Un papel que el job de clasificación ya alcanzó: es el único origen del nombre de la empresa. */
+const PROPIO_CLASIFICADO = {
+  nombre_largo: 'Grupo Financiero Galicia S.A.',
+  perfil_fuente: 'SEC EDGAR',
+  perfil_capturado_en: '2026-08-13T18:33:59+00:00',
+} as const
 
 const CONTRATO_ERROR = (mensaje: string) => ({
   error: { code: 'not_found', message: mensaje, details: null, request_id: null },
@@ -236,8 +171,10 @@ it('una acción navegada directo sigue mostrando la ficha de renta variable, no 
 
 // --- GWT-1: la ficha de una acción -----------------------------------------------------------
 
-it('muestra el nombre de la empresa de Yahoo, el precio de BYMA y la fuente de cada bloque', async () => {
-  mockearRutas({ [RUTA_RV(TICKER)]: { body: fichaRV() } })
+it('muestra el nombre de la empresa, el precio de BYMA y la fuente de cada bloque', async () => {
+  mockearRutas({
+    [RUTA_RV(TICKER)]: { body: fichaRV({ propio: propio(PROPIO_CLASIFICADO) }) },
+  })
   renderizar()
 
   expect(await screen.findByText('Grupo Financiero Galicia S.A.')).toBeInTheDocument()
@@ -297,9 +234,7 @@ it('muestra la actividad, el rubro y el eslabón productivo de la SEC', async ()
   expect(await screen.findByText('Commercial Banks, NEC')).toBeInTheDocument()
   expect(screen.getByText('Office of Finance')).toBeInTheDocument()
   expect(screen.getByText('Finanzas y seguros')).toBeInTheDocument()
-  // El nombre propio (SEC) gana sobre el de Yahoo.
   expect(screen.getByText('GRUPO FINANCIERO GALICIA SA')).toBeInTheDocument()
-  expect(screen.queryByText('Grupo Financiero Galicia S.A.')).not.toBeInTheDocument()
 })
 
 it('un fondo muestra su estrategia', async () => {
@@ -328,34 +263,6 @@ it('sin clasificar declara que el job no pasó por este papel, no inventa un sec
   expect(await screen.findByText('Todavía no se clasificó este papel.')).toBeInTheDocument()
 })
 
-// --- La pausa de Yahoo (13/08/2026) -------------------------------------------------------------
-
-it('con Yahoo pausado los paneles de valuación y perfil no se muestran', async () => {
-  const pausado = fichaRV({
-    externo: externo({
-      disponible: false,
-      motivo:
-        'Yahoo Finance está pausado desde el 13/08/2026: la fuente limita todos los pedidos ' +
-        'desde esta conexión (HTTP 429 sostenido, sin Retry-After). Se reactiva con ' +
-        'YAHOO_HABILITADO=true.',
-      cotizacion: null,
-      perfil: null,
-      valuacion: null,
-    }),
-  })
-  mockearRutas({ [RUTA_RV(TICKER)]: { body: pausado } })
-  const { container } = renderizar()
-
-  // Con Yahoo pausado los dos paneles que dependen de él ni se renderizan: no tiene sentido
-  // mostrar un panel entero para decir "no disponible" cuando la pausa es de fondo, no un evento.
-  await screen.findByText('La rueda de hoy · BYMA')
-  expect(screen.queryByText('Valuación · Yahoo Finance')).not.toBeInTheDocument()
-  expect(screen.queryByText('Perfil de la empresa · Yahoo Finance')).not.toBeInTheDocument()
-  expect(screen.queryByText(/pausado desde el 13\/08\/2026/)).not.toBeInTheDocument()
-  // El histórico no depende de la pausa de Yahoo.
-  expect(container.querySelector('polyline')).not.toBeNull()
-})
-
 it('muestra las puntas y las operaciones de BYMA', async () => {
   mockearRutas({ [RUTA_RV(TICKER)]: { body: fichaRV() } })
   renderizar()
@@ -369,7 +276,9 @@ it('muestra las puntas y las operaciones de BYMA', async () => {
 // --- GWT-5: la opinión de terceros no entra ----------------------------------------------------
 
 it('no muestra recomendación, precio objetivo ni consenso de analistas', async () => {
-  mockearRutas({ [RUTA_RV(TICKER)]: { body: fichaRV() } })
+  mockearRutas({
+    [RUTA_RV(TICKER)]: { body: fichaRV({ propio: propio(PROPIO_CLASIFICADO) }) },
+  })
   const { container } = renderizar()
 
   await screen.findByText('Grupo Financiero Galicia S.A.')
@@ -377,37 +286,8 @@ it('no muestra recomendación, precio objetivo ni consenso de analistas', async 
   expect(texto).not.toMatch(/recomendaci|precio objetivo|consenso|analista/i)
 })
 
-// --- GWT-4: la fuente externa puede faltar entera ----------------------------------------------
-
-it('con Yahoo caído muestra igual lo de BYMA, sin los paneles que dependen de él', async () => {
-  const sinYahoo = fichaRV({
-    externo: externo({
-      disponible: false,
-      motivo: 'Yahoo Finance no respondió la cotización: timeout',
-      cotizacion: null,
-      perfil: null,
-    }),
-  })
-  mockearRutas({ [RUTA_RV(TICKER)]: { body: sinYahoo } })
-  const { container } = renderizar()
-
-  // Lo nuestro sigue: el precio de BYMA está en pantalla (y coincide con el último cierre de la
-  // serie de data912, que no depende de Yahoo — por eso `findAllByText` y no `findByText`).
-  expect((await screen.findAllByText('5.000,00')).length).toBeGreaterThan(0)
-  // El bloque externo no está disponible: los dos paneles que dependen de Yahoo (valuación y
-  // perfil) no se renderizan — mismo contrato que la pausa, el frontend no distingue los motivos.
-  expect(screen.queryByText('Valuación · Yahoo Finance')).not.toBeInTheDocument()
-  expect(screen.queryByText('Perfil de la empresa · Yahoo Finance')).not.toBeInTheDocument()
-  expect(screen.queryByText(/no respondió la cotización/)).not.toBeInTheDocument()
-  // El histórico es de data912, no de Yahoo: un fallo de Yahoo no lo arrastra.
-  expect(container.querySelector('polyline')).not.toBeNull()
-})
-
 it('sin nombre de empresa la cabecera dice el ticker, no un nombre inventado', async () => {
-  const sinYahoo = fichaRV({
-    externo: externo({ disponible: false, motivo: 'sin red', cotizacion: null, perfil: null }),
-  })
-  mockearRutas({ [RUTA_RV(TICKER)]: { body: sinYahoo } })
+  mockearRutas({ [RUTA_RV(TICKER)]: { body: fichaRV() } })
   renderizar()
 
   expect(await screen.findByText('GGAL — nombre no disponible')).toBeInTheDocument()
@@ -440,6 +320,7 @@ it('con un solo cierre no dibuja nada y dice cuántos vinieron', async () => {
 
 it('con data912 caído declara el histórico ausente y el resto de la ficha sigue', async () => {
   const sinHistorico = fichaRV({
+    propio: propio(PROPIO_CLASIFICADO),
     historico: historico({
       disponible: false,
       motivo: 'data912 no respondió el histórico de GGAL (timeout)',
@@ -484,7 +365,9 @@ it('un ticker que no es renta variable cae en la ficha de renta fija', async () 
 })
 
 it('una acción no pide la ficha de renta fija', async () => {
-  const fetchMock = mockearRutas({ [RUTA_RV(TICKER)]: { body: fichaRV() } })
+  const fetchMock = mockearRutas({
+    [RUTA_RV(TICKER)]: { body: fichaRV({ propio: propio(PROPIO_CLASIFICADO) }) },
+  })
   renderizar()
 
   await screen.findByText('Grupo Financiero Galicia S.A.')

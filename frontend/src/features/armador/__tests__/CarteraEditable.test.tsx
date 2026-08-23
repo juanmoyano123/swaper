@@ -483,12 +483,8 @@ function accionGgal(extra: Record<string, unknown> = {}) {
     sufijo_liquidacion: null,
     hermanas: [],
     no_identificado: false,
-    nombre_corto: 'Grupo Galicia',
     nombre_largo: 'Grupo Financiero Galicia S.A.',
-    sector: 'Financial Services',
-    industria: 'Banks',
-    pais: 'Argentina',
-    perfil_fuente: 'yahoo',
+    perfil_fuente: 'SEC EDGAR',
     perfil_capturado_en: '2026-08-01T00:00:00Z',
     ...extra,
   }
@@ -518,7 +514,7 @@ describe('bloques por clase de activo', () => {
     await userEvent.click(screen.getByRole('button', { name: 'agregar GGAL' }))
 
     const fila = await screen.findByRole('row', { name: 'GGAL' })
-    expect(within(fila).getByText('Grupo Galicia')).toBeInTheDocument()
+    expect(within(fila).getByText('Grupo Financiero Galicia S.A.')).toBeInTheDocument()
   })
 
   it('la acción declara "no aplica" en la columna de pagos: no tiene cronograma que mostrar', async () => {

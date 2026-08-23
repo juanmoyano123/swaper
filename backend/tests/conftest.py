@@ -26,11 +26,6 @@ ENV_DE_PRUEBA = {
     "SUPABASE_ANON_KEY": "anon-key-de-prueba-9f3a",
     "SUPABASE_SERVICE_ROLE_KEY": "service-role-de-prueba-7c1b",
     "DATABASE_URL": "postgresql://usuario:contrasena-secreta@localhost:5432/swaper_test",
-    # En producción Yahoo está pausado desde el 13/08/2026 (`yahoo_habilitado`, default `False`),
-    # pero la mayoría de estos tests prueban el camino activo del cliente — la pausa tiene los
-    # suyos (`test_con_yahoo_pausado_...`), que la fuerzan a `False` con `monkeypatch.setenv` +
-    # `get_settings.cache_clear()`. Mismo criterio que `settings_de_prueba` usa para IAMC.
-    "YAHOO_HABILITADO": "true",
 }
 
 

@@ -1,5 +1,5 @@
 /**
- * La ficha de una acción o un CEDEAR — F-053, sin los paneles de Yahoo (14/08/2026).
+ * La ficha de una acción o un CEDEAR — F-053.
  *
  * Cada bloque dice de dónde salió. **El bloque propio** sostiene la ficha: precio, cierre
  * anterior, variación, puntas, operaciones, OHLC del día y la clasificación de la SEC (a qué se
@@ -12,16 +12,10 @@
  * corriente, calculados sobre XBRL de `companyfacts` (no se muestra activos/pasivos/patrimonio
  * crudos, sólo lo que el backend serializa — ver `ratios_sec.py`).
  *
- * **Los paneles de Yahoo Finance (valuación y perfil) se sacaron de la ficha (14/08/2026):
- * decisión del dueño del producto, no los va a usar.** El backend sigue pidiéndole a Yahoo el
- * bloque `externo` — `Cabecera` todavía lo usa como último fallback del nombre de la empresa
- * cuando ni BYMA ni la SEC lo tienen — pero ninguna pantalla vuelve a mostrar su valuación ni su
- * perfil.
- *
  * Lo que no está, y no es un olvido:
  *
- * - **No hay recomendación de analistas, ni precio objetivo, ni consenso.** Eran de Yahoo; son
- *   opinión de terceros y la regla 6 del dominio mantiene el análisis determinístico.
+ * - **No hay recomendación de analistas, ni precio objetivo, ni consenso.** Son opinión de
+ *   terceros y la regla 6 del dominio mantiene el análisis determinístico.
  * - **No hay rendimiento, ni duración, ni paridad.** Una acción no tiene ninguna de las tres y no se
  *   pone nada en su lugar (regla 2).
  * - **Los valores de la SEC no se traducen.** "Office of Energy & Transportation" se muestra como
@@ -41,7 +35,6 @@ import { fmtCompacto, fmtFecha, fmtFechaHora, fmtNumero, fmtPct, SIN_DATO } from
 
 import { useFichaRentaVariable } from './hooks/useFichaRentaVariable'
 import type {
-  BloqueExterno,
   BloqueHistorico as TipoBloqueHistorico,
   BloquePropio,
   BloqueSec,
@@ -97,12 +90,12 @@ export function FichaRentaVariable({ ticker }: { ticker: string }) {
     )
   }
 
-  const { propio, externo, historico, sec } = query.data
+  const { propio, historico, sec } = query.data
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <Panel rotulo="El activo">
-        <Cabecera propio={propio} externo={externo} />
+        <Cabecera propio={propio} />
       </Panel>
 
       <Panel rotulo={`La rueda de hoy · ${textoFuentePropia(propio.fuente)}`}>
@@ -165,20 +158,12 @@ function rango(minimo: number | null, maximo: number | null): string {
 
 // --- Cabecera ---------------------------------------------------------------------------------
 
-function Cabecera({ propio, externo }: { propio: BloquePropio; externo: BloqueExterno }) {
-  // El nombre sale primero de lo nuestro (SEC o la lista de CEDEARs de BYMA, ver `perfil_fuente`)
-  // y sólo cae a Yahoo si lo propio no lo tiene: con Yahoo pausado la cabecera no se queda sin
-  // nombre para los papeles que la SEC ya clasificó.
-  const nombre =
-    propio.nombre_largo ??
-    propio.nombre_corto ??
-    externo.cotizacion?.nombre_largo ??
-    externo.cotizacion?.nombre_corto ??
-    null
-  const fuenteDelNombre =
-    propio.nombre_largo !== null || propio.nombre_corto !== null
-      ? (propio.perfil_fuente ?? 'una corrida anterior')
-      : externo.fuente
+function Cabecera({ propio }: { propio: BloquePropio }) {
+  // El nombre sale de lo nuestro (SEC o la lista de CEDEARs de BYMA, ver `perfil_fuente`). Un
+  // papel que el job de clasificación todavía no alcanzó no tiene nombre, y eso se declara en vez
+  // de completarse desde otro lado (regla 1).
+  const nombre = propio.nombre_largo
+  const fuenteDelNombre = propio.perfil_fuente ?? 'una corrida anterior'
   const variacion = propio.variacion
   const color =
     variacion === null || variacion === 0 ? 'var(--tx)' : variacion > 0 ? 'var(--pos)' : 'var(--neg)'
@@ -200,10 +185,11 @@ function Cabecera({ propio, externo }: { propio: BloquePropio; externo: BloqueEx
         </span>
       </div>
       <Leyenda>
-        Precio y variación: {textoFuentePropia(propio.fuente)}. El nombre de la empresa
-        {nombre === null ? ' no lo entregó ' : ' lo declara '}
-        {nombre === null ? externo.fuente : fuenteDelNombre}. La moneda es la que declara la
-        fuente, sin convertir.
+        Precio y variación: {textoFuentePropia(propio.fuente)}.{' '}
+        {nombre === null
+          ? 'Ninguna fuente declaró el nombre de la empresa.'
+          : `El nombre de la empresa lo declara ${fuenteDelNombre}.`}{' '}
+        La moneda es la que declara la fuente, sin convertir.
       </Leyenda>
     </div>
   )

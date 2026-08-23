@@ -46,11 +46,7 @@ function accion(extra: Partial<EspecieRentaVariable> = {}): EspecieRentaVariable
     sufijo_liquidacion: null,
     hermanas: [],
     no_identificado: false,
-    nombre_corto: null,
     nombre_largo: null,
-    sector: null,
-    industria: null,
-    pais: null,
     perfil_fuente: null,
     perfil_capturado_en: null,
     sic_codigo: null,
@@ -83,11 +79,7 @@ function cedear(extra: Partial<EspecieRentaVariable> = {}): EspecieRentaVariable
     sufijo_liquidacion: null,
     hermanas: [],
     no_identificado: false,
-    nombre_corto: null,
     nombre_largo: null,
-    sector: null,
-    industria: null,
-    pais: null,
     perfil_fuente: null,
     perfil_capturado_en: null,
     sic_codigo: null,
@@ -475,8 +467,8 @@ describe('el buscador de CEDEARs', () => {
   it('busca por nombre además de por ticker', async () => {
     responderCon({
       cedears: [
-        cedear({ nombre_corto: 'APPLE INC', nombre_largo: 'Apple Inc.' }),
-        cedear({ ticker: 'PAMP', nombre_corto: 'PAMPA ENERGIA' }),
+        cedear({ nombre_largo: 'Apple Inc.' }),
+        cedear({ ticker: 'PAMP', nombre_largo: 'PAMPA ENERGIA' }),
       ],
     })
     renderizar()

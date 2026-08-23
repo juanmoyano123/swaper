@@ -29,9 +29,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.api.deps import get_db
-from app.core.config import Settings, get_settings
 from app.core.pagination import CursorParams, Page, build_page
-from app.externos import bloque_pausado, cliente_yahoo
 from app.externos.data912 import cliente_data912_historico
 from app.externos.sec_calendario import cliente_sec_calendario
 from app.externos.sec_ficha import cliente_sec_ficha
@@ -107,8 +105,8 @@ async def _especie_de(conn: Any, ticker: str) -> EspecieRentaVariable | None:
 
 @router.get(
     "/{ticker}/ficha",
-    summary="La ficha de una acción o un CEDEAR: lo nuestro de BYMA, el histórico de data912, los "
-    "estados contables de la SEC y el bloque externo de Yahoo",
+    summary="La ficha de una acción o un CEDEAR: lo nuestro de BYMA, el histórico de data912 y los "
+    "estados contables de la SEC",
     responses={
         404: {"description": "El ticker no es renta variable del universo de hoy"},
         503: {"description": "La base de datos no está disponible"},
@@ -117,34 +115,21 @@ async def _especie_de(conn: Any, ticker: str) -> EspecieRentaVariable | None:
 async def ficha(
     ticker: str,
     conn: Annotated[object, Depends(get_db)],
-    settings: Annotated[Settings, Depends(get_settings)],
 ) -> dict[str, object]:
-    """Cuatro bloques con su fuente a la vista, y la ficha se muestra aunque cualquiera de los
-    últimos tres falte.
+    """Tres bloques con su fuente a la vista, y la ficha se muestra aunque cualquiera de los dos
+    últimos falte.
 
     **El bloque propio** —precio, cierre anterior, variación, puntas, operaciones, apertura, rango
-    del día, VWAP— sale del universo consolidado de BYMA y es el que sostiene la pantalla. **El
-    bloque externo** es Yahoo Finance, rotulado con su fuente y la hora en que se lo capturó, y
-    puede venir declarado no disponible sin que eso rompa nada: Yahoo no publica una API y sus
-    endpoints no son contractuales (ver `app/externos/yahoo.py`).
+    del día, VWAP— sale del universo consolidado de BYMA y es el que sostiene la pantalla.
 
-    **Con `settings.yahoo_habilitado` en `False` (el default desde el 13/08/2026) no se le pide
-    nada a Yahoo**: el bloque externo llega directamente como `bloque_pausado()`, con el motivo de
-    la pausa en castellano. Es la misma forma que un fallo de red — el frontend no necesita
-    distinguir los dos casos — y evita el único costo real de la pausa: seguir gastando cuota contra
-    una fuente que ya nos tiene limitados.
+    Lo que la ficha **nunca** trae es recomendación de analistas, precio objetivo ni consenso: es
+    opinión de terceros y la regla 6 del dominio mantiene el análisis determinístico.
 
-    Lo que el bloque externo **nunca** trae es recomendación de analistas, precio objetivo ni
-    consenso: es opinión de terceros y la regla 6 del dominio mantiene el análisis determinístico.
-    Y los valores propietarios de Yahoo viajan tal como la fuente los declara, sin traducir
-    (regla 11).
+    **El segundo bloque, `historico`**, es el sparkline de cierres diarios de data912: rotulado, y
+    declarado ausente sin romper el resto de la ficha si la fuente no tiene la serie de este
+    ticker.
 
-    **El tercer bloque, `historico`**, es el sparkline de cierres diarios — de data912, no de
-    Yahoo: cubre más papeles y más años de los que Yahoo daba, y no depende de la pausa. Mismo
-    contrato que `externo`: rotulado, y declarado ausente sin romper el resto de la ficha si
-    data912 no tiene la serie de este ticker.
-
-    **El cuarto bloque, `sec`**, es el paquete de ratios financieros (14/08/2026): ROE, margen
+    **El tercer bloque, `sec`**, es el paquete de ratios financieros (14/08/2026): ROE, margen
     operativo, crecimiento de ingresos, EPS, deuda/patrimonio y liquidez corriente, calculados
     sobre XBRL de `companyfacts` — **sólo para CEDEARs** (decisión del dueño del producto: las
     acciones argentinas se sacaron de la UI). `assets`/`liabilities`/`equity` se parsean para el
@@ -160,27 +145,17 @@ async def ficha(
     if especie is None:
         raise HTTPException(404, detail=f"{ticker} no es renta variable del universo de hoy")
 
-    # `historico` y `sec` siempre van en paralelo: son dos fuentes independientes que nunca se
-    # bloquean entre sí. `externo` se suma al mismo `gather` sólo cuando Yahoo está habilitado —
-    # pausado, `bloque_pausado()` no hace red y no tiene sentido esperarlo junto a los otros dos.
-    if settings.yahoo_habilitado:
-        externo, historico, sec = await asyncio.gather(
-            cliente_yahoo().bloque_externo(especie.ticker),
-            cliente_data912_historico().bloque_historico(especie.ticker, especie.clase_activo),
-            cliente_sec_ficha().bloque_sec(especie.ticker, especie.clase_activo, especie.emision),
-        )
-    else:
-        externo = bloque_pausado(especie.ticker)
-        historico, sec = await asyncio.gather(
-            cliente_data912_historico().bloque_historico(especie.ticker, especie.clase_activo),
-            cliente_sec_ficha().bloque_sec(especie.ticker, especie.clase_activo, especie.emision),
-        )
+    # `historico` y `sec` van en paralelo: son dos fuentes independientes que nunca se bloquean
+    # entre sí.
+    historico, sec = await asyncio.gather(
+        cliente_data912_historico().bloque_historico(especie.ticker, especie.clase_activo),
+        cliente_sec_ficha().bloque_sec(especie.ticker, especie.clase_activo, especie.emision),
+    )
     return {
         "ticker": especie.ticker,
         # `**especie.como_dict()` va primero: si trae `fuente` (experimento data912), gana sobre
         # la constante. Si no (corrida anterior a la migración, `fuente is None`), el `or` la pisa.
         "propio": {**especie.como_dict(), "fuente": especie.fuente or FUENTE_PROPIA},
-        "externo": externo.como_dict(),
         "historico": historico.como_dict(),
         "sec": sec.como_dict(),
     }

@@ -33,19 +33,6 @@ es una guía, no una regla del dominio.
    orden. Si no alcanza para `n_rv`, se arma con lo que hay — no se rellena con otra naturaleza.
 6. Si terminó eligiendo especies y **ninguna** tiene rubro informado, se declara que no se pudo
    diversificar por rubro.
-
-## Por qué el rubro es el de la SEC y no el de Yahoo
-
-Hasta el 13/08/2026 esto filtraba y diversificaba por `sector`, el campo de Yahoo Finance. Yahoo
-bloqueó el endpoint de perfil (429 sostenido) y `perfil_renta_variable` quedó con **cero** sectores
-cargados: con temática activa el bloque devolvía siempre cero candidatos, y sin temática la alerta
-de "no se pudo diversificar" saltaba en todas las corridas. La fuente pasó a ser la SEC, que sí
-responde y cubre 870 especies.
-
-**Los dos campos no se mezclan.** Son taxonomías distintas —`Financial Services` de Yahoo no es
-`Office of Finance` de la SEC, aunque se parezcan— y caer de una a la otra cuando falta la primera
-haría que dos papeles del mismo rubro cuenten como rubros distintos según qué fuente los alcanzó.
-`sector` sigue en el modelo por si Yahoo se destraba; acá no se usa.
 7. Si no quedó ningún candidato tras los filtros, se declara y el bloque vuelve vacío.
 8. Equiponderación dentro del bloque: cada posición pesa `pct_rv / len(elegidas)` del total de la
    cartera, y su monto sale de aplicar ese peso a `monto_total` — mismo patrón que usa `armar()` en
@@ -67,8 +54,8 @@ PCT_RV_PERFIL: dict[str, float] = {
 
 CODIGO_RV_SIN_VOLUMEN_USD = "rv_sin_volumen_usd"
 CODIGO_RV_SIN_PERFIL_SECTORIAL = "rv_sin_perfil_sectorial"
-"""Se mantiene el código aunque el rubro ya no salga de Yahoo: es la llave con la que el frontend
-reconoce la alerta y renombrarla la rompería sin cambiar lo que significa."""
+"""Es la llave con la que el frontend reconoce la alerta: renombrarla la rompería sin cambiar lo
+que significa."""
 CODIGO_RV_SIN_CANDIDATOS = "rv_sin_candidatos"
 
 

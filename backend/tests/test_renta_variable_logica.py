@@ -103,11 +103,7 @@ def test_sin_fila_de_perfil_todos_los_campos_nuevos_quedan_none() -> None:
         }
     ]
     (especie,) = armar_renta_variable(filas, TipoDeCambio())
-    assert especie.nombre_corto is None
     assert especie.nombre_largo is None
-    assert especie.sector is None
-    assert especie.industria is None
-    assert especie.pais is None
     assert especie.perfil_fuente is None
     assert especie.perfil_capturado_en is None
 
@@ -125,20 +121,14 @@ def test_con_fila_de_perfil_los_campos_llegan_tal_como_la_fuente_los_declaro() -
             "px_bid": 4995.0,
             "px_ask": 5005.0,
             "operaciones": 120,
-            "nombre_corto": "GRUPO FINANCIERO GALICIA",
             "nombre_largo": "Grupo Financiero Galicia S.A.",
-            "sector": "Financial Services",
-            "industria": "Banks - Regional",
-            "pais": "Argentina",
-            "perfil_fuente": "Yahoo Finance",
+            "perfil_fuente": "SEC EDGAR",
             "perfil_capturado_en": capturado,
         }
     ]
     (especie,) = armar_renta_variable(filas, TipoDeCambio())
-    assert especie.nombre_corto == "GRUPO FINANCIERO GALICIA"
-    assert especie.sector == "Financial Services"
-    assert especie.pais == "Argentina"
-    assert especie.perfil_fuente == "Yahoo Finance"
+    assert especie.nombre_largo == "Grupo Financiero Galicia S.A."
+    assert especie.perfil_fuente == "SEC EDGAR"
     assert especie.perfil_capturado_en == capturado.isoformat()
 
 

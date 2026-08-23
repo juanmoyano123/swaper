@@ -188,7 +188,7 @@ describe('armarMercadoCongelado', () => {
     const mercado = armarMercadoCongelado({
       tickers: ['GGAL'],
       porTickerRentaFija: new Map(),
-      porTickerRentaVariable: new Map([['GGAL', { nombre_corto: 'Galicia', nombre_largo: 'Grupo Financiero Galicia' }]]),
+      porTickerRentaVariable: new Map([['GGAL', { nombre_largo: 'Grupo Financiero Galicia' }]]),
       vector: null,
       perfilConcentracion: null,
       calendario: null,

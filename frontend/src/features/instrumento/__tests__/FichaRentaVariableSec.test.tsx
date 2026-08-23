@@ -19,7 +19,6 @@ import { crearQueryClient } from '@/app/queryClient'
 
 import { FichaDelActivo } from '../FichaDelActivo'
 import type {
-  BloqueExterno,
   BloqueHistorico,
   BloquePropio,
   BloqueSec,
@@ -53,7 +52,6 @@ function propio(extra: Partial<BloquePropio> = {}): BloquePropio {
     precio_maximo: 43200,
     precio_minimo: 42400,
     vwap: 42950,
-    nombre_corto: null,
     nombre_largo: null,
     perfil_fuente: null,
     perfil_capturado_en: null,
@@ -65,19 +63,6 @@ function propio(extra: Partial<BloquePropio> = {}): BloquePropio {
     ratio_conversion: null,
     mercado_origen: null,
     ...extra,
-  }
-}
-
-function externoPausado(): BloqueExterno {
-  return {
-    fuente: 'Yahoo Finance',
-    simbolo_consultado: `${TICKER}.BA`,
-    disponible: false,
-    motivo: 'Yahoo Finance está pausado (13/08/2026).',
-    cotizacion: null,
-    perfil: null,
-    valuacion: null,
-    perfil_motivo: null,
   }
 }
 
@@ -122,7 +107,6 @@ function fichaRV(extra: Partial<Ficha> = {}): Ficha {
   return {
     ticker: TICKER,
     propio: propio(),
-    externo: externoPausado(),
     historico: historicoVacio(),
     sec: sec(),
     ...extra,

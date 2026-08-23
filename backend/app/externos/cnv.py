@@ -569,5 +569,5 @@ def _extraer_primer_archivo(html_publicview: str) -> ArchivoAdjunto | None:
 @lru_cache(maxsize=1)
 def cliente_cnv() -> ClienteCnv:
     """El cliente compartido por todo el proceso: la caché de documentos por emisor sólo sirve si
-    es una sola instancia. Mismo patrón que `cliente_yahoo`/`cliente_sec_ficha`."""
+    es una sola instancia. Mismo patrón que `cliente_sec_ficha`."""
     return ClienteCnv()

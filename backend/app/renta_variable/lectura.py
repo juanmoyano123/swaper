@@ -13,10 +13,10 @@ meter una acción en `EspecieUniverso` explota, porque `.naturaleza` hace
 que la vista `resumen` usa para precios — primera lectura de esa tabla en todo el backend: se
 escribe para toda la rueda desde F-007 y ninguna otra lectura la expone.
 
-**Perfil de empresa (Etapa 4 del rediseño del armador).** `public.perfil_renta_variable` se suma
-con un LEFT JOIN más: no toda especie tiene fila todavía (el job de enriquecimiento es incremental,
-ver `enriquecimiento.py`), así que es `LEFT` y no `INNER` — sin eso una especie recién agregada al
-universo desaparecería del listado hasta que corriera el job. `fuente` y `capturado_en` de esa
+**Perfil de empresa.** `public.perfil_renta_variable` se suma con un LEFT JOIN más: no toda especie
+tiene fila todavía (el job de clasificación es incremental, ver `clasificacion.py`), así que es
+`LEFT` y no `INNER` — sin eso una especie recién agregada al universo desaparecería del listado
+hasta que corriera el job. `fuente` y `capturado_en` de esa
 tabla se alias-ean como `perfil_fuente`/`perfil_capturado_en`: `fuente` ya existe en
 `COLUMNAS_VISTA` (la fuente del precio, BYMA/data912) y sin el alias `dict(fila)` se quedaría con
 uno solo de los dos bajo la misma clave.
@@ -49,13 +49,9 @@ COLUMNAS_VISTA: tuple[str, ...] = (
 COLUMNAS_INSTRUMENTOS: tuple[str, ...] = ("moneda_cotizacion",)
 COLUMNAS_PUNTAS: tuple[str, ...] = ("px_bid", "px_ask", "operaciones")
 COLUMNAS_PERFIL: tuple[str, ...] = (
-    "nombre_corto",
     "nombre_largo",
-    "sector",
-    "industria",
-    "pais",
-    # La clasificación de la SEC y de la tabla de CEDEARs de BYMA (13/08/2026). Conviven con las de
-    # Yahoo en la misma fila: cada job escribe sus columnas y `fuente` declara cuál corrió última.
+    # La clasificación de la SEC y de la tabla de CEDEARs de BYMA (13/08/2026). `fuente` declara
+    # cuál escribió la fila.
     "sic_codigo",
     "sic_titulo",
     "sic_oficina",

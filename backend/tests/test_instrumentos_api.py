@@ -526,7 +526,7 @@ async def test_sensibilidad_sin_base_de_datos_responde_503(crear_app) -> None:
 
 class FakeClienteCnv:
     """Reemplaza `cliente_cnv()` en el módulo del endpoint — mismo patrón que
-    `test_renta_variable_ficha_api.py` con `cliente_yahoo`/`cliente_sec_ficha`: la respuesta se
+    `test_renta_variable_ficha_api.py` con `cliente_sec_ficha`: la respuesta se
     inyecta en vez de pegarle a la red."""
 
     def __init__(

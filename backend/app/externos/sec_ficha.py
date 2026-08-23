@@ -36,8 +36,7 @@ py`); acá se usa `emision or ticker`.
    calculan los ratios con `app.renta_variable.ratios_sec.calcular_ratios`.
 
 Nunca lanza: cualquier fallo (sin CIK, companyfacts vacío, timeout, 429) vuelve como un bloque
-declarado ausente con su motivo — mismo contrato que `ClienteData912Historico.bloque_historico` y
-`ClienteYahoo.bloque_externo`.
+declarado ausente con su motivo — mismo contrato que `ClienteData912Historico.bloque_historico`.
 """
 
 import asyncio

@@ -50,7 +50,7 @@ const esquemaEspecieCongelada = z.strictObject({
   calificacion: z.string().nullable(),
   sector: z.string().nullable(),
   moneda_cupon: z.string().nullable(),
-  /** Renta variable: `nombre_largo`/`nombre_corto` de Yahoo. `null` en renta fija y FCI. */
+  /** Renta variable: el `nombre_largo` del perfil de empresa. `null` en renta fija y FCI. */
   denominacion: z.string().nullable(),
 })
 

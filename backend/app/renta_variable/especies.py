@@ -15,12 +15,11 @@ ticker: esa regla es de especies de liquidación de renta fija y aplicarla a una
 completar por analogía. Sin moneda utilizable, `volumen_usd` queda `None` y se cuenta como
 faltante — sobre el universo de hoy son 341 CEDEARs y acciones en `EXT`, más las que no declaran.
 
-**Nombre, sector, industria y país (Etapa 4 del rediseño del armador).** Vienen de
-`public.perfil_renta_variable`, poblada por un job de enriquecimiento aparte contra Yahoo Finance
-(`app/renta_variable/enriquecimiento.py`) — no de BYMA, y no siempre están: el job es incremental
-y una especie recién agregada al universo puede no tener fila todavía. `perfil_fuente` y
-`perfil_capturado_en` declaran de dónde salió y cuándo, igual que el resto de los datos externos
-del proyecto (regla 11): nunca se muestran sin decir su origen.
+**El perfil de empresa** viene de `public.perfil_renta_variable`, poblada por el job de
+clasificación contra la SEC (`app/renta_variable/clasificacion.py`) — no de BYMA, y no siempre
+está: el job es incremental y una especie recién agregada al universo puede no tener fila todavía.
+`perfil_fuente` y `perfil_capturado_en` declaran de dónde salió y cuándo, igual que el resto de los
+datos externos del proyecto (regla 11): nunca se muestran sin decir su origen.
 """
 
 from dataclasses import dataclass, field
@@ -63,13 +62,9 @@ class EspecieRentaVariable:
     no_identificado: bool = False
     """La fuente no explica qué es esta especie — hoy, las que terminan en `B`."""
 
-    # Perfil de empresa (Etapa 4): todos `None` hasta que el job de enriquecimiento pase por este
-    # ticker. Valores de Yahoo tal como la fuente los declara, sin traducir (regla 11).
-    nombre_corto: str | None = None
+    # Perfil de empresa: `None` hasta que el job de clasificación pase por este ticker. Valores de
+    # la fuente tal como los declara, sin traducir (regla 11).
     nombre_largo: str | None = None
-    sector: str | None = None
-    industria: str | None = None
-    pais: str | None = None
     perfil_fuente: str | None = None
     perfil_capturado_en: str | None = None
 
@@ -92,9 +87,9 @@ class EspecieRentaVariable:
     mercado_origen: str | None = None
     """En qué mercado cotiza el subyacente: `NASDAQ`, `NYSE`, `B3`."""
 
-    # El OHLC de BYMA que la consolidación descartaba (13/08/2026): reemplaza lo que la ficha le
-    # pedía a Yahoo Finance para el rango del día. **Siempre de BYMA**, aunque `fuente` diga
-    # data912 — el overlay no los pisa. Ver `COMMENT ON COLUMN` de la migración `ohlc_byma_precios`.
+    # El OHLC de BYMA que la consolidación descartaba (13/08/2026): el rango del día de la ficha.
+    # **Siempre de BYMA**, aunque `fuente` diga data912 — el overlay no los pisa. Ver el
+    # `COMMENT ON COLUMN` de la migración `ohlc_byma_precios`.
     precio_apertura: float | None = None
     precio_maximo: float | None = None
     precio_minimo: float | None = None
@@ -118,11 +113,7 @@ class EspecieRentaVariable:
             "sufijo_liquidacion": self.sufijo_liquidacion,
             "hermanas": self.hermanas,
             "no_identificado": self.no_identificado,
-            "nombre_corto": self.nombre_corto,
             "nombre_largo": self.nombre_largo,
-            "sector": self.sector,
-            "industria": self.industria,
-            "pais": self.pais,
             "perfil_fuente": self.perfil_fuente,
             "perfil_capturado_en": self.perfil_capturado_en,
             "sic_codigo": self.sic_codigo,
@@ -235,11 +226,7 @@ def armar_renta_variable(
                 sufijo_liquidacion=grupos[str(fila["ticker"])].sufijo_liquidacion,
                 hermanas=hermanas(grupos, str(fila["ticker"])),
                 no_identificado=grupos[str(fila["ticker"])].no_identificado,
-                nombre_corto=_texto(fila.get("nombre_corto")),
                 nombre_largo=_texto(fila.get("nombre_largo")),
-                sector=_texto(fila.get("sector")),
-                industria=_texto(fila.get("industria")),
-                pais=_texto(fila.get("pais")),
                 perfil_fuente=_texto(fila.get("perfil_fuente")),
                 perfil_capturado_en=_fecha_iso(fila.get("perfil_capturado_en")),
                 sic_codigo=_texto(fila.get("sic_codigo")),

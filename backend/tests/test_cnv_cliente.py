@@ -1,6 +1,6 @@
 """`ClienteCnv` — F-072: documentos de un emisor y el PDF real detrás de cada uno.
 
-Todo se mockea con `respx`, mismo criterio que `test_yahoo_cliente.py`: la CNV no es una fuente
+Todo se mockea con `respx`: la CNV no es una fuente
 contractual y una suite que le pegara de verdad sería lenta y frágil. Los fragmentos de HTML/XML
 son shapes mínimos, recortados de páginas reales verificadas en vivo el 17/08/2026 — no inventados.
 """
