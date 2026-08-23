@@ -4,7 +4,7 @@ Generado desde `claude-docs/planning/plan.md` (Fase 2) al correr `/init-project`
 Estado inicial: las 50 features arrancaban en **pendiente**. Este archivo se actualiza a mano o
 desde `/build-feature` a medida que cada una se implementa.
 
-**Estado al 23/08/2026 — Stage 1 cerrado (44 de 44), Stage 2 abierto (2 de 26), Stage 3 creado
+**Estado al 23/08/2026 — Stage 1 cerrado (44 de 44), Stage 2 abierto (4 de 26), Stage 3 creado
 con 5 diferidas.** El catálogo
 creció de 50 a 77 features desde que se generó este archivo; la tabla de Stage 2 se reconcilió
 contra `plan.md` el 23/08/2026. Lo que está trabado hoy **no es código sino dato**: ver
@@ -113,7 +113,7 @@ mismo día: es de uso diario, se queda en Stage 2.
 | F-074 | Convexidad propia | 112,5 | pendiente |
 | F-077 | Perfilado formal del inversor | 96,0 | pendiente |
 | F-057 | FCI en el monitor (CAFCI) | 85,0 | **completada** |
-| F-067 | FCI: comparador, categorías y gestoras | 85,0 | pendiente |
+| F-067 | FCI: comparador, categorías y gestoras | 85,0 | **completada** |
 | F-058 | Carry trade: calculadora y breakeven | 78,8 | pendiente |
 | F-062 | Curva histórica del segmento | 75,0 | pendiente |
 | F-063 | Heatmap del panel | 75,0 | pendiente |
@@ -121,7 +121,7 @@ mismo día: es de uso diario, se queda en Stage 2.
 | F-049 | Comparación de carteras entre sí | 40,0 | pendiente |
 | F-075 | Estadística de cartera | 37,5 | pendiente |
 | F-076 | Calculadora de valuación con supuestos declarados | 35,0 | pendiente |
-| F-046 | FCI valuables en cartera | 30,0 | pendiente |
+| F-046 | FCI valuables en cartera | 30,0 | **completada** |
 | F-065 | Cauciones | 30,0 | pendiente |
 | F-044 | Historial de propuestas | 25,0 | pendiente |
 | F-066 | Futuros de dólar | 25,0 | pendiente |
@@ -164,8 +164,14 @@ cierre. El RICE no cambió; cambió la etiqueta que decide cuándo entran.
   `false`). Verificado en vivo contra la base real: 4.251 fondos ingeridos, 11 tipos de renta, los
   endpoints responden contra Supabase. 64 tests nuevos (parser con fixture real recortado +
   sintéticos para los abortos, cliente con respx, almacén wipe-and-replace, API, jobs) más 9 de
-  frontend. F-067 (comparador/categorías/gestoras) y F-046 (FCI valuable en cartera) quedan para
-  la Tanda 2, en paralelo.
+  frontend. F-067 (comparador/categorías/gestoras) y F-046 (FCI valuable en cartera) se
+  construyeron a continuación, en paralelo, con dos agentes: F-067 agrega el AUM por tipo de
+  renta y por gestora sin cruzar nunca monedas (`backend/app/fci/agregados.py`) y un comparador
+  de fondos (`frontend/src/features/fci/`); F-046 identifica un FCI en una cartera por
+  `codigo_cafci` exacto (nunca por nombre) y lo valúa contra el VCP de la planilla, con el
+  capital en FCI declarado aparte en el calendario (sin cronograma contractual, nunca lo tuvo) y
+  como exposición no atribuible en el vector de riesgo. Las tres verificadas en vivo contra
+  Postgres real. Suite completa al cierre: 1366 tests de backend, 1046 de frontend.
 
 ## Totales
 
@@ -176,7 +182,7 @@ cierre. El RICE no cambió; cambió la etiqueta que decide cuándo entran.
 | 3 — RV, carga y diagnóstico | 9 | 41 | ~8 | ~28,5 |
 | 4 — Optimizador y persistencia | 9 | 42 | ~8,5 | ~37 |
 | **Stage 1** | **44** | **185** | **~37 semanas** | **cerrado el 16/08/2026** |
-| Stage 2 | 26 | 147 | ~29 | 2 de 26 hechas (F-072, F-057) |
+| Stage 2 | 26 | 147 | ~29 | 4 de 26 hechas (F-072, F-057, F-067, F-046) |
 | Stage 3 (diferido el 23/08/2026) | 5 | 37 | ~7 | ninguna empezada; F-054 parcial |
 
 **La base está poblada.** F-007 corrió contra Supabase el 06/08/2026 y dejó 2.894 instrumentos,
