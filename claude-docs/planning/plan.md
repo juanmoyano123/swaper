@@ -2185,7 +2185,10 @@ THEN nunca quedan en el repositorio de código
 
 **Descripción.** Registro de las propuestas presentadas a lo largo del tiempo y comparación de lo
 propuesto contra lo que efectivamente pasó. Depende de tener clientes (F-043) y de acumular meses de
-carteras guardadas.
+carteras guardadas. La performance se reporta con **TWR y MWR, las dos por separado**: TWR mide la
+estrategia contra su benchmark neutralizando aportes y retiros; MWR —la TIR del cliente— mide lo que
+efectivamente le pasó a su plata con el timing de sus aportes. Ambas en la moneda de referencia de la
+cartera, y en términos reales si es en pesos.
 
 **Input:** F-043; histórico de carteras y snapshots.
 **Output:** línea de tiempo de propuestas con su evolución.
@@ -2861,11 +2864,13 @@ THEN cae en una celda de "naturaleza no declarada" y se cuenta ahí; no se lo as
 **Descripción.** Variación acumulada por ticker en ventanas de 1 día, 1 semana, 1 mes, 3 meses, 6
 meses, 1 año y año a la fecha, en pesos y en dólares, y —para bonos— con precio clean o dirty.
 
-**Depende de tiempo, no de una fuente.** La serie se construye con los cierres que la corrida
-programada vaya guardando en `precios`, que ya acumula una fila por especie y por corrida. Una ventana
-de un año exige un año de corridas: hasta entonces la ventana existe pero se declara incompleta, con
-la fecha de la primera corrida a la vista. **No se rellena** con precios reconstruidos ni empalmando
-la serie de un tercero.
+**Depende de tiempo, no de una fuente.** La serie se construye con los cierres diarios que persiste
+F-073. Ojo: la versión original de esta ficha decía que `precios` "ya acumula una fila por especie y
+por corrida", y eso es falso desde que la poda de consolidación deja una sola fila por ticker
+(`serie_historica_habilitada=false`, su default) — sin F-073 esta feature no tiene insumo. Una
+ventana de un año exige un año de cierres: hasta entonces la ventana existe pero se declara
+incompleta, con la fecha del primer cierre a la vista. **No se rellena** con precios reconstruidos ni
+empalmando la serie de un tercero.
 
 **El histórico de data912 no sirve para esta feature, y conviene decir por qué.** Cubre acciones y
 CEDEARs con años de profundidad, pero su contrato (`app/externos/`) es consulta por especie al hacer
@@ -2873,9 +2878,9 @@ clic, sin persistir ni mezclar con nuestro dato. Un ranking por ventana sobre el
 una consulta por cada especie y produciría una tabla que mezcla serie externa con serie propia. Sirve
 para el sparkline de una ficha; no para esta grilla.
 
-**Input:** serie de cierres acumulada por F-008.
+**Input:** serie de cierres diarios persistida por F-073.
 **Output:** tabla de rendimientos por ventana, por segmento.
-**Depende de:** F-008, F-012 (para la vista en dólares)
+**Depende de:** F-073, F-012 (para la vista en dólares)
 **Habilita:** —
 
 **RICE:** R = 300 · I = 2 · C = 60 % · E = 5 → **Score 72**
@@ -2907,9 +2912,9 @@ instrumento o sólo contra sus pares de hoy.
 Misma restricción que F-061: **se dibuja desde la primera corrida guardada y el eje lo dice**. Una
 curva histórica de tres semanas es ruido con ejes.
 
-**Input:** serie de TIR y duración por ticker acumulada por F-008.
+**Input:** serie de TIR y duración por ticker persistida por F-073.
 **Output:** curva del segmento con selector de fecha y comparación contra hoy.
-**Depende de:** F-008, F-023, F-060
+**Depende de:** F-073, F-023, F-060
 **Habilita:** —
 
 **RICE:** R = 250 · I = 2 · C = 60 % · E = 4 → **Score 75**
@@ -3352,6 +3357,277 @@ THEN el bloque de prospecto no se muestra, porque el Tesoro no presenta ante la 
 
 ---
 
+#### F-073 — Serie diaria de cierres persistida
+
+**Etiqueta:** Stage 2 · **Traza a:** análisis de los skills de asesoramiento del 23/08/2026
+(asesor-financiero/IAEF y asesor-fundamental-senior), contrastado contra la capacidad ya
+implementada — la matemática determinística de los skills se baja a features; el juicio queda en
+los skills, fuera de la app.
+
+**Descripción.** Un cierre por especie por día hábil, persistido en la base y nunca podado. Hoy no
+existe: la poda de consolidación deja **una sola fila por ticker** (la última), así que el producto
+no acumula historia propia de precios — y sin historia no hay volatilidad, correlaciones, beta,
+Sharpe, drawdown ni las ventanas de F-061/F-062, cuyas fichas asumían una acumulación que en la
+práctica no ocurre.
+
+**Prender `serie_historica_habilitada` no es la solución.** Ese flag revive la acumulación
+**intradiaria**: ~2.900 filas cada 15 minutos, ~11 MB por día hábil sin nada que las borre — el
+motivo exacto por el que se apagó (ver el comentario en `config.py`). Lo que la estadística
+necesita es otra cosa: **el último snapshot de cada fecha se conserva, los intradiarios se siguen
+podando**. Un cierre diario del universo entero son ~2.900 filas por día hábil, ~700 mil filas por
+año: trivial. Si se implementa como poda con memoria de fechas o como tabla `cierres_diarios`
+aparte lo decide el plan de la feature.
+
+**La historia empieza cuando se prende, y eso se declara.** No se reconstruye hacia atrás con
+series de terceros ni con precios inferidos (regla 11): el primer día con la feature activa es el
+primer punto de la serie, y toda consulta declara desde qué fecha hay datos. Por eso es la más
+urgente del lote aunque su UI sea nula: cada día que pasa apagada es un día de historia que no se
+recupera.
+
+**Input:** los precios que la corrida programada de F-008 ya trae cada 15 minutos.
+**Output:** serie de cierres diarios por especie (precio, TIR, duración, paridad del cierre), con
+fecha de inicio de la historia declarada.
+**Depende de:** F-008
+**Habilita:** F-061, F-062, F-075
+
+**RICE:** R = 300 · I = 2 · C = 90 % · E = 3 → **Score 180,0**
+*Confidence 90 %: la ingesta y la tabla ya existen; el único riesgo es el detalle de qué snapshot
+cuenta como "cierre" en un mercado que corta a las 17:00 con corridas cada 15 minutos.*
+
+```
+GIVEN varias corridas del mismo día hábil
+WHEN corre la poda
+THEN del día queda sólo el último snapshot, y los cierres de los días anteriores no se tocan
+
+GIVEN una consulta sobre la serie de una especie
+WHEN la historia acumulada es más corta que la ventana pedida
+THEN se declara desde qué fecha hay datos y no se rellena hacia atrás con fuentes de terceros ni
+     precios reconstruidos
+
+GIVEN el flag intradiario `serie_historica_habilitada` en false
+WHEN la feature está activa
+THEN el cierre diario se persiste igual: son mecanismos independientes y el flag intradiario sigue
+     significando lo que siempre significó
+```
+
+---
+
+#### F-074 — Convexidad propia
+
+**Etiqueta:** Stage 2 · **Traza a:** análisis de los skills de asesoramiento del 23/08/2026 — la
+asimetría precio-TIR (principio 2 de Malkiel) que el material IAEF enseña, calculada sobre el dato
+propio.
+
+**Descripción.** La columna `convexidad` existe en `precios` desde F-007, pero sólo la llenaba
+IAMC y quedó huérfana con la pausa del 13/08/2026. Se calcula de forma propia, con el mismo insumo
+y el mismo criterio que la TIR y la duración de F-051: el cronograma contractual contra el precio
+publicado, aritmética sobre datos duros. Completa la sensibilidad de F-040: la duración modificada
+aproxima lineal, la convexidad corrige la asimetría (la suba de precio cuando la TIR baja es mayor
+que la caída cuando sube).
+
+**Sólo donde ya hay TIR propia.** La regla de F-051 aplica intacta: precio y flujo en la misma
+moneda. Donde la TIR propia no se calcula (CER, dollar-linked, badlar, tamar), la convexidad
+tampoco, y el espacio va vacío con su motivo — no se aproxima desde otra métrica.
+
+**Input:** cronograma y TIR propia ya calculados por F-051.
+**Output:** convexidad por especie en la columna que ya existe, con fuente propia rotulada.
+**Depende de:** F-051
+**Habilita:** —
+
+**RICE:** R = 250 · I = 1 · C = 90 % · E = 2 → **Score 112,5**
+*Confidence 90 %: es la derivada segunda del mismo valor presente que ya se resuelve; el módulo,
+los tests de paridad y la columna destino ya existen.*
+
+```
+GIVEN una especie con TIR propia calculada
+WHEN corre el cálculo de métricas
+THEN la convexidad sale del mismo cronograma y precio que la TIR, con la fuente propia rotulada
+
+GIVEN una especie sin TIR propia (precio y flujo en distinta moneda)
+WHEN se muestra su ficha
+THEN la convexidad va vacía con el motivo declarado, no aproximada desde otra métrica ni arrastrada
+     del último informe de IAMC
+```
+
+---
+
+#### F-075 — Estadística de cartera
+
+**Etiqueta:** Stage 2 · **Traza a:** análisis de los skills de asesoramiento del 23/08/2026 —
+gestión de carteras del material IAEF (volatilidad, correlación, beta, Sharpe) con insumo propio.
+
+**Descripción.** Sobre una cartera guardada o cargada: volatilidad de cada posición y de la
+cartera (desvío de los retornos diarios de la serie propia, anualizado), matriz de correlaciones
+entre posiciones, beta contra el índice que BYMA publica, y Sharpe. Es el complemento estadístico
+del riesgo composicional que ya existe: el vector de seis ejes (F-031) dice *qué* riesgos hay; esto
+mide *cuánto se movió* de verdad.
+
+**Cada métrica por separado, nunca un score.** La regla 7 aplica entera: no hay nota compuesta ni
+semáforo que combine volatilidad con concentración. Y la diversificación se muestra como lo que
+es: correlaciones medidas sobre fechas comunes de la serie propia — con la advertencia del material
+en pantalla: las correlaciones se rompen en crisis, medirlas no las congela.
+
+**El Sharpe necesita una tasa libre de riesgo, y ésa no es un dato: es un supuesto.** El asesor la
+elige y queda rotulada junto al resultado, como los supuestos de F-076. Sin tasa elegida, no hay
+Sharpe — no hay default silencioso.
+
+**Ventanas incompletas, declaradas.** Mismo criterio que F-061: la estadística vale desde que
+F-073 acumula. Una volatilidad anualizada sobre tres semanas de historia es ruido con decimales, y
+se declara como incompleta en vez de mostrarse como si fuera un año.
+
+**Input:** serie diaria de F-073; composición de la cartera (F-018/F-041); índice de referencia de
+la ingesta BYMA.
+**Output:** volatilidad por posición y de cartera, matriz de correlaciones, beta y Sharpe con su
+supuesto declarado, cada una con su ventana y su fecha de inicio de datos.
+**Depende de:** F-073, F-041
+**Habilita:** —
+
+**RICE:** R = 250 · I = 2 · C = 60 % · E = 8 → **Score 37,5**
+*Confidence 60 %: la matemática es estándar; la incertidumbre es cuándo hay historia suficiente
+para que el resultado signifique algo — la misma espera que F-061.*
+
+```
+GIVEN una cartera cuya historia acumulada es menor que la ventana pedida
+WHEN se calculan las métricas
+THEN cada una declara la ventana real usada y desde cuándo hay datos, y no se presenta una ventana
+     parcial como completa
+
+GIVEN dos posiciones con series de largo distinto
+WHEN se calcula su correlación
+THEN se usan sólo las fechas comunes de la serie propia, sin empalmar con series de terceros
+
+GIVEN todas las métricas calculadas
+WHEN se muestran
+THEN aparecen por separado, sin componerse en un score único ni en un semáforo agregado
+
+GIVEN el cálculo de Sharpe
+WHEN el asesor no eligió tasa libre de riesgo
+THEN no se calcula, y cuando la elige, la tasa queda rotulada como supuesto junto al resultado
+```
+
+---
+
+#### F-076 — Calculadora de valuación con supuestos declarados
+
+**Etiqueta:** Stage 2 · **Traza a:** análisis de los skills de asesoramiento del 23/08/2026 — el
+método fundamental (DCF, Gordon-Shapiro, múltiplos) convertido en calculadora, no en oráculo.
+
+**Descripción.** Una calculadora de valuación de renta variable donde **el asesor pone los
+supuestos y la herramienta hace la aritmética**: DCF (flujos proyectados, tasa de descuento, valor
+terminal), Gordon-Shapiro (P₀ = D₁/(k−g)) y múltiplos (PER, EV/EBITDA, P/B) con sensibilidad
+automática de ±1 punto en k y en g. Es la forma de tener el método fundamental de los skills
+adentro de la app sin romper la regla 11: un DCF automático necesitaría inventar g y k — acá los
+inventa el asesor, a sabiendas, y el sistema los rotula como suyos.
+
+**Los supuestos viajan pegados al resultado.** En pantalla y en cualquier exporte, el número sale
+acompañado de los supuestos que lo produjeron y de quién los declaró. Nunca se muestra un valor
+intrínseco como si fuera un dato de mercado, y la herramienta **no emite recomendación, rating ni
+precio objetivo**: eso es juicio, y el juicio quedó explícitamente fuera de la app.
+
+**Precarga lo duro, deja en blanco lo que falta.** Para CEDEARs con datos de la SEC (F-053) se
+precargan EPS, ingresos y los ratios ya calculados, cada uno con su fuente y su ejercicio; lo que
+la fuente no da, va en blanco para que el asesor lo complete o lo deje vacío. Para acciones sin
+fundamentals disponibles, la calculadora arranca vacía: sirve igual, porque el valor está en la
+aritmética y la sensibilidad, no en adivinar los inputs.
+
+**Input:** supuestos cargados por el asesor; datos duros de SEC precargados donde existen.
+**Output:** valor por acción según cada método, tabla de sensibilidad k×g, y el bloque de supuestos
+declarados que acompaña al resultado en pantalla y en exportes.
+**Depende de:** F-053
+**Habilita:** —
+
+**RICE:** R = 200 · I = 2 · C = 70 % · E = 8 → **Score 35,0**
+*Confidence 70 %: la aritmética es cerrada y verificable contra el material del curso; la
+incertidumbre es de producto — cuánto la usa un asesor cuya operación diaria es renta fija.*
+
+```
+GIVEN supuestos g y k cargados por el asesor
+WHEN se calcula el valor
+THEN el resultado aparece con la tabla de sensibilidad de ±1 punto en cada supuesto, y los
+     supuestos quedan rotulados como declarados por el asesor, en pantalla y en el exporte
+
+GIVEN g mayor o igual que k
+WHEN se intenta Gordon-Shapiro
+THEN no se calcula y se explica por qué la fórmula no admite ese caso, en vez de devolver un número
+     sin sentido
+
+GIVEN un CEDEAR con datos de la SEC disponibles
+WHEN se abre la calculadora
+THEN los datos duros aparecen precargados con su fuente y ejercicio, y lo que la fuente no publica
+     va en blanco — nunca estimado por el sistema
+
+GIVEN cualquier resultado de la calculadora
+WHEN se muestra o exporta
+THEN no se presenta como recomendación, rating ni precio objetivo del sistema
+```
+
+---
+
+#### F-077 — Perfilado formal del inversor
+
+**Etiqueta:** Stage 2 · **Traza a:** análisis de los skills de asesoramiento del 23/08/2026 — el
+cuestionario de perfil de riesgo del material IAEF, mapeado a los tres perfiles que el producto ya
+usa.
+
+**Descripción.** El cuestionario de seis preguntas del material del curso (reacción a una caída
+del 15 %, preferencia rentabilidad/seguridad, % histórico en renta variable, actitud frente al
+mercado accionario, tolerancia al endeudamiento, frecuencia de seguimiento) como formulario, con
+mapeo **determinístico** de las respuestas a los tres perfiles que `concentracion/perfiles.py` ya
+define: conservador, moderado, agresivo. Hoy el asesor elige el perfil a ojo en un selector; con
+esto puede además documentar de dónde salió.
+
+**El resultado se documenta, no se supone.** Quedan guardadas las respuestas, el perfil resultante
+y la fecha — el criterio del material: el test queda escrito. Con respuestas incompletas no se
+asigna perfil (regla 1: no se rellena el hueco con un default); se declara incompleto y listo.
+
+**Sin datos del cliente, hasta que exista F-043.** El cuestionario se guarda asociado al asesor
+(RLS de F-014) y opcionalmente a una cartera, sin nombre ni dato identificatorio del titular —
+ésos tienen prohibido entrar al repositorio y todavía no tienen dónde vivir. Cuando F-043 exista,
+el perfil documentado se asocia a la entidad cliente.
+
+**Input:** las seis respuestas del cuestionario.
+**Output:** perfil asignado con las respuestas y la fecha documentadas, precargable en el armador
+(que sigue permitiendo elegir otro perfil a mano).
+**Depende de:** F-014
+**Habilita:** F-043 (le entrega el perfil documentado que la ficha de cliente va a mostrar)
+
+**RICE:** R = 300 · I = 2 · C = 80 % · E = 5 → **Score 96,0**
+*Confidence 80 %: el cuestionario y los tres perfiles destino ya existen; la incertidumbre es el
+mapeo respuestas→perfil, que el material trae como criterio (primera opción conservadora, última
+agresiva) pero no como tabla cerrada.*
+
+```
+GIVEN las seis preguntas respondidas
+WHEN se calcula el perfil
+THEN el mapeo es determinístico y el resultado queda documentado con las respuestas y la fecha
+
+GIVEN un cuestionario con respuestas incompletas
+WHEN se intenta asignar perfil
+THEN no se asigna ninguno por default: se declara incompleto y se señalan las preguntas que faltan
+
+GIVEN un perfil documentado
+WHEN el asesor abre el armador
+THEN puede precargarlo, y elegir a mano un perfil distinto sigue siendo posible
+
+GIVEN el cuestionario guardado
+WHEN se persiste
+THEN no incluye nombre ni dato identificatorio del titular hasta que F-043 defina dónde viven los
+     datos de clientes
+```
+
+---
+
+**Nota de alcance del lote F-073–F-077.** Del análisis de los skills se bajó a features la capa de
+matemática determinística, y **sólo** ésa. Tesis de inversión, ratings comprar/mantener/vender,
+precios objetivo automáticos y scores compuestos de riesgo **no entran a la app**: chocan con las
+reglas 1 (un DCF automático inventa sus supuestos), 6 (la lógica de análisis es determinística), 7
+(el riesgo es un vector, no un número) y 11 (no se muestra interpretación en lugar del dato). Esa
+capa de juicio ya tiene dónde vivir: los skills de asesoramiento, fuera del producto, consumiendo
+los números verificables que la app produce. Los estados contables de emisores argentinos desde la
+CNV quedan como investigación pendiente —parsing grande, resultado incierto—, no como feature.
+
+---
+
 ## 4. Tabla de RICE ordenada
 
 | # | ID | Feature | Etiqueta | R | I | C | E | Score |
@@ -3377,57 +3653,62 @@ THEN el bloque de prospecto no se muestra, porque el Tesoro no presenta ante la 
 | 19 | F-035 | Costo real de rotar y cupón próximo | Stage 1 | 180 | 3 | 100 % | 3 | 180,0 |
 | 20 | F-041 | Guardar, listar, reabrir y revaluar | Stage 1 | 300 | 3 | 100 % | 5 | 180,0 |
 | 21 | F-055 | Descarga automática del informe de IAMC | Stage 2 | 300 | 2 | 90 % | 3 | 180,0 |
-| 22 | F-020 | Límites de concentración en vivo | Stage 1 | 350 | 2 | 100 % | 4 | 175,0 |
-| 23 | F-022 | Rendimientos por naturaleza y plazo | Stage 1 | 350 | 2 | 100 % | 4 | 175,0 |
-| 24 | F-072 | Prospecto de emisión de ONs, vía CNV | Stage 2 | 350 | 3 | 100 % | 6 | 175,0 |
-| 25 | F-007 | Consolidador multi-fuente | Stage 1 | 400 | 3 | 80 % | 6 | 160,0 |
-| 26 | F-051 | Métricas propias: TIR, duración y paridad | Stage 1 | 400 | 2 | 80 % | 4 | 160,0 |
-| 27 | F-071 | Calculadora de canjes y prorrateo de órdenes a mesa | Stage 2 | 350 | 3 | 90 % | 6 | 157,5 |
-| 28 | F-030 | Valuación y diagnóstico de cartera | Stage 1 | 200 | 3 | 100 % | 4 | 150,0 |
-| 29 | F-064 | Watchlist | Stage 2 | 300 | 1 | 100 % | 2 | 150,0 |
-| 30 | F-069 | Top ganadores y perdedores | Stage 2 | 300 | 1 | 100 % | 2 | 150,0 |
-| 31 | F-018 | Cartera editable y ponderación | Stage 1 | 350 | 3 | 80 % | 6 | 140,0 |
-| 32 | F-053 | Ficha del activo de renta variable | Stage 1 | 300 | 2 | 70 % | 3 | 140,0 |
-| 33 | F-016 | Grilla-selector de doce meses | Stage 1 | 380 | 3 | 80 % | 8 | 114,0 |
-| 34 | F-056 | Índice CER del BCRA: tasa real | Stage 2 | 250 | 2 | 90 % | 4 | 112,5 |
-| 35 | F-017 | Filtros de la grilla | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
-| 36 | F-039 | Ficha de instrumento | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
-| 37 | F-029 | Resolución de tickers | Stage 1 | 200 | 2 | 80 % | 3 | 106,7 |
-| 38 | F-038 | Monitor de mercado | Stage 1 | 400 | 2 | 80 % | 6 | 106,7 |
-| 39 | F-052 | Renta variable en el monitor | Stage 1 | 400 | 1 | 80 % | 3 | 106,7 |
-| 40 | F-031 | Vector de riesgo de seis ejes | Stage 1 | 250 | 3 | 80 % | 6 | 100,0 |
-| 41 | F-032 | Motor de rotaciones intra-segmento | Stage 1 | 200 | 3 | 100 % | 6 | 100,0 |
-| 42 | F-042 | Exportación a Excel y PDF | Stage 1 | 250 | 2 | 80 % | 4 | 100,0 |
-| 43 | F-028 | Ingreso de cartera por tres vías | Stage 1 | 200 | 3 | 80 % | 5 | 96,0 |
-| 44 | F-034 | Modo subir TIR con contrapartida | Stage 1 | 180 | 3 | 80 % | 5 | 86,4 |
-| 45 | F-057 | FCI en el monitor (CAFCI) | Stage 2 | 300 | 2 | 85 % | 6 | 85,0 |
-| 46 | F-067 | FCI: comparador, categorías y gestoras | Stage 2 | 250 | 2 | 85 % | 5 | 85,0 |
-| 47 | F-019 | Armado asistido | Stage 1 | 250 | 2 | 100 % | 6 | 83,3 |
-| 48 | F-026 | Bloque de renta variable | Stage 1 | 300 | 2 | 80 % | 6 | 80,0 |
-| 49 | F-050 | API Market Data oficial de BYMA | Stage 2 | 400 | 2 | 50 % | 5 | 80,0 |
-| 50 | F-058 | Carry trade: calculadora y breakeven | Stage 2 | 300 | 3 | 70 % | 8 | 78,8 |
-| 51 | F-062 | Curva histórica del segmento | Stage 2 | 250 | 2 | 60 % | 4 | 75,0 |
-| 52 | F-063 | Heatmap del panel | Stage 2 | 250 | 1 | 90 % | 3 | 75,0 |
-| 53 | F-037 | Comparación original contra propuesta | Stage 1 | 180 | 2 | 80 % | 4 | 72,0 |
-| 54 | F-061 | Rendimientos históricos por ventana | Stage 2 | 300 | 2 | 60 % | 5 | 72,0 |
-| 55 | F-040 | Sensibilidad por repricing completo | Stage 1 | 200 | 1 | 100 % | 3 | 66,7 |
-| 56 | F-054 | Info pública del emisor (CNV y SEC) | Stage 2 | 300 | 2 | 80 % | 8 | 60,0 |
-| 57 | F-033 | Modo bajar riesgo | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
-| 58 | F-036 | Aceptación rotación por rotación | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
-| 59 | F-025 | Carga asistida de lámina | Stage 1 | 200 | 1 | 80 % | 3 | 53,3 |
-| 60 | F-005 | Parser del informe diario de IAMC | Stage 1 | 400 | 2 | 50 % | 8 | 50,0 |
-| 61 | F-023 | Composición y curva TIR/duración | Stage 1 | 300 | 1 | 80 % | 5 | 48,0 |
-| 62 | F-048 | Alertas y notificaciones | Stage 2 | 300 | 1 | 80 % | 6 | 40,0 |
-| 63 | F-049 | Comparación de carteras entre sí | Stage 2 | 200 | 1 | 80 % | 4 | 40,0 |
-| 64 | F-046 | FCI valuables en cartera | Stage 2 | 200 | 2 | 60 % | 8 | 30,0 |
-| 65 | F-065 | Cauciones | Stage 2 | 200 | 1 | 60 % | 4 | 30,0 |
-| 66 | F-044 | Historial de propuestas | Stage 2 | 250 | 2 | 50 % | 10 | 25,0 |
-| 67 | F-066 | Futuros de dólar | Stage 2 | 200 | 1 | 50 % | 4 | 25,0 |
-| 68 | F-043 | Gestión de clientes y CRM | Stage 2 | 300 | 2 | 50 % | 15 | 20,0 |
-| 69 | F-027 | Calendario de balances (sólo CEDEARs, vía SEC) | Stage 1 | 200 | 1 | 85 % | 4 | 42,5 |
-| 70 | F-045 | Colocaciones primarias | Stage 2 | 150 | 2 | 50 % | 10 | 15,0 |
-| 71 | F-070 | Tenencias con P&L por lote | Stage 2 | 200 | 2 | 40 % | 12 | 13,3 |
-| 72 | F-047 | Opciones | Stage 2 | 80 | 1 | 50 % | 10 | 4,0 |
+| 22 | F-073 | Serie diaria de cierres persistida | Stage 2 | 300 | 2 | 90 % | 3 | 180,0 |
+| 23 | F-020 | Límites de concentración en vivo | Stage 1 | 350 | 2 | 100 % | 4 | 175,0 |
+| 24 | F-022 | Rendimientos por naturaleza y plazo | Stage 1 | 350 | 2 | 100 % | 4 | 175,0 |
+| 25 | F-072 | Prospecto de emisión de ONs, vía CNV | Stage 2 | 350 | 3 | 100 % | 6 | 175,0 |
+| 26 | F-007 | Consolidador multi-fuente | Stage 1 | 400 | 3 | 80 % | 6 | 160,0 |
+| 27 | F-051 | Métricas propias: TIR, duración y paridad | Stage 1 | 400 | 2 | 80 % | 4 | 160,0 |
+| 28 | F-071 | Calculadora de canjes y prorrateo de órdenes a mesa | Stage 2 | 350 | 3 | 90 % | 6 | 157,5 |
+| 29 | F-030 | Valuación y diagnóstico de cartera | Stage 1 | 200 | 3 | 100 % | 4 | 150,0 |
+| 30 | F-064 | Watchlist | Stage 2 | 300 | 1 | 100 % | 2 | 150,0 |
+| 31 | F-069 | Top ganadores y perdedores | Stage 2 | 300 | 1 | 100 % | 2 | 150,0 |
+| 32 | F-018 | Cartera editable y ponderación | Stage 1 | 350 | 3 | 80 % | 6 | 140,0 |
+| 33 | F-053 | Ficha del activo de renta variable | Stage 1 | 300 | 2 | 70 % | 3 | 140,0 |
+| 34 | F-016 | Grilla-selector de doce meses | Stage 1 | 380 | 3 | 80 % | 8 | 114,0 |
+| 35 | F-056 | Índice CER del BCRA: tasa real | Stage 2 | 250 | 2 | 90 % | 4 | 112,5 |
+| 36 | F-074 | Convexidad propia | Stage 2 | 250 | 1 | 90 % | 2 | 112,5 |
+| 37 | F-017 | Filtros de la grilla | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
+| 38 | F-039 | Ficha de instrumento | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
+| 39 | F-029 | Resolución de tickers | Stage 1 | 200 | 2 | 80 % | 3 | 106,7 |
+| 40 | F-038 | Monitor de mercado | Stage 1 | 400 | 2 | 80 % | 6 | 106,7 |
+| 41 | F-052 | Renta variable en el monitor | Stage 1 | 400 | 1 | 80 % | 3 | 106,7 |
+| 42 | F-031 | Vector de riesgo de seis ejes | Stage 1 | 250 | 3 | 80 % | 6 | 100,0 |
+| 43 | F-032 | Motor de rotaciones intra-segmento | Stage 1 | 200 | 3 | 100 % | 6 | 100,0 |
+| 44 | F-042 | Exportación a Excel y PDF | Stage 1 | 250 | 2 | 80 % | 4 | 100,0 |
+| 45 | F-028 | Ingreso de cartera por tres vías | Stage 1 | 200 | 3 | 80 % | 5 | 96,0 |
+| 46 | F-077 | Perfilado formal del inversor | Stage 2 | 300 | 2 | 80 % | 5 | 96,0 |
+| 47 | F-034 | Modo subir TIR con contrapartida | Stage 1 | 180 | 3 | 80 % | 5 | 86,4 |
+| 48 | F-057 | FCI en el monitor (CAFCI) | Stage 2 | 300 | 2 | 85 % | 6 | 85,0 |
+| 49 | F-067 | FCI: comparador, categorías y gestoras | Stage 2 | 250 | 2 | 85 % | 5 | 85,0 |
+| 50 | F-019 | Armado asistido | Stage 1 | 250 | 2 | 100 % | 6 | 83,3 |
+| 51 | F-026 | Bloque de renta variable | Stage 1 | 300 | 2 | 80 % | 6 | 80,0 |
+| 52 | F-050 | API Market Data oficial de BYMA | Stage 2 | 400 | 2 | 50 % | 5 | 80,0 |
+| 53 | F-058 | Carry trade: calculadora y breakeven | Stage 2 | 300 | 3 | 70 % | 8 | 78,8 |
+| 54 | F-062 | Curva histórica del segmento | Stage 2 | 250 | 2 | 60 % | 4 | 75,0 |
+| 55 | F-063 | Heatmap del panel | Stage 2 | 250 | 1 | 90 % | 3 | 75,0 |
+| 56 | F-037 | Comparación original contra propuesta | Stage 1 | 180 | 2 | 80 % | 4 | 72,0 |
+| 57 | F-061 | Rendimientos históricos por ventana | Stage 2 | 300 | 2 | 60 % | 5 | 72,0 |
+| 58 | F-040 | Sensibilidad por repricing completo | Stage 1 | 200 | 1 | 100 % | 3 | 66,7 |
+| 59 | F-054 | Info pública del emisor (CNV y SEC) | Stage 2 | 300 | 2 | 80 % | 8 | 60,0 |
+| 60 | F-033 | Modo bajar riesgo | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
+| 61 | F-036 | Aceptación rotación por rotación | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
+| 62 | F-025 | Carga asistida de lámina | Stage 1 | 200 | 1 | 80 % | 3 | 53,3 |
+| 63 | F-005 | Parser del informe diario de IAMC | Stage 1 | 400 | 2 | 50 % | 8 | 50,0 |
+| 64 | F-023 | Composición y curva TIR/duración | Stage 1 | 300 | 1 | 80 % | 5 | 48,0 |
+| 65 | F-048 | Alertas y notificaciones | Stage 2 | 300 | 1 | 80 % | 6 | 40,0 |
+| 66 | F-049 | Comparación de carteras entre sí | Stage 2 | 200 | 1 | 80 % | 4 | 40,0 |
+| 67 | F-075 | Estadística de cartera | Stage 2 | 250 | 2 | 60 % | 8 | 37,5 |
+| 68 | F-076 | Calculadora de valuación con supuestos declarados | Stage 2 | 200 | 2 | 70 % | 8 | 35,0 |
+| 69 | F-046 | FCI valuables en cartera | Stage 2 | 200 | 2 | 60 % | 8 | 30,0 |
+| 70 | F-065 | Cauciones | Stage 2 | 200 | 1 | 60 % | 4 | 30,0 |
+| 71 | F-044 | Historial de propuestas | Stage 2 | 250 | 2 | 50 % | 10 | 25,0 |
+| 72 | F-066 | Futuros de dólar | Stage 2 | 200 | 1 | 50 % | 4 | 25,0 |
+| 73 | F-043 | Gestión de clientes y CRM | Stage 2 | 300 | 2 | 50 % | 15 | 20,0 |
+| 74 | F-027 | Calendario de balances (sólo CEDEARs, vía SEC) | Stage 1 | 200 | 1 | 85 % | 4 | 42,5 |
+| 75 | F-045 | Colocaciones primarias | Stage 2 | 150 | 2 | 50 % | 10 | 15,0 |
+| 76 | F-070 | Tenencias con P&L por lote | Stage 2 | 200 | 2 | 40 % | 12 | 13,3 |
+| 77 | F-047 | Opciones | Stage 2 | 80 | 1 | 50 % | 10 | 4,0 |
 
 **Cómo se lee esta tabla.** El RICE ordena por eficiencia, no por secuencia. Las features de más
 score son las Foundation y las de ingesta: mucho alcance sobre poco esfuerzo, porque reusan lógica ya
@@ -3743,7 +4024,7 @@ Al final de este ciclo **Stage 1 está completo**: los tres flujos funcionan de 
 | 3 — RV, carga y diagnóstico | 9 | 41 | ~8 | ~28,5 |
 | 4 — Optimizador y persistencia | 9 | 42 | ~8,5 | ~37 |
 | **Stage 1** | **42** | **185** | **~37 semanas** | |
-| Stage 2 (27 features) | 27 | 161 | ~32 | |
+| Stage 2 (32 features) | 32 | 187 | ~37 | |
 
 **~37 semanas de un desarrollador a tiempo completo para Stage 1.** El camino crítico son 73 pd de esos
 185: con un segundo desarrollador, el piso teórico de compresión es **~15 semanas**, y el cuello real
