@@ -13,7 +13,7 @@ invertido — el número que lleva a la reunión. Esa mecánica es la razón de 
 **Stage 1 cerrado el 16/08/2026: las 44 features están construidas y la aplicación funciona.**
 Los tres flujos del producto cierran punta a punta — armar una cartera desde el calendario de
 cupones, diagnosticar una cartera que el cliente ya trae, y proponer rotaciones con su costo real.
-Stage 2 está abierto: 26 features catalogadas, 1 hecha (F-072, prospectos de la CNV). Otras 6 se
+Stage 2 está abierto: 27 features catalogadas, 1 hecha (F-072, prospectos de la CNV). Otras 5 se
 difirieron a Stage 3 el 23/08/2026 —CRM, alertas, cambios de fuente e info del emisor—: primero
 las herramientas operativas de uso diario.
 

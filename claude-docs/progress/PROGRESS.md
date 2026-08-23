@@ -4,8 +4,8 @@ Generado desde `claude-docs/planning/plan.md` (Fase 2) al correr `/init-project`
 Estado inicial: las 50 features arrancaban en **pendiente**. Este archivo se actualiza a mano o
 desde `/build-feature` a medida que cada una se implementa.
 
-**Estado al 23/08/2026 — Stage 1 cerrado (44 de 44), Stage 2 abierto (1 de 26), Stage 3 creado
-con 6 diferidas.** El catálogo
+**Estado al 23/08/2026 — Stage 1 cerrado (44 de 44), Stage 2 abierto (1 de 27), Stage 3 creado
+con 5 diferidas.** El catálogo
 creció de 50 a 77 features desde que se generó este archivo; la tabla de Stage 2 se reconcilió
 contra `plan.md` el 23/08/2026. Lo que está trabado hoy **no es código sino dato**: ver
 "Pendientes de datos y decisiones" al final.
@@ -87,15 +87,16 @@ contra `plan.md` el 23/08/2026. Lo que está trabado hoy **no es código sino da
 > F-051 y F-052 se agregaron el 08/08/2026, después de auditar cómo resuelve estas dos cosas el
 > monitor de mesa. El plan pasó de 42 a 44 features de Stage 1.
 
-## Stage 2 — 26 features, ordenadas por RICE (~148 pd · ~29 semanas)
+## Stage 2 — 27 features, ordenadas por RICE (~150 pd · ~30 semanas)
 
 Reconciliado el 23/08/2026 contra `claude-docs/planning/plan.md`. La tabla anterior tenía 8
 features: era la foto del catálogo al cerrar la Fase 2, y quedó vieja cuando el catálogo creció con
 F-054…F-057 (Bloque O), F-058…F-070 (Bloque P, paridad competitiva con Docta), F-071 y F-072, y
 F-073…F-077 (motor analítico determinístico). Estado medido contra el código, no contra los
-mensajes de commit. El mismo 23/08 el dueño del producto difirió seis features a un Stage 3
+mensajes de commit. El mismo 23/08 el dueño del producto difirió cinco features a un Stage 3
 (tabla propia más abajo): Stage 2 se concentra en herramientas operativas de uso diario, no en
-gestión comercial ni en cambios de fuente.
+gestión comercial ni en cambios de fuente. F-064 (watchlist) entró y salió del lote diferido el
+mismo día: es de uso diario, se queda en Stage 2.
 
 | ID | Feature | RICE | Estado |
 |---|---|---|---|
@@ -105,6 +106,7 @@ gestión comercial ni en cambios de fuente.
 | F-073 | Serie diaria de cierres persistida | 180,0 | pendiente |
 | F-072 | Prospecto de emisión de ONs, vía CNV | 175,0 | **completada** |
 | F-071 | Calculadora de canjes y prorrateo de órdenes | 157,5 | pendiente |
+| F-064 | Watchlist | 150,0 | pendiente |
 | F-069 | Top ganadores y perdedores del día | 150,0 | pendiente |
 | F-056 | Índice CER del BCRA: tasa real | 112,5 | pendiente |
 | F-074 | Convexidad propia | 112,5 | pendiente |
@@ -126,16 +128,15 @@ gestión comercial ni en cambios de fuente.
 | F-070 | Tenencias con P&L por lote | 13,3 | pendiente |
 | F-047 | Opciones | 4,0 | pendiente |
 
-## Stage 3 — 6 features diferidas el 23/08/2026 (~39 pd · ~8 semanas)
+## Stage 3 — 5 features diferidas el 23/08/2026 (~37 pd · ~7 semanas)
 
-Decisión del dueño del producto: primero las herramientas operativas de uso diario. Estas seis
+Decisión del dueño del producto: primero las herramientas operativas de uso diario. Estas cinco
 —gestión comercial, alertas, cambios de fuente e información del emisor— esperan a que Stage 2
 cierre. El RICE no cambió; cambió la etiqueta que decide cuándo entran.
 
 | ID | Feature | RICE | Estado |
 |---|---|---|---|
 | F-055 | Descarga automática del informe de IAMC | 180,0 | diferida |
-| F-064 | Watchlist | 150,0 | diferida |
 | F-050 | API Market Data oficial de BYMA | 80,0 | diferida |
 | F-054 | Info pública del emisor (CNV y SEC) | 60,0 | diferida (**parcial**: la pata SEC existe) |
 | F-048 | Alertas y notificaciones | 40,0 | diferida |
@@ -166,8 +167,8 @@ cierre. El RICE no cambió; cambió la etiqueta que decide cuándo entran.
 | 3 — RV, carga y diagnóstico | 9 | 41 | ~8 | ~28,5 |
 | 4 — Optimizador y persistencia | 9 | 42 | ~8,5 | ~37 |
 | **Stage 1** | **44** | **185** | **~37 semanas** | **cerrado el 16/08/2026** |
-| Stage 2 | 26 | 148 | ~29 | 1 de 26 hecha (F-072) |
-| Stage 3 (diferido el 23/08/2026) | 6 | 39 | ~8 | ninguna empezada; F-054 parcial |
+| Stage 2 | 27 | 150 | ~30 | 1 de 27 hecha (F-072) |
+| Stage 3 (diferido el 23/08/2026) | 5 | 37 | ~7 | ninguna empezada; F-054 parcial |
 
 **La base está poblada.** F-007 corrió contra Supabase el 06/08/2026 y dejó 2.894 instrumentos,
 2.894 precios, 3.344 puntas y 6.150 filas de cronograma, con el motor Python leyendo la vista

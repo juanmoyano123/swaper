@@ -2971,7 +2971,7 @@ THEN aparece en gris declarado como sin variación calculable, y no como variaci
 
 #### F-064 — Watchlist
 
-**Etiqueta:** Stage 3 (diferida el 23/08/2026) · **Traza a:** análisis Docta §1
+**Etiqueta:** Stage 2 · **Traza a:** análisis Docta §1
 
 **Descripción.** Un conjunto de tickers marcados por el asesor, que atraviesa todas las pantallas. No
 tiene lógica financiera: es persistencia por asesor y un filtro. La razón por la que puntúa alto no es
@@ -3669,7 +3669,7 @@ CNV quedan como investigación pendiente —parsing grande, resultado incierto�
 | 27 | F-051 | Métricas propias: TIR, duración y paridad | Stage 1 | 400 | 2 | 80 % | 4 | 160,0 |
 | 28 | F-071 | Calculadora de canjes y prorrateo de órdenes a mesa | Stage 2 | 350 | 3 | 90 % | 6 | 157,5 |
 | 29 | F-030 | Valuación y diagnóstico de cartera | Stage 1 | 200 | 3 | 100 % | 4 | 150,0 |
-| 30 | F-064 | Watchlist | Stage 3 | 300 | 1 | 100 % | 2 | 150,0 |
+| 30 | F-064 | Watchlist | Stage 2 | 300 | 1 | 100 % | 2 | 150,0 |
 | 31 | F-069 | Top ganadores y perdedores | Stage 2 | 300 | 1 | 100 % | 2 | 150,0 |
 | 32 | F-018 | Cartera editable y ponderación | Stage 1 | 350 | 3 | 80 % | 6 | 140,0 |
 | 33 | F-053 | Ficha del activo de renta variable | Stage 1 | 300 | 2 | 70 % | 3 | 140,0 |
@@ -3726,9 +3726,10 @@ el orden dentro de un ciclo; la etiqueta Stage 1 / Stage 2 / Stage 3 decide qué
 
 **Stage 3, creado el 23/08/2026.** Decisión del dueño del producto: Stage 2 se concentra en
 herramientas operativas de uso diario, no en gestión comercial ni en cambios de fuente. Se
-difirieron seis features: F-043 (CRM), F-048 (alertas), F-050 (API oficial de BYMA), F-054
-(info del emisor CNV+SEC), F-055 (IAMC automático) y F-064 (watchlist). El RICE de cada una no
-cambia; cambia la etiqueta que decide cuándo entran.
+difirieron cinco features: F-043 (CRM), F-048 (alertas), F-050 (API oficial de BYMA), F-054
+(info del emisor CNV+SEC) y F-055 (IAMC automático). El RICE de cada una no cambia; cambia la
+etiqueta que decide cuándo entran. F-064 (watchlist) estuvo en el lote diferido unas horas y el
+mismo día volvió a Stage 2: es herramienta operativa de uso diario, no gestión comercial.
 
 ---
 
@@ -4038,8 +4039,8 @@ Al final de este ciclo **Stage 1 está completo**: los tres flujos funcionan de 
 | 3 — RV, carga y diagnóstico | 9 | 41 | ~8 | ~28,5 |
 | 4 — Optimizador y persistencia | 9 | 42 | ~8,5 | ~37 |
 | **Stage 1** | **42** | **185** | **~37 semanas** | |
-| Stage 2 (26 features) | 26 | 148 | ~29 | |
-| Stage 3 (6 features, diferidas el 23/08/2026) | 6 | 39 | ~8 | |
+| Stage 2 (27 features) | 27 | 150 | ~30 | |
+| Stage 3 (5 features, diferidas el 23/08/2026) | 5 | 37 | ~7 | |
 
 **~37 semanas de un desarrollador a tiempo completo para Stage 1.** El camino crítico son 73 pd de esos
 185: con un segundo desarrollador, el piso teórico de compresión es **~15 semanas**, y el cuello real
