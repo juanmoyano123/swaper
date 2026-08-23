@@ -24,7 +24,7 @@ export function SeccionRiesgo({
   posiciones,
   perfil,
 }: {
-  posiciones: { ticker: string; peso: number }[]
+  posiciones: { ticker: string; peso: number; esFci?: boolean }[]
   perfil: NombreDePerfil
 }) {
   const { porTicker } = useMapaRiesgo()

@@ -166,3 +166,35 @@ async def test_el_endpoint_hace_una_sola_consulta(crear_app) -> None:
         await http.post(RUTA, json=cuerpo_con(("GD30", 100)))
 
     assert len(conexion.consultas) == 1
+
+
+# --- F-046: un FCI valuado entra al peso medido, nunca a un tope ----------------------------------
+
+
+async def test_un_fci_valuado_entra_al_peso_medido_y_no_a_fuera_del_universo(app_con_universo) -> None:
+    async with cliente(app_con_universo()) as http:
+        pedido = {
+            "posiciones": [
+                {"ticker": "GD30", "peso": 70},
+                {"ticker": "Fondo Renta Fija Ejemplo", "peso": 30, "es_fci": True},
+            ]
+        }
+        cuerpo = (await http.post(RUTA, json=pedido)).json()
+
+    assert cuerpo["peso"] == {"declarado": 100.0, "medido": 100.0}
+    assert cuerpo["fuera_del_universo"] == []
+    assert cuerpo["fci"] == ["Fondo Renta Fija Ejemplo"]
+    assert "exposicion_fci_no_atribuible" in {a["codigo"] for a in cuerpo["alertas"]}
+
+
+async def test_el_nombre_de_un_fondo_no_se_corta_por_el_limite_de_un_ticker(app_con_universo) -> None:
+    """Un ticker de renta fija mide hasta 6 caracteres; un fondo de `public.fci` llega a 88
+    (medido el 23/08/2026). El límite tiene que cubrir el nombre real, no sólo el ticker."""
+    nombre_largo = "BAVSA Renta Balanceado IX - Clase A de Suscripción Inicial Ejemplo"
+    assert len(nombre_largo) > 20
+    async with cliente(app_con_universo()) as http:
+        pedido = {"posiciones": [{"ticker": nombre_largo, "peso": 100, "es_fci": True}]}
+        respuesta = await http.post(RUTA, json=pedido)
+
+    assert respuesta.status_code == 200
+    assert respuesta.json()["fci"] == [nombre_largo]

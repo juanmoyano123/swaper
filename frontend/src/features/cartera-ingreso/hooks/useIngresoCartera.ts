@@ -168,6 +168,22 @@ export function useIngresoCartera() {
     setPaso({ tipo: 'menu' })
   }
 
+  /**
+   * "¿Es un FCI?" (F-046): una fila que no resolvió contra el universo —`no_esta_en_el_universo`—
+   * se re-identifica a mano contra `public.fci`, elegida del mismo picker que usa el armador.
+   *
+   * Le pisa el texto declarado por el `codigo_cafci` exacto: es lo único que el lookup de F-046
+   * (`resolucion.py`) compara, y así la próxima resolución matchea. **Nunca automático ni por
+   * nombre** — el asesor eligió la fila de la lista, esto no adivina nada (regla 11).
+   */
+  function identificarComoFci(id: string, codigoCafci: string) {
+    if (paso.tipo !== 'confirmada') return
+    setPaso({
+      tipo: 'confirmada',
+      posiciones: paso.posiciones.map((p) => (p.id === id ? { ...p, tickerDeclarado: codigoCafci } : p)),
+    })
+  }
+
   return {
     paso,
     elegirVia,
@@ -182,6 +198,7 @@ export function useIngresoCartera() {
     confirmar,
     volver,
     reiniciar,
+    identificarComoFci,
   }
 }
 

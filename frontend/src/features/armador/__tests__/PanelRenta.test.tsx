@@ -115,14 +115,62 @@ function calendario({
   }
 }
 
+function fondoFci(extra: Record<string, unknown> = {}) {
+  return {
+    codigo_cafci: '1234',
+    fondo: 'Fondo X',
+    codigo_cnv: null,
+    seccion: 'Renta Fija',
+    tipo_renta: 'Renta Fija',
+    naturaleza: 'variacion_cuotaparte',
+    naturaleza_nombre: 'Variación de cuotaparte',
+    moneda: 'USD',
+    region: null,
+    horizonte: null,
+    fecha_vcp: '2026-08-22',
+    vcp: 2000,
+    vcp_anterior: null,
+    var_diaria_pct: null,
+    var_mes_pct: null,
+    var_anio_pct: null,
+    var_12m_pct: null,
+    cuotapartes: null,
+    cuotapartes_anterior: null,
+    patrimonio: null,
+    patrimonio_anterior: null,
+    market_share: null,
+    gerente: null,
+    depositaria: null,
+    calificacion: null,
+    calificado: null,
+    tipo_dinero: null,
+    comision_ingreso: null,
+    honorarios_adm_sg: null,
+    honorarios_adm_sd: null,
+    gastos_ord_gestion: null,
+    comision_rescate: null,
+    comision_transferencia: null,
+    honorarios_exito: null,
+    moneda_fondo: null,
+    discrepancia_moneda: false,
+    plazo_liq: null,
+    dias_para_rescatar: null,
+    minimo_inversion: null,
+    advertencia_distribucion: '',
+    ...extra,
+  }
+}
+
 function responderCon({
   especies = [],
   tipoDeCambio = { valor: 1500, disponible: true },
   cartera,
+  fondosFci = [],
 }: {
   especies?: Especie[]
   tipoDeCambio?: { valor: number | null; disponible: boolean }
   cartera: unknown
+  fondosFci?: ReturnType<typeof fondoFci>[]
 }) {
   const fetchMock = vi.fn((entrada: RequestInfo | URL) => {
     const url = typeof entrada === 'string' ? entrada : entrada.toString()
@@ -133,6 +181,8 @@ function responderCon({
       cuerpo = { tipo_de_cambio: tipoDeCambio, alertas: [] }
     } else if (url.includes('/calendario/cartera')) {
       cuerpo = cartera
+    } else if (url.includes('/fci/fondos')) {
+      cuerpo = { items: fondosFci, next_cursor: null }
     } else {
       throw new Error(`fetch no mockeado en este test: ${url}`)
     }
@@ -145,7 +195,7 @@ function responderCon({
 }
 
 function Arnes() {
-  const { alternarPapel, fijarPeso, fijarMontoTotal } = useArmadorAcciones()
+  const { alternarPapel, fijarPeso, fijarMontoTotal, agregarFci } = useArmadorAcciones()
   return (
     <div>
       <button type="button" onClick={() => alternarPapel('AL30')}>
@@ -156,6 +206,9 @@ function Arnes() {
       </button>
       <button type="button" onClick={() => fijarMontoTotal(10_000)}>
         monto 10.000
+      </button>
+      <button type="button" onClick={() => agregarFci('Fondo X', 100, '1234')}>
+        agregar FCI identificado
       </button>
       <PanelRenta />
     </div>
@@ -180,6 +233,26 @@ describe('sin posiciones', () => {
     renderizar()
 
     expect(screen.getByText(/Sin posiciones de renta fija con monto asignado/)).toBeInTheDocument()
+  })
+})
+
+describe('F-046: cartera 100% FCI', () => {
+  it('nunca llega al calendario y muestra la franja en vez del mensaje genérico de "sin monto"', async () => {
+    responderCon({ cartera: calendario({ rentaAnual: {} }), fondosFci: [fondoFci()] })
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar FCI identificado' }))
+    await userEvent.click(screen.getByRole('button', { name: 'monto 10.000' }))
+
+    // El mensaje genérico ("agregá papeles y un monto total") mentiría acá: sí hay monto, sólo
+    // que ninguna posición tiene cronograma.
+    expect(screen.queryByText(/agregá papeles y un monto total/)).not.toBeInTheDocument()
+    expect(
+      await screen.findByText(/Sin posiciones de renta fija con cronograma: toda la cartera armada hasta acá es FCI/),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Capital sin cronograma contractual en FCI')).toHaveTextContent(
+      /100,0% de la cartera/,
+    )
   })
 })
 

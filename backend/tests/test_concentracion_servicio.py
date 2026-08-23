@@ -18,6 +18,7 @@ from app.concentracion.alertas import (
     CODIGO_CONCENTRACION_SECTOR,
     CODIGO_CONCENTRACION_SOBERANA,
     CODIGO_DIVERSIFICACION_INSUFICIENTE,
+    CODIGO_EXPOSICION_FCI_NO_ATRIBUIBLE,
     CODIGO_FUERA_DEL_UNIVERSO,
 )
 from app.concentracion.perfiles import PERFILES, SOBERANO_AR, TOLERANCIA_TOPE
@@ -316,3 +317,71 @@ def test_el_dict_que_viaja_por_el_api_lleva_todo_lo_que_el_panel_muestra() -> No
     assert cuerpo["peso"] == {"declarado": pytest.approx(100), "medido": pytest.approx(100)}
     assert all("excedido" in tope for tope in cuerpo["topes"])
     assert all("sin_dato" in tramo for tramo in cuerpo["distribucion"]["sector"])
+
+
+# --- F-046: exposición no atribuible de un FCI valuado ---------------------------------------------
+
+
+def test_un_fci_valuado_entra_al_peso_medido_pero_a_ningun_tope() -> None:
+    resultado = evaluar_concentracion(
+        [
+            Posicion(ticker="GD30", peso=70),
+            Posicion(ticker="Fondo Renta Fija Clase A", peso=30, es_fci=True),
+        ],
+        ESPECIES,
+        "moderado",
+    )
+
+    assert resultado.peso_declarado == pytest.approx(100)
+    assert resultado.peso_medido == pytest.approx(100)
+    assert resultado.fci == ["Fondo Renta Fija Clase A"]
+    # El FCI no aporta a ningún tope: sólo GD30 (soberano) figura.
+    assert [t.clave for t in resultado.topes] == [SOBERANO_AR]
+    soberano = tope_de(resultado, SOBERANO_AR, TipoDeTope.SOBERANO)
+    assert soberano.peso == pytest.approx(70)
+
+
+def test_un_fci_valuado_no_entra_a_la_distribucion_por_sector_ley_ni_naturaleza() -> None:
+    resultado = evaluar_concentracion(
+        [Posicion(ticker="YMCHO", peso=60), Posicion(ticker="Fondo X", peso=40, es_fci=True)],
+        ESPECIES,
+        "moderado",
+    )
+
+    assert sum(t.peso for t in resultado.por_sector) == pytest.approx(60)
+    assert sum(t.peso for t in resultado.por_ley) == pytest.approx(60)
+    assert sum(t.peso for t in resultado.por_naturaleza) == pytest.approx(60)
+
+
+def test_un_fci_valuado_dispara_una_alerta_propia_distinta_de_fuera_del_universo() -> None:
+    resultado = evaluar_concentracion(
+        [Posicion(ticker="GD30", peso=70), Posicion(ticker="Fondo X", peso=30, es_fci=True)],
+        ESPECIES,
+        "moderado",
+    )
+
+    codigos_alerta = codigos(resultado)
+    assert CODIGO_EXPOSICION_FCI_NO_ATRIBUIBLE in codigos_alerta
+    assert CODIGO_FUERA_DEL_UNIVERSO not in codigos_alerta
+
+    alerta = next(a for a in resultado.alertas if a.codigo == CODIGO_EXPOSICION_FCI_NO_ATRIBUIBLE)
+    assert alerta.severidad is Severidad.INFO
+    assert "Fondo X" in alerta.mensaje
+
+
+def test_un_fci_y_un_ticker_fuera_del_universo_disparan_las_dos_alertas_por_separado() -> None:
+    resultado = evaluar_concentracion(
+        [
+            Posicion(ticker="GD30", peso=50),
+            Posicion(ticker="NOEXISTE", peso=20),
+            Posicion(ticker="Fondo X", peso=30, es_fci=True),
+        ],
+        ESPECIES,
+        "moderado",
+    )
+
+    assert resultado.fuera_del_universo == ["NOEXISTE"]
+    assert resultado.fci == ["Fondo X"]
+    codigos_alerta = codigos(resultado)
+    assert CODIGO_FUERA_DEL_UNIVERSO in codigos_alerta
+    assert CODIGO_EXPOSICION_FCI_NO_ATRIBUIBLE in codigos_alerta

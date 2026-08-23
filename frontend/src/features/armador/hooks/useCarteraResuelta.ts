@@ -20,6 +20,8 @@
 
 import { useMemo } from 'react'
 
+import { useFondosFci, type FondoFci } from '@/lib/fci'
+
 import { useEspeciesUniverso } from './useEspeciesUniverso'
 import { useTipoDeCambio } from './useTipoDeCambio'
 import type { Especie } from '../lib/schema'
@@ -60,6 +62,9 @@ export function useCarteraResuelta(): CarteraResuelta {
 
   const especies = useEspeciesUniverso()
   const tipoDeCambio = useTipoDeCambio()
+  // `null` trae todos los fondos (F-046): la cartera puede tener FCI de cualquier tipo de renta, y
+  // el hook no filtra por segmento — mismo criterio que el picker (F-057, `useFondosFci`).
+  const fondosFci = useFondosFci(null)
 
   const porTicker = useMemo(() => {
     const mapa = new Map<string, Especie>()
@@ -67,18 +72,46 @@ export function useCarteraResuelta(): CarteraResuelta {
     return mapa
   }, [especies.data])
 
+  const porCodigoCafci = useMemo(() => {
+    const mapa = new Map<string, FondoFci>()
+    for (const fondo of fondosFci.data ?? []) mapa.set(fondo.codigo_cafci, fondo)
+    return mapa
+  }, [fondosFci.data])
+
   const tcValor = tipoDeCambio.data?.tipo_de_cambio.valor ?? null
 
   const resueltas = useMemo(() => {
     const entradas: EntradaResolver[] = posicionesRentaFija(pos).map((p) => {
+      const esFci = p.clase === 'fci'
+
+      if (esFci) {
+        // Sin `codigoCafci` (FCI legado, F-046) o con código pero sin fila en la planilla de hoy
+        // (el fondo desapareció o todavía no se identificó): `fondo` da `undefined` en los dos
+        // casos, y `resolver()` los declara sin resolver de la misma forma — nunca se inventa un
+        // VCP ni se matchea por nombre (regla 1 y 11 del proyecto).
+        const fondo = p.codigoCafci ? porCodigoCafci.get(p.codigoCafci) : undefined
+        // `USB` y cualquier moneda que no sea ARS/USD viajan tal cual la declara CAFCI: `resolver`
+        // decide si se puede convertir, acá no se traduce nada (regla 11).
+        const monedaCotizacion = fondo?.moneda?.toLowerCase() ?? 'usd'
+        return {
+          ticker: p.ticker,
+          peso: p.peso,
+          precio: null,
+          monedaCotizacion,
+          lamina: null,
+          esFci: true,
+          vcpPorMil: fondo?.vcp ?? null,
+          fechaVcp: fondo?.fecha_vcp ?? null,
+        }
+      }
+
       const especie = porTicker.get(p.ticker)
       // Normalizado a minúscula acá: `moneda_cotizacion` llega de BYMA en mayúsculas ("ARS"/"USD")
       // y `EntradaResolver` compara contra los literales en minúscula. Es casing, no negocio.
       const monedaCotizacion = especie?.moneda_cotizacion?.toLowerCase() ?? null
-      const esFci = p.clase === 'fci'
       // Sin moneda declarada no hay con qué decidir si conviene TC: se declara sin precio en vez
       // de asumir una moneda (regla 1 del proyecto), aunque la especie sí traiga un precio.
-      const sinBase = esFci || monedaCotizacion === null
+      const sinBase = monedaCotizacion === null
       return {
         ticker: p.ticker,
         peso: p.peso,
@@ -86,21 +119,27 @@ export function useCarteraResuelta(): CarteraResuelta {
         monedaCotizacion: monedaCotizacion ?? 'usd', // irrelevante: `resolver` no la usa con precio null
         // F-024: la lámina real, de condiciones_emision vía /especies. `null` = no informada: el
         // resolver no redondea y la fila lo declara. Jamás un default (regla 1 del proyecto).
-        lamina: esFci ? null : (especie?.lamina ?? null),
-        esFci,
+        lamina: especie?.lamina ?? null,
+        esFci: false,
+        vcpPorMil: null,
+        fechaVcp: null,
       }
     })
     return resolver(entradas, montoTotal, tcValor)
-  }, [pos, porTicker, montoTotal, tcValor])
+  }, [pos, porTicker, porCodigoCafci, montoTotal, tcValor])
 
   const ajuste = useMemo(() => resumenAjuste(resueltas), [resueltas])
 
   const posicionesParaCalendario = useMemo(
     () =>
       resueltas
+        // Un FCI nunca tiene cronograma contractual (regla 5 del proyecto): se excluye por clase y
+        // no por `invertido`, porque un FCI valuado sí tiene invertido y entraría igual si el
+        // filtro fuera sólo "tiene monto" (F-046). Su monto se suma aparte —
+        // `lib/cartera/porcionSinCronograma.ts`— y se declara como hueco, no se ignora en silencio.
         .filter(
           (r): r is PosicionResuelta & { invertido: number } =>
-            r.invertido !== null && r.invertido > 0,
+            !r.esFci && r.invertido !== null && r.invertido > 0,
         )
         .map((r) => ({ ticker: r.ticker, monto: r.invertido })),
     [resueltas],

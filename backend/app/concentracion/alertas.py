@@ -24,6 +24,7 @@ CODIGO_CONCENTRACION_EMISOR = "concentracion_emisor"
 CODIGO_CONCENTRACION_SECTOR = "concentracion_sector"
 CODIGO_DIVERSIFICACION_INSUFICIENTE = "diversificacion_sectorial_insuficiente"
 CODIGO_FUERA_DEL_UNIVERSO = "posiciones_fuera_del_universo"
+CODIGO_EXPOSICION_FCI_NO_ATRIBUIBLE = "exposicion_fci_no_atribuible"
 
 # Cuántas posiciones se nombran en el mensaje antes de cortar. El resto sigue completo en `detalle`.
 MUESTRA_ALERTA = 8
@@ -139,6 +140,29 @@ def fuera_del_universo(tickers: Sequence[str], peso: float) -> Alerta:
             f"{len(tickers)} posición(es) no están en el universo de renta fija "
             f"({muestra}{resto}): suman {_pp(peso)} % de la cartera y quedan fuera de "
             "todos los topes."
+        ),
+        severidad=Severidad.INFO,
+        accion_requerida=None,
+        detalle={"tickers": list(tickers), "peso": peso},
+    )
+
+
+def exposicion_fci_no_atribuible(tickers: Sequence[str], peso: float) -> Alerta:
+    """Un FCI valuado (F-046): a diferencia de `fuera_del_universo`, acá sí se sabe cuánto pesa —
+    tiene precio de cuotaparte y entra al denominador— pero no con quién concentra.
+
+    Es una alerta distinta y no la misma de `fuera_del_universo` porque el hecho es otro: ahí no se
+    pudo medir nada de la posición (typo, renta variable); acá se midió el peso entero y lo único
+    que falta es la composición interna del fondo, que ninguna fuente publica hoy.
+    """
+    muestra = ", ".join(tickers[:MUESTRA_ALERTA])
+    resto = f" y {len(tickers) - MUESTRA_ALERTA} más" if len(tickers) > MUESTRA_ALERTA else ""
+    return Alerta(
+        codigo=CODIGO_EXPOSICION_FCI_NO_ATRIBUIBLE,
+        mensaje=(
+            f"{len(tickers)} fondo(s) común(es) de inversión ({muestra}{resto}) suman "
+            f"{_pp(peso)} % de la cartera: entran al total medido, pero su composición interna no "
+            "tiene fuente, así que no cuentan para ningún tope de crédito, sector ni ley."
         ),
         severidad=Severidad.INFO,
         accion_requerida=None,

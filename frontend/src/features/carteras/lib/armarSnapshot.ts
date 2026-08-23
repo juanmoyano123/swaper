@@ -252,6 +252,8 @@ export function armarSnapshotArmador(
       cantidad: null,
       invertido: r?.invertido ?? null,
       invertidoUsd: r?.invertidoUsd ?? null,
+      codigoCafci: p.codigoCafci,
+      cuotapartes: p.clase === 'fci' ? (r?.cuotapartes ?? null) : null,
     }
   })
 
@@ -262,7 +264,7 @@ export function armarSnapshotArmador(
     origen: 'armador',
     tipoDeCambio,
     montoTotalUsd,
-    posiciones: pos.map((p) => ({ ticker: p.ticker, peso: p.peso, clase: p.clase })),
+    posiciones: pos.map((p) => ({ ticker: p.ticker, peso: p.peso, clase: p.clase, codigoCafci: p.codigoCafci })),
     resueltas,
     totalInvertidoUsd,
     mercado: mercado ?? undefined,

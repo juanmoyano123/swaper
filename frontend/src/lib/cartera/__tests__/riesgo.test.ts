@@ -45,6 +45,7 @@ function concentracionBase(extra: Partial<Concentracion> = {}): Concentracion {
     sectores: { presentes: [], cantidad: 0, minimo: 3, suficiente: false, peso_sin_sector: 0 },
     peso: { declarado: 100, medido: 100 },
     fuera_del_universo: [],
+    fci: [],
     alertas: [],
     ...extra,
   }
@@ -431,5 +432,46 @@ describe('preprocesamiento común', () => {
 
     expect(duracion.cobertura.posiciones).toBe(1) // un solo ticker, sumado
     expect(duracion.cobertura.pesoTotal).toBe(50)
+  })
+})
+
+describe('F-046: nota de FCI, distinta de "fuera del universo" genérico', () => {
+  const porTicker = universo([especie({ ticker: 'AL30', duracion: 4 })])
+  const posiciones: PosicionConPeso[] = [
+    { ticker: 'AL30', peso: 70 },
+    { ticker: 'Fondo X', peso: 30, esFci: true },
+  ]
+
+  it('crédito y legislación: nota propia con el peso del FCI, no un typo genérico', () => {
+    const [, credito, legislacion] = vectorDeRiesgo(posiciones, porTicker, null)
+
+    expect(credito.cobertura.notas.some((n) => n.includes('30.0% en FCI'))).toBe(true)
+    expect(legislacion.cobertura.notas.some((n) => n.includes('30.0% en FCI'))).toBe(true)
+  })
+
+  it('duración: sigue usando la nota genérica, sin desglosar el FCI (fuera del alcance del eje)', () => {
+    const [duracion] = vectorDeRiesgo(posiciones, porTicker, null)
+
+    expect(duracion.cobertura.notas.some((n) => n.includes('en FCI'))).toBe(false)
+    expect(duracion.cobertura.notas.some((n) => n.includes('fuera del universo'))).toBe(true)
+  })
+
+  it('un typo real y un FCI en la misma cartera producen las dos notas por separado', () => {
+    const conTypo: PosicionConPeso[] = [
+      { ticker: 'AL30', peso: 50 },
+      { ticker: 'NOEXISTE', peso: 20 },
+      { ticker: 'Fondo X', peso: 30, esFci: true },
+    ]
+    const [, credito] = vectorDeRiesgo(conTypo, porTicker, null)
+
+    expect(credito.cobertura.notas.some((n) => n.includes('1 posición(es) fuera del universo'))).toBe(true)
+    expect(credito.cobertura.notas.some((n) => n.includes('en FCI'))).toBe(true)
+  })
+
+  it('concentración: nota con la cantidad de FCI cuando el backend los declaró aparte', () => {
+    const concentracion = concentracionBase({ fci: ['Fondo X'], peso: { declarado: 100, medido: 100 } })
+    const [, , , , concentracionEje] = vectorDeRiesgo(posiciones, porTicker, concentracion)
+
+    expect(concentracionEje.cobertura.notas.some((n) => n.includes('1 FCI'))).toBe(true)
   })
 })

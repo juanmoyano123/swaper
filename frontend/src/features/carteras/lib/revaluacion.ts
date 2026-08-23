@@ -185,22 +185,58 @@ interface EspecieConMonedaYPrecio extends EspecieConMoneda {
   precio: number | null
 }
 
+/** Lo que hace falta de un fondo de hoy para revaluar un FCI congelado — F-046. */
+interface FondoConVcpYMoneda {
+  vcp: number | null
+  moneda: string
+}
+
 /**
  * Revalúa el mandato guardado del armador contra el universo de hoy. No se corre `resolver()` de
  * nuevo: eso recalcularía otros nominales a partir del monto total, es decir, otra cartera. Lo que
- * se revalúa es lo que se propuso comprar —el `vn`/`cantidad` congelados— a precios de hoy, misma
- * fórmula que `resolver.ts` (RF, precio cada 100 VN) y `resolverRentaVariable.ts` (RV, unidades
- * enteras).
+ * se revalúa es lo que se propuso comprar —el `vn`/`cantidad`/`cuotapartes` congelados— a precios de
+ * hoy, misma fórmula que `resolver.ts` (RF, precio cada 100 VN; FCI, VCP de hoy) y
+ * `resolverRentaVariable.ts` (RV, unidades enteras).
  */
 export function revaluarResueltasHoy(
   resueltas: readonly ResueltaGuardada[],
   porTickerHoy: ReadonlyMap<string, EspecieConMonedaYPrecio>,
   tipoDeCambioHoy: number | null,
+  /** Fondos de hoy por `codigo_cafci` (F-046). `undefined` = no se pasó ninguno (mismo default
+   *  vacío que un snapshot sin FCI necesitaría): todo FCI cae en `fci_sin_identificar` o
+   *  `fci_sin_vcp_hoy` según tenga o no código, nunca en un precio inventado. */
+  porCodigoCafciHoy: ReadonlyMap<string, FondoConVcpYMoneda> = new Map(),
 ): PosicionComparable[] {
   return resueltas.map((r) => {
     if (r.clase === 'fci') {
-      // Un FCI no cotiza: sin precio hoy tampoco lo tuvo al guardar, por construcción (GWT-4 de F-018).
-      return { ticker: r.ticker, moneda: null, invertido: null, invertidoUsd: null, motivo: 'sin_precio_hoy' }
+      // Ausente en snapshots guardados antes de F-046: un FCI legado sigue sin identificar, nunca
+      // matcheado por nombre (regla 11).
+      if (!r.codigoCafci) {
+        return { ticker: r.ticker, moneda: null, invertido: null, invertidoUsd: null, motivo: 'fci_sin_identificar' }
+      }
+      const fondo = porCodigoCafciHoy.get(r.codigoCafci)
+      if (!fondo || fondo.vcp === null) {
+        // El fondo desapareció de la planilla de hoy, o esta corrida no lo trajo: distinto de un
+        // FCI sin identificar, que nunca tuvo con qué buscarlo.
+        return { ticker: r.ticker, moneda: null, invertido: null, invertidoUsd: null, motivo: 'fci_sin_vcp_hoy' }
+      }
+      const monedaHoy = monedaNormalizada(fondo.moneda)
+      if (monedaHoy === null) {
+        // `USB` de CAFCI, u otra moneda que no sea `usd`/`ars`: nunca se convierte (regla 3).
+        return { ticker: r.ticker, moneda: null, invertido: null, invertidoUsd: null, motivo: 'fci_moneda_no_convertible' }
+      }
+      if (monedaHoy === 'ars' && tipoDeCambioHoy === null) {
+        return { ticker: r.ticker, moneda: 'ars', invertido: null, invertidoUsd: null, motivo: 'sin_tipo_de_cambio' }
+      }
+      if (r.cuotapartes == null) {
+        // Se identificó pero no se pudo congelar la cantidad al guardar (no resolvía en ese
+        // momento): no hay con qué multiplicar el VCP de hoy sin inventar una cantidad.
+        return { ticker: r.ticker, moneda: monedaHoy, invertido: null, invertidoUsd: null, motivo: 'sin_precio_hoy' }
+      }
+
+      const invertido = r.cuotapartes * (fondo.vcp / 1000)
+      const invertidoUsd = monedaHoy === 'ars' ? invertido / tipoDeCambioHoy! : invertido
+      return { ticker: r.ticker, moneda: monedaHoy, invertido, invertidoUsd, motivo: null }
     }
 
     const especie = porTickerHoy.get(r.ticker)
@@ -236,5 +272,10 @@ export function revaluarResueltasHoy(
  *  en el armador" (decisión 7 del plan). No incluye la parte valuada: eso lo vuelve a calcular el
  *  armador con los precios de hoy, que es justamente lo que "reabrir para seguir trabajando" pide. */
 export function mandatoDesdeSnapshotArmador(snapshot: SnapshotArmador): PosicionArmador[] {
-  return snapshot.posiciones.map((p) => ({ ticker: p.ticker, peso: p.peso, clase: p.clase }))
+  return snapshot.posiciones.map((p) => ({
+    ticker: p.ticker,
+    peso: p.peso,
+    clase: p.clase,
+    codigoCafci: p.codigoCafci,
+  }))
 }

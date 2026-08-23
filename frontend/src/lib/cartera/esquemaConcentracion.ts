@@ -82,6 +82,9 @@ export const esquemaConcentracion = z.object({
     medido: z.number(),
   }),
   fuera_del_universo: z.array(z.string()),
+  /** F-046: tickers de FCI valuados — entran al peso medido pero a ningún tope ni distribución.
+   *  Distinto de `fuera_del_universo`: acá sí se conoce el peso, sólo falta la composición. */
+  fci: z.array(z.string()),
   alertas: z.array(esquemaAlertaConcentracion),
 })
 

@@ -22,7 +22,7 @@ describe('armarSnapshotCargada', () => {
   ]
 
   const valuacion: CarteraValuada = {
-    valuadas: [{ ticker: 'AL30D', invertido: 700, invertidoUsd: 700, pesoReal: 100, peso: 100 }],
+    valuadas: [{ ticker: 'AL30D', invertido: 700, invertidoUsd: 700, pesoReal: 100, peso: 100, esFci: false }],
     excluidas: [{ id: 'p2', motivo: 'no_resuelta', montoDeclarado: null }],
     totalInvertidoUsd: 700,
   }
@@ -60,8 +60,8 @@ describe('armarSnapshotArmador', () => {
   ]
 
   const resueltasRentaFija: PosicionResuelta[] = [
-    { ticker: 'AL30D', peso: 60, vn: 8571.4, invertido: 6000, invertidoUsd: 6000, pesoReal: 60, laminaConocida: true, esFci: false },
-    { ticker: 'FCI-RENTA', peso: 10, vn: null, invertido: null, invertidoUsd: null, pesoReal: null, laminaConocida: false, esFci: true },
+    { ticker: 'AL30D', peso: 60, vn: 8571.4, invertido: 6000, invertidoUsd: 6000, pesoReal: 60, laminaConocida: true, esFci: false, cuotapartes: null, motivo: null },
+    { ticker: 'FCI-RENTA', peso: 10, vn: null, invertido: null, invertidoUsd: null, pesoReal: null, laminaConocida: false, esFci: true, cuotapartes: null, motivo: 'fci_sin_vcp' },
   ]
   const porTickerRentaFija = new Map([['AL30D', { precio: 70, moneda_cotizacion: 'USD' }]])
 

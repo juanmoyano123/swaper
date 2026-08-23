@@ -58,6 +58,7 @@ function resueltaF029(ticker: string, extra: Record<string, unknown> = {}) {
     dato_sano: true,
     motivo: null,
     motivo_descripcion: null,
+    fondo_fci: null,
     ...extra,
   }
 }
@@ -200,6 +201,7 @@ function concentracion(extra: Partial<Concentracion> = {}): Concentracion {
     sectores: { presentes: ['Soberano'], cantidad: 1, minimo: 3, suficiente: false, peso_sin_sector: 0 },
     peso: { declarado: 100, medido: 100 },
     fuera_del_universo: [],
+    fci: [],
     alertas: [
       {
         codigo: 'concentracion_soberana',
@@ -349,7 +351,7 @@ describe('una cartera valuada', () => {
     expect(cuerpoCalendario.posiciones).toEqual([{ ticker: 'AL30D', monto: 1000 }])
 
     const cuerpoConcentracion = JSON.parse(String(pedidosA(fetchMock, '/concentracion')[0]?.[1]?.body))
-    expect(cuerpoConcentracion.posiciones).toEqual([{ ticker: 'AL30D', peso: 100 }])
+    expect(cuerpoConcentracion.posiciones).toEqual([{ ticker: 'AL30D', peso: 100, es_fci: false }])
   })
 })
 

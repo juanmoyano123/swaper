@@ -7,7 +7,7 @@
  */
 
 import { QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -59,6 +59,7 @@ function resuelta(ticker: string, extra: Record<string, unknown> = {}) {
     dato_sano: true,
     motivo: null,
     motivo_descripcion: null,
+    fondo_fci: null,
     ...extra,
   }
 }
@@ -96,20 +97,74 @@ function cobertura(extra: Partial<Resolucion['cobertura']> = {}): Resolucion['co
   }
 }
 
-function responderCon(cuerpo: unknown, status = 200) {
-  const fetchMock = vi.fn(() =>
-    Promise.resolve(
-      new Response(JSON.stringify(cuerpo), {
-        status,
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    ),
-  )
+function fondoFci(extra: Record<string, unknown> = {}) {
+  return {
+    codigo_cafci: '1234',
+    fondo: 'Fondo Ahorro Pesos',
+    codigo_cnv: null,
+    seccion: 'Renta Fija',
+    tipo_renta: 'Renta Fija',
+    naturaleza: 'variacion_cuotaparte',
+    naturaleza_nombre: 'Variación de cuotaparte',
+    moneda: 'ARS',
+    region: null,
+    horizonte: null,
+    fecha_vcp: '2026-08-22',
+    vcp: 15_000,
+    vcp_anterior: null,
+    var_diaria_pct: null,
+    var_mes_pct: null,
+    var_anio_pct: null,
+    var_12m_pct: null,
+    cuotapartes: null,
+    cuotapartes_anterior: null,
+    patrimonio: null,
+    patrimonio_anterior: null,
+    market_share: null,
+    gerente: null,
+    depositaria: null,
+    calificacion: null,
+    calificado: null,
+    tipo_dinero: null,
+    comision_ingreso: null,
+    honorarios_adm_sg: null,
+    honorarios_adm_sd: null,
+    gastos_ord_gestion: null,
+    comision_rescate: null,
+    comision_transferencia: null,
+    honorarios_exito: null,
+    moneda_fondo: null,
+    discrepancia_moneda: false,
+    plazo_liq: null,
+    dias_para_rescatar: null,
+    minimo_inversion: null,
+    advertencia_distribucion: '',
+    ...extra,
+  }
+}
+
+function responderCon(cuerpo: unknown, status = 200, fondosFci: unknown[] = []) {
+  const fetchMock = vi.fn((entrada: RequestInfo | URL) => {
+    const url = typeof entrada === 'string' ? entrada : entrada.toString()
+    // F-046: el picker de "¿Es un FCI?" pide `/fci/fondos` por su cuenta — se mockea aparte para
+    // que no herede el cuerpo de `/posiciones/resolver`, que tiene otra forma.
+    if (url.includes('/fci/fondos')) {
+      return Promise.resolve(
+        new Response(JSON.stringify({ items: fondosFci, next_cursor: null }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    }
+    return Promise.resolve(
+      new Response(JSON.stringify(cuerpo), { status, headers: { 'Content-Type': 'application/json' } }),
+    )
+  })
   vi.stubGlobal('fetch', fetchMock)
   return fetchMock
 }
 
-function renderizar(posiciones: PosicionCruda[]) {
+function renderizar(posiciones: PosicionCruda[], onIdentificarComoFci: (id: string, codigoCafci: string) => void = () => {}) {
   const cliente = crearQueryClient()
   // Sin reintentos: la política real reintenta dos veces con backoff ante un 5xx, así que el test
   // del estado de error mediría el backoff en vez de la pantalla. Que el 5xx se reintente en
@@ -118,7 +173,7 @@ function renderizar(posiciones: PosicionCruda[]) {
 
   return render(
     <QueryClientProvider client={cliente}>
-      <ResolucionCartera posiciones={posiciones} />
+      <ResolucionCartera posiciones={posiciones} onIdentificarComoFci={onIdentificarComoFci} />
     </QueryClientProvider>,
   )
 }
@@ -225,6 +280,48 @@ describe('una posición que no resuelve', () => {
 
     expect(await screen.findByText(/Renta variable/)).toBeInTheDocument()
     expect(screen.queryByText(/No está en el universo/)).not.toBeInTheDocument()
+  })
+})
+
+describe('F-046: "¿Es un FCI?" sobre una fila que no resolvió', () => {
+  it('sólo aparece para no_esta_en_el_universo, no para otros motivos', async () => {
+    responderCon({
+      posiciones: [
+        noResuelta('NOEXISTE', { monto: 5000 }),
+        noResuelta('GGAL', { motivo: 'renta_variable', motivo_descripcion: 'Renta variable' }),
+      ],
+      cobertura: cobertura({ resueltas: 0, no_resueltas: 2 }),
+      alertas: [],
+    })
+
+    renderizar([cruda('NOEXISTE', { monto: 5000 }), cruda('GGAL')])
+    await screen.findAllByText(/no reconocida/)
+
+    const filaNoexiste = screen.getByText('NOEXISTE').closest('li')
+    const filaGgal = screen.getByText('GGAL').closest('li')
+    expect(filaNoexiste && within(filaNoexiste).getByRole('button', { name: '¿Es un FCI?' })).toBeTruthy()
+    expect(filaGgal && within(filaGgal).queryByRole('button', { name: '¿Es un FCI?' })).toBeNull()
+  })
+
+  it('elegir un fondo del picker llama a onIdentificarComoFci con el id de la fila y el codigo_cafci', async () => {
+    responderCon(
+      {
+        posiciones: [noResuelta('Fondo Ahorro Pesos', { monto: 5000 })],
+        cobertura: cobertura({ resueltas: 0, no_resueltas: 1 }),
+        alertas: [],
+      },
+      200,
+      [fondoFci()],
+    )
+
+    const onIdentificarComoFci = vi.fn()
+    renderizar([cruda('Fondo Ahorro Pesos', { monto: 5000 })], onIdentificarComoFci)
+
+    await userEvent.click(await screen.findByRole('button', { name: '¿Es un FCI?' }))
+    await userEvent.type(screen.getByRole('textbox', { name: /buscar el fondo/ }), 'ahorro')
+    await userEvent.click(await screen.findByRole('option', { name: /Fondo Ahorro Pesos/ }))
+
+    expect(onIdentificarComoFci).toHaveBeenCalledWith('id-Fondo Ahorro Pesos', '1234')
   })
 })
 

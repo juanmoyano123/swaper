@@ -27,7 +27,7 @@ export function PanelRiesgo() {
 
   // Mismo criterio que `PanelConcentracion`: el peso real cuando se pudo calcular, el pedido si no.
   const posiciones = useMemo(
-    () => resueltas.map((r) => ({ ticker: r.ticker, peso: r.pesoReal ?? r.peso })),
+    () => resueltas.map((r) => ({ ticker: r.ticker, peso: r.pesoReal ?? r.peso, esFci: r.esFci })),
     [resueltas],
   )
   const conPesoReal = resueltas.filter((r) => r.pesoReal !== null).length

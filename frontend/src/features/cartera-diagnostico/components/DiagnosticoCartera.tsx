@@ -59,6 +59,8 @@ const MOTIVO_LABEL: Record<MotivoExclusionValuacion, string> = {
   sin_nominal: 'resueltas pero sin nominal declarado (sólo monto, en una moneda no declarada)',
   sin_precio: 'sin precio de mercado o sin moneda de cotización conocida',
   sin_tipo_de_cambio: 'cotizan en pesos y no hay tipo de cambio implícito para llevarlas a dólares',
+  fci_sin_vcp: 'FCI identificado, pero sin valor de cuotaparte en la planilla de hoy',
+  fci_moneda_no_convertible: 'FCI en una moneda que no es ARS ni USD (p. ej. USB de CAFCI): nunca se convierte',
 }
 
 export function DiagnosticoCartera({ posiciones }: { posiciones: PosicionCruda[] }) {
@@ -70,7 +72,9 @@ export function DiagnosticoCartera({ posiciones }: { posiciones: PosicionCruda[]
   const excluidas = useMemo(() => valuacion?.excluidas ?? [], [valuacion])
 
   const posicionesParaCalendario = useMemo(
-    () => valuadas.map((v) => ({ ticker: v.ticker, monto: v.invertido })),
+    // Un FCI valuado (F-046) no tiene cronograma contractual: se excluye por clase, igual que en
+    // `useCarteraResuelta` del armador — nunca por `invertido`, que un FCI valuado sí tiene.
+    () => valuadas.filter((v) => !v.esFci).map((v) => ({ ticker: v.ticker, monto: v.invertido })),
     [valuadas],
   )
   // `pesoReal` sólo es `null` cuando el total invertido no se pudo determinar (denominador
@@ -80,7 +84,7 @@ export function DiagnosticoCartera({ posiciones }: { posiciones: PosicionCruda[]
     () =>
       valuadas
         .filter((v): v is typeof v & { pesoReal: number } => v.pesoReal !== null)
-        .map((v) => ({ ticker: v.ticker, peso: v.pesoReal })),
+        .map((v) => ({ ticker: v.ticker, peso: v.pesoReal, esFci: v.esFci })),
     [valuadas],
   )
 

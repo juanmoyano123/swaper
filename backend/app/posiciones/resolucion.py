@@ -85,13 +85,16 @@ CODIGO_POSICION_CON_DATO_NO_SANO = "posicion_con_dato_no_sano"
 class MotivoNoResuelta(StrEnum):
     """Por qué un ticker declarado no quedó vinculado a una especie.
 
-    Los tres motivos son hechos leídos de la base, no interpretaciones. En particular, distinguir
+    Los cuatro motivos son hechos leídos de la base, no interpretaciones. En particular, distinguir
     "no existe" de "existe pero no es comparable" importa: contestarle a un asesor que GGAL no está
-    en el universo es falso —está— y lo mandaría a buscar un error de tipeo que no cometió.
+    en el universo es falso —está— y lo mandaría a buscar un error de tipeo que no cometió. Lo mismo
+    con un FCI: pegado en un resumen de cuenta, un código CAFCI no es un ticker con typo, es otra
+    clase de instrumento (F-046).
     """
 
     NO_ESTA_EN_EL_UNIVERSO = "no_esta_en_el_universo"
-    """No aparece en `instrumentos`. Ni se aproxima al más parecido ni se deriva de otro."""
+    """No aparece en `instrumentos` ni matchea un `codigo_cafci` de `public.fci`. Ni se aproxima al
+    más parecido ni se deriva de otro."""
 
     RENTA_VARIABLE = "renta_variable"
     """Es una acción o un CEDEAR: no tiene TIR, ni duración, ni cronograma de cupones."""
@@ -100,11 +103,17 @@ class MotivoNoResuelta(StrEnum):
     """Es renta fija conocida pero su tipo de tasa no se reconoce, así que no se sabe con quién es
     comparable. Es el mismo `sin_segmento` del universo, visto desde una posición."""
 
+    ES_FCI = "es_fci"
+    """El texto pegado matchea, **exacto y nunca por nombre**, un `codigo_cafci` de `public.fci`
+    (F-046). No es un ticker del universo de renta fija — es un fondo, y viaja con su ficha resuelta
+    en `PosicionResuelta.fondo_fci`."""
+
 
 DESC_MOTIVO: dict[MotivoNoResuelta, str] = {
     MotivoNoResuelta.NO_ESTA_EN_EL_UNIVERSO: "No está en el universo",
     MotivoNoResuelta.RENTA_VARIABLE: "Renta variable: no es un instrumento de renta fija",
     MotivoNoResuelta.SIN_TIPO_DE_TASA: "Sin tipo de tasa reconocido: no se sabe con quién comparar",
+    MotivoNoResuelta.ES_FCI: "Es un fondo común de inversión (FCI), no un instrumento de renta fija",
 }
 
 
@@ -136,6 +145,31 @@ class PosicionDeclarada:
 
 
 @dataclass(frozen=True, slots=True)
+class FondoFciResuelto:
+    """La ficha mínima de un FCI matcheado por `codigo_cafci` exacto — F-046.
+
+    Sale de `app.fci.fondos.FondoFci`, no de acá: `resolucion.py` no lee `public.fci` ni interpreta
+    sus columnas, sólo recibe el resultado ya interpretado y lo adjunta a la posición.
+    """
+
+    codigo_cafci: str
+    fondo: str
+    vcp: float | None
+    """Por cada mil cuotapartes, tal como CAFCI lo publica — no se divide acá."""
+    fecha_vcp: str | None
+    moneda: str
+
+    def como_dict(self) -> dict[str, object]:
+        return {
+            "codigo_cafci": self.codigo_cafci,
+            "fondo": self.fondo,
+            "vcp": self.vcp,
+            "fecha_vcp": self.fecha_vcp,
+            "moneda": self.moneda,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class PosicionResuelta:
     """Una posición con su ticker ya buscado. Resuelta o no, sigue adentro de la cartera."""
 
@@ -154,6 +188,10 @@ class PosicionResuelta:
     clase_activo: str | None = None
     """La clase que declara `instrumentos`. Viaja incluso cuando no resolvió, porque es lo que
     explica el motivo: una acción no es un ticker inexistente."""
+
+    fondo_fci: FondoFciResuelto | None = None
+    """La ficha del fondo cuando `motivo is ES_FCI`. `None` en cualquier otro caso — nunca se
+    completa por analogía (regla 1)."""
 
     @property
     def resuelta(self) -> bool:
@@ -187,6 +225,7 @@ class PosicionResuelta:
             "dato_sano": self.dato_sano,
             "motivo": self.motivo.value if self.motivo else None,
             "motivo_descripcion": DESC_MOTIVO[self.motivo] if self.motivo else None,
+            "fondo_fci": self.fondo_fci.como_dict() if self.fondo_fci else None,
         }
 
 
@@ -309,6 +348,7 @@ def resolver(
     especies: Sequence[EspecieUniverso],
     instrumentos: Mapping[str, FilaInstrumento] | None = None,
     descartados: Collection[str] = frozenset(),
+    fondos_fci: Mapping[str, FondoFciResuelto] | None = None,
 ) -> CarteraResuelta:
     """Busca cada ticker declarado entre las especies vivas y arma el diagnóstico de cobertura.
 
@@ -320,11 +360,16 @@ def resolver(
     `instrumentos` es lo que existe en la base aunque no sea comparable, y sirve para dos cosas: el
     plazo de liquidación de las que resolvieron, y el motivo de las que no. Sin él, todo lo no
     resuelto se reportaría como "no está en el universo", que sobre una acción es falso.
+
+    `fondos_fci` es el lookup **exacto** por `codigo_cafci` (F-046): sólo se consulta cuando el
+    ticker declarado no matcheó ninguna especie, y sólo por el código tal cual está escrito — nunca
+    por nombre, nunca fuzzy (regla 1 del proyecto).
     """
     por_ticker = {clave_de_busqueda(e.ticker): e for e in especies}
     conocidos = instrumentos or {}
+    fondos = fondos_fci or {}
 
-    resueltas = [_resolver_una(p, por_ticker, conocidos, descartados) for p in posiciones]
+    resueltas = [_resolver_una(p, por_ticker, conocidos, descartados, fondos) for p in posiciones]
     return CarteraResuelta(posiciones=resueltas, cobertura=_medir_cobertura(resueltas))
 
 
@@ -333,6 +378,7 @@ def _resolver_una(
     por_ticker: Mapping[str, EspecieUniverso],
     conocidos: Mapping[str, FilaInstrumento],
     descartados: Collection[str],
+    fondos_fci: Mapping[str, FondoFciResuelto],
 ) -> PosicionResuelta:
     """Una sola búsqueda exacta. No hay un segundo intento con el ticker modificado."""
     clave = clave_de_busqueda(posicion.ticker_declarado)
@@ -340,6 +386,12 @@ def _resolver_una(
     especie = por_ticker.get(clave)
 
     if especie is None:
+        # El lookup de FCI se prueba antes de resignarse a "no está en el universo": un
+        # `codigo_cafci` pegado en un resumen de cuenta no es un typo, es otra clase de instrumento.
+        # Comparación por el texto tal cual, sólo despojado de espacios — nunca por nombre.
+        fondo = fondos_fci.get(posicion.ticker_declarado.strip())
+        if fondo is not None:
+            return PosicionResuelta(declarada=posicion, motivo=MotivoNoResuelta.ES_FCI, fondo_fci=fondo)
         return PosicionResuelta(
             declarada=posicion,
             motivo=_motivo_de(conocido),

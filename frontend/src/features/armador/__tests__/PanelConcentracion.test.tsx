@@ -122,6 +122,7 @@ function veredicto(extra: Partial<Concentracion> = {}): Concentracion {
     },
     peso: { declarado: 100, medido: 100 },
     fuera_del_universo: [],
+    fci: [],
     alertas: [
       {
         codigo: 'concentracion_soberana',
@@ -382,6 +383,7 @@ describe('sobre qué peso se midió', () => {
       concentracion: veredicto({
         peso: { declarado: 100, medido: 65 },
         fuera_del_universo: ['FCI Ahorro'],
+        fci: [],
       }),
     })
     renderizar()

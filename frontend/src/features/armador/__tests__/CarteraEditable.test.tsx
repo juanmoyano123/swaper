@@ -99,12 +99,59 @@ function calendarioVacio() {
   }
 }
 
+function fondoFci(extra: Record<string, unknown> = {}) {
+  return {
+    codigo_cafci: '1234',
+    fondo: 'Fondo Ahorro Pesos',
+    codigo_cnv: null,
+    seccion: 'Renta Fija',
+    tipo_renta: 'Renta Fija',
+    naturaleza: 'variacion_cuotaparte',
+    naturaleza_nombre: 'Variación de cuotaparte',
+    moneda: 'ARS',
+    region: null,
+    horizonte: null,
+    fecha_vcp: '2026-08-22',
+    vcp: 15_000,
+    vcp_anterior: null,
+    var_diaria_pct: null,
+    var_mes_pct: null,
+    var_anio_pct: null,
+    var_12m_pct: null,
+    cuotapartes: null,
+    cuotapartes_anterior: null,
+    patrimonio: null,
+    patrimonio_anterior: null,
+    market_share: null,
+    gerente: null,
+    depositaria: null,
+    calificacion: null,
+    calificado: null,
+    tipo_dinero: null,
+    comision_ingreso: null,
+    honorarios_adm_sg: null,
+    honorarios_adm_sd: null,
+    gastos_ord_gestion: null,
+    comision_rescate: null,
+    comision_transferencia: null,
+    honorarios_exito: null,
+    moneda_fondo: null,
+    discrepancia_moneda: false,
+    plazo_liq: null,
+    dias_para_rescatar: null,
+    minimo_inversion: null,
+    advertencia_distribucion: '',
+    ...extra,
+  }
+}
+
 function responderCon({
   especies = [],
   tipoDeCambio = { valor: 1500, disponible: true },
   calendario = calendarioVacio(),
   lamina,
   acciones = [],
+  fondosFci = [],
 }: {
   especies?: Especie[]
   tipoDeCambio?: { valor: number | null; disponible: boolean }
@@ -114,6 +161,8 @@ function responderCon({
   lamina?: { status: number; cuerpo: unknown }
   /** Tanda 13: la tabla muestra también el bloque de renta variable, así que pide su universo. */
   acciones?: unknown[]
+  /** F-046: los fondos que el picker de `SelectorFci` filtra en cliente. */
+  fondosFci?: ReturnType<typeof fondoFci>[]
 } = {}) {
   const fetchMock = vi.fn((entrada: RequestInfo | URL, _init?: RequestInit) => {
     const url = typeof entrada === 'string' ? entrada : entrada.toString()
@@ -127,6 +176,8 @@ function responderCon({
       cuerpo = calendario
     } else if (url.includes('/renta-variable/especies')) {
       cuerpo = { items: url.includes('clase=accion') ? acciones : [], next_cursor: null }
+    } else if (url.includes('/fci/fondos')) {
+      cuerpo = { items: fondosFci, next_cursor: null }
     } else if (url.includes('/lamina')) {
       if (!lamina) throw new Error(`fetch no mockeado en este test: ${url}`)
       status = lamina.status
@@ -262,9 +313,59 @@ describe('una línea de FCI (GWT-4)', () => {
 
     // El peso pedido del FCI sigue viajando: es un input con ese valor.
     expect(within(filaFci).getByRole('spinbutton')).toHaveValue(20)
-    // Todo lo demás —VN, invertido, peso real— se declara sin dato, nunca en blanco.
-    expect(within(filaFci).getByText(/VN s\/d · s\/d/)).toBeInTheDocument()
+    // Todo lo demás —cuotapartes, invertido, peso real— se declara sin dato, nunca en blanco.
+    expect(within(filaFci).getByText(/cuotapartes s\/d · invertido s\/d/)).toBeInTheDocument()
     expect(within(filaFci).getByText('s/d')).toBeInTheDocument()
+    // Sin `codigoCafci` (agregado acá sin él, a propósito): es un FCI legado, declarado.
+    expect(within(filaFci).getByText(/FCI sin identificar/)).toBeInTheDocument()
+  })
+})
+
+describe('F-046: el picker de FCI reemplaza al texto libre', () => {
+  it('buscar y elegir un fondo lo agrega con su codigoCafci, sin texto libre', async () => {
+    responderCon({ fondosFci: [fondoFci({ codigo_cafci: '1234', fondo: 'Fondo Ahorro Pesos' })] })
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar FCI' }))
+    await userEvent.type(screen.getByRole('textbox', { name: /buscar FCI/ }), 'ahorro')
+
+    const opcion = await screen.findByRole('option', { name: /Fondo Ahorro Pesos/ })
+    await userEvent.click(opcion)
+
+    const fila = await screen.findByRole('row', { name: 'Fondo Ahorro Pesos' })
+    // El picker desaparece después de elegir, y la fila queda identificada (sin la nota de "sin
+    // identificar", a diferencia del GWT-4 de más arriba).
+    expect(within(fila).queryByText(/FCI sin identificar/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('option')).not.toBeInTheDocument()
+  })
+
+  it('un fondo que no matchea ninguna búsqueda se declara, no se inventa un resultado', async () => {
+    responderCon({ fondosFci: [fondoFci({ fondo: 'Fondo Ahorro Pesos' })] })
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Agregar FCI' }))
+    await userEvent.type(screen.getByRole('textbox', { name: /buscar FCI/ }), 'xyz-inexistente')
+
+    expect(await screen.findByText(/Ningún fondo coincide/)).toBeInTheDocument()
+  })
+
+  it('re-identificar un FCI legado le pisa el codigoCafci sin tocar su peso', async () => {
+    responderCon({ fondosFci: [fondoFci({ codigo_cafci: '5678', fondo: 'Fondo Ahorro Pesos' })] })
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar FCI' })) // legado, sin código
+    const filaFci = await screen.findByRole('row', { name: 'FCI Ahorro' })
+    expect(within(filaFci).getByRole('spinbutton')).toHaveValue(100) // única posición: 100%
+
+    await userEvent.click(within(filaFci).getByRole('button', { name: 'identificar contra CAFCI' }))
+    await userEvent.type(within(filaFci).getByRole('textbox', { name: /buscar el fondo/ }), 'ahorro')
+    await userEvent.click(await screen.findByRole('option', { name: /Fondo Ahorro Pesos/ }))
+
+    // El ticker/nombre de la fila no cambia (identificar no es lo mismo que reemplazar la posición)
+    // y ya no muestra la nota de "sin identificar".
+    const filaActualizada = screen.getByRole('row', { name: 'FCI Ahorro' })
+    expect(within(filaActualizada).queryByText(/FCI sin identificar/)).not.toBeInTheDocument()
+    expect(within(filaActualizada).getByRole('spinbutton')).toHaveValue(100)
   })
 })
 

@@ -9,12 +9,24 @@
 
 import { z } from 'zod'
 
-/** Por qué un ticker no quedó vinculado a una especie. Los tres son hechos leídos de la base. */
+/** Por qué un ticker no quedó vinculado a una especie. Los cuatro son hechos leídos de la base. */
 export const esquemaMotivo = z.enum([
   'no_esta_en_el_universo',
   'renta_variable',
   'sin_tipo_de_tasa',
+  'es_fci',
 ])
+
+/** La ficha mínima de un FCI matcheado por `codigo_cafci` exacto (F-046). Presente sólo cuando
+ *  `motivo === 'es_fci'`; nunca se completa por analogía en ningún otro caso (regla 1). */
+export const esquemaFondoFciResuelto = z.object({
+  codigo_cafci: z.string(),
+  fondo: z.string(),
+  /** Por cada mil cuotapartes, tal como CAFCI lo publica. */
+  vcp: z.number().nullable(),
+  fecha_vcp: z.string().nullable(),
+  moneda: z.string(),
+})
 
 export const esquemaPosicionResuelta = z.object({
   id: z.string(),
@@ -36,6 +48,7 @@ export const esquemaPosicionResuelta = z.object({
   dato_sano: z.boolean().nullable(),
   motivo: esquemaMotivo.nullable(),
   motivo_descripcion: z.string().nullable(),
+  fondo_fci: esquemaFondoFciResuelto.nullable(),
 })
 
 export const esquemaCobertura = z.object({
@@ -69,6 +82,7 @@ export const esquemaResolucion = z.object({
   alertas: z.array(esquemaAlerta),
 })
 
+export type FondoFciResuelto = z.infer<typeof esquemaFondoFciResuelto>
 export type PosicionResuelta = z.infer<typeof esquemaPosicionResuelta>
 export type Cobertura = z.infer<typeof esquemaCobertura>
 export type AlertaResolucion = z.infer<typeof esquemaAlerta>

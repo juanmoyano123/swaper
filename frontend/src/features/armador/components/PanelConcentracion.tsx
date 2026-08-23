@@ -26,8 +26,12 @@
  * sería exactamente lo que la regla 11 prohíbe.
  *
  * La renta variable no entra: `useCarteraResuelta` devuelve renta fija y FCI, y el bloque de
- * acciones y CEDEARs tiene su propio subtotal (F-026). Los FCI llegan igual y el backend los
- * devuelve en `fuera_del_universo`, que es lo correcto: no tienen emisor, ni sector, ni ley.
+ * acciones y CEDEARs tiene su propio subtotal (F-026). Los FCI llegan marcados con `esFci`
+ * (F-046): si se pudieron valuar, el backend los suma al peso medido pero los deja fuera de todo
+ * tope —"exposición no atribuible"—, porque la composición interna del fondo no tiene fuente. Un
+ * FCI sin valuar (sin código CAFCI o sin cotización del día) sigue cayendo en
+ * `fuera_del_universo`, indistinguible de un ticker mal escrito, que es lo correcto: de ésos no se
+ * sabe ni siquiera cuánto pesan.
  */
 
 import { useMemo, useState } from 'react'
@@ -77,7 +81,7 @@ export function PanelConcentracion() {
   // `pesoReal ?? peso`: el real cuando se pudo calcular, la ponderación pedida cuando no. La
   // leyenda de abajo declara cuántas cayeron de cada lado — no se elige en silencio.
   const posiciones = useMemo(
-    () => resueltas.map((r) => ({ ticker: r.ticker, peso: r.pesoReal ?? r.peso })),
+    () => resueltas.map((r) => ({ ticker: r.ticker, peso: r.pesoReal ?? r.peso, esFci: r.esFci })),
     [resueltas],
   )
   const conPesoReal = resueltas.filter((r) => r.pesoReal !== null).length
@@ -190,7 +194,7 @@ function Veredicto({ datos }: { datos: Concentracion }) {
         </div>
       </div>
 
-      <PesoMedido peso={datos.peso} fuera={datos.fuera_del_universo} />
+      <PesoMedido peso={datos.peso} fuera={datos.fuera_del_universo} fci={datos.fci} />
       <Advertencias alertas={datos.alertas} />
     </div>
   )
@@ -315,9 +319,11 @@ function Diversificacion({ sectores }: { sectores: Concentracion['sectores'] }) 
 function PesoMedido({
   peso,
   fuera,
+  fci,
 }: {
   peso: Concentracion['peso']
   fuera: string[]
+  fci: string[]
 }) {
   // Los pesos no se normalizan a 100 (regla de F-018): que declarado y medido se muestren siempre,
   // aunque coincidan, es lo que evita leer "los topes están bien" sobre media cartera.
@@ -325,6 +331,9 @@ function PesoMedido({
     <p className="mono" style={{ margin: 0, fontSize: 10.5, color: 'var(--sd)' }}>
       Σ declarada {fmtPct(peso.declarado, 1)} · medida {fmtPct(peso.medido, 1)}
       {fuera.length > 0 && <> · {fuera.length} posición(es) fuera del universo de renta fija</>}
+      {fci.length > 0 && (
+        <> · {fci.length} FCI dentro de lo medido, sin composición atribuible a ningún tope</>
+      )}
     </p>
   )
 }

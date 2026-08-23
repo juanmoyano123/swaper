@@ -48,11 +48,17 @@ class PosicionEntrada(BaseModel):
     buscar la emisión en vez de la especie haría desaparecer del panel la posición que sí tiene.
     """
 
-    ticker: str = Field(min_length=1, max_length=20)
+    # 20 alcanzaba para un ticker de renta fija; un FCI viaja acá con el nombre del fondo
+    # (`es_fci=True`), y el más largo de `public.fci` mide 88 caracteres (medido el 23/08/2026).
+    ticker: str = Field(min_length=1, max_length=120)
     peso: float = Field(ge=0)
     """En puntos porcentuales (16.5 = 16,5 %), tal como los declara el armador. **No se normalizan
     a 100**: si la cartera no suma 100, eso se mide tal cual y se declara — es la misma regla con la
     que F-018 muestra la ponderación pedida y la real sin hacerlas coincidir."""
+    es_fci: bool = False
+    """F-046: un FCI valuado (con precio de cuotaparte) entra al peso medido de la cartera pero
+    nunca a un tope — su composición interna no tiene fuente. El armador lo marca cuando la posición
+    es de clase `fci` y se pudo valuar; el resto de las posiciones no lo manda (default `False`)."""
 
 
 class CarteraEntrada(BaseModel):
@@ -87,7 +93,7 @@ async def concentracion(
     """
     saneado = await sanear_universo(conn)
     resultado = evaluar_concentracion(
-        [Posicion(ticker=p.ticker, peso=p.peso) for p in entrada.posiciones],
+        [Posicion(ticker=p.ticker, peso=p.peso, es_fci=p.es_fci) for p in entrada.posiciones],
         saneado.especies,
         perfil,
     )

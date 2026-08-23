@@ -148,6 +148,60 @@ describe('esquemaSnapshotArmador', () => {
   })
 })
 
+describe('F-046: codigoCafci y cuotapartes, agregados el 23/08/2026', () => {
+  it('un snapshot guardado antes de F-046 (sin codigoCafci ni cuotapartes) sigue parseando', () => {
+    // `snapshotArmador()` no declara estos campos: es exactamente la forma de una fila vieja.
+    const parseado = esquemaSnapshotArmador.parse(snapshotArmador())
+    expect(parseado.posiciones[0].codigoCafci).toBeUndefined()
+    expect(parseado.resueltas[0].codigoCafci).toBeUndefined()
+    expect(parseado.resueltas[0].cuotapartes).toBeUndefined()
+  })
+
+  it('un FCI con codigoCafci y cuotapartes round-tripea sin pérdida', () => {
+    const original = snapshotArmador({
+      posiciones: [{ ticker: 'Fondo X', peso: 100, clase: 'fci', codigoCafci: '1234' }],
+      resueltas: [
+        {
+          ticker: 'Fondo X',
+          clase: 'fci',
+          peso: 100,
+          moneda: 'ars',
+          precio: null,
+          vn: null,
+          cantidad: null,
+          invertido: 150_000,
+          invertidoUsd: 100,
+          codigoCafci: '1234',
+          cuotapartes: 10,
+        },
+      ],
+    })
+    const parseado = esquemaSnapshotArmador.parse(JSON.parse(JSON.stringify(original)))
+    expect(parseado).toEqual(original)
+  })
+
+  it('un FCI legado sin codigoCafci en el mandato también parsea, declarado sin identificar', () => {
+    const original = snapshotArmador({
+      posiciones: [{ ticker: 'FCI legado', peso: 100, clase: 'fci' }],
+      resueltas: [
+        {
+          ticker: 'FCI legado',
+          clase: 'fci',
+          peso: 100,
+          moneda: null,
+          precio: null,
+          vn: null,
+          cantidad: null,
+          invertido: null,
+          invertidoUsd: null,
+        },
+      ],
+    })
+    const parseado = esquemaSnapshotArmador.parse(original)
+    expect(parseado.posiciones[0].codigoCafci).toBeUndefined()
+  })
+})
+
 describe('esquemaSnapshotCartera (union discriminada)', () => {
   it('discrimina por `origen` y valida cada forma con su propio schema', () => {
     expect(esquemaSnapshotCartera.parse(snapshotCargada()).origen).toBe('cargada')

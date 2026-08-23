@@ -156,7 +156,14 @@ const esquemaValuadaGuardada = z.strictObject({
 
 const esquemaExcluidaGuardada = z.strictObject({
   id: z.string(),
-  motivo: z.enum(['no_resuelta', 'sin_nominal', 'sin_precio', 'sin_tipo_de_cambio']),
+  motivo: z.enum([
+    'no_resuelta',
+    'sin_nominal',
+    'sin_precio',
+    'sin_tipo_de_cambio',
+    'fci_sin_vcp',
+    'fci_moneda_no_convertible',
+  ]),
   montoDeclarado: z.number().nullable(),
 })
 
@@ -194,6 +201,13 @@ const esquemaResueltaGuardada = z.strictObject({
   cantidad: z.number().nullable(),
   invertido: z.number().nullable(),
   invertidoUsd: z.number().nullable(),
+  /** F-046, agregado el 23/08/2026: el código CAFCI del fondo, sólo en `clase: 'fci'`. `.optional()`
+   *  — no `version` nueva — para que un snapshot guardado antes de esta feature siga parseando: un
+   *  FCI legado sin este campo sigue siendo un FCI sin identificar, declarado. */
+  codigoCafci: z.string().optional(),
+  /** Cuotapartes suscriptas al momento de guardar — el equivalente de `vn`/`cantidad` para un FCI.
+   *  `null` cuando no se pudo resolver contra un VCP. Ausente en snapshots anteriores a F-046. */
+  cuotapartes: z.number().nullable().optional(),
 })
 
 export const esquemaSnapshotArmador = z.strictObject({
@@ -205,7 +219,13 @@ export const esquemaSnapshotArmador = z.strictObject({
   montoTotalUsd: z.number(),
   /** El mandato: lo que hace falta para reabrir en el armador con `cargarCartera`. */
   posiciones: z.array(
-    z.strictObject({ ticker: z.string(), peso: z.number(), clase: esquemaClasePosicion }),
+    z.strictObject({
+      ticker: z.string(),
+      peso: z.number(),
+      clase: esquemaClasePosicion,
+      /** F-046, agregado el 23/08/2026 — ver `esquemaResueltaGuardada.codigoCafci`. */
+      codigoCafci: z.string().optional(),
+    }),
   ),
   /** La foto valuada, congelada al momento de guardar. */
   resueltas: z.array(esquemaResueltaGuardada),

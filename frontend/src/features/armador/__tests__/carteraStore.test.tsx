@@ -38,6 +38,7 @@ function Arnes() {
     equiponderar,
     vaciar,
     agregarFci,
+    identificarFci,
     fijarFiltros,
     limpiarFiltros,
     cargarCartera,
@@ -48,6 +49,7 @@ function Arnes() {
       <p data-testid="pos">{pos.map((p) => p.ticker).join(',')}</p>
       <p data-testid="pesos">{pos.map((p) => `${p.ticker}:${p.peso}`).join(',')}</p>
       <p data-testid="clases">{pos.map((p) => `${p.ticker}:${p.clase}`).join(',')}</p>
+      <p data-testid="codigos">{pos.map((p) => `${p.ticker}:${p.codigoCafci ?? ''}`).join(',')}</p>
       <p data-testid="renta-fija">{posicionesRentaFija(pos).map((p) => p.ticker).join(',')}</p>
       <p data-testid="renta-variable">
         {posicionesRentaVariable(pos).map((p) => p.ticker).join(',')}
@@ -59,6 +61,9 @@ function Arnes() {
       </button>
       <button type="button" onClick={() => agregarFci('FCI Pesos', 10)}>
         agregar FCI
+      </button>
+      <button type="button" onClick={() => identificarFci('FCI Pesos', 'CAFCI-1')}>
+        identificar FCI Pesos
       </button>
       <button type="button" onClick={() => alternarPapel('AL30')}>
         alternar AL30
@@ -325,6 +330,25 @@ describe('clase de posición', () => {
     await userEvent.click(screen.getByRole('button', { name: 'agregar FCI' }))
 
     expect(screen.getByTestId('clases')).toHaveTextContent('FCI Pesos:fci')
+  })
+
+  it('agregarFci sin codigoCafci entra como FCI sin identificar (F-046)', async () => {
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar FCI' }))
+
+    expect(screen.getByTestId('codigos')).toHaveTextContent('FCI Pesos:')
+  })
+
+  it('identificarFci le pisa el codigoCafci sin tocar el peso ni la clase (F-046)', async () => {
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar FCI' }))
+    await userEvent.click(screen.getByRole('button', { name: 'identificar FCI Pesos' }))
+
+    expect(screen.getByTestId('codigos')).toHaveTextContent('FCI Pesos:CAFCI-1')
+    expect(screen.getByTestId('clases')).toHaveTextContent('FCI Pesos:fci')
+    expect(screen.getByTestId('pesos')).toHaveTextContent('FCI Pesos:10')
   })
 
   it('la renta variable reparte peso con la renta fija: el 100% es de la cartera entera', async () => {

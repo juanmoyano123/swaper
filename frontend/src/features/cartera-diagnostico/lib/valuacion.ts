@@ -20,6 +20,13 @@ export type MotivoExclusionValuacion =
   | 'sin_nominal'
   | 'sin_precio'
   | 'sin_tipo_de_cambio'
+  /** F-046: el texto declarado matcheó un `codigo_cafci`, pero el fondo no tiene VCP en la
+   *  planilla de hoy (desapareció, o `public.fci` no lo trajo en esta corrida). No es lo mismo que
+   *  `sin_precio` genérico: acá el instrumento sí se identificó. */
+  | 'fci_sin_vcp'
+  /** El fondo cotiza en una moneda que no es `USD` ni `ARS` (p. ej. `USB` de CAFCI): nunca se
+   *  convierte (regla 3 del proyecto). */
+  | 'fci_moneda_no_convertible'
 
 export interface PosicionValuada {
   ticker: string
@@ -34,6 +41,10 @@ export interface PosicionValuada {
    *  `@/lib/cartera/metricas` (`{ ticker, peso, pesoReal }`), que es la forma que piden
    *  `rendimientosPorNaturaleza` y `plazoPromedio`. */
   peso: number | null
+  /** F-046: un FCI valuado no tiene cronograma contractual ni especie en el universo de renta fija
+   *  — quien arme el calendario o el vector de riesgo con esta posición lo tiene que saber para
+   *  excluirla por clase en vez de tratarla como una posición de renta fija más. */
+  esFci: boolean
 }
 
 export interface PosicionExcluidaValuacion {
@@ -57,6 +68,7 @@ interface Intermedia {
   /** En la moneda de cotización de la especie. */
   invertido: number
   monedaCotizacion: 'usd' | 'ars'
+  esFci: boolean
 }
 
 export function valuarCartera(
@@ -68,6 +80,16 @@ export function valuarCartera(
   const excluidas: PosicionExcluidaValuacion[] = []
 
   for (const pos of posiciones) {
+    // F-046: un `codigo_cafci` matcheado por F-029 no es una especie del universo de renta fija
+    // (`pos.resuelta` es `false` por construcción), así que se valúa aparte y antes de caer en
+    // `no_resuelta` — que sería indistinguible de un ticker mal escrito.
+    if (pos.motivo === 'es_fci' && pos.fondo_fci !== null) {
+      const resultado = valuarFci(pos, pos.fondo_fci, tipoDeCambio)
+      if ('excluida' in resultado) excluidas.push(resultado.excluida)
+      else intermedias.push(resultado.intermedia)
+      continue
+    }
+
     if (!pos.resuelta || pos.ticker === null) {
       excluidas.push({ id: pos.id, motivo: 'no_resuelta', montoDeclarado: pos.monto })
       continue
@@ -102,7 +124,7 @@ export function valuarCartera(
 
     // Misma fórmula que `resolver.ts:89`: precio cada 100 de valor nominal.
     const invertido = (pos.nominal * especie.precio) / 100
-    intermedias.push({ id: pos.id, ticker: pos.ticker, invertido, monedaCotizacion })
+    intermedias.push({ id: pos.id, ticker: pos.ticker, invertido, monedaCotizacion, esFci: false })
   }
 
   const conInvertidoUsd = intermedias.map((i) => ({
@@ -124,8 +146,44 @@ export function valuarCartera(
       invertidoUsd: i.invertidoUsd,
       pesoReal,
       peso: pesoReal,
+      esFci: i.esFci,
     }
   })
 
   return { valuadas, excluidas, totalInvertidoUsd }
+}
+
+/**
+ * Valúa una posición identificada como FCI (F-046) — separado de la matemática de bonos porque no
+ * hay precio cada 100 VN: `pos.nominal` se interpreta como cuotapartes suscriptas, que es la única
+ * magnitud que un resumen de cuenta declara para un fondo (no hay otro casillero disponible).
+ */
+function valuarFci(
+  pos: PosicionResuelta,
+  fondo: NonNullable<PosicionResuelta['fondo_fci']>,
+  tipoDeCambio: number | null,
+): { intermedia: Intermedia } | { excluida: PosicionExcluidaValuacion } {
+  if (pos.nominal === null) {
+    return { excluida: { id: pos.id, motivo: 'sin_nominal', montoDeclarado: pos.monto } }
+  }
+  // Sin fila en la planilla de hoy (el fondo desapareció, o esta corrida no lo trajo): se declara
+  // distinto de "sin_precio" genérico porque acá el instrumento sí se identificó.
+  if (fondo.vcp === null) {
+    return { excluida: { id: pos.id, motivo: 'fci_sin_vcp', montoDeclarado: pos.monto } }
+  }
+
+  const monedaCruda = fondo.moneda.toLowerCase()
+  let monedaCotizacion: 'usd' | 'ars'
+  if (monedaCruda === 'usd') monedaCotizacion = 'usd'
+  else if (monedaCruda === 'ars') monedaCotizacion = 'ars'
+  else {
+    // `USB` de CAFCI, u otra moneda que no sea `usd`/`ars`: nunca se convierte (regla 3).
+    return { excluida: { id: pos.id, motivo: 'fci_moneda_no_convertible', montoDeclarado: pos.monto } }
+  }
+  if (monedaCotizacion === 'ars' && tipoDeCambio === null) {
+    return { excluida: { id: pos.id, motivo: 'sin_tipo_de_cambio', montoDeclarado: pos.monto } }
+  }
+
+  const invertido = pos.nominal * (fondo.vcp / 1000)
+  return { intermedia: { id: pos.id, ticker: fondo.fondo, invertido, monedaCotizacion, esFci: true } }
 }

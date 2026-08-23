@@ -36,6 +36,7 @@ export function IngresoCarteraPanel() {
     confirmar,
     volver,
     reiniciar,
+    identificarComoFci,
   } = useIngresoCartera()
 
   switch (paso.tipo) {
@@ -106,6 +107,12 @@ export function IngresoCarteraPanel() {
       )
 
     case 'confirmada':
-      return <CarteraConfirmada posiciones={paso.posiciones} onCargarOtra={reiniciar} />
+      return (
+        <CarteraConfirmada
+          posiciones={paso.posiciones}
+          onCargarOtra={reiniciar}
+          onIdentificarComoFci={identificarComoFci}
+        />
+      )
   }
 }

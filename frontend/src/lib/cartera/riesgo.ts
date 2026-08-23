@@ -42,6 +42,11 @@ export interface EspecieRiesgo {
 export interface PosicionConPeso {
   ticker: string
   peso: number
+  /** F-046: un FCI nunca tiene especie en el universo de renta fija, así que cae siempre en la
+   *  rama "fuera del universo" de cada eje — pero es un hecho distinto de un ticker mal escrito, y
+   *  se declara aparte en los ejes donde corresponde (crédito, legislación, concentración).
+   *  `undefined` equivale a `false`. */
+  esFci?: boolean
 }
 
 export interface TramoDeEje {
@@ -99,6 +104,7 @@ interface FilaRiesgo {
   ticker: string
   peso: number
   especie: EspecieRiesgo | null
+  esFci: boolean
 }
 
 const ORDEN_EJES: IdDeEje[] = ['duracion', 'credito', 'legislacion', 'liquidez', 'concentracion', 'moneda']
@@ -116,6 +122,7 @@ export function vectorDeRiesgo(
     ticker: p.ticker,
     peso: p.peso,
     especie: porTicker.get(p.ticker) ?? null,
+    esFci: p.esFci,
   }))
 
   const ejes: Record<IdDeEje, EjeDeRiesgo> = {
@@ -130,14 +137,16 @@ export function vectorDeRiesgo(
   return ORDEN_EJES.map((id) => ejes[id])
 }
 
-function sumarPorTicker(posiciones: PosicionConPeso[]): PosicionConPeso[] {
+function sumarPorTicker(posiciones: PosicionConPeso[]): (PosicionConPeso & { esFci: boolean })[] {
   const pesos = new Map<string, number>()
+  const esFciPorTicker = new Map<string, boolean>()
   const orden: string[] = []
   for (const p of posiciones) {
     if (!pesos.has(p.ticker)) orden.push(p.ticker)
     pesos.set(p.ticker, (pesos.get(p.ticker) ?? 0) + p.peso)
+    esFciPorTicker.set(p.ticker, esFciPorTicker.get(p.ticker) || (p.esFci ?? false))
   }
-  return orden.map((ticker) => ({ ticker, peso: pesos.get(ticker)! }))
+  return orden.map((ticker) => ({ ticker, peso: pesos.get(ticker)!, esFci: esFciPorTicker.get(ticker)! }))
 }
 
 function suma(filas: { peso: number }[]): number {
@@ -147,6 +156,23 @@ function suma(filas: { peso: number }[]): number {
 function notaFueraDelUniverso(filas: FilaRiesgo[]): string[] {
   const fuera = filas.filter((f) => f.especie === null).length
   return fuera > 0 ? [`${fuera} posición(es) fuera del universo de renta fija`] : []
+}
+
+/** Igual que `notaFueraDelUniverso`, pero separa el FCI: es un hecho distinto de un ticker que no
+ *  se reconoce, y merecen textos distintos (crédito, legislación — regla 11 del proyecto). */
+function notasFueraDelUniversoConFci(filas: FilaRiesgo[]): string[] {
+  const sinEspecie = filas.filter((f) => f.especie === null)
+  const fci = sinEspecie.filter((f) => f.esFci)
+  const otras = sinEspecie.filter((f) => !f.esFci)
+
+  const notas: string[] = []
+  if (otras.length > 0) notas.push(`${otras.length} posición(es) fuera del universo de renta fija`)
+  if (fci.length > 0) {
+    notas.push(
+      `${suma(fci).toFixed(1)}% en FCI: composición del fondo sin fuente, exposición no atribuible en este eje`,
+    )
+  }
+  return notas
 }
 
 // --- 1. Duración -------------------------------------------------------------------------------
@@ -223,7 +249,7 @@ function ejeCredito(filas: FilaRiesgo[]): EjeDeRiesgo {
 
   const conDato = conCalificacion.length
   const pesoConDato = suma(conCalificacion)
-  const notas = notaFueraDelUniverso(filas)
+  const notas = notasFueraDelUniversoConFci(filas)
   if (conDato < posiciones) {
     notas.push(
       `sin calificación en ${posiciones - conDato} posiciones: el armado y las rotaciones usan los proxies del perfil (tope de rendimiento del segmento, percentil de liquidez, topes de concentración) — la calificación nunca filtra`,
@@ -285,7 +311,7 @@ function ejeLegislacion(filas: FilaRiesgo[]): EjeDeRiesgo {
     .filter((f) => f.especie!.ley !== null)
     .reduce((acumulado, f) => acumulado + f.peso, 0)
 
-  const notas = notaFueraDelUniverso(filas)
+  const notas = notasFueraDelUniversoConFci(filas)
   const pesoConocido = pesoExtranjera + suma(conEspecie.filter((f) => f.especie!.ley === LEY_LOCAL))
   if (conEspecie.length > 0 && pesoConocido === 0 && leyesDesconocidas.size === 0) {
     notas.push('ninguna posición con ley informada: el 0% no implica ley local, es ausencia de dato')
@@ -421,6 +447,13 @@ function ejeConcentracion(concentracion: Concentracion | null, posiciones: numbe
   const notas: string[] = []
   if (concentracion.fuera_del_universo.length > 0) {
     notas.push(`${concentracion.fuera_del_universo.length} posición(es) fuera del universo de renta fija`)
+  }
+  if (concentracion.fci.length > 0) {
+    // Distinto del caso de arriba: acá sí se conoce el peso (el backend ya lo sumó a `peso.medido`)
+    // y sólo falta la composición del fondo, que ninguna fuente publica hoy.
+    notas.push(
+      `${concentracion.fci.length} FCI: composición del fondo sin fuente, exposición no atribuible a ningún tope de crédito, sector ni ley`,
+    )
   }
 
   return {

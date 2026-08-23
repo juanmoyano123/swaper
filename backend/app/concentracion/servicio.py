@@ -43,6 +43,7 @@ from app.concentracion.alertas import (
     concentracion_sector,
     concentracion_soberana,
     diversificacion_insuficiente,
+    exposicion_fci_no_atribuible,
     fuera_del_universo,
 )
 from app.concentracion.perfiles import (
@@ -83,6 +84,11 @@ class Posicion:
 
     ticker: str
     peso: float
+    es_fci: bool = False
+    """F-046: un FCI valuado no es una especie del universo de renta fija —nunca va a matchear
+    contra `especies`— pero si el asesor lo valuó (tiene precio de cuotaparte), su peso sí es
+    exposición real de la cartera. Entra al denominador (`peso_medido`) sin entrar a ningún tope: la
+    composición interna del fondo no tiene fuente (regla 11 del dominio)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,9 +158,14 @@ class Concentracion:
     """Lo que suman todas las posiciones, esté o no cada una en el universo. No se normaliza."""
 
     peso_medido: float
-    """Lo que suman las que sí están. Los topes se miden sobre esto."""
+    """Lo que suman las que sí están, **incluidos los FCI valuados**. Los topes se miden sobre esto,
+    salvo la porción de FCI: ésa no entra a ningún tope, porque no se conoce su composición."""
 
     fuera_del_universo: list[str] = field(default_factory=list)
+    fci: list[str] = field(default_factory=list)
+    """Tickers de FCI valuados (F-046): entran a `peso_medido` pero no a ningún tope ni a la
+    distribución por sector/ley/naturaleza — es exposición no atribuible, declarada aparte de
+    `fuera_del_universo` (que agrupa lo que no se pudo medir en absoluto: typos, renta variable)."""
     alertas: list[Alerta] = field(default_factory=list)
 
     @property
@@ -188,6 +199,7 @@ class Concentracion:
                 "medido": self.peso_medido,
             },
             "fuera_del_universo": list(self.fuera_del_universo),
+            "fci": list(self.fci),
             "alertas": [a.como_dict() for a in self.alertas],
         }
 
@@ -209,7 +221,16 @@ def evaluar_concentracion(
         raise ValueError(f"perfil desconocido: {perfil!r}")
     limites = PERFILES[perfil]
 
-    pesos = _sumar_por_ticker(posiciones)
+    # Los FCI valuados se separan antes de cualquier otra cosa (F-046): nunca van a matchear contra
+    # `especies` —no son instrumentos del universo de renta fija— así que si se los dejara pasar por
+    # el mismo camino caerían en `ausentes`/`fuera_del_universo`, indistinguibles de un typo.
+    normales = [p for p in posiciones if not p.es_fci]
+    fci = [p for p in posiciones if p.es_fci]
+    pesos_fci = _sumar_por_ticker(fci)
+    peso_fci = sum(pesos_fci.values())
+    tickers_fci = sorted(pesos_fci)
+
+    pesos = _sumar_por_ticker(normales)
     por_ticker = {e.ticker: e for e in especies}
     riesgos = derivar_riesgo(especies)
 
@@ -236,11 +257,16 @@ def evaluar_concentracion(
         por_naturaleza=por_naturaleza,
         sectores_presentes=sectores,
         peso_sin_sector=peso_sin_sector,
-        peso_declarado=sum(pesos.values()),
-        peso_medido=sum(presentes.values()),
+        peso_declarado=sum(pesos.values()) + peso_fci,
+        # El FCI entra al denominador aunque nunca entre a un tope: es exposición real de la
+        # cartera, sólo que no atribuible a ningún crédito, sector o ley concretos.
+        peso_medido=sum(presentes.values()) + peso_fci,
         fuera_del_universo=ausentes,
+        fci=tickers_fci,
     )
-    return replace(concentracion, alertas=_advertir(concentracion, ausentes, peso_ausente))
+    return replace(
+        concentracion, alertas=_advertir(concentracion, ausentes, peso_ausente, tickers_fci, peso_fci)
+    )
 
 
 def _sumar_por_ticker(posiciones: Sequence[Posicion]) -> dict[str, float]:
@@ -353,7 +379,11 @@ def _repartir_por_sector(
 
 
 def _advertir(
-    concentracion: Concentracion, ausentes: Sequence[str], peso_ausente: float
+    concentracion: Concentracion,
+    ausentes: Sequence[str],
+    peso_ausente: float,
+    tickers_fci: Sequence[str],
+    peso_fci: float,
 ) -> list[Alerta]:
     """Las advertencias, en el orden en que importan: primero los topes rotos, después el mínimo.
 
@@ -384,4 +414,6 @@ def _advertir(
 
     if ausentes:
         alertas.append(fuera_del_universo(ausentes, peso_ausente))
+    if tickers_fci:
+        alertas.append(exposicion_fci_no_atribuible(tickers_fci, peso_fci))
     return alertas

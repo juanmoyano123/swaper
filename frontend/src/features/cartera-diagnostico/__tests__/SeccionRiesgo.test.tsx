@@ -74,6 +74,7 @@ function veredicto(extra: Partial<Concentracion> = {}): Concentracion {
     sectores: { presentes: ['Soberano'], cantidad: 1, minimo: 3, suficiente: false, peso_sin_sector: 0 },
     peso: { declarado: 100, medido: 100 },
     fuera_del_universo: [],
+    fci: [],
     alertas: [],
     ...extra,
   }
@@ -133,7 +134,7 @@ describe('con posiciones', () => {
     const pedidoConcentracion = fetchMock.mock.calls.find(([e]) => String(e).includes('/concentracion'))!
     expect(String(pedidoConcentracion[0])).toContain('perfil=moderado')
     const cuerpo = JSON.parse(String((pedidoConcentracion[1] as RequestInit).body))
-    expect(cuerpo.posiciones).toEqual([{ ticker: 'AL30D', peso: 100 }])
+    expect(cuerpo.posiciones).toEqual([{ ticker: 'AL30D', peso: 100, es_fci: false }])
   })
 
   it('la misma composición produce el mismo eje de concentración que el veredicto ya pedido', async () => {

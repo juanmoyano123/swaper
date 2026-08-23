@@ -93,6 +93,7 @@ type AccionArmador =
   | { tipo: 'equiponderar' }
   | { tipo: 'vaciar' }
   | { tipo: 'agregarFci'; nombre: string; peso: number; codigoCafci?: string }
+  | { tipo: 'identificarFci'; ticker: string; codigoCafci: string }
   | { tipo: 'fijarFiltros'; filtros: FiltrosArmador }
   | { tipo: 'limpiarFiltros' }
   | { tipo: 'aplicarTematica'; id: string; filtros: FiltrosArmador }
@@ -161,6 +162,16 @@ function reducer(estado: EstadoArmador, accion: AccionArmador): EstadoArmador {
           accion.peso,
         ),
       }
+    // Re-identifica un FCI legado (sin `codigoCafci`) contra el picker: no rearma la cartera, sólo
+    // pisa el código de la posición que ya estaba. Nunca matchea por nombre (regla 11) — el asesor
+    // lo elige a mano de la misma lista que usa `agregarFci`.
+    case 'identificarFci':
+      return {
+        ...estado,
+        pos: estado.pos.map((p) =>
+          p.ticker === accion.ticker && p.clase === 'fci' ? { ...p, codigoCafci: accion.codigoCafci } : p,
+        ),
+      }
     // Los filtros filtran la oferta, no la cartera: estas dos acciones nunca tocan `pos`,
     // `selMes` ni `montoTotal` — un papel ya seleccionado sigue en la cartera aunque un filtro
     // le tape el renglón en la grilla.
@@ -215,6 +226,9 @@ interface AccionesArmador {
    *  `codigoCafci` es el identificador contra `public.fci` (F-046, picker sobre F-057); sin él la
    *  posición queda como un FCI sin identificar, declarado y no valuable. */
   agregarFci: (nombre: string, peso: number, codigoCafci?: string) => void
+  /** Le pisa el `codigoCafci` a un FCI ya cargado, sin tocar su peso ni su posición en la lista —
+   *  la acción de "re-identificar" un FCI legado (F-046). */
+  identificarFci: (ticker: string, codigoCafci: string) => void
   /** Pisa el objeto de filtros entero: el llamador arma el objeto (mismo patrón `onCambio` del
    *  monitor). */
   fijarFiltros: (filtros: FiltrosArmador) => void
@@ -254,6 +268,8 @@ export function ArmadorProvider({ children }: { children: ReactNode }) {
       vaciar: () => dispatch({ tipo: 'vaciar' }),
       agregarFci: (nombre: string, peso: number, codigoCafci?: string) =>
         dispatch({ tipo: 'agregarFci', nombre, peso, codigoCafci }),
+      identificarFci: (ticker: string, codigoCafci: string) =>
+        dispatch({ tipo: 'identificarFci', ticker, codigoCafci }),
       fijarFiltros: (filtros: FiltrosArmador) => dispatch({ tipo: 'fijarFiltros', filtros }),
       limpiarFiltros: () => dispatch({ tipo: 'limpiarFiltros' }),
       aplicarTematica: (id: string, filtros: FiltrosArmador) =>

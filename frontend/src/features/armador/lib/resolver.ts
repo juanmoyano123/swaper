@@ -14,22 +14,47 @@
  * poder testearse sin la pantalla.
  */
 
+/** Por qué una posición quedó sin resolver — sólo se puebla en las ramas donde hace falta
+ *  distinguir el motivo (F-046, FCI); el resto de los casos sigue sin motivo explícito, igual que
+ *  antes de F-046 (la pantalla ya lo explica genéricamente por "sin precio o sin tipo de cambio"). */
+export type MotivoSinResolver =
+  | 'fci_sin_vcp'
+  /** Sin `codigoCafci` (FCI legado) o con código pero sin fila en la planilla de hoy: los dos casos
+   *  colapsan en lo mismo desde acá — `vcpPorMil` vino `null` — y la distinción de cuál de los dos
+   *  es la queda del lado de quien arma `EntradaResolver` (F-046, punto 2). */
+  | 'fci_moneda_no_convertible'
+  /** La moneda del fondo no es `usd` ni `ars` (p. ej. `USB` de CAFCI): nunca se convierte
+   *  (regla 3 del proyecto). */
+  | 'sin_tipo_de_cambio'
+
 export interface EntradaResolver {
   ticker: string
   /** Pedido, en puntos porcentuales (16.5 = 16,5%). */
   peso: number
   /** En la moneda de cotización de la especie. `null` = FCI o sin precio conocido. */
   precio: number | null
+  /** Moneda de cotización de la especie, o moneda propia del fondo cuando `esFci` (F-046):
+   *  `'usb'` u otra distinta de `'usd'`/`'ars'` nunca se convierte (regla 3 del proyecto). */
   monedaCotizacion: 'usd' | 'ars' | string
-  /** `null` = sin dato: no se redondea a ningún múltiplo (regla 1 del proyecto). */
+  /** `null` = sin dato: no se redondea a ningún múltiplo (regla 1 del proyecto). Sin sentido en un
+   *  FCI — un fondo suscribe fracciones de cuotaparte, no nominales — así que siempre viaja `null`
+   *  ahí y `resolver()` nunca lo usa en esa rama. */
   lamina: number | null
   esFci: boolean
+  /** Valor de cuotaparte de hoy, por cada MIL cuotapartes tal como CAFCI lo publica (F-046, F-057).
+   *  `null` = sin código CAFCI identificado o sin fila en la planilla de hoy: la posición queda sin
+   *  resolver, nunca se redondea a lámina ni se convierte. Irrelevante cuando `!esFci`. */
+  vcpPorMil: number | null
+  /** Fecha del valor de cuotaparte usado, tal como la publica CAFCI. Sólo declarativa: `resolver`
+   *  no la usa para calcular nada. Irrelevante cuando `!esFci`. */
+  fechaVcp: string | null
 }
 
 export interface PosicionResuelta {
   ticker: string
   peso: number
-  /** Valor nominal asignado. `null` si no se pudo calcular. */
+  /** Valor nominal asignado. `null` si no se pudo calcular, o siempre en un FCI: no hay lámina que
+   *  redondear — un fondo suscribe fracciones de cuotaparte, no nominales (F-046). */
   vn: number | null
   /** En la moneda de cotización de la especie. */
   invertido: number | null
@@ -41,9 +66,16 @@ export interface PosicionResuelta {
   /** Una lámina faltante en un FCI no es un dato faltante: a un FCI no le corresponde lámina.
    *  El resumen de ajuste lo necesita para no contarlo como "lámina no informada". */
   esFci: boolean
+  /** Cuotapartes suscriptas, derivado de `invertido / (vcpPorMil / 1000)` — sólo para mostrar, en
+   *  un FCI resuelto. `null` en renta fija y en cualquier FCI sin resolver (F-046). */
+  cuotapartes: number | null
+  /** Por qué no se pudo resolver. `null` cuando resolvió, y también en la mayoría de los casos sin
+   *  resolver de renta fija (la pantalla ya declara "sin precio o sin tipo de cambio" ahí sin
+   *  necesitar un código). Poblado en las ramas de FCI donde el motivo importa distinguir. */
+  motivo: MotivoSinResolver | null
 }
 
-function sinResolver(entrada: EntradaResolver): PosicionResuelta {
+function sinResolver(entrada: EntradaResolver, motivo: MotivoSinResolver | null = null): PosicionResuelta {
   return {
     ticker: entrada.ticker,
     peso: entrada.peso,
@@ -53,6 +85,55 @@ function sinResolver(entrada: EntradaResolver): PosicionResuelta {
     pesoReal: null,
     laminaConocida: entrada.lamina !== null,
     esFci: entrada.esFci,
+    cuotapartes: null,
+    motivo,
+  }
+}
+
+/**
+ * Un FCI se valúa aparte de un bono: no hay precio cada 100 VN ni lámina — se convierte el monto
+ * objetivo a la moneda del fondo y se derivan las cuotapartes, sin redondear a ningún múltiplo
+ * (regla 1 del proyecto: suscribir fracciones de cuotaparte no es una aproximación, es lo que un
+ * FCI permite de verdad).
+ */
+function resolverFci(
+  entrada: EntradaResolver,
+  montoTotalUsd: number,
+  tipoDeCambio: number | null,
+): PosicionResuelta {
+  if (montoTotalUsd === 0) return sinResolver(entrada)
+  if (entrada.vcpPorMil === null) return sinResolver(entrada, 'fci_sin_vcp')
+
+  const objetivoUsd = (montoTotalUsd * entrada.peso) / 100
+
+  let invertido: number
+  if (entrada.monedaCotizacion === 'usd') {
+    invertido = objetivoUsd
+  } else if (entrada.monedaCotizacion === 'ars') {
+    // Nunca se inventa un tipo de cambio externo (regla 3 del proyecto): sin el implícito del
+    // propio universo, esta posición no se puede resolver y se declara, no se estima.
+    if (tipoDeCambio === null) return sinResolver(entrada, 'sin_tipo_de_cambio')
+    invertido = objetivoUsd * tipoDeCambio
+  } else {
+    // `USB` de CAFCI, u otra moneda que no sea `usd`/`ars`: nunca se convierte (regla 3).
+    return sinResolver(entrada, 'fci_moneda_no_convertible')
+  }
+
+  const invertidoUsd =
+    entrada.monedaCotizacion === 'ars' && tipoDeCambio !== null ? invertido / tipoDeCambio : invertido
+  const cuotapartes = invertido / (entrada.vcpPorMil / 1000)
+
+  return {
+    ticker: entrada.ticker,
+    peso: entrada.peso,
+    vn: null,
+    invertido,
+    invertidoUsd,
+    pesoReal: null,
+    laminaConocida: entrada.lamina !== null,
+    esFci: true,
+    cuotapartes,
+    motivo: null,
   }
 }
 
@@ -62,7 +143,8 @@ export function resolver(
   tipoDeCambio: number | null,
 ): PosicionResuelta[] {
   const resueltas = posiciones.map((entrada): PosicionResuelta => {
-    if (entrada.esFci || entrada.precio === null || montoTotalUsd === 0) return sinResolver(entrada)
+    if (entrada.esFci) return resolverFci(entrada, montoTotalUsd, tipoDeCambio)
+    if (entrada.precio === null || montoTotalUsd === 0) return sinResolver(entrada)
 
     const precio = entrada.precio
     const objetivoUsd = (montoTotalUsd * entrada.peso) / 100
@@ -99,6 +181,8 @@ export function resolver(
       pesoReal: null,
       laminaConocida: entrada.lamina !== null,
       esFci: entrada.esFci,
+      cuotapartes: null,
+      motivo: null,
     }
   })
 

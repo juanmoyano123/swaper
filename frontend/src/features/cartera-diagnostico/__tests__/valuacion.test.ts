@@ -29,6 +29,7 @@ function posicion(overrides: Partial<PosicionResuelta> = {}): PosicionResuelta {
     dato_sano: true,
     motivo: null,
     motivo_descripcion: null,
+    fondo_fci: null,
     ...overrides,
   }
 }

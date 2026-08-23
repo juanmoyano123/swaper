@@ -156,9 +156,57 @@ describe('revaluarResueltasHoy', () => {
     expect(resultado.invertidoUsd).toBeCloseTo(7_500_000 / 1100)
   })
 
-  it('un FCI nunca tiene precio hoy, por construcción', () => {
-    const [resultado] = revaluarResueltasHoy([resuelta({ ticker: 'FCI-X', clase: 'fci', vn: null })], new Map(), null)
-    expect(resultado.motivo).toBe('sin_precio_hoy')
+  // --- F-046: FCI en el mandato guardado --------------------------------------------------------
+
+  it('FCI sin codigoCafci en el snapshot (legado): fci_sin_identificar, nunca matcheado por nombre', () => {
+    const [resultado] = revaluarResueltasHoy(
+      [resuelta({ ticker: 'FCI-X', clase: 'fci', vn: null, codigoCafci: undefined })],
+      new Map(),
+      null,
+    )
+    expect(resultado.motivo).toBe('fci_sin_identificar')
+  })
+
+  it('FCI identificado pero sin fila en la planilla de hoy: fci_sin_vcp_hoy', () => {
+    const [resultado] = revaluarResueltasHoy(
+      [resuelta({ ticker: 'FCI-X', clase: 'fci', vn: null, codigoCafci: '1234', cuotapartes: 500 })],
+      new Map(),
+      null,
+      new Map(), // sin fondos de hoy
+    )
+    expect(resultado.motivo).toBe('fci_sin_vcp_hoy')
+  })
+
+  it('FCI en moneda USB de CAFCI: fci_moneda_no_convertible, nunca se convierte', () => {
+    const [resultado] = revaluarResueltasHoy(
+      [resuelta({ ticker: 'FCI-X', clase: 'fci', vn: null, codigoCafci: '1234', cuotapartes: 500 })],
+      new Map(),
+      null,
+      new Map([['1234', { vcp: 2000, moneda: 'USB' }]]),
+    )
+    expect(resultado.motivo).toBe('fci_moneda_no_convertible')
+  })
+
+  it('FCI en ARS sin tipo de cambio de hoy: sin_tipo_de_cambio, no se inventa una conversión', () => {
+    const [resultado] = revaluarResueltasHoy(
+      [resuelta({ ticker: 'FCI-X', clase: 'fci', vn: null, codigoCafci: '1234', cuotapartes: 500 })],
+      new Map(),
+      null,
+      new Map([['1234', { vcp: 15_000, moneda: 'ARS' }]]),
+    )
+    expect(resultado.motivo).toBe('sin_tipo_de_cambio')
+  })
+
+  it('FCI identificado con VCP de hoy: revalúa las cuotapartes congeladas contra el VCP de hoy', () => {
+    const [resultado] = revaluarResueltasHoy(
+      [resuelta({ ticker: 'FCI-X', clase: 'fci', vn: null, codigoCafci: '1234', cuotapartes: 500 })],
+      new Map(),
+      null,
+      new Map([['1234', { vcp: 2000, moneda: 'USD' }]]), // 2 USD por cuotaparte
+    )
+    expect(resultado.motivo).toBeNull()
+    expect(resultado.invertido).toBeCloseTo(1000, 6) // 500 * (2000/1000)
+    expect(resultado.invertidoUsd).toBeCloseTo(1000, 6)
   })
 
   it('ARS sin TC de hoy: sin_tipo_de_cambio, no se inventa una conversión', () => {

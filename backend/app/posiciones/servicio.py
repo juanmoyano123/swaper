@@ -22,9 +22,12 @@ from typing import Any
 
 import structlog
 
+from app.fci.fondos import fondo_de_fila
+from app.fci.lectura import leer_fondos_por_codigos
 from app.posiciones.lectura import leer_instrumentos
 from app.posiciones.resolucion import (
     CarteraResuelta,
+    FondoFciResuelto,
     PosicionDeclarada,
     indexar_instrumentos,
     resolver,
@@ -35,10 +38,11 @@ logger = structlog.get_logger()
 
 
 async def resolver_cartera(conn: Any, posiciones: Sequence[PosicionDeclarada]) -> CarteraResuelta:
-    """Lee el universo y los instrumentos y busca cada ticker declarado. No escribe nada.
+    """Lee el universo, los instrumentos y los FCI candidatos, y busca cada ticker declarado. No
+    escribe nada.
 
-    Las dos lecturas van **en serie y no en un `gather`**, aunque no dependan una de la otra: son
-    dos consultas sobre la misma conexión, y una conexión de asyncpg no admite dos operaciones a la
+    Las lecturas van **en serie y no en un `gather`**, aunque no dependan una de la otra: son
+    consultas sobre la misma conexión, y una conexión de asyncpg no admite dos operaciones a la
     vez —la segunda muere con "another operation is in progress"—. El paralelismo de
     `sanear_universo` funciona porque ahí lo que corre al lado es una llamada HTTP, no otro SQL.
 
@@ -47,11 +51,28 @@ async def resolver_cartera(conn: Any, posiciones: Sequence[PosicionDeclarada]) -
     """
     saneado = await sanear_universo(conn)
     filas = await leer_instrumentos(conn)
+
+    # Sólo se buscan los textos declarados que todavía no matchearon un ticker — no hace falta leer
+    # el universo de FCI entero (4.251 filas) para resolver la cartera de un cliente (F-046).
+    candidatos = sorted({p.ticker_declarado.strip() for p in posiciones if p.ticker_declarado.strip()})
+    filas_fci = await leer_fondos_por_codigos(conn, candidatos)
+    fondos_fci = {
+        fondo.codigo_cafci: FondoFciResuelto(
+            codigo_cafci=fondo.codigo_cafci,
+            fondo=fondo.fondo,
+            vcp=fondo.vcp,
+            fecha_vcp=fondo.fecha_vcp,
+            moneda=fondo.moneda,
+        )
+        for fondo in (fondo_de_fila(fila) for fila in filas_fci)
+    }
+
     resultado = resolver(
         posiciones,
         saneado.especies,
         indexar_instrumentos(filas),
         saneado.sanidad.descartados,
+        fondos_fci,
     )
     logger.info(
         "cartera_resuelta",

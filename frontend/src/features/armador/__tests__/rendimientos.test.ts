@@ -50,6 +50,8 @@ function posicion(extra: Partial<PosicionResuelta> = {}): PosicionResuelta {
     pesoReal: null,
     laminaConocida: true,
     esFci: false,
+    cuotapartes: null,
+    motivo: null,
     ...extra,
   }
 }

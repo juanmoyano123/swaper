@@ -195,9 +195,13 @@ function BloqueOptimizador({
 export function CarteraConfirmada({
   posiciones,
   onCargarOtra,
+  onIdentificarComoFci,
 }: {
   posiciones: PosicionCruda[]
   onCargarOtra: () => void
+  /** F-046: "¿Es un FCI?" sobre una fila que no resolvió — re-identifica el texto declarado por el
+   *  `codigo_cafci` exacto elegido del picker, nunca por nombre (regla 11). */
+  onIdentificarComoFci: (id: string, codigoCafci: string) => void
 }) {
   const invalidas = posiciones.filter((p) => !p.valida).length
 
@@ -220,7 +224,7 @@ export function CarteraConfirmada({
 
       {/* Se mandan también las inválidas: una fila que no se pudo leer sigue siendo plata del
           cliente, y sacarla del pedido la sacaría del diagnóstico de cobertura. */}
-      <ResolucionCartera posiciones={posiciones} />
+      <ResolucionCartera posiciones={posiciones} onIdentificarComoFci={onIdentificarComoFci} />
 
       <DiagnosticoCartera posiciones={posiciones} />
 

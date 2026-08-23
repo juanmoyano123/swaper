@@ -8,6 +8,7 @@ cartera del cliente entre por el cuerpo y no por la query string.
 
 from typing import Any
 
+from app.fci.lectura import TABLA_FCI
 from app.posiciones.lectura import TABLA_INSTRUMENTOS
 from tests.conftest import cliente
 
@@ -51,22 +52,26 @@ INSTRUMENTOS = [
 class FakeConexionCartera:
     """Conexión falsa que contesta distinto según qué tabla le pidan.
 
-    Hace falta porque el servicio hace **dos** lecturas sobre la misma conexión —el universo
-    saneado y el índice de instrumentos— y una conexión que devolviera siempre lo mismo taparía
-    justamente el enganche que se quiere probar.
+    Hace falta porque el servicio hace **tres** lecturas sobre la misma conexión —el universo
+    saneado, el índice de instrumentos y los FCI candidatos (F-046)— y una conexión que devolviera
+    siempre lo mismo taparía justamente el enganche que se quiere probar.
     """
 
     def __init__(
         self,
         universo: list[dict[str, Any]] | None = None,
         instrumentos: list[dict[str, Any]] | None = None,
+        fondos_fci: list[dict[str, Any]] | None = None,
     ) -> None:
         self.universo = UNIVERSO if universo is None else universo
         self.instrumentos = INSTRUMENTOS if instrumentos is None else instrumentos
+        self.fondos_fci = [] if fondos_fci is None else fondos_fci
         self.consultas: list[str] = []
 
     async def fetch(self, query: str, *_: Any) -> list[dict[str, Any]]:
         self.consultas.append(query)
+        if TABLA_FCI in query:
+            return self.fondos_fci
         if TABLA_INSTRUMENTOS in query and "public.resumen" not in query:
             return self.instrumentos
         return self.universo
@@ -254,6 +259,7 @@ async def test_no_se_pide_el_contraste_de_byma(crear_app) -> None:
     async with cliente(app_con(crear_app, conexion)) as http:
         await http.post(RESOLVER, json=cuerpo(pos("AL30")))
 
-    assert len(conexion.consultas) == 2
+    assert len(conexion.consultas) == 3
     assert any("public.resumen" in q for q in conexion.consultas)
     assert any(TABLA_INSTRUMENTOS in q for q in conexion.consultas)
+    assert any(TABLA_FCI in q for q in conexion.consultas)

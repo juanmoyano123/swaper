@@ -103,6 +103,7 @@ function mockFetch() {
             dato_sano: true,
             motivo: null,
             motivo_descripcion: null,
+            fondo_fci: null,
           },
         ],
         cobertura: {

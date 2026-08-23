@@ -13,6 +13,7 @@ import { EstadoError } from '@/components/EstadoError'
 import { useCarteraCargadaValuada } from '@/features/cartera-diagnostico/hooks/useCarteraCargadaValuada'
 import { useEspeciesUniverso } from '@/lib/cartera/hooks/useEspeciesUniverso'
 import { useTipoDeCambio } from '@/lib/cartera/hooks/useTipoDeCambio'
+import { useFondosFci } from '@/lib/fci'
 import { fmtFechaHora, fmtMonto, fmtNumero, SIN_DATO } from '@/lib/fmt'
 import { useRentaVariable } from '@/lib/rentaVariable'
 
@@ -74,9 +75,13 @@ function RevaluacionArmador({ snapshot, snapshotEn }: { snapshot: SnapshotArmado
   const acciones = useRentaVariable('accion')
   const cedears = useRentaVariable('cedear')
   const tipoDeCambio = useTipoDeCambio()
+  // `null` trae todos los fondos (F-046): un mandato guardado puede tener un FCI de cualquier tipo
+  // de renta, y no hay de dónde sacar el segmento sin volver a resolver la cartera entera.
+  const fondosFci = useFondosFci(null)
 
-  const cargando = rentaFija.isPending || acciones.isPending || cedears.isPending || tipoDeCambio.isPending
-  const error = rentaFija.error ?? acciones.error ?? cedears.error ?? tipoDeCambio.error ?? null
+  const cargando =
+    rentaFija.isPending || acciones.isPending || cedears.isPending || tipoDeCambio.isPending || fondosFci.isPending
+  const error = rentaFija.error ?? acciones.error ?? cedears.error ?? tipoDeCambio.error ?? fondosFci.error ?? null
 
   const porTickerHoy = useMemo(() => {
     const mapa = new Map<string, { precio: number | null; moneda_cotizacion: string | null }>()
@@ -86,14 +91,20 @@ function RevaluacionArmador({ snapshot, snapshotEn }: { snapshot: SnapshotArmado
     return mapa
   }, [rentaFija.data, acciones.data, cedears.data])
 
+  const porCodigoCafciHoy = useMemo(() => {
+    const mapa = new Map<string, { vcp: number | null; moneda: string }>()
+    for (const f of fondosFci.data ?? []) mapa.set(f.codigo_cafci, { vcp: f.vcp, moneda: f.moneda })
+    return mapa
+  }, [fondosFci.data])
+
   const tcHoy = tipoDeCambio.data?.tipo_de_cambio.valor ?? null
 
   const comparacion = useMemo(() => {
     if (cargando) return null
     const congeladas = comparablesDesdeSnapshotArmador(snapshot)
-    const hoy = revaluarResueltasHoy(snapshot.resueltas, porTickerHoy, tcHoy)
+    const hoy = revaluarResueltasHoy(snapshot.resueltas, porTickerHoy, tcHoy, porCodigoCafciHoy)
     return compararValuaciones(congeladas, hoy)
-  }, [snapshot, porTickerHoy, tcHoy, cargando])
+  }, [snapshot, porTickerHoy, tcHoy, porCodigoCafciHoy, cargando])
 
   if (cargando) return <EstadoCarga que="los precios de hoy" />
   if (error) return <EstadoError error={error} />

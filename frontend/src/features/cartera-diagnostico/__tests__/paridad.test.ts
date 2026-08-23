@@ -103,9 +103,9 @@ const UNIVERSO = new Map<string, Especie>([
 ])
 
 const ENTRADAS: EntradaResolver[] = [
-  { ticker: 'AL30D', peso: 40, precio: AL30D.precio, monedaCotizacion: 'usd', lamina: AL30D.lamina, esFci: false },
-  { ticker: 'GD30D', peso: 35, precio: GD30D.precio, monedaCotizacion: 'usd', lamina: GD30D.lamina, esFci: false },
-  { ticker: 'TX26', peso: 25, precio: TX26.precio, monedaCotizacion: 'ars', lamina: TX26.lamina, esFci: false },
+  { ticker: 'AL30D', peso: 40, precio: AL30D.precio, monedaCotizacion: 'usd', lamina: AL30D.lamina, esFci: false, vcpPorMil: null, fechaVcp: null },
+  { ticker: 'GD30D', peso: 35, precio: GD30D.precio, monedaCotizacion: 'usd', lamina: GD30D.lamina, esFci: false, vcpPorMil: null, fechaVcp: null },
+  { ticker: 'TX26', peso: 25, precio: TX26.precio, monedaCotizacion: 'ars', lamina: TX26.lamina, esFci: false, vcpPorMil: null, fechaVcp: null },
 ]
 
 function posicionResueltaSimulada(
@@ -131,6 +131,7 @@ function posicionResueltaSimulada(
     dato_sano: true,
     motivo: null,
     motivo_descripcion: null,
+    fondo_fci: null,
   }
 }
 

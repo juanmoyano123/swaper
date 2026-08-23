@@ -20,6 +20,8 @@
 import { useState, type ReactNode } from 'react'
 
 import { MiniCalendario, type CeldaMes } from '@/components/MiniCalendario'
+import { SelectorFci } from '@/components/SelectorFci'
+import type { FondoFci } from '@/lib/fci'
 import { fmtMonto, fmtNumero, fmtPct, SIN_DATO } from '@/lib/fmt'
 import type { EspecieRentaVariable } from '@/lib/rentaVariable'
 
@@ -48,7 +50,8 @@ const TOLERANCIA_DIFERENCIA_FILA = 0.6
 
 export function CarteraEditable() {
   const { pos, montoTotal } = useArmador()
-  const { fijarPeso, fijarMontoTotal, equiponderar, vaciar } = useArmadorAcciones()
+  const { fijarPeso, fijarMontoTotal, equiponderar, vaciar, agregarFci } = useArmadorAcciones()
+  const [mostrarSelectorFci, setMostrarSelectorFci] = useState(false)
 
   const {
     resueltas,
@@ -96,6 +99,13 @@ export function CarteraEditable() {
   function onVaciar() {
     if (pos.length > 0 && !window.confirm('¿Vaciar la cartera en construcción?')) return
     vaciar()
+  }
+
+  // El FCI entra con el mismo default que un papel de la grilla — 100/(n+1) — para que el asesor
+  // no tenga que declarar un peso a mano antes de poder buscar el fondo (F-046, punto 1).
+  function onElegirFci(fondo: FondoFci) {
+    agregarFci(fondo.fondo, 100 / (pos.length + 1), fondo.codigo_cafci)
+    setMostrarSelectorFci(false)
   }
 
   return (
@@ -157,6 +167,7 @@ export function CarteraEditable() {
           />
         </label>
         <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
+          <BotonAccion onClick={() => setMostrarSelectorFci((v) => !v)}>Agregar FCI</BotonAccion>
           <BotonAccion onClick={equiponderar} disabled={pos.length === 0}>
             Equiponderar
           </BotonAccion>
@@ -164,6 +175,15 @@ export function CarteraEditable() {
             Vaciar
           </BotonAccion>
         </div>
+        {mostrarSelectorFci && (
+          <div style={{ flexBasis: '100%' }}>
+            <SelectorFci
+              etiqueta="buscar FCI para agregar a la cartera"
+              onElegir={onElegirFci}
+              onCancelar={() => setMostrarSelectorFci(false)}
+            />
+          </div>
+        )}
         {posiciones.length > 0 && (
           <span style={{ flexBasis: '100%', fontSize: 11, color: 'var(--dim)' }}>
             {leyendaAjuste(ajuste)}
@@ -536,7 +556,8 @@ function FilaCartera({
   meses: { nombre: string; instrumentos: { ticker: string; pct_renta: number }[] }[] | null
   onFijarPeso: (peso: number) => void
 }) {
-  const { alternarPapel } = useArmadorAcciones()
+  const { alternarPapel, identificarFci } = useArmadorAcciones()
+  const [reidentificando, setReidentificando] = useState(false)
 
   const mesesQuePaga: string[] = []
   const celdas: CeldaMes[] = Array.from({ length: 12 }, (_, indice) => {
@@ -581,27 +602,72 @@ function FilaCartera({
           {posicion.clase === 'fci' ? posicion.ticker : (especie?.emisor ?? especie?.ticker ?? posicion.ticker)}
         </div>
         <div className="mono" style={{ fontSize: 10, color: 'var(--sd)' }}>
-          VN {resuelta?.vn !== null && resuelta?.vn !== undefined ? fmtNumero(resuelta.vn, 0) : SIN_DATO}
-          {' · '}
-          {resuelta?.invertido !== null && resuelta?.invertido !== undefined
-            ? fmtMonto(resuelta.invertido, especie?.moneda_cotizacion === 'ARS' ? 'ars' : 'usd')
-            : SIN_DATO}
-          {resuelta?.laminaConocida === true && especie?.lamina != null && (
-            <> · lám. {fmtNumero(especie.lamina, 0)}</>
-          )}
-          {resuelta?.laminaConocida === false && posicion.clase !== 'fci' && (
+          {posicion.clase === 'fci' ? (
             <>
-              {' · '}
-              <InputLamina ticker={posicion.ticker} />
+              cuotapartes{' '}
+              {resuelta?.cuotapartes !== null && resuelta?.cuotapartes !== undefined
+                ? fmtNumero(resuelta.cuotapartes, 2)
+                : SIN_DATO}
+              {' · invertido '}
+              {resuelta?.invertido !== null && resuelta?.invertido !== undefined
+                ? fmtNumero(resuelta.invertido, 2)
+                : SIN_DATO}
             </>
-          )}
-          {posicion.clase !== 'fci' && (
+          ) : (
             <>
+              VN {resuelta?.vn !== null && resuelta?.vn !== undefined ? fmtNumero(resuelta.vn, 0) : SIN_DATO}
+              {' · '}
+              {resuelta?.invertido !== null && resuelta?.invertido !== undefined
+                ? fmtMonto(resuelta.invertido, especie?.moneda_cotizacion === 'ARS' ? 'ars' : 'usd')
+                : SIN_DATO}
+              {resuelta?.laminaConocida === true && especie?.lamina != null && (
+                <> · lám. {fmtNumero(especie.lamina, 0)}</>
+              )}
+              {resuelta?.laminaConocida === false && (
+                <>
+                  {' · '}
+                  <InputLamina ticker={posicion.ticker} />
+                </>
+              )}
               {' · calif. '}
               {especie?.calificacion ?? 'sin calif.'}
             </>
           )}
         </div>
+        {posicion.clase === 'fci' && !posicion.codigoCafci && (
+          <div style={{ marginTop: 2 }}>
+            {!reidentificando ? (
+              <span style={{ fontSize: 10, color: 'var(--ac2)' }}>
+                FCI sin identificar —{' '}
+                <button
+                  type="button"
+                  onClick={() => setReidentificando(true)}
+                  style={{
+                    font: 'inherit',
+                    fontSize: 10,
+                    color: 'var(--ac2)',
+                    background: 'transparent',
+                    border: 'none',
+                    textDecoration: 'underline',
+                    cursor: 'pointer',
+                    padding: 0,
+                  }}
+                >
+                  identificar contra CAFCI
+                </button>
+              </span>
+            ) : (
+              <SelectorFci
+                etiqueta={`buscar el fondo de ${posicion.ticker} para identificarlo`}
+                onCancelar={() => setReidentificando(false)}
+                onElegir={(fondo) => {
+                  identificarFci(posicion.ticker, fondo.codigo_cafci)
+                  setReidentificando(false)
+                }}
+              />
+            )}
+          </div>
+        )}
       </div>
 
       <input

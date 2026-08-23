@@ -6,6 +6,7 @@ regla 2 (naturaleza de rendimiento distinta). Mismo precedente que `renta_variab
 `posiciones/lectura.py`: lectura aparte para un universo que nunca comparte tabla con el resto.
 """
 
+from collections.abc import Sequence
 from typing import Any
 
 TABLA_FCI = "public.fci"
@@ -68,3 +69,18 @@ async def leer_fondos(
 async def leer_fondo(conn: Any, codigo_cafci: str) -> dict[str, Any] | None:
     fila = await conn.fetchrow(SQL_FONDO, codigo_cafci)
     return dict(fila) if fila else None
+
+
+SQL_FONDOS_POR_CODIGOS = f"SELECT * FROM {TABLA_FCI} WHERE codigo_cafci = ANY($1)"
+
+
+async def leer_fondos_por_codigos(conn: Any, codigos: Sequence[str]) -> list[dict[str, Any]]:
+    """El lookup exacto de F-046: sólo los fondos cuyo `codigo_cafci` está en `codigos`, tal cual.
+
+    Se usa para resolver una cartera cargada contra `public.fci` sin traer las 4.251 filas del
+    universo entero — la cartera de un cliente tiene, como mucho, unas pocas decenas de posiciones.
+    """
+    if not codigos:
+        return []
+    filas = await conn.fetch(SQL_FONDOS_POR_CODIGOS, list(codigos))
+    return [dict(fila) for fila in filas]

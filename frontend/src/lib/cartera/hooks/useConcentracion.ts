@@ -36,10 +36,13 @@ import { esquemaConcentracion, type NombreDePerfil } from '../esquemaConcentraci
 export interface PosicionConPeso {
   ticker: string
   peso: number
+  /** F-046: un FCI valuado entra al peso medido pero a ningún tope. `undefined` en las posiciones
+   *  de renta fija (equivale a `false`). */
+  esFci?: boolean
 }
 
 export function firmaDePesos(posiciones: PosicionConPeso[]): string {
-  return posiciones.map((p) => `${p.ticker}:${p.peso}`).join('|')
+  return posiciones.map((p) => `${p.ticker}:${p.peso}:${p.esFci ? 1 : 0}`).join('|')
 }
 
 export function useConcentracion(posiciones: PosicionConPeso[], perfil: NombreDePerfil) {
@@ -53,7 +56,11 @@ export function useConcentracion(posiciones: PosicionConPeso[], perfil: NombreDe
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            posiciones: posiciones.map((p) => ({ ticker: p.ticker, peso: p.peso })),
+            posiciones: posiciones.map((p) => ({
+              ticker: p.ticker,
+              peso: p.peso,
+              es_fci: p.esFci ?? false,
+            })),
           }),
         },
       ),

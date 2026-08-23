@@ -16,6 +16,8 @@ function entrada(extra: Partial<EntradaResolver> = {}): EntradaResolver {
     monedaCotizacion: 'usd',
     lamina: null,
     esFci: false,
+    vcpPorMil: null,
+    fechaVcp: null,
     ...extra,
   }
 }
@@ -174,6 +176,89 @@ describe('GWT-4: FCI con peso y sin precio', () => {
     expect(fci.vn).toBeNull()
     expect(fci.invertido).toBeNull()
     expect(fci.pesoReal).toBeNull()
+  })
+})
+
+// --- F-046: valuación de un FCI contra su valor de cuotaparte ----------------------------------
+
+describe('F-046: FCI con VCP disponible', () => {
+  it('se resuelve sin lámina ni Math.floor, y deriva las cuotapartes', () => {
+    const [fci] = resolver(
+      [
+        entrada({
+          ticker: 'Fondo X',
+          peso: 40,
+          esFci: true,
+          precio: null,
+          monedaCotizacion: 'usd',
+          vcpPorMil: 2000, // 2 USD por cuotaparte
+        }),
+      ],
+      1000,
+      null,
+    )
+
+    // objetivoUsd = 400; en USD directo: invertido = 400.
+    expect(fci.invertido).toBeCloseTo(400, 6)
+    expect(fci.invertidoUsd).toBeCloseTo(400, 6)
+    expect(fci.vn).toBeNull() // nunca lámina en un FCI
+    expect(fci.cuotapartes).toBeCloseTo(400 / 2, 6) // 400 / (2000/1000)
+    expect(fci.motivo).toBeNull()
+  })
+
+  it('en ARS convierte con el tipo de cambio del universo, nunca con uno externo', () => {
+    const [fci] = resolver(
+      [entrada({ ticker: 'Fondo ARS', peso: 50, esFci: true, monedaCotizacion: 'ars', vcpPorMil: 15000 })],
+      1000,
+      1500,
+    )
+
+    // objetivoUsd = 500; invertido en ARS = 500 * 1500 = 750.000; invertidoUsd vuelve a 500.
+    expect(fci.invertido).toBeCloseTo(750_000, 3)
+    expect(fci.invertidoUsd).toBeCloseTo(500, 3)
+    expect(fci.cuotapartes).toBeCloseTo(750_000 / 15, 3)
+  })
+})
+
+describe('F-046: FCI sin identificar o sin fila en la planilla de hoy', () => {
+  it('queda sin resolver con motivo fci_sin_vcp, nunca con un precio inventado', () => {
+    const [fci] = resolver(
+      [entrada({ ticker: 'Fondo legado', peso: 20, esFci: true, vcpPorMil: null })],
+      1000,
+      null,
+    )
+
+    expect(fci.invertido).toBeNull()
+    expect(fci.invertidoUsd).toBeNull()
+    expect(fci.cuotapartes).toBeNull()
+    expect(fci.motivo).toBe('fci_sin_vcp')
+  })
+})
+
+describe('F-046: FCI en moneda USB de CAFCI', () => {
+  it('nunca se convierte: queda sin resolver con motivo fci_moneda_no_convertible', () => {
+    const [fci] = resolver(
+      [entrada({ ticker: 'Fondo USB', peso: 20, esFci: true, monedaCotizacion: 'usb', vcpPorMil: 1000 })],
+      1000,
+      1500,
+    )
+
+    expect(fci.invertido).toBeNull()
+    expect(fci.invertidoUsd).toBeNull()
+    expect(fci.motivo).toBe('fci_moneda_no_convertible')
+  })
+})
+
+describe('F-046: FCI en ARS sin tipo de cambio disponible', () => {
+  it('no inventa un tipo de cambio externo: queda sin resolver con motivo sin_tipo_de_cambio', () => {
+    const [fci] = resolver(
+      [entrada({ ticker: 'Fondo ARS', peso: 20, esFci: true, monedaCotizacion: 'ars', vcpPorMil: 1000 })],
+      1000,
+      null,
+    )
+
+    expect(fci.invertido).toBeNull()
+    expect(fci.motivo).toBe('sin_tipo_de_cambio')
   })
 })
 

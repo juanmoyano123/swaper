@@ -8,6 +8,7 @@ cobertura, que es donde un faltante tratado como cero mentiría sin que nadie lo
 from app.posiciones.resolucion import (
     Cobertura,
     FilaInstrumento,
+    FondoFciResuelto,
     MotivoNoResuelta,
     PosicionDeclarada,
     clave_de_busqueda,
@@ -401,3 +402,57 @@ def test_la_no_resuelta_viaja_con_su_motivo_descripto_y_sin_ticker_resuelto() ->
     assert fila["emision"] is None
     assert fila["motivo"] == "renta_variable"
     assert fila["motivo_descripcion"] is not None
+
+
+# --- F-046: el lookup exacto contra `public.fci` ---------------------------------------------------
+
+FONDO = FondoFciResuelto(
+    codigo_cafci=" 1234 ".strip(), fondo="Fondo Ejemplo Renta Fija", vcp=15234.5, fecha_vcp="2026-08-22",
+    moneda="ARS",
+)
+
+
+def test_un_codigo_cafci_pegado_resuelve_como_fci_y_no_como_no_esta_en_el_universo() -> None:
+    (resuelta,) = resolver(
+        [posicion("1234")], UNIVERSO, INSTRUMENTOS, fondos_fci={"1234": FONDO}
+    ).posiciones
+
+    assert resuelta.resuelta is False  # no es una especie del universo de renta fija
+    assert resuelta.motivo is MotivoNoResuelta.ES_FCI
+    assert resuelta.fondo_fci == FONDO
+
+
+def test_el_lookup_de_fci_es_exacto_y_no_por_nombre() -> None:
+    """Un código que no matchea ningún `codigo_cafci` sigue cayendo en no_esta_en_el_universo."""
+    (resuelta,) = resolver(
+        [posicion("9999")], UNIVERSO, INSTRUMENTOS, fondos_fci={"1234": FONDO}
+    ).posiciones
+
+    assert resuelta.motivo is MotivoNoResuelta.NO_ESTA_EN_EL_UNIVERSO
+    assert resuelta.fondo_fci is None
+
+
+def test_un_ticker_del_universo_de_renta_fija_no_se_prueba_contra_fci() -> None:
+    """El lookup de FCI sólo corre cuando no matcheó ninguna especie: nunca le gana a un ticker real."""
+    (resuelta,) = resolver(
+        [posicion("AL30")], UNIVERSO, INSTRUMENTOS, fondos_fci={"AL30": FONDO}
+    ).posiciones
+
+    assert resuelta.resuelta is True
+    assert resuelta.motivo is None
+    assert resuelta.fondo_fci is None
+
+
+def test_el_fondo_resuelto_viaja_completo_en_el_dict_de_la_posicion() -> None:
+    fila = resolver(
+        [posicion("1234")], UNIVERSO, INSTRUMENTOS, fondos_fci={"1234": FONDO}
+    ).posiciones[0].como_dict()
+
+    assert fila["motivo"] == "es_fci"
+    assert fila["fondo_fci"] == {
+        "codigo_cafci": "1234",
+        "fondo": "Fondo Ejemplo Renta Fija",
+        "vcp": 15234.5,
+        "fecha_vcp": "2026-08-22",
+        "moneda": "ARS",
+    }

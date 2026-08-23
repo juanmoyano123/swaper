@@ -20,7 +20,8 @@
 
 import { EstadoCarga } from '@/components/EstadoCarga'
 import { EstadoError } from '@/components/EstadoError'
-import { fmtCompacto, fmtMonto } from '@/lib/fmt'
+import { porcionSinCronograma, type PorcionSinCronograma } from '@/lib/cartera/porcionSinCronograma'
+import { fmtCompacto, fmtMonto, fmtPct } from '@/lib/fmt'
 
 import { useCalendarioCartera } from '../hooks/useCalendarioCartera'
 import { useCarteraResuelta } from '../hooks/useCarteraResuelta'
@@ -31,22 +32,29 @@ import { PanelRentaAnual } from './PanelRentaAnual'
 import { PanelRentaCordillera } from './PanelRentaCordillera'
 
 export function PanelRenta() {
-  const { posicionesParaCalendario, resueltas, tipoDeCambio } = useCarteraResuelta()
+  const { posicionesParaCalendario, resueltas, tipoDeCambio, totalInvertidoUsd } = useCarteraResuelta()
+  const fci = porcionSinCronograma(resueltas, totalInvertidoUsd)
   const calendario = useCalendarioCartera(posicionesParaCalendario)
 
   if (posicionesParaCalendario.length === 0) {
     return (
-      <div
-        style={{
-          padding: '10px 12px',
-          border: '1px dashed var(--lin)',
-          borderRadius: 4,
-          fontSize: 12,
-          color: 'var(--dim)',
-        }}
-      >
-        Sin posiciones de renta fija con monto asignado todavía: agregá papeles y un monto total
-        para ver la renta mensual y la renta anual sobre lo invertido.
+      <div style={{ display: 'grid', gap: 10 }}>
+        <div
+          style={{
+            padding: '10px 12px',
+            border: '1px dashed var(--lin)',
+            borderRadius: 4,
+            fontSize: 12,
+            color: 'var(--dim)',
+          }}
+        >
+          {fci.cantidadFci > 0
+            ? // Excluida por clase (F-046), no por falta de dato: hay que decirlo distinto de
+              // "sin posiciones" — la cartera sí tiene monto, sólo que ninguno tiene cronograma.
+              'Sin posiciones de renta fija con cronograma: toda la cartera armada hasta acá es FCI.'
+            : 'Sin posiciones de renta fija con monto asignado todavía: agregá papeles y un monto total para ver la renta mensual y la renta anual sobre lo invertido.'}
+        </div>
+        {fci.cantidadFci > 0 && <FranjaSinCronogramaFci fci={fci} />}
       </div>
     )
   }
@@ -103,9 +111,37 @@ export function PanelRenta() {
         </div>
       )}
 
+      {fci.cantidadFci > 0 && <FranjaSinCronogramaFci fci={fci} />}
+
       <DetalleMesCartera meses={meses} />
 
       <PanelRentaAnual datos={porMoneda} />
+    </div>
+  )
+}
+
+/**
+ * El capital en FCI declarado como hueco del calendario — F-046. No es la misma alerta que
+ * `instrumento_sin_cronograma` (esa dice "el dato falta"): acá el motivo es estructural, un FCI no
+ * tiene flujo contractual que proyectar, así que el texto lo dice con otras palabras a propósito.
+ */
+function FranjaSinCronogramaFci({ fci }: { fci: PorcionSinCronograma }) {
+  return (
+    <div
+      role="note"
+      aria-label="Capital sin cronograma contractual en FCI"
+      style={{
+        background: 'var(--pan)',
+        border: '1px dashed var(--lin)',
+        borderRadius: 4,
+        padding: '8px 12px',
+        fontSize: 11.5,
+        color: 'var(--dim)',
+      }}
+    >
+      Capital sin cronograma contractual (FCI): {fci.pctFci !== null ? fmtPct(fci.pctFci, 1) : '—'} de
+      la cartera ({fmtMonto(fci.montoFciUsd, 'usd')}) — un FCI no tiene cronograma de cupones, por
+      eso no aparece en ningún mes de las cordilleras de arriba.
     </div>
   )
 }

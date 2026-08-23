@@ -98,6 +98,7 @@ function concentracion(pesoMaximo: number): Concentracion {
     sectores: { presentes: ['Soberano'], cantidad: 1, minimo: 3, suficiente: false, peso_sin_sector: 0 },
     peso: { declarado: 100, medido: 100 },
     fuera_del_universo: [],
+    fci: [],
     alertas: [],
   }
 }

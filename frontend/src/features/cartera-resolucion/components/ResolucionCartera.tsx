@@ -15,8 +15,11 @@
  * por sector. Todo eso consume `Resolucion.posiciones`, que es lo que esta pantalla ya tiene.
  */
 
+import { useState } from 'react'
+
 import { EstadoCarga } from '@/components/EstadoCarga'
 import { EstadoError } from '@/components/EstadoError'
+import { SelectorFci } from '@/components/SelectorFci'
 import { fmtNumero, fmtPct } from '@/lib/fmt'
 
 import type { PosicionCruda } from '@/features/cartera-ingreso/types'
@@ -35,7 +38,14 @@ const filaBase = {
 
 const listaBase = { listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 4 } as const
 
-export function ResolucionCartera({ posiciones }: { posiciones: PosicionCruda[] }) {
+export function ResolucionCartera({
+  posiciones,
+  onIdentificarComoFci,
+}: {
+  posiciones: PosicionCruda[]
+  /** F-046: re-identifica una fila que no resolvió, eligiendo el fondo del picker. */
+  onIdentificarComoFci: (id: string, codigoCafci: string) => void
+}) {
   const consulta = useResolucionCartera(posiciones)
 
   // Sin posiciones no hay consulta —el hook la deja deshabilitada— y por lo tanto tampoco hay
@@ -70,7 +80,7 @@ export function ResolucionCartera({ posiciones }: { posiciones: PosicionCruda[] 
 
       <ul style={listaBase}>
         {resueltas.map((p) => (
-          <FilaResuelta key={p.id} posicion={p} />
+          <FilaResuelta key={p.id} posicion={p} onIdentificarComoFci={onIdentificarComoFci} />
         ))}
       </ul>
 
@@ -135,7 +145,13 @@ function ResumenCobertura({ cobertura }: { cobertura: Cobertura }) {
   )
 }
 
-function FilaResuelta({ posicion }: { posicion: PosicionResuelta }) {
+function FilaResuelta({
+  posicion,
+  onIdentificarComoFci,
+}: {
+  posicion: PosicionResuelta
+  onIdentificarComoFci: (id: string, codigoCafci: string) => void
+}) {
   return (
     <li style={filaBase}>
       <span className="mono" style={{ fontSize: 12, minWidth: 90 }}>
@@ -143,7 +159,11 @@ function FilaResuelta({ posicion }: { posicion: PosicionResuelta }) {
       </span>
 
       <span className="mono" style={{ fontSize: 11.5, color: 'var(--dim)', flex: 1 }}>
-        {posicion.resuelta ? <DatosResueltos posicion={posicion} /> : <NoReconocida posicion={posicion} />}
+        {posicion.resuelta ? (
+          <DatosResueltos posicion={posicion} />
+        ) : (
+          <NoReconocida posicion={posicion} onIdentificarComoFci={onIdentificarComoFci} />
+        )}
       </span>
 
       <span className="mono" style={{ fontSize: 11.5, color: 'var(--dim)' }}>
@@ -176,11 +196,59 @@ function DatosResueltos({ posicion }: { posicion: PosicionResuelta }) {
   )
 }
 
-/** No se reconoció: se dice por qué y **no se propone ningún reemplazo**. */
-function NoReconocida({ posicion }: { posicion: PosicionResuelta }) {
+/**
+ * No se reconoció: se dice por qué y **no se propone ningún reemplazo**.
+ *
+ * Cuando el motivo es `no_esta_en_el_universo` (F-046), se ofrece "¿Es un FCI?": el texto pegado
+ * puede ser el nombre de un fondo en vez de un ticker de renta fija — el backend ya intentó un
+ * lookup exacto por `codigo_cafci` y no matcheó, así que la única forma de identificarlo es que el
+ * asesor lo elija a mano de la lista. Nunca se matchea por nombre en ningún lado de este flujo.
+ */
+function NoReconocida({
+  posicion,
+  onIdentificarComoFci,
+}: {
+  posicion: PosicionResuelta
+  onIdentificarComoFci: (id: string, codigoCafci: string) => void
+}) {
+  const [buscando, setBuscando] = useState(false)
+
   return (
     <span style={{ color: 'var(--neg)' }}>
       no reconocida{posicion.motivo_descripcion ? ` · ${posicion.motivo_descripcion}` : ''}
+      {posicion.motivo === 'no_esta_en_el_universo' && !buscando && (
+        <>
+          {' · '}
+          <button
+            type="button"
+            onClick={() => setBuscando(true)}
+            style={{
+              font: 'inherit',
+              fontSize: 11.5,
+              color: 'var(--ac)',
+              background: 'transparent',
+              border: 'none',
+              textDecoration: 'underline',
+              cursor: 'pointer',
+              padding: 0,
+            }}
+          >
+            ¿Es un FCI?
+          </button>
+        </>
+      )}
+      {buscando && (
+        <div style={{ marginTop: 4 }}>
+          <SelectorFci
+            etiqueta={`buscar el fondo de la fila ${posicion.fila}`}
+            onCancelar={() => setBuscando(false)}
+            onElegir={(fondo) => {
+              onIdentificarComoFci(posicion.id, fondo.codigo_cafci)
+              setBuscando(false)
+            }}
+          />
+        </div>
+      )}
     </span>
   )
 }
