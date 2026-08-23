@@ -4,7 +4,7 @@ Generado desde `claude-docs/planning/plan.md` (Fase 2) al correr `/init-project`
 Estado inicial: las 50 features arrancaban en **pendiente**. Este archivo se actualiza a mano o
 desde `/build-feature` a medida que cada una se implementa.
 
-**Estado al 23/08/2026 — Stage 1 cerrado (44 de 44), Stage 2 abierto (1 de 27), Stage 3 creado
+**Estado al 23/08/2026 — Stage 1 cerrado (44 de 44), Stage 2 abierto (1 de 26), Stage 3 creado
 con 5 diferidas.** El catálogo
 creció de 50 a 77 features desde que se generó este archivo; la tabla de Stage 2 se reconcilió
 contra `plan.md` el 23/08/2026. Lo que está trabado hoy **no es código sino dato**: ver
@@ -87,12 +87,14 @@ contra `plan.md` el 23/08/2026. Lo que está trabado hoy **no es código sino da
 > F-051 y F-052 se agregaron el 08/08/2026, después de auditar cómo resuelve estas dos cosas el
 > monitor de mesa. El plan pasó de 42 a 44 features de Stage 1.
 
-## Stage 2 — 27 features, ordenadas por RICE (~150 pd · ~30 semanas)
+## Stage 2 — 26 features, ordenadas por RICE (~147 pd · ~29 semanas)
 
 Reconciliado el 23/08/2026 contra `claude-docs/planning/plan.md`. La tabla anterior tenía 8
 features: era la foto del catálogo al cerrar la Fase 2, y quedó vieja cuando el catálogo creció con
 F-054…F-057 (Bloque O), F-058…F-070 (Bloque P, paridad competitiva con Docta), F-071 y F-072, y
-F-073…F-077 (motor analítico determinístico). Estado medido contra el código, no contra los
+F-074…F-077 (motor analítico determinístico; su quinta pieza, F-073, se eliminó el mismo 23/08:
+no se guardan series históricas — F-061/F-062/F-075 consumen el histórico de data912 a demanda).
+Estado medido contra el código, no contra los
 mensajes de commit. El mismo 23/08 el dueño del producto difirió cinco features a un Stage 3
 (tabla propia más abajo): Stage 2 se concentra en herramientas operativas de uso diario, no en
 gestión comercial ni en cambios de fuente. F-064 (watchlist) entró y salió del lote diferido el
@@ -103,7 +105,6 @@ mismo día: es de uso diario, se queda en Stage 2.
 | F-068 | Panel de dólar y spreads | 266,7 | pendiente |
 | F-060 | Navegación por emisor × naturaleza de tasa | 240,0 | pendiente |
 | F-059 | Comparador de dos instrumentos | 189,0 | pendiente |
-| F-073 | Serie diaria de cierres persistida | 180,0 | pendiente |
 | F-072 | Prospecto de emisión de ONs, vía CNV | 175,0 | **completada** |
 | F-071 | Calculadora de canjes y prorrateo de órdenes | 157,5 | pendiente |
 | F-064 | Watchlist | 150,0 | pendiente |
@@ -167,7 +168,7 @@ cierre. El RICE no cambió; cambió la etiqueta que decide cuándo entran.
 | 3 — RV, carga y diagnóstico | 9 | 41 | ~8 | ~28,5 |
 | 4 — Optimizador y persistencia | 9 | 42 | ~8,5 | ~37 |
 | **Stage 1** | **44** | **185** | **~37 semanas** | **cerrado el 16/08/2026** |
-| Stage 2 | 27 | 150 | ~30 | 1 de 27 hecha (F-072) |
+| Stage 2 | 26 | 147 | ~29 | 1 de 26 hecha (F-072) |
 | Stage 3 (diferido el 23/08/2026) | 5 | 37 | ~7 | ninguna empezada; F-054 parcial |
 
 **La base está poblada.** F-007 corrió contra Supabase el 06/08/2026 y dejó 2.894 instrumentos,
@@ -1139,11 +1140,12 @@ precio deja de servir para armar. Es criterio de negocio, no técnico, y bloquea
 | `IAMC_HABILITADO=false` | 13/08/2026 | 35 emisiones con rendimiento (283 → 248), convexidad, valor residual | F-055 (descarga automática) |
 | `CNV_HABILITADO=false` | 17/08/2026 | prospectos de ON (default apagado por diseño; `.env` local lo tiene en true) | ninguna: es el flag normal de la feature |
 
-**5. La serie histórica de precios no se acumula.** La poda de consolidación deja una fila por
-ticker, así que el producto no tiene historia propia: sin ella no hay volatilidad, correlaciones,
-beta ni Sharpe, y F-061/F-062 no tienen insumo. Se destraba con **F-073**, y es el único pendiente
-del backlog donde postergar tiene un costo que no se recupera: la historia empieza el día que se
-prende.
+**5. La serie histórica de precios no se acumula — y quedó resuelto que no se va a acumular.**
+Decisión del dueño del producto (23/08/2026): el producto no guarda series históricas. F-073 se
+eliminó del catálogo el mismo día que se creó, y F-061/F-062/F-075 se reescribieron para consumir
+el histórico de cierres de data912 a demanda, sin persistir. Cobertura medida ese día contra la
+fuente viva: acciones 88 %, CEDEARs 53 %, soberanos líquidos con ~5 años de barras, 7 de 24 en una
+muestra del panel de bonos, y cero letras y cero ONs — esos huecos se declaran, no se rellenan.
 
 **6. El cronograma de pagos no tiene fuente viva** desde la baja de Docta (12/08/2026). El conjunto
 de `public.cashflow` quedó cerrado y es irrecuperable: toda emisión que empiece a cotizar de ahora

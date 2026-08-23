@@ -2872,33 +2872,43 @@ THEN cae en una celda de "naturaleza no declarada" y se cuenta ahí; no se lo as
 **Descripción.** Variación acumulada por ticker en ventanas de 1 día, 1 semana, 1 mes, 3 meses, 6
 meses, 1 año y año a la fecha, en pesos y en dólares, y —para bonos— con precio clean o dirty.
 
-**Depende de tiempo, no de una fuente.** La serie se construye con los cierres diarios que persiste
-F-073. Ojo: la versión original de esta ficha decía que `precios` "ya acumula una fila por especie y
-por corrida", y eso es falso desde que la poda de consolidación deja una sola fila por ticker
-(`serie_historica_habilitada=false`, su default) — sin F-073 esta feature no tiene insumo. Una
-ventana de un año exige un año de cierres: hasta entonces la ventana existe pero se declara
-incompleta, con la fecha del primer cierre a la vista. **No se rellena** con precios reconstruidos ni
-empalmando la serie de un tercero.
+**La serie no se guarda: se consulta.** Decisión del dueño del producto (23/08/2026): el producto
+no acumula historia propia de precios — la herramienta es para armar y decidir, no para hacer
+seguimiento. El insumo es el histórico de cierres de data912 (`/historical/...`), el mismo que ya
+alimenta el sparkline de la ficha de renta variable: consulta por especie a demanda, caché en
+memoria, **nunca se persiste ni se mezcla con el dato propio** (contrato de `app/externos/`). La
+versión original de esta ficha descartaba ese camino porque asumía una serie propia acumulada por
+una F-073 que se eliminó el mismo día que se creó.
 
-**El histórico de data912 no sirve para esta feature, y conviene decir por qué.** Cubre acciones y
-CEDEARs con años de profundidad, pero su contrato (`app/externos/`) es consulta por especie al hacer
-clic, sin persistir ni mezclar con nuestro dato. Un ranking por ventana sobre el panel entero exigiría
-una consulta por cada especie y produciría una tabla que mezcla serie externa con serie propia. Sirve
-para el sparkline de una ficha; no para esta grilla.
+**La cobertura es parcial y se declara.** Medida contra la fuente viva el 23/08/2026: 88 % de las
+acciones que operan, 53 % de los CEDEARs, soberanos líquidos con ~5 años de barras (AL30, GD30,
+AL35, AL41…) — pero sólo 7 de 24 tickers en una muestra al azar del panel de bonos, y **cero
+letras y cero ONs**: el tramo no existe. Una especie sin serie muestra el hueco declarado, no un
+cálculo a medias. La fuente tampoco declara la moneda de cada serie: la leyenda lo dice (regla 11).
 
-**Input:** serie de cierres diarios persistida por F-073.
-**Output:** tabla de rendimientos por ventana, por segmento.
-**Depende de:** F-073, F-012 (para la vista en dólares)
+**El alcance se acota a donde la fuente llega.** Un ranking por ventana sobre el panel entero
+exigiría una consulta por especie y la cobertura no lo banca. La feature vive en la ficha del
+instrumento y en el comparador (F-059); como tabla, sólo para el segmento soberano, cuyo universo
+cabe en una tanda de consultas cacheables.
+
+**Input:** histórico de cierres de data912 por especie, a demanda.
+**Output:** rendimientos por ventana en la ficha y el comparador; tabla sólo del segmento soberano.
+**Depende de:** F-012 (para la vista en dólares)
 **Habilita:** —
 
 **RICE:** R = 300 · I = 2 · C = 60 % · E = 5 → **Score 72**
-*Confidence 60 %: la implementación es simple; la incertidumbre es cuándo hay suficiente historia
-para que la pantalla sirva.*
+*Confidence 60 %: la implementación es simple; la incertidumbre pasó de "cuándo hay historia
+acumulada" a la cobertura y la permanencia de una fuente pública sin contrato.*
 
 ```
-GIVEN una ventana temporal más larga que la historia acumulada
+GIVEN una especie sin serie en la fuente
+WHEN se pide su rendimiento por ventana
+THEN el espacio va vacío y declara que la fuente no publica serie para esa especie; no se rellena
+     con precios reconstruidos ni empalmando otra fuente
+
+GIVEN una ventana temporal más larga que la serie que la fuente publica
 WHEN se la muestra
-THEN el valor va vacío y declara desde qué fecha hay datos; no se calcula sobre una ventana parcial
+THEN el valor va vacío y declara desde qué fecha hay serie; no se calcula sobre una ventana parcial
      presentándola como completa
 
 GIVEN la vista en dólares
@@ -2917,20 +2927,27 @@ THEN se usa el tipo de cambio derivado del universo de cada fecha, nombrando el 
 F-023 convertida en película. Sirve para ver si una TIR alta es alta contra el propio historial del
 instrumento o sólo contra sus pares de hoy.
 
-Misma restricción que F-061: **se dibuja desde la primera corrida guardada y el eje lo dice**. Una
-curva histórica de tres semanas es ruido con ejes.
+**La curva de ayer se calcula, no se guarda.** La TIR de una fecha pasada es aritmética: el
+cronograma contractual —que no envejece— descontado contra el cierre de esa fecha, que publica el
+histórico de data912. El mismo criterio de F-051, aplicado hacia atrás, con la misma regla: precio
+y flujo en la misma moneda. Nada se persiste; se consulta a demanda y se calcula al vuelo.
 
-**Input:** serie de TIR y duración por ticker persistida por F-073.
-**Output:** curva del segmento con selector de fecha y comparación contra hoy.
-**Depende de:** F-073, F-023, F-060
+**Sólo la curva soberana.** La cobertura del histórico de data912 en renta fija son los soberanos
+líquidos (~5 años de barras); las ONs y las letras no tienen serie en ninguna fuente gratuita
+conocida, así que sus curvas históricas no existen y el selector lo dice. Dentro del segmento, la
+especie sin serie queda fuera de la curva y se lista como faltante.
+
+**Input:** histórico de cierres de data912 + cronograma contractual (`public.cashflow`), a demanda.
+**Output:** curva del segmento soberano con selector de fecha y comparación contra hoy.
+**Depende de:** F-023, F-060
 **Habilita:** —
 
 **RICE:** R = 250 · I = 2 · C = 60 % · E = 4 → **Score 75**
 
 ```
-GIVEN una fecha anterior a la primera corrida guardada
+GIVEN una fecha anterior al inicio de la serie que publica la fuente
 WHEN se la elige en el selector
-THEN no se dibuja nada y se declara desde cuándo hay datos
+THEN no se dibuja nada y se declara desde cuándo hay serie
 
 GIVEN una curva de un segmento en dos fechas
 WHEN se las superpone
@@ -3365,61 +3382,6 @@ THEN el bloque de prospecto no se muestra, porque el Tesoro no presenta ante la 
 
 ---
 
-#### F-073 — Serie diaria de cierres persistida
-
-**Etiqueta:** Stage 2 · **Traza a:** análisis de los skills de asesoramiento del 23/08/2026
-(asesor-financiero/IAEF y asesor-fundamental-senior), contrastado contra la capacidad ya
-implementada — la matemática determinística de los skills se baja a features; el juicio queda en
-los skills, fuera de la app.
-
-**Descripción.** Un cierre por especie por día hábil, persistido en la base y nunca podado. Hoy no
-existe: la poda de consolidación deja **una sola fila por ticker** (la última), así que el producto
-no acumula historia propia de precios — y sin historia no hay volatilidad, correlaciones, beta,
-Sharpe, drawdown ni las ventanas de F-061/F-062, cuyas fichas asumían una acumulación que en la
-práctica no ocurre.
-
-**Prender `serie_historica_habilitada` no es la solución.** Ese flag revive la acumulación
-**intradiaria**: ~2.900 filas cada 15 minutos, ~11 MB por día hábil sin nada que las borre — el
-motivo exacto por el que se apagó (ver el comentario en `config.py`). Lo que la estadística
-necesita es otra cosa: **el último snapshot de cada fecha se conserva, los intradiarios se siguen
-podando**. Un cierre diario del universo entero son ~2.900 filas por día hábil, ~700 mil filas por
-año: trivial. Si se implementa como poda con memoria de fechas o como tabla `cierres_diarios`
-aparte lo decide el plan de la feature.
-
-**La historia empieza cuando se prende, y eso se declara.** No se reconstruye hacia atrás con
-series de terceros ni con precios inferidos (regla 11): el primer día con la feature activa es el
-primer punto de la serie, y toda consulta declara desde qué fecha hay datos. Por eso es la más
-urgente del lote aunque su UI sea nula: cada día que pasa apagada es un día de historia que no se
-recupera.
-
-**Input:** los precios que la corrida programada de F-008 ya trae cada 15 minutos.
-**Output:** serie de cierres diarios por especie (precio, TIR, duración, paridad del cierre), con
-fecha de inicio de la historia declarada.
-**Depende de:** F-008
-**Habilita:** F-061, F-062, F-075
-
-**RICE:** R = 300 · I = 2 · C = 90 % · E = 3 → **Score 180,0**
-*Confidence 90 %: la ingesta y la tabla ya existen; el único riesgo es el detalle de qué snapshot
-cuenta como "cierre" en un mercado que corta a las 17:00 con corridas cada 15 minutos.*
-
-```
-GIVEN varias corridas del mismo día hábil
-WHEN corre la poda
-THEN del día queda sólo el último snapshot, y los cierres de los días anteriores no se tocan
-
-GIVEN una consulta sobre la serie de una especie
-WHEN la historia acumulada es más corta que la ventana pedida
-THEN se declara desde qué fecha hay datos y no se rellena hacia atrás con fuentes de terceros ni
-     precios reconstruidos
-
-GIVEN el flag intradiario `serie_historica_habilitada` en false
-WHEN la feature está activa
-THEN el cierre diario se persiste igual: son mecanismos independientes y el flag intradiario sigue
-     significando lo que siempre significó
-```
-
----
-
 #### F-074 — Convexidad propia
 
 **Etiqueta:** Stage 2 · **Traza a:** análisis de los skills de asesoramiento del 23/08/2026 — la
@@ -3479,30 +3441,39 @@ en pantalla: las correlaciones se rompen en crisis, medirlas no las congela.
 elige y queda rotulada junto al resultado, como los supuestos de F-076. Sin tasa elegida, no hay
 Sharpe — no hay default silencioso.
 
-**Ventanas incompletas, declaradas.** Mismo criterio que F-061: la estadística vale desde que
-F-073 acumula. Una volatilidad anualizada sobre tres semanas de historia es ruido con decimales, y
-se declara como incompleta en vez de mostrarse como si fuera un año.
+**La serie es externa y la cobertura manda.** El insumo son los cierres históricos de data912,
+consultados a demanda por cada posición y nunca persistidos (contrato de `app/externos/`, decisión
+del dueño del producto del 23/08/2026: no se acumula historia propia). Una posición sin serie —las
+ONs y las letras no tienen; parte de los bonos tampoco— queda **fuera de la volatilidad, la matriz
+y el beta, y la pantalla lista qué posiciones quedaron afuera y por qué**: una correlación de media
+cartera presentada como de toda la cartera sería un dato inventado. Y como la fuente no declara la
+moneda de cada serie, no se correlacionan dos series sin resolver primero en qué unidad está cada
+una (regla 3); donde eso no se pueda determinar, la posición también queda afuera, declarada.
 
-**Input:** serie diaria de F-073; composición de la cartera (F-018/F-041); índice de referencia de
-la ingesta BYMA.
+**Input:** histórico de cierres de data912 por posición, a demanda; composición de la cartera
+(F-018/F-041); índice de referencia de la ingesta BYMA.
 **Output:** volatilidad por posición y de cartera, matriz de correlaciones, beta y Sharpe con su
-supuesto declarado, cada una con su ventana y su fecha de inicio de datos.
-**Depende de:** F-073, F-041
+supuesto declarado, cada una con su ventana, su cobertura y sus posiciones excluidas a la vista.
+**Depende de:** F-041
 **Habilita:** —
 
 **RICE:** R = 250 · I = 2 · C = 60 % · E = 8 → **Score 37,5**
-*Confidence 60 %: la matemática es estándar; la incertidumbre es cuándo hay historia suficiente
-para que el resultado signifique algo — la misma espera que F-061.*
+*Confidence 60 %: la matemática es estándar; la incertidumbre es la cobertura de la fuente sobre
+carteras reales — una cartera cargada de ONs deja la matriz rala.*
 
 ```
-GIVEN una cartera cuya historia acumulada es menor que la ventana pedida
+GIVEN una posición sin serie en la fuente
+WHEN se calculan las métricas de la cartera
+THEN la posición queda fuera del cálculo y la pantalla la lista como excluida, con el motivo
+
+GIVEN una cartera cuya serie disponible es menor que la ventana pedida
 WHEN se calculan las métricas
-THEN cada una declara la ventana real usada y desde cuándo hay datos, y no se presenta una ventana
+THEN cada una declara la ventana real usada y desde cuándo hay serie, y no se presenta una ventana
      parcial como completa
 
 GIVEN dos posiciones con series de largo distinto
 WHEN se calcula su correlación
-THEN se usan sólo las fechas comunes de la serie propia, sin empalmar con series de terceros
+THEN se usan sólo las fechas comunes de sus series, sin empalmar fuentes distintas
 
 GIVEN todas las métricas calculadas
 WHEN se muestran
@@ -3625,7 +3596,7 @@ THEN no incluye nombre ni dato identificatorio del titular hasta que F-043 defin
 
 ---
 
-**Nota de alcance del lote F-073–F-077.** Del análisis de los skills se bajó a features la capa de
+**Nota de alcance del lote F-074–F-077.** Del análisis de los skills se bajó a features la capa de
 matemática determinística, y **sólo** ésa. Tesis de inversión, ratings comprar/mantener/vender,
 precios objetivo automáticos y scores compuestos de riesgo **no entran a la app**: chocan con las
 reglas 1 (un DCF automático inventa sus supuestos), 6 (la lógica de análisis es determinística), 7
@@ -3633,6 +3604,13 @@ reglas 1 (un DCF automático inventa sus supuestos), 6 (la lógica de análisis 
 capa de juicio ya tiene dónde vivir: los skills de asesoramiento, fuera del producto, consumiendo
 los números verificables que la app produce. Los estados contables de emisores argentinos desde la
 CNV quedan como investigación pendiente —parsing grande, resultado incierto—, no como feature.
+
+El lote nació como F-073–F-077: **F-073 (serie diaria de cierres persistida) se eliminó el mismo
+día que se creó**, por decisión del dueño del producto — el producto no guarda series históricas.
+Sus tres dependientes (F-061, F-062, F-075) se reescribieron para consumir el histórico de cierres
+de data912 a demanda, con la cobertura parcial declarada en cada ficha: acciones y CEDEARs bien,
+soberanos líquidos bien, el resto de los bonos a medias, letras y ONs sin serie en ninguna fuente
+gratuita conocida.
 
 ---
 
@@ -3661,62 +3639,61 @@ CNV quedan como investigación pendiente —parsing grande, resultado incierto�
 | 19 | F-035 | Costo real de rotar y cupón próximo | Stage 1 | 180 | 3 | 100 % | 3 | 180,0 |
 | 20 | F-041 | Guardar, listar, reabrir y revaluar | Stage 1 | 300 | 3 | 100 % | 5 | 180,0 |
 | 21 | F-055 | Descarga automática del informe de IAMC | Stage 3 | 300 | 2 | 90 % | 3 | 180,0 |
-| 22 | F-073 | Serie diaria de cierres persistida | Stage 2 | 300 | 2 | 90 % | 3 | 180,0 |
-| 23 | F-020 | Límites de concentración en vivo | Stage 1 | 350 | 2 | 100 % | 4 | 175,0 |
-| 24 | F-022 | Rendimientos por naturaleza y plazo | Stage 1 | 350 | 2 | 100 % | 4 | 175,0 |
-| 25 | F-072 | Prospecto de emisión de ONs, vía CNV | Stage 2 | 350 | 3 | 100 % | 6 | 175,0 |
-| 26 | F-007 | Consolidador multi-fuente | Stage 1 | 400 | 3 | 80 % | 6 | 160,0 |
-| 27 | F-051 | Métricas propias: TIR, duración y paridad | Stage 1 | 400 | 2 | 80 % | 4 | 160,0 |
-| 28 | F-071 | Calculadora de canjes y prorrateo de órdenes a mesa | Stage 2 | 350 | 3 | 90 % | 6 | 157,5 |
-| 29 | F-030 | Valuación y diagnóstico de cartera | Stage 1 | 200 | 3 | 100 % | 4 | 150,0 |
-| 30 | F-064 | Watchlist | Stage 2 | 300 | 1 | 100 % | 2 | 150,0 |
-| 31 | F-069 | Top ganadores y perdedores | Stage 2 | 300 | 1 | 100 % | 2 | 150,0 |
-| 32 | F-018 | Cartera editable y ponderación | Stage 1 | 350 | 3 | 80 % | 6 | 140,0 |
-| 33 | F-053 | Ficha del activo de renta variable | Stage 1 | 300 | 2 | 70 % | 3 | 140,0 |
-| 34 | F-016 | Grilla-selector de doce meses | Stage 1 | 380 | 3 | 80 % | 8 | 114,0 |
-| 35 | F-056 | Índice CER del BCRA: tasa real | Stage 2 | 250 | 2 | 90 % | 4 | 112,5 |
-| 36 | F-074 | Convexidad propia | Stage 2 | 250 | 1 | 90 % | 2 | 112,5 |
-| 37 | F-017 | Filtros de la grilla | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
-| 38 | F-039 | Ficha de instrumento | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
-| 39 | F-029 | Resolución de tickers | Stage 1 | 200 | 2 | 80 % | 3 | 106,7 |
-| 40 | F-038 | Monitor de mercado | Stage 1 | 400 | 2 | 80 % | 6 | 106,7 |
-| 41 | F-052 | Renta variable en el monitor | Stage 1 | 400 | 1 | 80 % | 3 | 106,7 |
-| 42 | F-031 | Vector de riesgo de seis ejes | Stage 1 | 250 | 3 | 80 % | 6 | 100,0 |
-| 43 | F-032 | Motor de rotaciones intra-segmento | Stage 1 | 200 | 3 | 100 % | 6 | 100,0 |
-| 44 | F-042 | Exportación a Excel y PDF | Stage 1 | 250 | 2 | 80 % | 4 | 100,0 |
-| 45 | F-028 | Ingreso de cartera por tres vías | Stage 1 | 200 | 3 | 80 % | 5 | 96,0 |
-| 46 | F-077 | Perfilado formal del inversor | Stage 2 | 300 | 2 | 80 % | 5 | 96,0 |
-| 47 | F-034 | Modo subir TIR con contrapartida | Stage 1 | 180 | 3 | 80 % | 5 | 86,4 |
-| 48 | F-057 | FCI en el monitor (CAFCI) | Stage 2 | 300 | 2 | 85 % | 6 | 85,0 |
-| 49 | F-067 | FCI: comparador, categorías y gestoras | Stage 2 | 250 | 2 | 85 % | 5 | 85,0 |
-| 50 | F-019 | Armado asistido | Stage 1 | 250 | 2 | 100 % | 6 | 83,3 |
-| 51 | F-026 | Bloque de renta variable | Stage 1 | 300 | 2 | 80 % | 6 | 80,0 |
-| 52 | F-050 | API Market Data oficial de BYMA | Stage 3 | 400 | 2 | 50 % | 5 | 80,0 |
-| 53 | F-058 | Carry trade: calculadora y breakeven | Stage 2 | 300 | 3 | 70 % | 8 | 78,8 |
-| 54 | F-062 | Curva histórica del segmento | Stage 2 | 250 | 2 | 60 % | 4 | 75,0 |
-| 55 | F-063 | Heatmap del panel | Stage 2 | 250 | 1 | 90 % | 3 | 75,0 |
-| 56 | F-037 | Comparación original contra propuesta | Stage 1 | 180 | 2 | 80 % | 4 | 72,0 |
-| 57 | F-061 | Rendimientos históricos por ventana | Stage 2 | 300 | 2 | 60 % | 5 | 72,0 |
-| 58 | F-040 | Sensibilidad por repricing completo | Stage 1 | 200 | 1 | 100 % | 3 | 66,7 |
-| 59 | F-054 | Info pública del emisor (CNV y SEC) | Stage 3 | 300 | 2 | 80 % | 8 | 60,0 |
-| 60 | F-033 | Modo bajar riesgo | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
-| 61 | F-036 | Aceptación rotación por rotación | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
-| 62 | F-025 | Carga asistida de lámina | Stage 1 | 200 | 1 | 80 % | 3 | 53,3 |
-| 63 | F-005 | Parser del informe diario de IAMC | Stage 1 | 400 | 2 | 50 % | 8 | 50,0 |
-| 64 | F-023 | Composición y curva TIR/duración | Stage 1 | 300 | 1 | 80 % | 5 | 48,0 |
-| 65 | F-048 | Alertas y notificaciones | Stage 3 | 300 | 1 | 80 % | 6 | 40,0 |
-| 66 | F-049 | Comparación de carteras entre sí | Stage 2 | 200 | 1 | 80 % | 4 | 40,0 |
-| 67 | F-075 | Estadística de cartera | Stage 2 | 250 | 2 | 60 % | 8 | 37,5 |
-| 68 | F-076 | Calculadora de valuación con supuestos declarados | Stage 2 | 200 | 2 | 70 % | 8 | 35,0 |
-| 69 | F-046 | FCI valuables en cartera | Stage 2 | 200 | 2 | 60 % | 8 | 30,0 |
-| 70 | F-065 | Cauciones | Stage 2 | 200 | 1 | 60 % | 4 | 30,0 |
-| 71 | F-044 | Historial de propuestas | Stage 2 | 250 | 2 | 50 % | 10 | 25,0 |
-| 72 | F-066 | Futuros de dólar | Stage 2 | 200 | 1 | 50 % | 4 | 25,0 |
-| 73 | F-043 | Gestión de clientes y CRM | Stage 3 | 300 | 2 | 50 % | 15 | 20,0 |
-| 74 | F-027 | Calendario de balances (sólo CEDEARs, vía SEC) | Stage 1 | 200 | 1 | 85 % | 4 | 42,5 |
-| 75 | F-045 | Colocaciones primarias | Stage 2 | 150 | 2 | 50 % | 10 | 15,0 |
-| 76 | F-070 | Tenencias con P&L por lote | Stage 2 | 200 | 2 | 40 % | 12 | 13,3 |
-| 77 | F-047 | Opciones | Stage 2 | 80 | 1 | 50 % | 10 | 4,0 |
+| 22 | F-020 | Límites de concentración en vivo | Stage 1 | 350 | 2 | 100 % | 4 | 175,0 |
+| 23 | F-022 | Rendimientos por naturaleza y plazo | Stage 1 | 350 | 2 | 100 % | 4 | 175,0 |
+| 24 | F-072 | Prospecto de emisión de ONs, vía CNV | Stage 2 | 350 | 3 | 100 % | 6 | 175,0 |
+| 25 | F-007 | Consolidador multi-fuente | Stage 1 | 400 | 3 | 80 % | 6 | 160,0 |
+| 26 | F-051 | Métricas propias: TIR, duración y paridad | Stage 1 | 400 | 2 | 80 % | 4 | 160,0 |
+| 27 | F-071 | Calculadora de canjes y prorrateo de órdenes a mesa | Stage 2 | 350 | 3 | 90 % | 6 | 157,5 |
+| 28 | F-030 | Valuación y diagnóstico de cartera | Stage 1 | 200 | 3 | 100 % | 4 | 150,0 |
+| 29 | F-064 | Watchlist | Stage 2 | 300 | 1 | 100 % | 2 | 150,0 |
+| 30 | F-069 | Top ganadores y perdedores | Stage 2 | 300 | 1 | 100 % | 2 | 150,0 |
+| 31 | F-018 | Cartera editable y ponderación | Stage 1 | 350 | 3 | 80 % | 6 | 140,0 |
+| 32 | F-053 | Ficha del activo de renta variable | Stage 1 | 300 | 2 | 70 % | 3 | 140,0 |
+| 33 | F-016 | Grilla-selector de doce meses | Stage 1 | 380 | 3 | 80 % | 8 | 114,0 |
+| 34 | F-056 | Índice CER del BCRA: tasa real | Stage 2 | 250 | 2 | 90 % | 4 | 112,5 |
+| 35 | F-074 | Convexidad propia | Stage 2 | 250 | 1 | 90 % | 2 | 112,5 |
+| 36 | F-017 | Filtros de la grilla | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
+| 37 | F-039 | Ficha de instrumento | Stage 1 | 350 | 2 | 80 % | 5 | 112,0 |
+| 38 | F-029 | Resolución de tickers | Stage 1 | 200 | 2 | 80 % | 3 | 106,7 |
+| 39 | F-038 | Monitor de mercado | Stage 1 | 400 | 2 | 80 % | 6 | 106,7 |
+| 40 | F-052 | Renta variable en el monitor | Stage 1 | 400 | 1 | 80 % | 3 | 106,7 |
+| 41 | F-031 | Vector de riesgo de seis ejes | Stage 1 | 250 | 3 | 80 % | 6 | 100,0 |
+| 42 | F-032 | Motor de rotaciones intra-segmento | Stage 1 | 200 | 3 | 100 % | 6 | 100,0 |
+| 43 | F-042 | Exportación a Excel y PDF | Stage 1 | 250 | 2 | 80 % | 4 | 100,0 |
+| 44 | F-028 | Ingreso de cartera por tres vías | Stage 1 | 200 | 3 | 80 % | 5 | 96,0 |
+| 45 | F-077 | Perfilado formal del inversor | Stage 2 | 300 | 2 | 80 % | 5 | 96,0 |
+| 46 | F-034 | Modo subir TIR con contrapartida | Stage 1 | 180 | 3 | 80 % | 5 | 86,4 |
+| 47 | F-057 | FCI en el monitor (CAFCI) | Stage 2 | 300 | 2 | 85 % | 6 | 85,0 |
+| 48 | F-067 | FCI: comparador, categorías y gestoras | Stage 2 | 250 | 2 | 85 % | 5 | 85,0 |
+| 49 | F-019 | Armado asistido | Stage 1 | 250 | 2 | 100 % | 6 | 83,3 |
+| 50 | F-026 | Bloque de renta variable | Stage 1 | 300 | 2 | 80 % | 6 | 80,0 |
+| 51 | F-050 | API Market Data oficial de BYMA | Stage 3 | 400 | 2 | 50 % | 5 | 80,0 |
+| 52 | F-058 | Carry trade: calculadora y breakeven | Stage 2 | 300 | 3 | 70 % | 8 | 78,8 |
+| 53 | F-062 | Curva histórica del segmento | Stage 2 | 250 | 2 | 60 % | 4 | 75,0 |
+| 54 | F-063 | Heatmap del panel | Stage 2 | 250 | 1 | 90 % | 3 | 75,0 |
+| 55 | F-037 | Comparación original contra propuesta | Stage 1 | 180 | 2 | 80 % | 4 | 72,0 |
+| 56 | F-061 | Rendimientos históricos por ventana | Stage 2 | 300 | 2 | 60 % | 5 | 72,0 |
+| 57 | F-040 | Sensibilidad por repricing completo | Stage 1 | 200 | 1 | 100 % | 3 | 66,7 |
+| 58 | F-054 | Info pública del emisor (CNV y SEC) | Stage 3 | 300 | 2 | 80 % | 8 | 60,0 |
+| 59 | F-033 | Modo bajar riesgo | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
+| 60 | F-036 | Aceptación rotación por rotación | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
+| 61 | F-025 | Carga asistida de lámina | Stage 1 | 200 | 1 | 80 % | 3 | 53,3 |
+| 62 | F-005 | Parser del informe diario de IAMC | Stage 1 | 400 | 2 | 50 % | 8 | 50,0 |
+| 63 | F-023 | Composición y curva TIR/duración | Stage 1 | 300 | 1 | 80 % | 5 | 48,0 |
+| 64 | F-048 | Alertas y notificaciones | Stage 3 | 300 | 1 | 80 % | 6 | 40,0 |
+| 65 | F-049 | Comparación de carteras entre sí | Stage 2 | 200 | 1 | 80 % | 4 | 40,0 |
+| 66 | F-075 | Estadística de cartera | Stage 2 | 250 | 2 | 60 % | 8 | 37,5 |
+| 67 | F-076 | Calculadora de valuación con supuestos declarados | Stage 2 | 200 | 2 | 70 % | 8 | 35,0 |
+| 68 | F-046 | FCI valuables en cartera | Stage 2 | 200 | 2 | 60 % | 8 | 30,0 |
+| 69 | F-065 | Cauciones | Stage 2 | 200 | 1 | 60 % | 4 | 30,0 |
+| 70 | F-044 | Historial de propuestas | Stage 2 | 250 | 2 | 50 % | 10 | 25,0 |
+| 71 | F-066 | Futuros de dólar | Stage 2 | 200 | 1 | 50 % | 4 | 25,0 |
+| 72 | F-043 | Gestión de clientes y CRM | Stage 3 | 300 | 2 | 50 % | 15 | 20,0 |
+| 73 | F-027 | Calendario de balances (sólo CEDEARs, vía SEC) | Stage 1 | 200 | 1 | 85 % | 4 | 42,5 |
+| 74 | F-045 | Colocaciones primarias | Stage 2 | 150 | 2 | 50 % | 10 | 15,0 |
+| 75 | F-070 | Tenencias con P&L por lote | Stage 2 | 200 | 2 | 40 % | 12 | 13,3 |
+| 76 | F-047 | Opciones | Stage 2 | 80 | 1 | 50 % | 10 | 4,0 |
 
 **Cómo se lee esta tabla.** El RICE ordena por eficiencia, no por secuencia. Las features de más
 score son las Foundation y las de ingesta: mucho alcance sobre poco esfuerzo, porque reusan lógica ya
@@ -4039,7 +4016,7 @@ Al final de este ciclo **Stage 1 está completo**: los tres flujos funcionan de 
 | 3 — RV, carga y diagnóstico | 9 | 41 | ~8 | ~28,5 |
 | 4 — Optimizador y persistencia | 9 | 42 | ~8,5 | ~37 |
 | **Stage 1** | **42** | **185** | **~37 semanas** | |
-| Stage 2 (27 features) | 27 | 150 | ~30 | |
+| Stage 2 (26 features) | 26 | 147 | ~29 | |
 | Stage 3 (5 features, diferidas el 23/08/2026) | 5 | 37 | ~7 | |
 
 **~37 semanas de un desarrollador a tiempo completo para Stage 1.** El camino crítico son 73 pd de esos
