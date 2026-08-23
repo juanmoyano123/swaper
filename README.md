@@ -10,20 +10,27 @@ invertido — el número que lleva a la reunión. Esa mecánica es la razón de 
 
 ## Estado
 
-El producto está en diseño. El **motor de cálculo financiero ya está construido y
-verificado**; lo que falta es la aplicación alrededor.
+**Stage 1 cerrado el 16/08/2026: las 44 features están construidas y la aplicación funciona.**
+Los tres flujos del producto cierran punta a punta — armar una cartera desde el calendario de
+cupones, diagnosticar una cartera que el cliente ya trae, y proponer rotaciones con su costo real.
+Stage 2 está abierto: 32 features catalogadas, 1 hecha (F-072, prospectos de la CNV).
 
 | Fase | Qué produce | Estado |
 |---|---|---|
 | −1 `/shape-idea` | `claude-docs/planning/idea-brief.md` | Hecha |
 | 1A `/define-product` | `claude-docs/planning/product-definition.md` | Hecha |
-| 2 `/create-prd` | `claude-docs/planning/plan.md` — features con RICE | Siguiente |
-| 3 Claude Design | `claude-docs/planning/design-system.md` | Prompt listo |
-| 4 `/init-project` | Estructura del repo | Pendiente |
-| 5 `/build-feature` | Código | Pendiente |
+| 2 `/create-prd` | `claude-docs/planning/plan.md` — 77 features con RICE | Hecha |
+| 3 Claude Design | `claude-docs/planning/design-system.md` | Hecha |
+| 4 `/init-project` | Estructura del repo | Hecha |
+| 5 `/build-feature` | Código | Stage 1 completo · Stage 2 en curso |
 
-**Empezá por `claude-docs/planning/product-definition.md`**: tiene las 13 features del MVP,
-el stack, los flujos y qué se reusa del motor existente.
+**Para saber qué falta, empezá por `claude-docs/progress/PROGRESS.md`**: tiene el estado feature
+por feature y, al final, los pendientes de datos y decisiones — que hoy pesan más que los de
+código. Tres cosas están construidas pero sin usar: el job de perfiles de renta variable nunca
+corrió, la ingesta programada tampoco, y falta fijar el umbral a partir del cual un precio se
+considera viejo.
+
+Para entender **qué** se está construyendo y por qué, `claude-docs/planning/product-definition.md`.
 
 ## Alcance
 
@@ -39,19 +46,33 @@ La gestión de clientes (CRM) es una segunda etapa. Se guardan carteras, no clie
 ## Estructura
 
 ```
+frontend/               React 19 + Vite + TypeScript + Tailwind v4 — la aplicación
+backend/                FastAPI + Python 3.12 — API, ingesta y cálculo
+supabase/migrations/    Esquema de la base, con rollback espejo por migración
 claude-docs/planning/   El pipeline de producto. No renombrar: los comandos lo tienen fijo
+claude-docs/progress/   PROGRESS.md — estado feature por feature y pendientes abiertos
 docs/                   ESTADO.md — qué se verificó y contra qué
 docs/historial/         El diseño WAT de julio, congelado. Explica el porqué de cada regla
-tools/                  El motor de cálculo, 8 módulos Python
+tools/                  El motor de cálculo original, 8 módulos Python (pre-Fase 4)
 workflows/              SOPs operativos de cada herramienta
 data/                   condiciones_emision.csv (curado) + output/ (regenerable)
 referencia/             Los entregables de la mesa que sirven de molde, y el monitor actual
 fuentes/                Muestras de los informes que alimentan el universo
 ```
 
-## El motor hoy
+## Cómo se corre
 
-Corre por línea de comandos y sigue siendo la única forma de producir carteras:
+```bash
+cd frontend && npm run dev                        # http://localhost:5173
+cd backend && source venv/bin/activate && \
+  uvicorn app.main:app --reload                   # http://localhost:8000/api/v1/health
+```
+
+## El motor de línea de comandos
+
+Sigue vigente, pero **ya no es la única forma de producir carteras**: el armador vive en la
+aplicación desde que cerró Stage 1. El motor original quedó como referencia y como contraste — hay
+tests de paridad que verifican que el backend devuelve lo mismo que él.
 
 ```bash
 python3 tools/armar_cartera.py --monto 100000
