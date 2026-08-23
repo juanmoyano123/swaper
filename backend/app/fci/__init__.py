@@ -1,3 +1,4 @@
+from app.fci.agregados import agregados_por_categoria, agregados_por_gestora
 from app.fci.fondos import (
     ADVERTENCIA_DISTRIBUCION,
     NATURALEZA_FCI,
@@ -11,6 +12,8 @@ __all__ = [
     "ADVERTENCIA_DISTRIBUCION",
     "NATURALEZA_FCI",
     "FondoFci",
+    "agregados_por_categoria",
+    "agregados_por_gestora",
     "fondo_de_fila",
     "leer_fondo",
     "leer_fondos",

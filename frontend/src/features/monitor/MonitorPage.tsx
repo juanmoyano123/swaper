@@ -37,6 +37,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import { EstadoVacio } from '@/components/EstadoVacio'
 import { Pantalla } from '@/components/Pantalla'
@@ -428,7 +429,12 @@ function RamaFci({
 
   return (
     <>
-      <SelectorSegmento segmentos={claves} activo={claveActiva} onCambio={setClaveActiva} />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <SelectorSegmento segmentos={claves} activo={claveActiva} onCambio={setClaveActiva} />
+        <Link to="/fci/analisis" style={{ fontSize: 12, color: 'var(--ac)', whiteSpace: 'nowrap' }}>
+          Comparador, categorías y gestoras →
+        </Link>
+      </div>
       <FciDelTipoDeRenta key={claveActiva} tipoRenta={tipoRentaDeClave(claveActiva)} planilla={planilla} />
     </>
   )
