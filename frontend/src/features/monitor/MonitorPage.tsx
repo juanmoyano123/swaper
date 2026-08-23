@@ -29,6 +29,11 @@
  * Renta variable no tiene segundo nivel propio hoy: `CLAVES_RENTA_VARIABLE` sólo tiene `cedear`, así
  * que la pestaña de familia va directo a la tabla, sin una sub-barra de una sola opción. Si mañana
  * vuelve una segunda clase, la sub-barra reaparece sola (ver `RamaRentaVariable`).
+ *
+ * **FCI (F-057, 23/08/2026) es la tercera familia.** Sí tiene segundo nivel — el tipo de renta del
+ * fondo (Renta Fija, Mercado de Dinero…) — con las mismas claves prefijadas `fci_` de
+ * `SelectorSegmento`, y un chip de moneda (ARS/USD/USB) igual que renta fija. Sin chip de crédito:
+ * un fondo no tiene emisor con crédito comparable. Ver `RamaFci` más abajo.
  */
 
 import { useEffect, useMemo, useState } from 'react'
@@ -39,10 +44,13 @@ import { Panel } from '@/components/Panel'
 import { SelectorCredito, contarPorCredito } from '@/components/SelectorCredito'
 import { SelectorMoneda, contarPorMoneda, monedaInicial, SIN_MONEDA_DECLARADA } from '@/components/SelectorMoneda'
 import { CLAVES_RENTA_VARIABLE, SelectorSegmento, nombreSegmento, ordenarSegmentos } from '@/components/SelectorSegmento'
+import { TablaFci } from '@/components/TablaFci'
 import { TablaRentaVariable } from '@/components/TablaRentaVariable'
+import { claveTipoRenta, tipoRentaDeClave, useFondosFci, useSegmentosFci, type PlanillaFci } from '@/lib/fci'
 import { fmtNumero } from '@/lib/fmt'
 import { useRentaVariable } from '@/lib/rentaVariable'
 
+import { useAbrirFondoFci } from '@/features/instrumento/useAbrirFondoFci'
 import { useAbrirInstrumento } from '@/features/instrumento/useAbrirInstrumento'
 
 import { CurvaSegmento } from './components/CurvaSegmento'
@@ -56,6 +64,7 @@ import { FILTROS_VACIOS, facetarUniverso, pasaFiltros, type FiltrosUniverso } fr
 
 export function MonitorPage() {
   const segmentos = useSegmentos()
+  const segmentosFci = useSegmentosFci()
   const [familia, setFamilia] = useState<Familia>('renta_fija')
   const [activo, setActivo] = useState<string | null>(null)
   const [filtros, setFiltros] = useState<FiltrosUniverso>(FILTROS_VACIOS)
@@ -65,8 +74,9 @@ export function MonitorPage() {
     const familias: Familia[] = []
     if (segmentos.data.segmentos.length > 0) familias.push('renta_fija')
     if (segmentos.data.renta_variable > 0) familias.push('renta_variable')
+    if ((segmentosFci.data?.segmentos.length ?? 0) > 0) familias.push('fci')
     return familias
-  }, [segmentos.data])
+  }, [segmentos.data, segmentosFci.data])
 
   // El default es el primero en el orden del design system, no el primero que llegó de la API.
   useEffect(() => {
@@ -121,6 +131,8 @@ export function MonitorPage() {
 
             {familia === 'renta_variable' ? (
               <RamaRentaVariable />
+            ) : familia === 'fci' ? (
+              <RamaFci segmentos={segmentosFci.data?.segmentos ?? []} planilla={segmentosFci.data?.planilla ?? null} />
             ) : (
               activo && (
                 <>
@@ -375,6 +387,105 @@ function RentaVariableDelMonitor({ clase }: { clase: string }) {
         etiqueta={nombreSegmento(clase)}
         moneda={activa}
         onAbrirTicker={abrirInstrumento}
+      />
+    </>
+  )
+}
+
+/**
+ * La rama de FCI de la pestaña de familia — F-057 (23/08/2026). Segundo nivel por tipo de renta
+ * (`SelectorSegmento` con claves `fci_*`), un chip de moneda (sin chip de crédito: un fondo no
+ * tiene emisor con crédito comparable), y la grilla de doce columnas.
+ */
+function RamaFci({
+  segmentos,
+  planilla,
+}: {
+  segmentos: { tipo_renta: string; cantidad: number; monedas: string[] }[]
+  planilla: PlanillaFci | null
+}) {
+  const claves = useMemo(() => segmentos.map((s) => claveTipoRenta(s.tipo_renta)), [segmentos])
+  const [claveActiva, setClaveActiva] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (claveActiva !== null || claves.length === 0) return
+    const [primera] = ordenarSegmentos(claves)
+    if (primera) setClaveActiva(primera)
+  }, [claveActiva, claves])
+
+  useEffect(() => {
+    if (claves.length === 0 || claveActiva === null || claves.includes(claveActiva)) return
+    setClaveActiva(claves[0] ?? null)
+  }, [claveActiva, claves])
+
+  if (claves.length === 0 || claveActiva === null) {
+    return (
+      <p style={{ margin: '18px 0', fontSize: 12.5, color: 'var(--dim)' }}>
+        No hay fondos comunes en la planilla de hoy.
+      </p>
+    )
+  }
+
+  return (
+    <>
+      <SelectorSegmento segmentos={claves} activo={claveActiva} onCambio={setClaveActiva} />
+      <FciDelTipoDeRenta key={claveActiva} tipoRenta={tipoRentaDeClave(claveActiva)} planilla={planilla} />
+    </>
+  )
+}
+
+function FciDelTipoDeRenta({
+  tipoRenta,
+  planilla,
+}: {
+  tipoRenta: string
+  planilla: PlanillaFci | null
+}) {
+  const fci = useFondosFci(tipoRenta)
+  const abrirFondo = useAbrirFondoFci()
+  const [moneda, setMoneda] = useState<string | null>(null)
+
+  const monedas = useMemo(
+    () => contarPorMoneda((fci.data ?? []).map((f) => ({ moneda_cotizacion: f.moneda }))),
+    [fci.data],
+  )
+  const activa = moneda ?? monedaInicial(monedas, MONEDA_PREFERIDA_POR_DEFECTO)
+  const deLaMoneda = useMemo(
+    () => (fci.data ?? []).filter((f) => (f.moneda ?? SIN_MONEDA_DECLARADA) === activa),
+    [fci.data, activa],
+  )
+
+  if (fci.isPending) {
+    return <p style={{ margin: '14px 0', color: 'var(--dim)', fontSize: 12.5 }}>consultando el segmento…</p>
+  }
+
+  if (fci.isError) {
+    return (
+      <EstadoVacio
+        titulo="No se pudo traer este segmento."
+        detalle={
+          <button
+            type="button"
+            onClick={() => void fci.refetch()}
+            style={{ color: 'var(--ac)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+          >
+            reintentar
+          </button>
+        }
+      />
+    )
+  }
+
+  return (
+    <>
+      {activa !== null && (
+        <SelectorMoneda disponibles={monedas} activa={activa} onCambio={setMoneda} />
+      )}
+      <TablaFci
+        fondos={deLaMoneda}
+        etiqueta={nombreSegmento(claveTipoRenta(tipoRenta))}
+        planilla={planilla}
+        onAbrirFondo={abrirFondo}
       />
     </>
   )

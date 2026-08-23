@@ -29,8 +29,9 @@ from typing import Any
 import structlog
 
 from app.core.config import Settings
-from app.ingesta.alertas import Alerta, Severidad
+from app.ingesta.alertas import Alerta, Severidad, fuente_caida
 from app.ingesta.byma import ingerir_rueda
+from app.ingesta.cafci import ingerir_cafci
 from app.ingesta.consolidacion import armar_consolidacion, consolidar
 from app.ingesta.consolidacion.persistencia import (
     leer_cronograma,
@@ -63,6 +64,26 @@ def _ticker_fuera_de_universo(tickers: list[str]) -> Alerta:
     )
 
 
+async def _ingerir_fci_sin_lanzar(
+    conn: Any,
+    settings: Settings,
+    dormir: Callable[[float], Awaitable[None]] = asyncio.sleep,
+) -> Snapshot:
+    """La planilla de CAFCI (F-057), en su propio try/except: no pasa por el consolidador —no es
+    una especie negociable, ver la ficha de F-057— y una excepción no vista (p. ej. la escritura a
+    `fci` fallando a mitad de transacción) no puede tirar abajo la corrida matinal entera, que ya
+    trajo BYMA, data912 e IAMC para cuando esto corre.
+    """
+    try:
+        return await ingerir_cafci(conn, settings, dormir=dormir)
+    except Exception as exc:  # noqa: BLE001 — nunca deja escapar hacia la matinal
+        logger.warning("cafci_ingesta_fallo_inesperado", error=str(exc))
+        snapshot = Snapshot(fuente="CAFCI")
+        snapshot.registrar_tramo("planilla", 0)
+        snapshot.alertar(fuente_caida("CAFCI", f"{type(exc).__name__}: {exc}"))
+        return snapshot
+
+
 def _estado_de(snapshots: Iterable[Snapshot]) -> str:
     """`completa` si nada falló, `parcial` si algo llegó igual, `fallida` si no llegó nada."""
     snapshots = list(snapshots)
@@ -81,18 +102,26 @@ async def corrida_matinal(
     *,
     dormir: Callable[[float], Awaitable[None]] = asyncio.sleep,
 ) -> dict[str, object]:
-    """BYMA + data912 + IAMC + consolidación, en ese orden — el orden ya lo fija `consolidar()`."""
+    """BYMA + data912 + IAMC + consolidación, en ese orden — el orden ya lo fija `consolidar()`.
+
+    CAFCI corre al final, fuera de `consolidar()`: no es una fuente que se consolide contra el
+    universo de renta fija/variable, es un universo propio (F-057). Sólo se pide acá y no en cada
+    refresh de 20 minutos — `pb_get` siempre devuelve el mismo archivo del último día hábil, así que
+    pedirla más seguido bajaría el mismo archivo sin dato nuevo.
+    """
     inicio = datetime.now(UTC)
     resultado = await consolidar(conn, settings, dormir=dormir)
+    snapshot_fci = await _ingerir_fci_sin_lanzar(conn, settings, dormir)
     fin = datetime.now(UTC)
 
+    todos_los_snapshots = {**resultado.snapshots, "cafci": snapshot_fci}
     alertas = [
-        *(a for s in resultado.snapshots.values() for a in s.alertas),
+        *(a for s in todos_los_snapshots.values() for a in s.alertas),
         *resultado.consolidacion.alertas,
         *resultado.escritura.alertas,
     ]
-    filas_por_fuente = {nombre: snap.total_filas for nombre, snap in resultado.snapshots.items()}
-    estado = _estado_de(resultado.snapshots.values())
+    filas_por_fuente = {nombre: snap.total_filas for nombre, snap in todos_los_snapshots.items()}
+    estado = _estado_de(todos_los_snapshots.values())
 
     corrida = await registrar_corrida(
         conn,
@@ -189,5 +218,42 @@ async def refresh_intra_rueda(
         duracion_ms=corrida["duracion_ms"],
         precios=escritura.filas_por_tabla.get("precios", 0),
         puntas=escritura.filas_por_tabla.get("puntas", 0),
+    )
+    return corrida
+
+
+async def correr_fci(
+    conn: Any,
+    settings: Settings,
+    *,
+    dormir: Callable[[float], Awaitable[None]] = asyncio.sleep,
+) -> dict[str, object]:
+    """Sólo la planilla de CAFCI (F-057), disparable a mano (`POST /jobs/fci`) sin esperar a la
+    corrida matinal completa — mismo criterio que `disparar_clasificacion_renta_variable`.
+
+    Con `cafci_habilitado=False` esto igual registra una corrida: `snapshot.total_filas == 0` sin
+    alertas de error, así que `_estado_de` la marca `fallida` (0 filas). Es correcto: el asesor que
+    dispara el job a mano tiene que ver que el flag está apagado, no una corrida "completa" vacía.
+    """
+    inicio = datetime.now(UTC)
+    snapshot = await _ingerir_fci_sin_lanzar(conn, settings, dormir)
+    fin = datetime.now(UTC)
+
+    estado = _estado_de([snapshot])
+    corrida = await registrar_corrida(
+        conn,
+        tipo=TipoCorrida.FCI,
+        iniciado_en=inicio,
+        finalizado_en=fin,
+        filas_por_fuente={"cafci": snapshot.total_filas},
+        alertas=[a.como_dict() for a in snapshot.alertas],
+        estado=estado,
+    )
+    logger.info(
+        "corrida_fci_registrada",
+        id=corrida["id"],
+        estado=estado,
+        duracion_ms=corrida["duracion_ms"],
+        filas=snapshot.total_filas,
     )
     return corrida

@@ -12,7 +12,10 @@ soltar los agentes para que ninguno de los cuatro tenga que tocar este archivo. 
 (F-020) es de la Tanda 9, por lo mismo. `armado` (F-019) es de la Tanda 10: se monta vacío para
 que F-022 y F-025 no tengan que tocar este archivo para agregarlo. `rotaciones` (F-032) es de la
 Tanda 12, mismo criterio: se monta vacío junto con la base común para que F-032 no tenga que tocar
-este archivo, y para que F-031 (que corre en paralelo, todo frontend) tampoco lo necesite.
+este archivo, y para que F-031 (que corre en paralelo, todo frontend) tampoco lo necesite. `fci`
+(F-057) se construyó completo el 23/08/2026, sola — no corre en paralelo con nada. `fci_agregados`
+(F-067) se monta vacío ese mismo día, junto con la base común de la Tanda 2 (F-067 + F-046 en
+paralelo), por el mismo motivo que los anteriores.
 """
 
 from fastapi import APIRouter
@@ -26,6 +29,8 @@ from app.api.v1 import (
     condiciones,
     consolidar,
     estado,
+    fci,
+    fci_agregados,
     health,
     iamc,
     instrumentos,
@@ -53,3 +58,5 @@ router.include_router(renta_variable.router)
 router.include_router(concentracion.router)
 router.include_router(armado.router)
 router.include_router(rotaciones.router)
+router.include_router(fci.router)
+router.include_router(fci_agregados.router)

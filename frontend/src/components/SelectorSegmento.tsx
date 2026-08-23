@@ -32,6 +32,22 @@ export const NOMBRE_SEGMENTO: Record<string, string> = {
   'usd_hard/bono_soberano': 'Soberanos',
   'usd_hard/bono_subsoberano': 'Subsoberanos',
   'usd_hard/on_corporativo': 'ONs',
+  // Los tipos de renta de FCI (23/08/2026, F-057), con prefijo `fci_` para no colisionar nunca con
+  // una clave de renta fija — espejan `tipo_renta` del backend (`app/ingesta/cafci/secciones.py`).
+  // Tienen entrada en UNIDAD_NATURALEZA (más abajo): a diferencia de una acción, un FCI sí tiene
+  // rendimiento — variación de cuotaparte —, sólo que de una naturaleza que no comparte eje con
+  // ninguna TIR.
+  fci_renta_variable: 'FCI renta variable',
+  fci_renta_fija: 'FCI renta fija',
+  fci_renta_mixta: 'FCI renta mixta',
+  fci_pymes: 'FCI PyMEs',
+  fci_infraestructura: 'FCI infraestructura',
+  fci_retorno_total: 'FCI retorno total',
+  fci_asg: 'FCI ASG',
+  fci_rg900: 'FCI RG900',
+  fci_mercado_dinero: 'FCI mercado de dinero',
+  fci_fondos_cerrados: 'FCI fondos cerrados',
+  fci_en_liquidacion: 'FCI en liquidación',
 }
 
 /** Las pestañas que no son de renta fija: quien las active muestra columnas propias, sin TIR.
@@ -117,6 +133,8 @@ export const UNIDAD_NATURALEZA: Record<string, string> = {
   tir_dolar_linked: 'TIR DL',
   tasa_real_cer: 'Tasa real CER',
   tna_nominal_ars: 'TNA $',
+  // F-057: espeja `NATURALEZA_FCI` de `app/fci/fondos.py`.
+  variacion_cuotaparte: 'Var. VCP %',
 }
 
 export function nombreSegmento(clave: string): string {
@@ -146,6 +164,17 @@ const ORDEN = [
   'tamar',
   'accion',
   'cedear',
+  'fci_renta_variable',
+  'fci_renta_fija',
+  'fci_renta_mixta',
+  'fci_pymes',
+  'fci_infraestructura',
+  'fci_retorno_total',
+  'fci_asg',
+  'fci_rg900',
+  'fci_mercado_dinero',
+  'fci_fondos_cerrados',
+  'fci_en_liquidacion',
 ]
 
 export function ordenarSegmentos(claves: readonly string[]): string[] {

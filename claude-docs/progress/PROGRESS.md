@@ -4,7 +4,7 @@ Generado desde `claude-docs/planning/plan.md` (Fase 2) al correr `/init-project`
 Estado inicial: las 50 features arrancaban en **pendiente**. Este archivo se actualiza a mano o
 desde `/build-feature` a medida que cada una se implementa.
 
-**Estado al 23/08/2026 — Stage 1 cerrado (44 de 44), Stage 2 abierto (1 de 26), Stage 3 creado
+**Estado al 23/08/2026 — Stage 1 cerrado (44 de 44), Stage 2 abierto (2 de 26), Stage 3 creado
 con 5 diferidas.** El catálogo
 creció de 50 a 77 features desde que se generó este archivo; la tabla de Stage 2 se reconcilió
 contra `plan.md` el 23/08/2026. Lo que está trabado hoy **no es código sino dato**: ver
@@ -112,7 +112,7 @@ mismo día: es de uso diario, se queda en Stage 2.
 | F-056 | Índice CER del BCRA: tasa real | 112,5 | pendiente |
 | F-074 | Convexidad propia | 112,5 | pendiente |
 | F-077 | Perfilado formal del inversor | 96,0 | pendiente |
-| F-057 | FCI en el monitor (CAFCI) | 85,0 | pendiente |
+| F-057 | FCI en el monitor (CAFCI) | 85,0 | **completada** |
 | F-067 | FCI: comparador, categorías y gestoras | 85,0 | pendiente |
 | F-058 | Carry trade: calculadora y breakeven | 78,8 | pendiente |
 | F-062 | Curva histórica del segmento | 75,0 | pendiente |
@@ -154,10 +154,18 @@ cierre. El RICE no cambió; cambió la etiqueta que decide cuándo entran.
   `sec_ficha_parser.py`, `renta_variable/ratios_sec.py`, `sec_calendario.py`); la pata CNV de
   información del emisor sigue pendiente, aunque F-072 ya le dejó construido el cliente HTTP y el
   puente emisor→CUIT.
-- **F-057 NO está hecha, pese al nombre del commit.** El commit `47c040a` se llama
-  `feat: F-057 (FCI en el monitor, CAFCI)…` pero tocó únicamente `plan.md` y `analisis-docta.md`:
-  no hay una sola referencia a CAFCI en `backend/app` ni en `frontend/src` (verificado el
-  23/08/2026). Era documentación del catálogo, no implementación.
+- **F-057 se construyó completa el 23/08/2026** (corrigiendo el estado registrado más arriba en
+  esta misma nota: el commit `47c040a`, llamado `feat: F-057 (FCI en el monitor, CAFCI)…`, había
+  tocado únicamente `plan.md` y `analisis-docta.md`, sin una sola línea de código). Ingesta propia
+  en `backend/app/ingesta/cafci/` (cliente + parser XLSX con openpyxl + almacén), dominio y
+  lectura en `backend/app/fci/`, endpoints en `/api/v1/fci/*`, segmento FCI como tercera familia
+  del monitor (`frontend/src/features/monitor/`), ficha del fondo (drawer + página), job manual
+  `POST /jobs/fci` y enganche a la corrida matinal — todo detrás de `CAFCI_HABILITADO` (default
+  `false`). Verificado en vivo contra la base real: 4.251 fondos ingeridos, 11 tipos de renta, los
+  endpoints responden contra Supabase. 64 tests nuevos (parser con fixture real recortado +
+  sintéticos para los abortos, cliente con respx, almacén wipe-and-replace, API, jobs) más 9 de
+  frontend. F-067 (comparador/categorías/gestoras) y F-046 (FCI valuable en cartera) quedan para
+  la Tanda 2, en paralelo.
 
 ## Totales
 
@@ -168,7 +176,7 @@ cierre. El RICE no cambió; cambió la etiqueta que decide cuándo entran.
 | 3 — RV, carga y diagnóstico | 9 | 41 | ~8 | ~28,5 |
 | 4 — Optimizador y persistencia | 9 | 42 | ~8,5 | ~37 |
 | **Stage 1** | **44** | **185** | **~37 semanas** | **cerrado el 16/08/2026** |
-| Stage 2 | 26 | 147 | ~29 | 1 de 26 hecha (F-072) |
+| Stage 2 | 26 | 147 | ~29 | 2 de 26 hechas (F-072, F-057) |
 | Stage 3 (diferido el 23/08/2026) | 5 | 37 | ~7 | ninguna empezada; F-054 parcial |
 
 **La base está poblada.** F-007 corrió contra Supabase el 06/08/2026 y dejó 2.894 instrumentos,

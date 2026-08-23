@@ -62,6 +62,14 @@ class Settings(BaseSettings):
     # siempre, que es exactamente lo que la pausa existe para evitar.
     iamc_habilitado: bool = False
 
+    # F-057 — la planilla diaria de CAFCI (fondos comunes de inversión). API pública sin token que
+    # siempre devuelve el último día hábil: no hay parámetro de fecha que pedir (verificado el
+    # 23/08/2026 contra `?fecha=`, `?date=`, `?f=`, `?tipo=`). Con esto en `False` la corrida
+    # matinal no la pide y el segmento FCI del monitor queda vacío, declarado — mismo criterio que
+    # `iamc_habilitado`.
+    cafci_habilitado: bool = False
+    cafci_url: str = "https://api.pub.cafci.org.ar/pb_get"
+
     # **El consumo de la CNV está pausado por default (F-072, 17/08/2026).** Documentos filed por
     # un emisor —prospectos, suplementos, avisos— vía HTML servido, y el PDF real vía el
     # intercambio de dos pasos con `blob.cnv.gov.ar` (`app/externos/cnv.py`). En `False` el bloque

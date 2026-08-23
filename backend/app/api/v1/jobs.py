@@ -14,7 +14,7 @@ from app.api.deps import get_db
 from app.core.config import Settings, get_settings
 from app.externos.sec import ClienteSec
 from app.ingesta.byma.cedears import traer_lista
-from app.jobs.corridas import corrida_matinal, refresh_intra_rueda
+from app.jobs.corridas import corrida_matinal, correr_fci, refresh_intra_rueda
 from app.jobs.registro import listar_corridas
 from app.renta_variable.agrupamiento import agrupar
 from app.renta_variable.clasificacion import (
@@ -71,6 +71,21 @@ async def disparar_refresh(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> dict[str, object]:
     return await refresh_intra_rueda(conn, settings)
+
+
+@router.post(
+    "/fci",
+    summary="Dispara a mano la ingesta de la planilla diaria de CAFCI (F-057)",
+    responses={503: {"description": "La base de datos no está disponible"}},
+)
+async def disparar_fci(
+    conn: Annotated[asyncpg.Connection, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> dict[str, object]:
+    """No pasa por la corrida matinal completa: sólo la planilla de CAFCI, wipe-and-replace sobre
+    `public.fci`. Con `CAFCI_HABILITADO=false` (el default) registra una corrida sin filas —el
+    flag apagado se ve en el resultado, no se disimula."""
+    return await correr_fci(conn, settings)
 
 
 @router.post(

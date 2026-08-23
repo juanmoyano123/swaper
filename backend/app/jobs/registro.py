@@ -16,6 +16,9 @@ from typing import Any
 class TipoCorrida(StrEnum):
     MATINAL = "matinal"
     REFRESH = "refresh"
+    FCI = "fci"
+    """F-057: la corrida manual de la planilla de CAFCI (`POST /jobs/fci`). Distinta de `matinal`
+    porque no toca BYMA/data912/IAMC ni la consolidación — sólo la tabla `fci`."""
 
 
 class EstadoCorrida(StrEnum):

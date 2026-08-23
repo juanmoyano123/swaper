@@ -17,6 +17,7 @@ vi.mock('@/lib/supabase', () => ({
 }))
 
 import { crearQueryClient } from '@/app/queryClient'
+import type { FondoFci } from '@/lib/fci'
 
 import { MonitorPage } from '../MonitorPage'
 import type { Especie, Segmentos } from '../lib/schema'
@@ -707,5 +708,124 @@ describe('la carga del segmento entero', () => {
 
     const rutasPedidas = fetchMock.mock.calls.map(([input]) => new URL(String(input), 'http://localhost').search)
     expect(rutasPedidas.some((s) => s.includes('cursor=pagina-2'))).toBe(true)
+  })
+})
+
+// --- FCI: tercera familia (F-057, 23/08/2026) ------------------------------------------------
+
+function FichaFciFalsa() {
+  const { codigoCafci } = useParams()
+  return <div>ficha del fondo {codigoCafci}</div>
+}
+
+function renderizarConRutaFci() {
+  const cliente = crearQueryClient()
+  cliente.setDefaultOptions({ queries: { retry: false } })
+  return render(
+    <QueryClientProvider client={cliente}>
+      <MemoryRouter initialEntries={['/monitor']}>
+        <Routes>
+          <Route path="/monitor" element={<MonitorPage />} />
+          <Route path="/fci/:codigoCafci" element={<FichaFciFalsa />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+}
+
+const FONDO_FCI: FondoFci = {
+  codigo_cafci: '1031',
+  fondo: 'Gainvest Renta Variable - Clase A',
+  codigo_cnv: '500',
+  seccion: 'Renta Variable Peso Argentina',
+  tipo_renta: 'renta_variable',
+  naturaleza: 'variacion_cuotaparte',
+  naturaleza_nombre: 'Variación de cuotaparte',
+  moneda: 'ARS',
+  region: 'Arg',
+  horizonte: 'Lar',
+  fecha_vcp: '2026-08-21',
+  vcp: 1500.0,
+  vcp_anterior: 1490.0,
+  var_diaria_pct: 0.67,
+  var_mes_pct: 5.2,
+  var_anio_pct: 40.1,
+  var_12m_pct: 55.3,
+  cuotapartes: 100.0,
+  cuotapartes_anterior: 99.0,
+  patrimonio: 10_000_000.0,
+  patrimonio_anterior: 9_900_000.0,
+  market_share: 1.2,
+  gerente: 'Gainvest S.A.',
+  depositaria: 'Banco X',
+  calificacion: 'EF-3',
+  calificado: 'Si',
+  tipo_dinero: 'Ahorro',
+  comision_ingreso: 0,
+  honorarios_adm_sg: 2.0,
+  honorarios_adm_sd: 0.3,
+  gastos_ord_gestion: 0.1,
+  comision_rescate: 0,
+  comision_transferencia: 0,
+  honorarios_exito: 0,
+  moneda_fondo: 'ARS',
+  discrepancia_moneda: false,
+  plazo_liq: 1,
+  dias_para_rescatar: 1,
+  minimo_inversion: 1000.0,
+  advertencia_distribucion: 'Los rendimientos no consideran distribución de utilidades.',
+}
+
+/** Universo de renta fija/variable vacío a propósito: así la única familia disponible es FCI, y
+ *  la pantalla cae en ella sin necesidad de clickear una pestaña. */
+function mockearApiSoloFci() {
+  const fetchMock = vi.fn((input: RequestInfo | URL) => {
+    const url = new URL(String(input), 'http://localhost')
+
+    if (url.pathname === '/api/v1/universo/segmentos') {
+      return respuestaJson({ segmentos: [], renta_variable: 0, sin_segmento: 0 })
+    }
+    if (url.pathname === '/api/v1/fci/segmentos') {
+      return respuestaJson({
+        segmentos: [{ tipo_renta: 'renta_variable', cantidad: 1, monedas: ['ARS'] }],
+        planilla: {
+          fecha_planilla: '2026-08-21',
+          fecha_cierre_anterior: '2026-08-20',
+          fecha_base_mes: '2026-07-31',
+          fecha_base_anio: '2025-12-30',
+          fecha_base_12m: '2025-07-31',
+          total_filas: 1,
+          capturado_en: '2026-08-21T12:00:00Z',
+          advertencia_distribucion: FONDO_FCI.advertencia_distribucion,
+        },
+      })
+    }
+    if (url.pathname === '/api/v1/fci/fondos') {
+      return respuestaJson({ items: [FONDO_FCI], next_cursor: null })
+    }
+
+    throw new Error(`ruta no mockeada en el test: ${url.pathname}${url.search}`)
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  return fetchMock
+}
+
+describe('FCI como tercera familia', () => {
+  it('sin renta fija ni renta variable, la pantalla cae directo en FCI y muestra el fondo', async () => {
+    mockearApiSoloFci()
+    renderizarConRutaFci()
+
+    expect(await screen.findByText('Gainvest Renta Variable - Clase A')).toBeInTheDocument()
+    expect(screen.getByText('1 de 1 fondos')).toBeInTheDocument()
+  })
+
+  it('clickear un fondo navega a su ficha por código CAFCI', async () => {
+    mockearApiSoloFci()
+    renderizarConRutaFci()
+    await screen.findByText('Gainvest Renta Variable - Clase A')
+
+    await userEvent.click(screen.getByText('Gainvest Renta Variable - Clase A'))
+
+    expect(await screen.findByText('ficha del fondo 1031')).toBeInTheDocument()
   })
 })

@@ -47,6 +47,20 @@ export const claves = {
     // entra en la clave, no en la firma: mismo criterio que `concentracion`.
     rotaciones: (firma: string, perfil: string) =>
       ['mercado', 'rotaciones', perfil, firma] as const,
+    // F-057/F-067: los fondos comunes de inversión. Cuelgan de `mercado` (mismo prefijo) para que
+    // `invalidateQueries({ queryKey: claves.mercado.todas })` los alcance igual que al resto —
+    // aunque la planilla de CAFCI no se refresca cada 20 minutos, no hace daño invalidarla junto
+    // con lo demás, y evita que esta feature necesite su propio contrato de invalidación.
+    fci: {
+      segmentos: ['mercado', 'fci', 'segmentos'] as const,
+      fondos: (tipoRenta: string | null, moneda: string | null) =>
+        ['mercado', 'fci', 'fondos', tipoRenta ?? 'todos', moneda ?? 'todas'] as const,
+      ficha: (codigoCafci: string) => ['mercado', 'fci', 'ficha', codigoCafci] as const,
+      agregados: {
+        categorias: ['mercado', 'fci', 'agregados', 'categorias'] as const,
+        gestoras: ['mercado', 'fci', 'agregados', 'gestoras'] as const,
+      },
+    },
   },
 
   // Condiciones de emisión y demás dato curado: cambia por ingesta, no por paso del tiempo.

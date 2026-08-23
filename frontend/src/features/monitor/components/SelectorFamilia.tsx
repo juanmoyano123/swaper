@@ -10,13 +10,18 @@
  *
  * Local a esta feature: ninguna otra pantalla necesita la partición renta fija / renta variable
  * como pestañas — el armador la resuelve de otra forma (`CLAVES_RENTA_VARIABLE` para excluir).
+ *
+ * `'fci'` se sumó el 23/08/2026 (F-057): un fondo común no tiene TIR ni las magnitudes de una
+ * acción — variación de cuotaparte es una naturaleza propia (regla 2) — así que es una tercera
+ * pestaña, no una variante de ninguna de las otras dos.
  */
 
-export type Familia = 'renta_fija' | 'renta_variable'
+export type Familia = 'renta_fija' | 'renta_variable' | 'fci'
 
 const NOMBRE_FAMILIA: Record<Familia, string> = {
   renta_fija: 'Renta fija',
   renta_variable: 'Renta variable',
+  fci: 'FCI',
 }
 
 export function SelectorFamilia({

@@ -22,6 +22,8 @@ import { LoginPage } from '@/features/auth/LoginPage'
 import { RequiereSesion } from '@/features/auth/RequiereSesion'
 import { CarteraGuardadaPage } from '@/features/carteras/CarteraGuardadaPage'
 import { CarterasPage } from '@/features/carteras/CarterasPage'
+import { FichaFciDrawer } from '@/features/instrumento/FichaFciDrawer'
+import { FichaFciPage } from '@/features/instrumento/FichaFciPage'
 import { InstrumentoDrawer } from '@/features/instrumento/InstrumentoDrawer'
 import { InstrumentoPage } from '@/features/instrumento/InstrumentoPage'
 import { MonitorPage } from '@/features/monitor/MonitorPage'
@@ -59,6 +61,7 @@ export function AppRoutes() {
           <Route path="carteras" element={<CarterasPage />} />
           <Route path="carteras/:id" element={<CarteraGuardadaPage />} />
           <Route path="instrumento/:ticker" element={<InstrumentoPage />} />
+          <Route path="fci/:codigoCafci" element={<FichaFciPage />} />
           <Route path="*" element={<NoEncontrada />} />
         </Route>
       </Routes>
@@ -66,6 +69,7 @@ export function AppRoutes() {
       {fondo && (
         <Routes>
           <Route path="/instrumento/:ticker" element={<InstrumentoDrawer />} />
+          <Route path="/fci/:codigoCafci" element={<FichaFciDrawer />} />
         </Routes>
       )}
     </>
