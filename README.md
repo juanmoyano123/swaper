@@ -13,7 +13,9 @@ invertido — el número que lleva a la reunión. Esa mecánica es la razón de 
 **Stage 1 cerrado el 16/08/2026: las 44 features están construidas y la aplicación funciona.**
 Los tres flujos del producto cierran punta a punta — armar una cartera desde el calendario de
 cupones, diagnosticar una cartera que el cliente ya trae, y proponer rotaciones con su costo real.
-Stage 2 está abierto: 32 features catalogadas, 1 hecha (F-072, prospectos de la CNV).
+Stage 2 está abierto: 26 features catalogadas, 1 hecha (F-072, prospectos de la CNV). Otras 6 se
+difirieron a Stage 3 el 23/08/2026 —CRM, alertas, cambios de fuente e info del emisor—: primero
+las herramientas operativas de uso diario.
 
 | Fase | Qué produce | Estado |
 |---|---|---|
@@ -102,7 +104,7 @@ moneda de pago y estructura son atributos de la emisión, no de la especie:
   que no se puede calcular. Llegaba por subida manual y no se descargaba solo: cada corrida volvía
   a parsear el último informe cargado, que terminó teniendo ocho días. Se pausó porque un dato
   viejo sin rótulo es peor que uno ausente. El código quedó entero (`IAMC_HABILITADO=true` lo
-  reactiva); se retoma en Stage 2 con descarga automática.
+  reactiva); se retoma en Stage 3 con descarga automática (F-055, diferida el 23/08/2026).
 - **`data/condiciones_emision.csv`**, artefacto curado sin fuente viva: lámina y calificación.
 - **Cálculo propio** (F-051): TIR, duración y paridad se resuelven descontando el cronograma
   contra el precio, para las especies donde precio y flujo están en la misma moneda.

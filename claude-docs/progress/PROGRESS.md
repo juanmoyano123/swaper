@@ -4,7 +4,8 @@ Generado desde `claude-docs/planning/plan.md` (Fase 2) al correr `/init-project`
 Estado inicial: las 50 features arrancaban en **pendiente**. Este archivo se actualiza a mano o
 desde `/build-feature` a medida que cada una se implementa.
 
-**Estado al 23/08/2026 — Stage 1 cerrado (44 de 44), Stage 2 abierto (1 de 32).** El catálogo
+**Estado al 23/08/2026 — Stage 1 cerrado (44 de 44), Stage 2 abierto (1 de 26), Stage 3 creado
+con 6 diferidas.** El catálogo
 creció de 50 a 77 features desde que se generó este archivo; la tabla de Stage 2 se reconcilió
 contra `plan.md` el 23/08/2026. Lo que está trabado hoy **no es código sino dato**: ver
 "Pendientes de datos y decisiones" al final.
@@ -86,37 +87,34 @@ contra `plan.md` el 23/08/2026. Lo que está trabado hoy **no es código sino da
 > F-051 y F-052 se agregaron el 08/08/2026, después de auditar cómo resuelve estas dos cosas el
 > monitor de mesa. El plan pasó de 42 a 44 features de Stage 1.
 
-## Stage 2 — 32 features, ordenadas por RICE (~187 pd · ~37 semanas)
+## Stage 2 — 26 features, ordenadas por RICE (~148 pd · ~29 semanas)
 
 Reconciliado el 23/08/2026 contra `claude-docs/planning/plan.md`. La tabla anterior tenía 8
 features: era la foto del catálogo al cerrar la Fase 2, y quedó vieja cuando el catálogo creció con
 F-054…F-057 (Bloque O), F-058…F-070 (Bloque P, paridad competitiva con Docta), F-071 y F-072, y
 F-073…F-077 (motor analítico determinístico). Estado medido contra el código, no contra los
-mensajes de commit.
+mensajes de commit. El mismo 23/08 el dueño del producto difirió seis features a un Stage 3
+(tabla propia más abajo): Stage 2 se concentra en herramientas operativas de uso diario, no en
+gestión comercial ni en cambios de fuente.
 
 | ID | Feature | RICE | Estado |
 |---|---|---|---|
 | F-068 | Panel de dólar y spreads | 266,7 | pendiente |
 | F-060 | Navegación por emisor × naturaleza de tasa | 240,0 | pendiente |
 | F-059 | Comparador de dos instrumentos | 189,0 | pendiente |
-| F-055 | Descarga automática del informe de IAMC | 180,0 | pendiente |
 | F-073 | Serie diaria de cierres persistida | 180,0 | pendiente |
 | F-072 | Prospecto de emisión de ONs, vía CNV | 175,0 | **completada** |
 | F-071 | Calculadora de canjes y prorrateo de órdenes | 157,5 | pendiente |
-| F-064 | Watchlist | 150,0 | pendiente |
 | F-069 | Top ganadores y perdedores del día | 150,0 | pendiente |
 | F-056 | Índice CER del BCRA: tasa real | 112,5 | pendiente |
 | F-074 | Convexidad propia | 112,5 | pendiente |
 | F-077 | Perfilado formal del inversor | 96,0 | pendiente |
 | F-057 | FCI en el monitor (CAFCI) | 85,0 | pendiente |
 | F-067 | FCI: comparador, categorías y gestoras | 85,0 | pendiente |
-| F-050 | API Market Data oficial de BYMA | 80,0 | pendiente |
 | F-058 | Carry trade: calculadora y breakeven | 78,8 | pendiente |
 | F-062 | Curva histórica del segmento | 75,0 | pendiente |
 | F-063 | Heatmap del panel | 75,0 | pendiente |
 | F-061 | Rendimientos históricos por ventana | 72,0 | pendiente |
-| F-054 | Info pública del emisor (CNV y SEC) | 60,0 | **parcial** |
-| F-048 | Alertas y notificaciones | 40,0 | pendiente |
 | F-049 | Comparación de carteras entre sí | 40,0 | pendiente |
 | F-075 | Estadística de cartera | 37,5 | pendiente |
 | F-076 | Calculadora de valuación con supuestos declarados | 35,0 | pendiente |
@@ -124,10 +122,24 @@ mensajes de commit.
 | F-065 | Cauciones | 30,0 | pendiente |
 | F-044 | Historial de propuestas | 25,0 | pendiente |
 | F-066 | Futuros de dólar | 25,0 | pendiente |
-| F-043 | Gestión de clientes y CRM | 20,0 | pendiente |
 | F-045 | Colocaciones primarias | 15,0 | pendiente |
 | F-070 | Tenencias con P&L por lote | 13,3 | pendiente |
 | F-047 | Opciones | 4,0 | pendiente |
+
+## Stage 3 — 6 features diferidas el 23/08/2026 (~39 pd · ~8 semanas)
+
+Decisión del dueño del producto: primero las herramientas operativas de uso diario. Estas seis
+—gestión comercial, alertas, cambios de fuente e información del emisor— esperan a que Stage 2
+cierre. El RICE no cambió; cambió la etiqueta que decide cuándo entran.
+
+| ID | Feature | RICE | Estado |
+|---|---|---|---|
+| F-055 | Descarga automática del informe de IAMC | 180,0 | diferida |
+| F-064 | Watchlist | 150,0 | diferida |
+| F-050 | API Market Data oficial de BYMA | 80,0 | diferida |
+| F-054 | Info pública del emisor (CNV y SEC) | 60,0 | diferida (**parcial**: la pata SEC existe) |
+| F-048 | Alertas y notificaciones | 40,0 | diferida |
+| F-043 | Gestión de clientes y CRM | 20,0 | diferida |
 
 **Tres aclaraciones de estado que no se leen de la tabla:**
 
@@ -154,7 +166,8 @@ mensajes de commit.
 | 3 — RV, carga y diagnóstico | 9 | 41 | ~8 | ~28,5 |
 | 4 — Optimizador y persistencia | 9 | 42 | ~8,5 | ~37 |
 | **Stage 1** | **44** | **185** | **~37 semanas** | **cerrado el 16/08/2026** |
-| Stage 2 | 32 | 187 | ~37 | 1 de 32 hecha (F-072) |
+| Stage 2 | 26 | 148 | ~29 | 1 de 26 hecha (F-072) |
+| Stage 3 (diferido el 23/08/2026) | 6 | 39 | ~8 | ninguna empezada; F-054 parcial |
 
 **La base está poblada.** F-007 corrió contra Supabase el 06/08/2026 y dejó 2.894 instrumentos,
 2.894 precios, 3.344 puntas y 6.150 filas de cronograma, con el motor Python leyendo la vista
@@ -1101,12 +1114,14 @@ corrida matinal de F-008, programada a las 09:00, no cae en la misma ventana vac
 Cerrado Stage 1, lo que traba el producto **no es código sino dato y decisiones**. Las tres
 primeras son funcionalidad ya construida que no se está usando.
 
-**1. El job de perfiles de renta variable nunca corrió.** `public.perfil_renta_variable` tiene 0
-filas contra 434 acciones y 1.205 CEDEARs en el universo. Consecuencia concreta: los filtros por
-sector y rubro no encuentran nada, y **la diversificación sectorial del armado asistido no se
-aplica** (alerta `rv_sin_perfil_sectorial`). Es dato faltante, no un bug: el código está. Agravante:
-`YAHOO_HABILITADO` está apagado desde el 429 sostenido del 08/08/2026, así que la fuente de sector,
-país y rubro está cortada — sin resolver eso, el job no tiene de dónde traer los perfiles.
+**1. El job de clasificación de renta variable nunca corrió en producción.**
+`public.perfil_renta_variable` tiene 0 filas contra 434 acciones y 1.205 CEDEARs en el universo.
+Consecuencia concreta: los filtros por rubro y eslabón no encuentran nada, y **la diversificación
+sectorial del armado asistido no se aplica** (alerta `rv_sin_perfil_sectorial`). Es dato faltante,
+no un bug: el código está y la fuente (SEC EDGAR) responde. Se destraba corriendo
+`POST /api/v1/jobs/clasificar-renta-variable` en tandas hasta agotar los pendientes. Techo conocido:
+la SEC cubre el 74 % de los CEDEARs y el 9 % de las acciones argentinas; el resto queda declarado
+faltante hasta que entre la CNV como fuente (F-054).
 
 **2. La ingesta programada nunca corrió de verdad.** `corridas_ingesta` está vacía: todo el dato
 entró por corridas manuales, sin traza de fuente ni fecha (alerta `sin_corrida_registrada`). F-008
@@ -1121,7 +1136,6 @@ precio deja de servir para armar. Es criterio de negocio, no técnico, y bloquea
 | Flag | Desde | Qué se pierde | Se destraba con |
 |---|---|---|---|
 | `IAMC_HABILITADO=false` | 13/08/2026 | 35 emisiones con rendimiento (283 → 248), convexidad, valor residual | F-055 (descarga automática) |
-| `YAHOO_HABILITADO=false` | 08/08/2026 | PER, valor libro, beta, país, rubro, empleados | sin feature asignada — ver punto 1 |
 | `CNV_HABILITADO=false` | 17/08/2026 | prospectos de ON (default apagado por diseño; `.env` local lo tiene en true) | ninguna: es el flag normal de la feature |
 
 **5. La serie histórica de precios no se acumula.** La poda de consolidación deja una fila por

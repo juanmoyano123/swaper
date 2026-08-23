@@ -2003,6 +2003,14 @@ THEN los instrumentos que siguen fuera (sin_segmento) están declarados con su c
 
 **Etiqueta:** Stage 1 · **Traza a:** F8 · **Agregada el 08/08/2026**
 
+> **La fuente externa de esta ficha se eliminó el 23/08/2026, por decisión del dueño del producto.**
+> Todo lo que esta spec dice sobre Yahoo Finance —el bloque externo, sus dos niveles, sus GWT— es
+> **historia de cómo se construyó F-053, no requisito vigente**, y no se vuelve a implementar sin
+> una orden nueva. La ficha quedó con tres bloques, cada uno rotulado con su fuente: propio (BYMA),
+> histórico de cierres (data912) y estados contables (SEC EDGAR). El nombre de la empresa, la
+> actividad y el rubro los da la SEC. Ver `docs/ESTADO.md`, entrada del 23/08/2026, por qué se sacó
+> y qué campos se perdieron sin reemplazo.
+
 **Descripción.** Una acción o un CEDEAR en nuestro monitor son hoy cuatro números: ticker, precio,
 variación y volumen. No hay forma de saber **qué empresa es**, en qué sector opera ni de qué país,
 y esos son los datos con los que un asesor decide en renta variable — donde no hay TIR ni cronograma
@@ -2152,7 +2160,7 @@ THEN el pie declara la hora del snapshot de precios y la demora de la fuente
 
 #### F-043 — Gestión de clientes y CRM
 
-**Etiqueta:** Stage 2 · **Traza a:** "Fuera del MVP"
+**Etiqueta:** Stage 3 (diferida el 23/08/2026) · **Traza a:** "Fuera del MVP"
 
 **Descripción.** Ficha de cliente, asociación de carteras a clientes, y los datos que Stage 1 excluye
 deliberadamente. Es la feature que convierte "se guardan carteras" en "se guardan clientes", y por eso
@@ -2314,7 +2322,7 @@ THEN queda como posición no resuelta y declarada, sin cálculo asociado
 
 #### F-048 — Alertas y notificaciones
 
-**Etiqueta:** Stage 2 · **Traza a:** "Fuera del MVP"
+**Etiqueta:** Stage 3 (diferida el 23/08/2026) · **Traza a:** "Fuera del MVP"
 
 **Descripción.** Avisos proactivos: un mes de la cartera que quedó sin cobertura, una rotación que
 apareció, un cupón que se cobra la semana que viene. En Stage 1 toda la señalización es en pantalla
@@ -2359,7 +2367,7 @@ THEN los precios usados se declaran por cartera y la comparación advierte si lo
 
 #### F-050 — Migración a la API Market Data oficial de BYMA
 
-**Etiqueta:** Stage 2 · **Traza a:** "Fuera del MVP"
+**Etiqueta:** Stage 3 (diferida el 23/08/2026) · **Traza a:** "Fuera del MVP"
 
 **Descripción.** Reemplazo del feed abierto demorado 20 minutos por la API Market Data oficial, que
 según BYMA no requiere homologación y se solicita a `marketdata@byma.com.ar`. Elimina la demora
@@ -2388,7 +2396,7 @@ THEN declara la demora real de la nueva fuente, no la de 20 minutos de la anteri
 
 #### F-054 — Información pública del emisor desde CNV y SEC
 
-**Etiqueta:** Stage 2 · **Traza a:** "Fuera del MVP"
+**Etiqueta:** Stage 3 (diferida el 23/08/2026) · **Traza a:** "Fuera del MVP"
 
 **Descripción.** Al seleccionar un ticker se abre un modal con los números duros del último balance
 del emisor, extraídos del regulador que le corresponde: **CNV** para emisores argentinos (ONs y
@@ -2454,7 +2462,7 @@ THEN el espacio va vacío y el faltante se declara con nombre y apellido; no se 
 
 #### F-055 — Descarga automática del informe diario de IAMC
 
-**Etiqueta:** Stage 2 · **Traza a:** F1 (reactiva F-005)
+**Etiqueta:** Stage 3 (diferida el 23/08/2026) · **Traza a:** F1 (reactiva F-005)
 
 **Descripción.** IAMC se pausó el 13/08/2026 porque el informe llegaba a mano y envejecía. Esta
 feature lo reactiva sacando la parte manual: la corrida matinal baja el informe del día antes de
@@ -2963,7 +2971,7 @@ THEN aparece en gris declarado como sin variación calculable, y no como variaci
 
 #### F-064 — Watchlist
 
-**Etiqueta:** Stage 2 · **Traza a:** análisis Docta §1
+**Etiqueta:** Stage 3 (diferida el 23/08/2026) · **Traza a:** análisis Docta §1
 
 **Descripción.** Un conjunto de tickers marcados por el asesor, que atraviesa todas las pantallas. No
 tiene lógica financiera: es persistencia por asesor y un filtro. La razón por la que puntúa alto no es
@@ -3310,7 +3318,7 @@ documentos mencionan CRESUD; IRSA: 248 de 342—, nunca por parecido de nombre.
 **Estado: construida y verificada en vivo el 17/08/2026.** Cobertura medida sobre el universo vivo:
 **277 de 373 emisiones ON (74 %)** resuelven su CUIT y muestran documentos; sobre las emisiones que sí
 tienen emisor declarado, la cobertura es del **98 %**. La feature queda detrás del flag
-`CNV_HABILITADO`, **default apagado** —mismo patrón que `YAHOO_HABILITADO` e `IAMC_HABILITADO`—, con
+`CNV_HABILITADO`, **default apagado** —mismo patrón que `IAMC_HABILITADO`—, con
 cache de 1 día por CUIT.
 
 **Lo que falta, declarado.** Las **89 emisiones sin emisor declarado en ninguna fuente** son la deuda
@@ -3652,7 +3660,7 @@ CNV quedan como investigación pendiente —parsing grande, resultado incierto�
 | 18 | F-059 | Comparador de dos instrumentos | Stage 2 | 350 | 3 | 90 % | 5 | 189,0 |
 | 19 | F-035 | Costo real de rotar y cupón próximo | Stage 1 | 180 | 3 | 100 % | 3 | 180,0 |
 | 20 | F-041 | Guardar, listar, reabrir y revaluar | Stage 1 | 300 | 3 | 100 % | 5 | 180,0 |
-| 21 | F-055 | Descarga automática del informe de IAMC | Stage 2 | 300 | 2 | 90 % | 3 | 180,0 |
+| 21 | F-055 | Descarga automática del informe de IAMC | Stage 3 | 300 | 2 | 90 % | 3 | 180,0 |
 | 22 | F-073 | Serie diaria de cierres persistida | Stage 2 | 300 | 2 | 90 % | 3 | 180,0 |
 | 23 | F-020 | Límites de concentración en vivo | Stage 1 | 350 | 2 | 100 % | 4 | 175,0 |
 | 24 | F-022 | Rendimientos por naturaleza y plazo | Stage 1 | 350 | 2 | 100 % | 4 | 175,0 |
@@ -3661,7 +3669,7 @@ CNV quedan como investigación pendiente —parsing grande, resultado incierto�
 | 27 | F-051 | Métricas propias: TIR, duración y paridad | Stage 1 | 400 | 2 | 80 % | 4 | 160,0 |
 | 28 | F-071 | Calculadora de canjes y prorrateo de órdenes a mesa | Stage 2 | 350 | 3 | 90 % | 6 | 157,5 |
 | 29 | F-030 | Valuación y diagnóstico de cartera | Stage 1 | 200 | 3 | 100 % | 4 | 150,0 |
-| 30 | F-064 | Watchlist | Stage 2 | 300 | 1 | 100 % | 2 | 150,0 |
+| 30 | F-064 | Watchlist | Stage 3 | 300 | 1 | 100 % | 2 | 150,0 |
 | 31 | F-069 | Top ganadores y perdedores | Stage 2 | 300 | 1 | 100 % | 2 | 150,0 |
 | 32 | F-018 | Cartera editable y ponderación | Stage 1 | 350 | 3 | 80 % | 6 | 140,0 |
 | 33 | F-053 | Ficha del activo de renta variable | Stage 1 | 300 | 2 | 70 % | 3 | 140,0 |
@@ -3683,20 +3691,20 @@ CNV quedan como investigación pendiente —parsing grande, resultado incierto�
 | 49 | F-067 | FCI: comparador, categorías y gestoras | Stage 2 | 250 | 2 | 85 % | 5 | 85,0 |
 | 50 | F-019 | Armado asistido | Stage 1 | 250 | 2 | 100 % | 6 | 83,3 |
 | 51 | F-026 | Bloque de renta variable | Stage 1 | 300 | 2 | 80 % | 6 | 80,0 |
-| 52 | F-050 | API Market Data oficial de BYMA | Stage 2 | 400 | 2 | 50 % | 5 | 80,0 |
+| 52 | F-050 | API Market Data oficial de BYMA | Stage 3 | 400 | 2 | 50 % | 5 | 80,0 |
 | 53 | F-058 | Carry trade: calculadora y breakeven | Stage 2 | 300 | 3 | 70 % | 8 | 78,8 |
 | 54 | F-062 | Curva histórica del segmento | Stage 2 | 250 | 2 | 60 % | 4 | 75,0 |
 | 55 | F-063 | Heatmap del panel | Stage 2 | 250 | 1 | 90 % | 3 | 75,0 |
 | 56 | F-037 | Comparación original contra propuesta | Stage 1 | 180 | 2 | 80 % | 4 | 72,0 |
 | 57 | F-061 | Rendimientos históricos por ventana | Stage 2 | 300 | 2 | 60 % | 5 | 72,0 |
 | 58 | F-040 | Sensibilidad por repricing completo | Stage 1 | 200 | 1 | 100 % | 3 | 66,7 |
-| 59 | F-054 | Info pública del emisor (CNV y SEC) | Stage 2 | 300 | 2 | 80 % | 8 | 60,0 |
+| 59 | F-054 | Info pública del emisor (CNV y SEC) | Stage 3 | 300 | 2 | 80 % | 8 | 60,0 |
 | 60 | F-033 | Modo bajar riesgo | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
 | 61 | F-036 | Aceptación rotación por rotación | Stage 1 | 180 | 2 | 80 % | 5 | 57,6 |
 | 62 | F-025 | Carga asistida de lámina | Stage 1 | 200 | 1 | 80 % | 3 | 53,3 |
 | 63 | F-005 | Parser del informe diario de IAMC | Stage 1 | 400 | 2 | 50 % | 8 | 50,0 |
 | 64 | F-023 | Composición y curva TIR/duración | Stage 1 | 300 | 1 | 80 % | 5 | 48,0 |
-| 65 | F-048 | Alertas y notificaciones | Stage 2 | 300 | 1 | 80 % | 6 | 40,0 |
+| 65 | F-048 | Alertas y notificaciones | Stage 3 | 300 | 1 | 80 % | 6 | 40,0 |
 | 66 | F-049 | Comparación de carteras entre sí | Stage 2 | 200 | 1 | 80 % | 4 | 40,0 |
 | 67 | F-075 | Estadística de cartera | Stage 2 | 250 | 2 | 60 % | 8 | 37,5 |
 | 68 | F-076 | Calculadora de valuación con supuestos declarados | Stage 2 | 200 | 2 | 70 % | 8 | 35,0 |
@@ -3704,7 +3712,7 @@ CNV quedan como investigación pendiente —parsing grande, resultado incierto�
 | 70 | F-065 | Cauciones | Stage 2 | 200 | 1 | 60 % | 4 | 30,0 |
 | 71 | F-044 | Historial de propuestas | Stage 2 | 250 | 2 | 50 % | 10 | 25,0 |
 | 72 | F-066 | Futuros de dólar | Stage 2 | 200 | 1 | 50 % | 4 | 25,0 |
-| 73 | F-043 | Gestión de clientes y CRM | Stage 2 | 300 | 2 | 50 % | 15 | 20,0 |
+| 73 | F-043 | Gestión de clientes y CRM | Stage 3 | 300 | 2 | 50 % | 15 | 20,0 |
 | 74 | F-027 | Calendario de balances (sólo CEDEARs, vía SEC) | Stage 1 | 200 | 1 | 85 % | 4 | 42,5 |
 | 75 | F-045 | Colocaciones primarias | Stage 2 | 150 | 2 | 50 % | 10 | 15,0 |
 | 76 | F-070 | Tenencias con P&L por lote | Stage 2 | 200 | 2 | 40 % | 12 | 13,3 |
@@ -3714,7 +3722,13 @@ CNV quedan como investigación pendiente —parsing grande, resultado incierto�
 score son las Foundation y las de ingesta: mucho alcance sobre poco esfuerzo, porque reusan lógica ya
 verificada. Las del optimizador puntúan bajo por su Reach acotado al Flujo B, y **eso no las hace
 opcionales**: el usuario declaró el optimizador como mitad no negociable del producto. El RICE informa
-el orden dentro de un ciclo; la etiqueta Stage 1 / Stage 2 decide qué se construye.
+el orden dentro de un ciclo; la etiqueta Stage 1 / Stage 2 / Stage 3 decide qué se construye.
+
+**Stage 3, creado el 23/08/2026.** Decisión del dueño del producto: Stage 2 se concentra en
+herramientas operativas de uso diario, no en gestión comercial ni en cambios de fuente. Se
+difirieron seis features: F-043 (CRM), F-048 (alertas), F-050 (API oficial de BYMA), F-054
+(info del emisor CNV+SEC), F-055 (IAMC automático) y F-064 (watchlist). El RICE de cada una no
+cambia; cambia la etiqueta que decide cuándo entran.
 
 ---
 
@@ -4024,7 +4038,8 @@ Al final de este ciclo **Stage 1 está completo**: los tres flujos funcionan de 
 | 3 — RV, carga y diagnóstico | 9 | 41 | ~8 | ~28,5 |
 | 4 — Optimizador y persistencia | 9 | 42 | ~8,5 | ~37 |
 | **Stage 1** | **42** | **185** | **~37 semanas** | |
-| Stage 2 (32 features) | 32 | 187 | ~37 | |
+| Stage 2 (26 features) | 26 | 148 | ~29 | |
+| Stage 3 (6 features, diferidas el 23/08/2026) | 6 | 39 | ~8 | |
 
 **~37 semanas de un desarrollador a tiempo completo para Stage 1.** El camino crítico son 73 pd de esos
 185: con un segundo desarrollador, el piso teórico de compresión es **~15 semanas**, y el cuello real
