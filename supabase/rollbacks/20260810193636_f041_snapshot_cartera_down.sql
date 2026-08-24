@@ -7,3 +7,5 @@ ALTER TABLE public.carteras
     DROP COLUMN IF EXISTS monto,
     DROP COLUMN IF EXISTS moneda_referencia,
     DROP COLUMN IF EXISTS origen;
+
+DELETE FROM supabase_migrations.schema_migrations WHERE version = '20260810193636';
