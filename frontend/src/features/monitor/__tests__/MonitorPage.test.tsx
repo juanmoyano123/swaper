@@ -774,6 +774,7 @@ const FONDO_FCI: FondoFci = {
   dias_para_rescatar: 1,
   minimo_inversion: 1000.0,
   advertencia_distribucion: 'Los rendimientos no consideran distribución de utilidades.',
+  enlace_composicion_cnv: null,
 }
 
 /** Universo de renta fija/variable vacío a propósito: así la única familia disponible es FCI, y

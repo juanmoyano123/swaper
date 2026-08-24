@@ -148,6 +148,14 @@ class Settings(BaseSettings):
     # valúa al 31/12 y no puede traer una emisión que salió a cotizar después.
     emisores_arca_csv: str = "data/emisores_arca.csv"
 
+    # F-057 — el puente codigo_cnv -> id interno de la CNV, para linkear desde la ficha de un FCI a
+    # su "COMPOSICIÓN DE CARTERA" pública (artículo 34). Igual criterio que `emisores_cuit_csv`:
+    # dato curado, versionado, sin fuente de origen viva por request (se cura una vez con
+    # `tools/curar_fci_cnv.py`, matcheando por nombre normalizado la planilla de CAFCI contra el
+    # listado de fondos de la CNV). Cubre 922 de 1.197 fondos padre al 23/08/2026 — lo que no está
+    # resuelto se declara sin enlace, no bloquea la ficha.
+    fci_cnv_csv: str = "data/fci_cnv_ids.csv"
+
     # F-010 no declara settings a propósito. Los topes de sanidad (300 % hard-dollar, 100 % de tasa
     # real CER, 500 % de TNA nominal) y el umbral de discordancia entre especies son criterio de
     # dominio verificado, no configuración: hacerlos ajustables por entorno invitaría a subirlos

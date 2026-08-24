@@ -41,6 +41,37 @@ export function FichaFciContenido({ codigoCafci }: { codigoCafci: string | null 
   return (
     <div>
       <p style={{ fontSize: 13, margin: '0 0 4px' }}>{f.fondo}</p>
+
+      {f.enlace_composicion_cnv ? (
+        <div style={{ margin: '0 0 12px' }}>
+          <a
+            href={f.enlace_composicion_cnv}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'inline-block',
+              fontSize: 12.5,
+              fontWeight: 600,
+              padding: '7px 14px',
+              borderRadius: 3,
+              border: '1px solid var(--ac)',
+              background: 'var(--ac)',
+              color: '#08120c',
+              textDecoration: 'none',
+            }}
+          >
+            Composición de cartera en CNV ↗
+          </a>
+          <p style={{ fontSize: 10.5, color: 'var(--dim)', margin: '4px 0 0' }}>
+            La composición semanal completa del fondo, publicada por la CNV — artículo 34.
+          </p>
+        </div>
+      ) : (
+        <p style={{ fontSize: 11, color: 'var(--dim)', margin: '0 0 12px' }}>
+          El mapeo contra el registro público de la CNV está pendiente de curación para este fondo.
+        </p>
+      )}
+
       <p style={{ fontSize: 11, color: 'var(--dim)', margin: '0 0 12px' }}>
         {f.tipo_renta} · {f.moneda}
         {f.discrepancia_moneda && f.moneda_fondo ? ` (moneda del fondo: ${f.moneda_fondo} — la sección y el fondo declaran monedas distintas)` : ''}

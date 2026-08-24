@@ -68,6 +68,10 @@ export const esquemaFondoFci = z.object({
   minimo_inversion: z.number().nullable(),
 
   advertencia_distribucion: z.string(),
+
+  /** Sólo la ficha individual lo trae — el listado de `/fci/fondos` reusa este esquema para sus
+   *  items y nunca manda el campo, de ahí el `.default(null)`. */
+  enlace_composicion_cnv: z.string().nullable().default(null),
 })
 
 export type FondoFci = z.infer<typeof esquemaFondoFci>

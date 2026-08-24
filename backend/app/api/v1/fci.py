@@ -12,7 +12,15 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.deps import get_db
 from app.core.pagination import CursorParams, Page, build_page
-from app.fci import fondo_de_fila, leer_fondo, leer_fondos, leer_planilla, leer_segmentos, planilla_como_dict
+from app.fci import (
+    enlace_composicion_cnv,
+    fondo_de_fila,
+    leer_fondo,
+    leer_fondos,
+    leer_planilla,
+    leer_segmentos,
+    planilla_como_dict,
+)
 
 router = APIRouter(prefix="/fci", tags=["fci"])
 
@@ -81,4 +89,5 @@ async def ficha(
     fila = await leer_fondo(conn, codigo_cafci.strip())
     if fila is None:
         raise HTTPException(404, detail=f"{codigo_cafci} no está en la planilla de hoy")
-    return fondo_de_fila(fila).como_dict()
+    fondo = fondo_de_fila(fila)
+    return {**fondo.como_dict(), "enlace_composicion_cnv": enlace_composicion_cnv(fondo.codigo_cnv)}

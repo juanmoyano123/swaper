@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 
+from app.api.v1 import fci as modulo_fci
 from tests.conftest import cliente
 
 FONDO_A = {
@@ -185,3 +186,33 @@ async def test_ficha_devuelve_el_fondo(app_con_fci) -> None:
     assert respuesta.status_code == 200
     assert respuesta.json()["gerente"] == "Gainvest S.A."
     assert respuesta.json()["codigo_cnv"] == "500"
+
+
+async def test_ficha_con_codigo_cnv_mapeado_trae_el_enlace(app_con_fci, monkeypatch) -> None:
+    monkeypatch.setattr(
+        modulo_fci,
+        "enlace_composicion_cnv",
+        lambda codigo_cnv: f"https://www.cnv.gov.ar/SitioWeb/FondosComunesInversion/DetallesFCI/{codigo_cnv}",
+    )
+    async with cliente(app_con_fci(fondos=[FONDO_A])) as http:
+        respuesta = await http.get("/api/v1/fci/1031/ficha")
+
+    assert respuesta.json()["enlace_composicion_cnv"] == (
+        "https://www.cnv.gov.ar/SitioWeb/FondosComunesInversion/DetallesFCI/500"
+    )
+
+
+async def test_ficha_sin_codigo_cnv_mapeado_no_trae_enlace(app_con_fci, monkeypatch) -> None:
+    monkeypatch.setattr(modulo_fci, "enlace_composicion_cnv", lambda codigo_cnv: None)
+    async with cliente(app_con_fci(fondos=[FONDO_A])) as http:
+        respuesta = await http.get("/api/v1/fci/1031/ficha")
+
+    assert respuesta.json()["enlace_composicion_cnv"] is None
+
+
+async def test_listado_de_fondos_no_lleva_enlace_composicion_cnv(app_con_fci) -> None:
+    async with cliente(app_con_fci(fondos=[FONDO_A])) as http:
+        respuesta = await http.get("/api/v1/fci/fondos")
+
+    (fondo,) = respuesta.json()["items"]
+    assert "enlace_composicion_cnv" not in fondo
