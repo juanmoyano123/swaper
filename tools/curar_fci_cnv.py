@@ -28,6 +28,26 @@ variantes cerradas—, sólo [a-z0-9]). Conservador: sólo entra a `data/fci_cnv
 más de uno van a `data/fci_cnv_pendientes.csv` para revisión humana — nunca se elige "el más
 parecido" (mismo criterio que `tools/curar_emisores_cuit.py`).
 
+**Dos deformaciones del listado de la CNV, medidas el 24/08/2026**, que la primera curación no
+contemplaba y dejaban afuera a 123 fondos padre que sí están publicados:
+
+1. **El nombre anterior pegado con "Ex"**: a los fondos renombrados la CNV les concatena su
+   denominación vieja — `Balanz Institucional` figura como *"Balanz Institucional Ex Balanz Capital
+   Multimercado I"*. Son 137 fondos. Se indexan **las dos formas** (completa y hasta antes del
+   "Ex"), no se reemplaza una por otra: si un fondo se llamara legítimamente "… Ex …", su nombre
+   entero sigue siendo buscable.
+2. **Nombres truncados a 50 caracteres**: 125 entradas vienen cortadas a mitad de palabra
+   (*"Balanz Acciones Ex Balanz Capital Acciones Argenti"*). Para ésas —y sólo para ésas, las de
+   largo exactamente 50— se acepta que la denominación de la CNV sea **prefijo** del nombre de
+   CAFCI, con dos recaudos contra el falso positivo: el prefijo normalizado debe medir al menos
+   `LARGO_MINIMO_PREFIJO` caracteres, y si empata con más de un id la fila va a pendientes (sin
+   esto, un truncado "Balanz Performance I" se comería a "Balanz Performance III").
+
+Además se valida que **ningún id de la CNV quede asignado a dos `codigo_cnv` distintos**: si dos
+fondos padre resuelven al mismo detalle, los dos van a pendientes en vez de publicar un enlace que
+apunta al fondo equivocado. El CSV declara en `verificado_por` por cuál de las tres reglas entró
+cada fila, para que la revisión humana pueda priorizar las menos directas.
+
 Uso (con acceso a red, sin backend local necesario — las dos fuentes son públicas):
     python3 tools/curar_fci_cnv.py --dry-run
     python3 tools/curar_fci_cnv.py
@@ -71,12 +91,29 @@ _PATRON_CLASE = re.compile(r"-?\s*clase\s+[a-z0-9ivx]+\b")
 _PATRON_ESTADO = re.compile(
     r"\(\s*(en proceso de liquidaci[oó]n|valor final de liquidaci[oó]n)\s*\)"
 )
+# La CNV le pega a cada fondo renombrado su denominación anterior: "Nuevo Nombre Ex Nombre Viejo".
+_PATRON_EX = re.compile(r"\s+ex\s+", re.IGNORECASE)
+
+# Largo al que el listado de la CNV corta las denominaciones largas (medido: 125 entradas de 1.677
+# miden exactamente esto, varias partidas a mitad de palabra).
+LARGO_TRUNCADO = 50
+
+# Piso para aceptar un match por prefijo. Un prefijo corto ("balanz") matchearía media gestora;
+# con este piso, lo que se compara ya es un nombre de fondo y no una marca.
+LARGO_MINIMO_PREFIJO = 25
+
 _PATRONES_FORMA_LEGAL = (
-    re.compile(r"\bfondo\s+comun\s+de\s+inversion\s+cerrado\s+agropecuario\b"),
-    re.compile(r"\bfondo\s+comun\s+de\s+inversion\s+cerrado\s+inmobiliario\b"),
-    re.compile(r"\bfondo\s+comun\s+de\s+inversion\s+abierto\b"),
-    re.compile(r"\bfondo\s+comun\s+de\s+inversion\b"),
+    re.compile(r"\bfondo\s+comun\s+de\s+inversion(?:es)?\s+cerrado\s+agropecuario\b"),
+    re.compile(r"\bfondo\s+comun\s+de\s+inversion(?:es)?\s+cerrado\s+inmobiliario\b"),
+    re.compile(r"\bfondo\s+comun\s+de\s+inversion(?:es)?\s+abierto\b"),
+    re.compile(r"\bfondo\s+comun\s+de\s+inversion(?:es)?\b"),
+    # La CNV corta a 50 caracteres y parte el sufijo legal a la mitad ("… Fondo Comun de Inver").
+    # Sólo al final del texto: en el medio, un corte así no existiría.
+    re.compile(r"\bfondo\s+comun\s+de\s+inv[a-z]*\s*$"),
     re.compile(r"\bf\.?\s*c\.?\s*i\.?\b"),
+    # Designación legal de los FCI de infraestructura (RG 900): la llevan todos los de esa clase,
+    # así que no distingue un fondo de otro. Se acepta truncada por la misma razón que arriba.
+    re.compile(r"\bpara\s+el\s+financiamiento\s+de\s+la\s+infraestructura\s+y\s+la\s+economia\s+rea[l]?\s*$"),
 )
 
 
@@ -90,6 +127,16 @@ def normalizar(nombre: str) -> str:
     for patron in _PATRONES_FORMA_LEGAL:
         s = patron.sub(" ", s)
     return re.sub(r"[^a-z0-9]", "", s)
+
+
+def variantes_normalizadas(denominacion: str) -> set[str]:
+    """Las formas bajo las que se indexa una denominación de la CNV: la completa y, si arrastra el
+    nombre anterior con "Ex", también la parte previa. Las dos, nunca una en lugar de la otra."""
+    variantes = {normalizar(denominacion)}
+    antes_del_ex = _PATRON_EX.split(denominacion, maxsplit=1)[0]
+    if antes_del_ex != denominacion:
+        variantes.add(normalizar(antes_del_ex))
+    return {v for v in variantes if v}
 
 
 def listado_cnv(cliente: httpx.Client) -> list[tuple[str, str]]:
@@ -147,7 +194,14 @@ def main() -> None:
 
     indice_cnv: dict[str, list[tuple[str, str]]] = {}
     for id_cnv, denominacion in cnv:
-        indice_cnv.setdefault(normalizar(denominacion), []).append((id_cnv, denominacion))
+        for variante in variantes_normalizadas(denominacion):
+            indice_cnv.setdefault(variante, []).append((id_cnv, denominacion))
+
+    # Sólo las denominaciones que la CNV cortó: son las únicas habilitadas a matchear por prefijo.
+    truncadas = [
+        (normalizar(d), id_cnv, d) for id_cnv, d in cnv if len(d) == LARGO_TRUNCADO
+    ]
+    print(f"  {len(truncadas)} denominaciones truncadas a {LARGO_TRUNCADO} caracteres.\n")
 
     confirmados: list[tuple[str, str, str, str]] = []  # (codigo_cnv, id, denominacion, verificado_por)
     pendientes: list[tuple[str, str, str]] = []  # (codigo_cnv, nombre_cafci, candidatos)
@@ -156,21 +210,64 @@ def main() -> None:
         objetivo = normalizar(nombre_cafci)
         candidatos = indice_cnv.get(objetivo, [])
         ids_distintos = {c for c, _ in candidatos}
+        regla = "nombre"
+
+        if not ids_distintos:
+            # Nada exacto: puede ser una denominación que la CNV cortó a la mitad. Se acepta que la
+            # suya sea prefijo de la nuestra, nunca al revés, y con piso de largo.
+            por_prefijo = [
+                (id_cnv, denominacion)
+                for norm_cnv, id_cnv, denominacion in truncadas
+                if len(norm_cnv) >= LARGO_MINIMO_PREFIJO and objetivo.startswith(norm_cnv)
+            ]
+            candidatos = por_prefijo
+            ids_distintos = {c for c, _ in por_prefijo}
+            regla = "nombre_truncado"
 
         if len(ids_distintos) == 1:
             id_cnv, denominacion = candidatos[0]
-            confirmados.append((codigo_cnv, id_cnv, denominacion, "nombre"))
+            if regla == "nombre" and normalizar(denominacion) != objetivo:
+                regla = "nombre_sin_ex"
+            confirmados.append((codigo_cnv, id_cnv, denominacion, regla))
         elif len(ids_distintos) > 1:
             detalle = "; ".join(f"{d!r} (id {i})" for i, d in candidatos)
             pendientes.append((codigo_cnv, nombre_cafci, f"ambiguo: {detalle}"))
         else:
             pendientes.append((codigo_cnv, nombre_cafci, "sin candidatos"))
 
+    # Un mismo detalle de la CNV no puede ser la composición de dos fondos padre distintos: si pasa,
+    # al menos uno está mal apuntado y no hay forma de saber cuál. Los dos a revisión.
+    por_id: dict[str, list[tuple[str, str, str, str]]] = {}
+    for confirmado in confirmados:
+        por_id.setdefault(confirmado[1], []).append(confirmado)
+
+    colisiones = {id_cnv: filas for id_cnv, filas in por_id.items() if len(filas) > 1}
+    if colisiones:
+        confirmados = [c for c in confirmados if c[1] not in colisiones]
+        for id_cnv, filas in colisiones.items():
+            codigos = ", ".join(c[0] for c in filas)
+            for codigo_cnv, _id, denominacion, _regla in filas:
+                pendientes.append((
+                    codigo_cnv,
+                    padres[codigo_cnv][0],
+                    f"colisión: el id {id_cnv} ({denominacion!r}) también lo reclaman {codigos}",
+                ))
+        print(f"{len(colisiones)} ids de la CNV reclamados por más de un fondo padre: a pendientes.\n")
+
+    pendientes.sort(key=lambda p: p[0])
+
     total = len(padres)
+    por_regla: dict[str, int] = {}
+    for _codigo, _id, _denominacion, regla in confirmados:
+        por_regla[regla] = por_regla.get(regla, 0) + 1
+
     print(
         f"{len(confirmados)}/{total} fondos padre matchean único "
-        f"({len(confirmados) / total:.0%}), {len(pendientes)} a revisar a mano.\n"
+        f"({len(confirmados) / total:.0%}), {len(pendientes)} a revisar a mano."
     )
+    for regla, cantidad in sorted(por_regla.items()):
+        print(f"    por {regla}: {cantidad}")
+    print()
 
     if args.dry_run:
         print("--dry-run: no se escribió nada.")
