@@ -47,7 +47,7 @@ import { SelectorMoneda, contarPorMoneda, monedaInicial, SIN_MONEDA_DECLARADA } 
 import { CLAVES_RENTA_VARIABLE, SelectorSegmento, nombreSegmento, ordenarSegmentos } from '@/components/SelectorSegmento'
 import { TablaFci } from '@/components/TablaFci'
 import { TablaRentaVariable } from '@/components/TablaRentaVariable'
-import { claveTipoRenta, tipoRentaDeClave, useFondosFci, useSegmentosFci, type PlanillaFci } from '@/lib/fci'
+import { claveTipoRenta, tipoRentaDeClave, useFondosFci, useSegmentosFci, type FondoFci, type PlanillaFci } from '@/lib/fci'
 import { fmtNumero } from '@/lib/fmt'
 import { useRentaVariable } from '@/lib/rentaVariable'
 
@@ -55,6 +55,7 @@ import { useAbrirFondoFci } from '@/features/instrumento/useAbrirFondoFci'
 import { useAbrirInstrumento } from '@/features/instrumento/useAbrirInstrumento'
 
 import { CurvaSegmento } from './components/CurvaSegmento'
+import { FiltrosFci } from './components/FiltrosFci'
 import { FiltrosNumericos } from './components/FiltrosNumericos'
 import { FiltrosPerfil } from './components/FiltrosPerfil'
 import { SelectorFamilia, type Familia } from './components/SelectorFamilia'
@@ -62,6 +63,7 @@ import { TablaUniverso } from './components/TablaUniverso'
 import { useSegmentos } from './hooks/useSegmentos'
 import { useUniversoSegmento } from './hooks/useUniversoSegmento'
 import { FILTROS_VACIOS, facetarUniverso, pasaFiltros, type FiltrosUniverso } from './lib/filtros'
+import { FILTROS_FCI_VACIOS, facetarFci, pasaFiltrosFci, type FiltrosFci as TipoFiltrosFci } from './lib/filtrosFci'
 
 export function MonitorPage() {
   const segmentos = useSegmentos()
@@ -449,17 +451,36 @@ function FciDelTipoDeRenta({
 }) {
   const fci = useFondosFci(tipoRenta)
   const abrirFondo = useAbrirFondoFci()
-  const [moneda, setMoneda] = useState<string | null>(null)
+  // No hace falta resetear al cambiar de tipo de renta: `RamaFci` monta esto con `key={claveActiva}`,
+  // así que el remount descarta los filtros solo.
+  const [filtros, setFiltros] = useState<TipoFiltrosFci>(FILTROS_FCI_VACIOS)
 
-  const monedas = useMemo(
-    () => contarPorMoneda((fci.data ?? []).map((f) => ({ moneda_cotizacion: f.moneda }))),
-    [fci.data],
+  const deLTipo = useMemo(() => fci.data ?? [], [fci.data])
+
+  const { opciones, efectivos, apagadas } = useMemo(
+    () => facetarFci(deLTipo, filtros),
+    [deLTipo, filtros],
   )
-  const activa = moneda ?? monedaInicial(monedas, MONEDA_PREFERIDA_POR_DEFECTO)
+
+  // Leave-one-out: los conteos del chip reaccionan al resto de los filtros, pero no a la moneda
+  // misma — si no, elegir una dejaría las otras en cero y no habría cómo volver.
+  const monedas = useMemo(() => {
+    const paraMoneda = deLTipo.filter((f) => pasaFiltrosFci(f, { ...efectivos, moneda: null }))
+    return contarPorMoneda(paraMoneda.map((f) => ({ moneda_cotizacion: f.moneda })))
+  }, [deLTipo, efectivos])
+
+  const activa = efectivos.moneda ?? monedaInicial(monedas, MONEDA_PREFERIDA_POR_DEFECTO)
+
+  /** El "de M" del conteo: todo lo del tipo de renta en la moneda activa, antes del resto. */
   const deLaMoneda = useMemo(
-    () => (fci.data ?? []).filter((f) => (f.moneda ?? SIN_MONEDA_DECLARADA) === activa),
-    [fci.data, activa],
+    () => deLTipo.filter((f) => (f.moneda ?? SIN_MONEDA_DECLARADA) === activa),
+    [deLTipo, activa],
   )
+
+  const filtro = useMemo(() => {
+    const resueltos = { ...efectivos, moneda: activa }
+    return (fondo: FondoFci) => pasaFiltrosFci(fondo, resueltos)
+  }, [efectivos, activa])
 
   if (fci.isPending) {
     return <p style={{ margin: '14px 0', color: 'var(--dim)', fontSize: 12.5 }}>consultando el segmento…</p>
@@ -485,14 +506,32 @@ function FciDelTipoDeRenta({
   return (
     <>
       {activa !== null && (
-        <SelectorMoneda disponibles={monedas} activa={activa} onCambio={setMoneda} />
+        <SelectorMoneda
+          disponibles={monedas}
+          activa={activa}
+          onCambio={(moneda) => setFiltros({ ...filtros, moneda })}
+        />
       )}
-      <TablaFci
-        fondos={deLaMoneda}
-        etiqueta={nombreSegmento(claveTipoRenta(tipoRenta))}
-        planilla={planilla}
-        onAbrirFondo={abrirFondo}
+      <FiltrosFci
+        filtros={filtros}
+        efectivos={efectivos}
+        opciones={opciones}
+        apagadas={apagadas}
+        onCambio={setFiltros}
       />
+      {activa === null ? (
+        <p style={{ margin: '18px 0', fontSize: 12.5, color: 'var(--dim)' }}>
+          Ningún fondo pasa los filtros activos.
+        </p>
+      ) : (
+        <TablaFci
+          fondos={deLaMoneda}
+          etiqueta={nombreSegmento(claveTipoRenta(tipoRenta))}
+          planilla={planilla}
+          filtro={filtro}
+          onAbrirFondo={abrirFondo}
+        />
+      )}
     </>
   )
 }

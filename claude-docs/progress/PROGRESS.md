@@ -172,6 +172,20 @@ cierre. El RICE no cambió; cambió la etiqueta que decide cuándo entran.
   capital en FCI declarado aparte en el calendario (sin cronograma contractual, nunca lo tuvo) y
   como exposición no atribuible en el vector de riesgo. Las tres verificadas en vivo contra
   Postgres real. Suite completa al cierre: 1366 tests de backend, 1046 de frontend.
+- **La barra de filtros de FCI se agregó el 23/08/2026**, como extensión de F-057 (no es una
+  feature nueva del catálogo). Port de la barra del universo de renta fija sobre el mismo motor
+  de `lib/facetado.ts`, en `features/monitor/lib/filtrosFci.ts` + `components/FiltrosFci.tsx`:
+  seis ejes categóricos con facetado en cascada —sección, tipo de dinero, región, horizonte,
+  calificación (multiselect) y sociedad gerente, 46 gestoras medidas en renta variable— más el
+  chip de moneda, ahora una faceta con conteos leave-one-out. `TablaFci` gana un prop `filtro`
+  (predicado, no el tipo: `components/` no importa de `features/`) que hace real el "N de M" y
+  declara el vacío por filtros aparte del de planilla vacía. **No hay filtro por "rubro"**: CAFCI
+  no lo publica por fondo. **No hay variación semanal ni semestral**: la fuente publica cuatro
+  períodos (día, mes, año calendario, 12 meses) y no queda serie histórica para derivar otros, así
+  que los rangos mín/máx son sobre esos cuatro. Los rangos comparan en **puntos porcentuales, sin
+  dividir por 100** —al revés que renta fija, porque `var_*_pct` no es fracción— y eso está fijado
+  con un test. Verificado en vivo contra los 4.251 fondos reales: elegir Delta lleva los chips de
+  244/59/7 a 18/10/2, y un mínimo diario de 1 deja los de +1,03 % y saca los de +0,70 %.
 
 ## Totales
 

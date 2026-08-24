@@ -66,26 +66,36 @@ export function TablaFci({
   fondos,
   etiqueta,
   planilla,
+  filtro,
   onAbrirFondo,
 }: {
-  /** Ya filtrados por tipo de renta y moneda por quien monta esto. */
+  /** Ya filtrados por tipo de renta y moneda por quien monta esto: el "de M" del conteo. */
   fondos: FondoFci[]
   /** El nombre de la pestaña activa, para el estado "sin filas hoy". */
   etiqueta: string
   /** Las fechas base de las variaciones, para rotular las cabeceras — `null` si la ingesta nunca
    *  corrió. */
   planilla: PlanillaFci | null
+  /** El resto de los filtros de la barra, como predicado: el "N" del conteo sale del mismo cálculo
+   *  que decide qué filas se ven, así no hay dos fuentes que puedan desalinearse. Va como función y
+   *  no como el tipo `FiltrosFci` porque `components/` no importa de `features/` — eso invertiría
+   *  la capa. Ausente = sin filtros, se muestra todo lo recibido. */
+  filtro?: (fondo: FondoFci) => boolean
   onAbrirFondo: (codigoCafci: string) => void
 }) {
   const [orden, setOrden] = useState<Orden>({ campo: null, direccion: 'asc' })
   const contenedorRef = useRef<HTMLDivElement>(null)
 
-  const filasOrdenadas = useMemo(() => {
-    if (orden.campo === null) return fondos
-    const campo = orden.campo
-    return [...fondos].sort((a, b) => comparar(a, b, campo, orden.direccion))
-  }, [fondos, orden])
+  const filtradas = useMemo(() => (filtro ? fondos.filter(filtro) : fondos), [fondos, filtro])
 
+  const filasOrdenadas = useMemo(() => {
+    if (orden.campo === null) return filtradas
+    const campo = orden.campo
+    return [...filtradas].sort((a, b) => comparar(a, b, campo, orden.direccion))
+  }, [filtradas, orden])
+
+  // Sobre `fondos`, antes de filtrar: la cobertura es del segmento y la moneda que se está mirando,
+  // así el conteo de faltantes no cambia según los filtros que estén puestos.
   const notaCobertura = useMemo(() => {
     const sinFecha = fondos.filter((f) => f.fecha_vcp === null).length
     const sinCalificacion = fondos.filter((f) => f.calificacion === null).length
@@ -138,6 +148,10 @@ export function TablaFci({
       {fondos.length === 0 ? (
         <p style={{ margin: '18px 0', fontSize: 12.5, color: 'var(--dim)' }}>
           No hay {etiqueta} en la planilla de hoy.
+        </p>
+      ) : filasOrdenadas.length === 0 ? (
+        <p style={{ margin: '18px 0', fontSize: 12.5, color: 'var(--dim)' }}>
+          Ningún fondo pasa los filtros activos.
         </p>
       ) : (
         <>

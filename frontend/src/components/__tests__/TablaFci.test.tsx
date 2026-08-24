@@ -136,6 +136,51 @@ describe('TablaFci', () => {
     expect(screen.getByText(PLANILLA.advertencia_distribucion)).toBeInTheDocument()
   })
 
+  it('el predicado de filtros decide qué filas se ven y el conteo dice "N de M"', () => {
+    render(
+      <TablaFci
+        fondos={[fondo({ codigo_cafci: '1', fondo: 'Fondo Uno' }), fondo({ codigo_cafci: '2', fondo: 'Fondo Dos' })]}
+        etiqueta="FCI renta variable"
+        planilla={PLANILLA}
+        filtro={(f) => f.codigo_cafci === '1'}
+        onAbrirFondo={vi.fn()}
+      />,
+    )
+    expect(screen.getByText('Fondo Uno')).toBeInTheDocument()
+    expect(screen.queryByText('Fondo Dos')).not.toBeInTheDocument()
+    expect(screen.getByText('1 de 2 fondos')).toBeInTheDocument()
+  })
+
+  it('un filtro que no deja nada se declara, y no se confunde con la planilla vacía', () => {
+    render(
+      <TablaFci
+        fondos={[fondo()]}
+        etiqueta="FCI renta variable"
+        planilla={PLANILLA}
+        filtro={() => false}
+        onAbrirFondo={vi.fn()}
+      />,
+    )
+    expect(screen.getByText('Ningún fondo pasa los filtros activos.')).toBeInTheDocument()
+    expect(screen.queryByText(/No hay FCI renta variable en la planilla de hoy/)).not.toBeInTheDocument()
+  })
+
+  it('la nota de cobertura se cuenta sobre todo lo recibido, no sobre lo que dejan los filtros', () => {
+    render(
+      <TablaFci
+        fondos={[
+          fondo({ codigo_cafci: '1', calificacion: null }),
+          fondo({ codigo_cafci: '2', calificacion: null }),
+        ]}
+        etiqueta="FCI renta variable"
+        planilla={PLANILLA}
+        filtro={(f) => f.codigo_cafci === '1'}
+        onAbrirFondo={vi.fn()}
+      />,
+    )
+    expect(screen.getByText(/2 sin calificación informada/)).toBeInTheDocument()
+  })
+
   it('clickear una fila abre la ficha de ese fondo por su código CAFCI', async () => {
     const { default: userEvent } = await import('@testing-library/user-event')
     const onAbrirFondo = vi.fn()

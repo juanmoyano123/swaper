@@ -779,7 +779,10 @@ const FONDO_FCI: FondoFci = {
 
 /** Universo de renta fija/variable vacío a propósito: así la única familia disponible es FCI, y
  *  la pantalla cae en ella sin necesidad de clickear una pestaña. */
-function mockearApiSoloFci() {
+function mockearApiSoloFci(
+  fondos: FondoFci[] = [FONDO_FCI],
+  segmentos = [{ tipo_renta: 'renta_variable', cantidad: fondos.length, monedas: ['ARS'] }],
+) {
   const fetchMock = vi.fn((input: RequestInfo | URL) => {
     const url = new URL(String(input), 'http://localhost')
 
@@ -788,27 +791,53 @@ function mockearApiSoloFci() {
     }
     if (url.pathname === '/api/v1/fci/segmentos') {
       return respuestaJson({
-        segmentos: [{ tipo_renta: 'renta_variable', cantidad: 1, monedas: ['ARS'] }],
+        segmentos,
         planilla: {
           fecha_planilla: '2026-08-21',
           fecha_cierre_anterior: '2026-08-20',
           fecha_base_mes: '2026-07-31',
           fecha_base_anio: '2025-12-30',
           fecha_base_12m: '2025-07-31',
-          total_filas: 1,
+          total_filas: fondos.length,
           capturado_en: '2026-08-21T12:00:00Z',
           advertencia_distribucion: FONDO_FCI.advertencia_distribucion,
         },
       })
     }
     if (url.pathname === '/api/v1/fci/fondos') {
-      return respuestaJson({ items: [FONDO_FCI], next_cursor: null })
+      const tipoRenta = url.searchParams.get('tipo_renta')
+      const items = tipoRenta === null ? fondos : fondos.filter((f) => f.tipo_renta === tipoRenta)
+      return respuestaJson({ items, next_cursor: null })
     }
 
     throw new Error(`ruta no mockeada en el test: ${url.pathname}${url.search}`)
   })
   vi.stubGlobal('fetch', fetchMock)
   return fetchMock
+}
+
+/** Tres fondos con perfiles cruzados: dos gerentes, dos secciones, dos monedas, y una calificación
+ *  que la fuente escribe "NA" — que no es lo mismo que no tenerla. */
+const GAINVEST_ARS: FondoFci = { ...FONDO_FCI, codigo_cafci: '1', fondo: 'Gainvest Renta Variable - Clase A' }
+const DELTA_ARS: FondoFci = {
+  ...FONDO_FCI,
+  codigo_cafci: '2',
+  fondo: 'Delta Acciones - Clase I',
+  gerente: 'Delta Asset Management S.A.',
+  horizonte: 'Cor',
+  calificacion: 'NA',
+  var_diaria_pct: 1.4,
+}
+const DELTA_USD: FondoFci = {
+  ...FONDO_FCI,
+  codigo_cafci: '3',
+  fondo: 'Delta Dólar - Clase A',
+  seccion: 'Renta Variable Dólar',
+  gerente: 'Delta Asset Management S.A.',
+  moneda: 'USD',
+  horizonte: 'Flex',
+  calificacion: null,
+  var_diaria_pct: 0.2,
 }
 
 describe('FCI como tercera familia', () => {
@@ -828,5 +857,112 @@ describe('FCI como tercera familia', () => {
     await userEvent.click(screen.getByText('Gainvest Renta Variable - Clase A'))
 
     expect(await screen.findByText('ficha del fondo 1031')).toBeInTheDocument()
+  })
+})
+
+describe('filtros de la barra de FCI', () => {
+  function opcionesDe(etiqueta: string) {
+    return Array.from(screen.getByLabelText(etiqueta).children).map((o) => o.textContent)
+  }
+
+  async function renderizarConLosTres() {
+    mockearApiSoloFci([GAINVEST_ARS, DELTA_ARS, DELTA_USD])
+    renderizarConRutaFci()
+    // La moneda preferida es ARS: el "de M" son los dos fondos en pesos.
+    await screen.findByText('2 de 2 fondos')
+  }
+
+  it('los selects ofrecen los códigos de la fuente sin traducir, y "NA" como una calificación más', async () => {
+    await renderizarConLosTres()
+
+    expect(opcionesDe('Horizonte')).toEqual(['todos', 'Cor', 'Flex', 'Lar'])
+    expect(opcionesDe('Sección')).toEqual([
+      'todos', 'Renta Variable Dólar', 'Renta Variable Peso Argentina',
+    ])
+    expect(opcionesDe('Gerente')).toEqual(['todos', 'Delta Asset Management S.A.', 'Gainvest S.A.'])
+    const calificaciones = screen.getByRole('group', { name: 'Calificación' })
+    expect(within(calificaciones).getByRole('checkbox', { name: 'NA' })).toBeInTheDocument()
+    expect(within(calificaciones).getByRole('checkbox', { name: 'sin calificación' })).toBeInTheDocument()
+  })
+
+  it('elegir una gerente acota las demás dimensiones y actualiza el "N de M"', async () => {
+    await renderizarConLosTres()
+
+    await userEvent.selectOptions(screen.getByLabelText('Gerente'), 'Gainvest S.A.')
+
+    expect(opcionesDe('Sección')).toEqual(['todos', 'Renta Variable Peso Argentina'])
+    expect(opcionesDe('Horizonte')).toEqual(['todos', 'Lar'])
+    // El select propio no se acota a sí mismo: se puede cambiar de idea.
+    expect(opcionesDe('Gerente')).toEqual(['todos', 'Delta Asset Management S.A.', 'Gainvest S.A.'])
+    // El "M" sigue siendo el tipo de renta en pesos; lo que cambia es el "N".
+    expect(await screen.findByText('1 de 2 fondos')).toBeInTheDocument()
+    expect(screen.queryByText('Delta Acciones - Clase I')).not.toBeInTheDocument()
+  })
+
+  it('un mínimo de variación se lee en puntos porcentuales: 1 deja fuera al que subió 0,67 %', async () => {
+    await renderizarConLosTres()
+
+    await userEvent.type(screen.getByLabelText('Var. día mín. (%)'), '1')
+
+    expect(await screen.findByText('1 de 2 fondos')).toBeInTheDocument()
+    expect(screen.getByText('Delta Acciones - Clase I')).toBeInTheDocument()
+    expect(screen.queryByText('Gainvest Renta Variable - Clase A')).not.toBeInTheDocument()
+  })
+
+  it('una selección que se queda sin respaldo se apaga y se declara, no se aplica en silencio', async () => {
+    await renderizarConLosTres()
+
+    await userEvent.selectOptions(screen.getByLabelText('Gerente'), 'Gainvest S.A.')
+    await userEvent.type(screen.getByLabelText('Var. día mín. (%)'), '1')
+
+    expect(
+      await screen.findByText(/no se aplica: Gerente «Gainvest S\.A\.»/),
+    ).toBeInTheDocument()
+    // Apagada quiere decir apagada: el fondo de la otra gerente se ve igual.
+    expect(screen.getByText('Delta Acciones - Clase I')).toBeInTheDocument()
+  })
+
+  it('sin ningún fondo bajo los filtros lo dice, y la barra sigue montada para poder deshacerlos', async () => {
+    await renderizarConLosTres()
+
+    await userEvent.type(screen.getByLabelText('Var. día mín. (%)'), '99')
+
+    expect(await screen.findByText('Ningún fondo pasa los filtros activos.')).toBeInTheDocument()
+    expect(screen.getByLabelText('Gerente')).toBeInTheDocument()
+  })
+
+  it('"limpiar filtros" devuelve el tipo de renta entero', async () => {
+    await renderizarConLosTres()
+    await userEvent.selectOptions(screen.getByLabelText('Gerente'), 'Gainvest S.A.')
+    await screen.findByText('1 de 2 fondos')
+
+    await userEvent.click(screen.getByRole('button', { name: 'limpiar filtros' }))
+
+    expect(await screen.findByText('2 de 2 fondos')).toBeInTheDocument()
+  })
+
+  it('cambiar de tipo de renta limpia los filtros: el perfil de un segmento no aplica al otro', async () => {
+    const mercadoDinero: FondoFci = {
+      ...FONDO_FCI,
+      codigo_cafci: '9',
+      fondo: 'Delta Pesos - Clase A',
+      tipo_renta: 'mercado_dinero',
+      seccion: 'Mercado de Dinero Peso Argentina',
+      gerente: 'Delta Asset Management S.A.',
+    }
+    mockearApiSoloFci([GAINVEST_ARS, DELTA_ARS, mercadoDinero], [
+      { tipo_renta: 'renta_variable', cantidad: 2, monedas: ['ARS'] },
+      { tipo_renta: 'mercado_dinero', cantidad: 1, monedas: ['ARS'] },
+    ])
+    renderizarConRutaFci()
+    await screen.findByText('2 de 2 fondos')
+
+    await userEvent.selectOptions(screen.getByLabelText('Gerente'), 'Gainvest S.A.')
+    await screen.findByText('1 de 2 fondos')
+
+    await userEvent.click(screen.getByRole('button', { name: /FCI mercado de dinero/i }))
+
+    expect(await screen.findByText('1 de 1 fondos')).toBeInTheDocument()
+    expect(screen.getByLabelText('Gerente')).toHaveValue('')
   })
 })
