@@ -3,6 +3,26 @@ name = "swaper-backend"
 version = "0.1.0"
 description = "Backend de 10-Swaper: armado y optimizacion de carteras de renta fija y variable"
 requires-python = ">=3.12"
+# Dependencias directas de app/, con las mismas versiones que requirements.txt (que sigue
+# siendo el freeze completo del venv). Vercel instala desde acá e ignora requirements.txt:
+# sin esta lista el build resolvía cero paquetes y la función moría en el primer import.
+# Si se agrega una librería, va en los dos archivos.
+dependencies = [
+    "asyncpg==0.31.0",
+    "cryptography==50.0.0",
+    "fastapi==0.141.1",
+    "httpx==0.28.1",
+    "openpyxl==3.1.5",
+    "pdfplumber==0.11.10",
+    "pydantic==2.13.4",
+    "pydantic-settings==2.14.2",
+    "PyJWT==2.13.0",
+    "python-multipart==0.0.32",
+    "starlette==1.4.1",
+    "structlog==26.1.0",
+    "tzdata==2026.3",
+    "uvicorn==0.52.1",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

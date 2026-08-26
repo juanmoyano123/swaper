@@ -34,3 +34,4 @@ tools/__pycache__/
 
 # Worktrees temporales de los agentes
 .claude/worktrees/
+.vercel
