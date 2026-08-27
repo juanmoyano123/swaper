@@ -32,7 +32,6 @@ from app.api.v1 import (
     fci,
     fci_agregados,
     health,
-    iamc,
     instrumentos,
     jobs,
     posiciones,
@@ -44,7 +43,6 @@ from app.api.v1 import (
 router = APIRouter()
 router.include_router(health.router)
 router.include_router(byma.router)
-router.include_router(iamc.router)
 router.include_router(consolidar.router)
 router.include_router(jobs.router)
 router.include_router(auth.router)

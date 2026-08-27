@@ -37,7 +37,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 
-from app.calendario.cupones import Pago, valor_tecnico
+from app.calendario.cupones import Pago, componentes_valor_tecnico
 
 # Días por año para llevar una fecha a la exponente del descuento. Es la convención del motor
 # (`tools/cupones.py`), no un estándar de mercado: la base de cálculo real de cada bono depende de
@@ -49,10 +49,39 @@ DIAS_POR_ANIO = 365.25
 # de tener sentido; el motor corta en -0,99 y acá se respeta ese límite.
 TASA_PISO = -0.99
 
-# Techo del bracket: 1000 % efectivo anual. Un bono que cotiza por debajo de lo que ese descuento
-# explica no está rindiendo, está en default o mal precificado. No se reporta el número: se reporta
-# el motivo.
-TASA_TECHO = 10.0
+# Techo del bracket: 10.000 % efectivo anual.
+#
+# **Era 10.0 (1000 % EA) hasta el 26/08/2026, y ese techo cortaba rendimientos reales.** El
+# antecedente está medido en `docs/ESTADO.md:194`: SNSBO rindiendo 245 % es dato correcto —un bono
+# a 80 días al 78 % de su valor técnico anualiza ahí—, y esa misma aritmética con plazos más
+# cortos se pasa del 1000 % sin dejar de ser aritmética. Un bono a 60 días al 61 % de paridad
+# anualiza al 1900 % EA: con el techo viejo salía `tir_sobre_techo`, sin número, cuando el número
+# existía y era exacto.
+#
+# Medido el 26/08/2026 sobre un cupón cero: la paridad por debajo de la cual el solver dejaba de
+# devolver número, por plazo al vencimiento, con cada techo.
+#
+#     plazo    techo 10.0    techo 100.0
+#      15 d        90,6 %         82,7 %
+#      30 d        82,1 %         68,5 %
+#      60 d        67,4 %         46,9 %
+#      90 d        55,4 %         32,1 %
+#     180 d        30,7 %         10,3 %
+#
+# Leído en la primera fila: con el techo viejo, **cualquier** especie a 30 días que cotizara por
+# debajo del 82 % de su valor técnico salía sin TIR. En `cashflow_completo.csv` hay 56 emisiones
+# con vencimiento dentro de los 90 días —SNSBO entre ellas—, que son las que quedaban expuestas.
+#
+# **El solver no es quien decide qué rendimiento es creíble.** El bracket sólo tiene que contener
+# la raíz; el filtro de plausibilidad es la capa de sanidad por segmento
+# (`app/universo/sanidad.py`, `TOPE_SANIDAD_SEGMENTO`), que aplica topes por naturaleza de tasa y
+# **rotula** la especie sospechosa en vez de vaciarle la celda. Vaciar acá pierde el dato; rotular
+# allá lo conserva con su advertencia, que es lo que la regla 1 pide.
+#
+# El bracket más ancho no compromete la convergencia: la bisección parte de un intervalo de
+# 100,99 y lo parte al medio, así que hace falta n con 100,99/2ⁿ < 1e-10, o sea n = 40. Con el
+# techo viejo hacían falta 37. `MAX_ITERACIONES = 200` cubre las dos con margen de sobra.
+TASA_TECHO = 100.0
 
 TOLERANCIA_SOLVER = 1e-10
 MAX_ITERACIONES = 200
@@ -61,6 +90,27 @@ MOTIVO_VENCIDA = "vencida"
 MOTIVO_TIR_BAJO_PISO = "tir_bajo_piso"
 MOTIVO_TIR_SOBRE_TECHO = "tir_sobre_techo"
 MOTIVO_SIN_CONVERGENCIA = "sin_convergencia"
+
+MOTIVO_SIN_PRECIO_POSITIVO = "sin_precio_positivo"
+"""El precio operado vino en cero o negativo. Hasta el 26/08/2026 esto salía rotulado `vencida`,
+que es falso: un bono vivo sin precio publicado no venció, le falta el precio del día."""
+
+MOTIVO_RESIDUAL_CONTRADICTORIO = "residual_contradictorio"
+"""Relevamiento de confiabilidad de datos (16/08/2026): el residual que declara el cronograma para
+el último pago pasado no coincide con `100 - Σ capital` de los pagos ya cobrados (ver
+`cupones.componentes_valor_tecnico`) — la fuente dejó el residual clavado en 100 mientras el bono
+amortizaba.
+
+Vive acá y no en `app/ingesta/consolidacion/metricas.py`, donde estuvo hasta el 26/08/2026, porque
+desde esa fecha `metricas_de` también lo emite: ese módulo importa de éste, así que la constante
+tiene que estar del lado del que no importa a nadie. Es un faltante del dato de hoy —no una
+decisión de diseño— y por eso cae en el balde "sin insumo" de las alertas, no en el de las
+naturalezas excluidas."""
+
+MOTIVO_SIN_RESIDUAL_VIGENTE = "sin_residual_vigente"
+"""El cronograma tiene pagos futuros pero el residual que declara ya está agotado o no viene. Sin
+residual vivo no hay valor técnico contra el cual medir, y tampoco es un vencimiento: el
+calendario sigue proyectando pagos."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,6 +208,14 @@ def paridad_de(precio_sucio: float, tecnico: float | None) -> float | None:
     return precio_sucio / tecnico
 
 
+def _sin_metricas(motivo: str, paridad: float | None = None) -> MetricasEspecie:
+    """Las tres métricas vacías con su motivo. La paridad se pasa aparte porque hay casos donde sí
+    se pudo calcular aunque la TIR no —ver el docstring de `MetricasEspecie`—."""
+    return MetricasEspecie(
+        tir=None, duration=None, duration_macaulay=None, paridad=paridad, motivo=motivo
+    )
+
+
 def metricas_de(pagos: Sequence[Pago], precio_sucio: float, hoy: date) -> MetricasEspecie:
     """Las tres métricas de una especie a partir de su cronograma y su precio del día.
 
@@ -165,31 +223,38 @@ def metricas_de(pagos: Sequence[Pago], precio_sucio: float, hoy: date) -> Metric
     cotiza — que el llamador ya verificó que es la del flujo. No se ajusta por corridos: el precio
     de mercado ya los incluye, que es por qué se lo compara contra el valor técnico y no contra el
     residual pelado.
-    """
-    vacia = MetricasEspecie(
-        tir=None, duration=None, duration_macaulay=None, paridad=None, motivo=MOTIVO_VENCIDA
-    )
-    futuros = [p for p in pagos if p.fecha > hoy]
-    if not futuros or precio_sucio <= 0:
-        return vacia
 
-    tecnico = valor_tecnico(pagos, hoy)
+    **Cada motivo nombra lo que efectivamente pasó (26/08/2026).** Hasta esa fecha tres
+    situaciones distintas salían las tres como `vencida`: el bono sin pagos futuros, el precio en
+    cero y el residual que no cierra. Sólo la primera es un vencimiento; las otras dos son
+    faltantes del dato del día, y rotularlas como vencidas mandaba a buscar el problema al lugar
+    equivocado —a la emisión, cuando estaba en el precio o en el cronograma—.
+    """
+    futuros = [p for p in pagos if p.fecha > hoy]
+    if not futuros:
+        return _sin_metricas(MOTIVO_VENCIDA)
+    if precio_sucio <= 0:
+        return _sin_metricas(MOTIVO_SIN_PRECIO_POSITIVO)
+
+    componentes = componentes_valor_tecnico(pagos, hoy)
+    tecnico = componentes.valor_tecnico
     paridad = paridad_de(precio_sucio, tecnico)
     if tecnico is None:
-        # Sin residual vivo el bono no proyecta nada aunque tenga fechas futuras cargadas.
-        return vacia
+        # Sin residual vivo el bono no proyecta nada aunque tenga fechas futuras cargadas, y las
+        # dos razones por las que puede no haberlo piden acciones distintas: el residual que se
+        # contradice con lo amortizado es un dato a corregir en la fuente, el residual agotado o
+        # ausente es un faltante a completar. `coherente` es lo que las separa.
+        return _sin_metricas(
+            MOTIVO_RESIDUAL_CONTRADICTORIO
+            if not componentes.coherente
+            else MOTIVO_SIN_RESIDUAL_VIGENTE
+        )
 
     t = [anios_entre(hoy, p.fecha) for p in futuros]
     cf = [p.total for p in futuros]
     tir = resolver_tir(t, cf, precio_sucio)
     if tir is None:
-        return MetricasEspecie(
-            tir=None,
-            duration=None,
-            duration_macaulay=None,
-            paridad=paridad,
-            motivo=_motivo_sin_tir(t, cf, precio_sucio),
-        )
+        return _sin_metricas(_motivo_sin_tir(t, cf, precio_sucio), paridad=paridad)
 
     return MetricasEspecie(
         tir=tir,

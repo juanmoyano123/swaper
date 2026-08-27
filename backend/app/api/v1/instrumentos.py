@@ -72,7 +72,11 @@ MOTIVO_PAUSA_CNV = (
 ESCENARIOS_BPS: tuple[int, ...] = (-500, -400, -300, -200, -100, 0, 100, 200)
 
 # Naturaleza cuyo rendimiento es TNA nominal en pesos: no es una tasa efectiva descontable (regla 2
-# del proyecto). Cubre tasa_fija, badlar y tamar (ver NATURALEZA_TASA en universo/segmentacion.py).
+# del proyecto). Cubre badlar y tamar (ver NATURALEZA_TASA en universo/segmentacion.py). `tasa_fija`
+# salió del grupo el 26/08/2026 —pasó a declarar su TIR efectiva anual, naturaleza `tir_ea_ars`— y
+# por eso su sensibilidad quedó habilitada: una TIR EA sí es una tasa efectiva y descontar el
+# cronograma a la TIR del escenario es válido. Se resuelve por naturaleza y no por segmento
+# justamente para que ese cambio de unidad se propague solo.
 NATURALEZA_TNA_NOMINAL = "tna_nominal_ars"
 
 # Mismas columnas que `GET /condiciones`, filtradas a un solo ticker: la forma de la fila no cambia,

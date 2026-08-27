@@ -55,8 +55,8 @@ UNIVERSO: list[dict[str, Any]] = [
         "ticker": "S30J6",
         "clase_activo": "bono_soberano",
         "tipo_tasa": "tasa-fija",
-        "tir": None,
-        "tna": 4.80,
+        "tir": 4.80,
+        "tna": None,
     },
     {"ticker": "GGAL", "clase_activo": "accion", "tipo_tasa": None, "tir": None, "tna": None},
     {
@@ -160,7 +160,7 @@ def test_el_resumen_abre_los_conteos_por_segmento_con_su_unidad(saneado) -> None
     assert por_segmento["cer"]["descartados"] == 1
     assert "CER" in por_segmento["cer"]["naturaleza"]
     assert por_segmento["tasa_fija"]["descartados"] == 0
-    assert por_segmento["tasa_fija"]["naturaleza"] == "TNA nominal en pesos"
+    assert por_segmento["tasa_fija"]["naturaleza"] == "TIR efectiva anual en pesos"
     assert por_segmento["usd_hard"]["evaluados"] == 4
 
 

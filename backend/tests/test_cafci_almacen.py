@@ -1,9 +1,8 @@
 from datetime import UTC, date, datetime
 
-from tests.conftest import FakeConexionEscritura
-
 from app.ingesta.cafci.almacen import reescribir_fci
 from app.ingesta.cafci.parser import FilaFci
+from tests.conftest import FakeConexionEscritura
 
 
 def _fila(codigo: str = "1", fondo: str = "Fondo de Prueba") -> FilaFci:

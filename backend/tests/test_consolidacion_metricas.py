@@ -18,20 +18,18 @@ from app.calendario.metricas import MetricasEspecie
 from app.ingesta.byma.normalizacion import normalizar_fila_rueda
 from app.ingesta.consolidacion.armado import armar_consolidacion
 from app.ingesta.consolidacion.metricas import (
-    CODIGO_METRICAS_CONTRASTE_IAMC,
     CODIGO_METRICAS_FUERA_DE_NATURALEZA,
     CODIGO_METRICAS_SIN_INSUMO,
     FUENTE_CALCULO,
     FUENTE_FUERA,
-    FUENTE_IAMC,
-    ContrasteMetricas,
+    MOTIVO_MONEDA_CRUZADA,
+    MOTIVO_NATURALEZA_DESCONOCIDA,
+    MOTIVO_SIN_TIPO_TASA,
     ResultadoMetricas,
     fuente_de_metricas,
 )
-from app.ingesta.iamc.parser import FilaInforme
 
 HOY = date(2026, 8, 7)
-FECHA_INFORME = date(2026, 8, 5)
 
 
 def especie(ticker: str, *, moneda="USD", ultimo=56.7, **extra):
@@ -48,25 +46,6 @@ def especie(ticker: str, *, moneda="USD", ultimo=56.7, **extra):
         **extra,
     }
     return normalizar_fila_rueda(crudo)
-
-
-def informe(ticker: str, **overrides) -> FilaInforme:
-    base = dict.fromkeys(FilaInforme.__annotations__)
-    base.update(
-        {
-            "ticker": ticker,
-            "seccion": "DEUDA CORPORATIVA EN USD - LEY ARG",
-            "fecha_informe": FECHA_INFORME,
-            "emisor": "YPF S.A.",
-            "ley": "Ley Argentina",
-            "moneda_pago": "USD",
-            "tir": 7.92,
-            "paridad_pct": 98.5,
-            "duracion_modificada": 6.7,
-        }
-    )
-    base.update(overrides)
-    return base  # type: ignore[return-value]
 
 
 def cronograma(ticker: str, tipo: str) -> list[dict[str, object]]:
@@ -120,14 +99,17 @@ class TestQuienSeCalcula:
             ("dollar-linked", "ARS", FUENTE_FUERA),
             ("badlar", "ARS", FUENTE_FUERA),
             ("tamar", "ARS", FUENTE_FUERA),
-            (None, "ARS", FUENTE_IAMC),
+            # Sin tipo de tasa no hay unidad en la que reportar. Hasta el 26/08/2026 esto era
+            # `iamc` —había una fuente publicando por estas especies— y con la ingesta eliminada
+            # pasa a `fuera`, que es lo que las hace aparecer nombradas en la alerta.
+            (None, "ARS", FUENTE_FUERA),
         ],
     )
     def test_la_tabla_por_naturaleza(self, tipo_tasa, moneda, esperado) -> None:
         assert fuente_de_metricas(tipo_tasa, moneda) == esperado
 
-    def test_una_naturaleza_desconocida_conserva_lo_publicado_en_vez_de_improvisar(self) -> None:
-        assert fuente_de_metricas("uva-plus-plus", "ARS") == FUENTE_IAMC
+    def test_una_naturaleza_desconocida_queda_fuera_en_vez_de_improvisar(self) -> None:
+        assert fuente_de_metricas("uva-plus-plus", "ARS") == FUENTE_FUERA
 
     def test_sin_moneda_declarada_no_se_calcula(self) -> None:
         """La moneda se lee, no se deduce del sufijo: hay especies con D declaradas en pesos."""
@@ -154,15 +136,19 @@ class TestUnBonoCerNoSeCalcula:
         assert "coeficiente CER" in detalle["porque"]
 
     def test_no_se_le_reporta_la_tasa_de_otra_naturaleza(self) -> None:
-        """Ni siquiera cuando el solver tendría todo para devolver un número."""
+        """Ni siquiera cuando el solver tendría todo para devolver un número.
+
+        Precio, cronograma y monedas coincidentes: al solver no le falta nada para resolver. Lo
+        que falta es el coeficiente CER, y sin él el número que saldría sería una tasa nominal
+        puesta donde va una real. La fila lo declara sin atribuirse un cálculo que no hizo.
+        """
         resultado = armar(
             especies_por_endpoint={"public-bonds": [especie("TX26", moneda="ARS", ultimo=1500.0)]},
             filas_cashflow=cronograma("TX26", "CER"),
-            filas_iamc=[informe("TX26", tir=None, paridad_pct=None, duracion_modificada=None)],
-            fecha_informe=FECHA_INFORME,
         )
         (precio,) = resultado.filas_precios
         assert precio["tir"] is None
+        assert "calculo" not in precio["fuente"]
 
 
 class TestFaltaDeInsumo:
@@ -213,50 +199,42 @@ class TestFaltaDeInsumo:
 
 
 class TestPrecedencia:
-    def test_el_calculo_propio_no_lo_pisa_iamc(self) -> None:
-        """Aunque IAMC publique esa misma especie, la que manda es la calculada."""
-        resultado = armar(
-            especies_por_endpoint={"public-bonds": [especie("AL30D")]},
-            filas_cashflow=cronograma("AL30", "HARD_DOLLAR"),
-            filas_iamc=[informe("AL30D", tir=7.92)],
-            fecha_informe=FECHA_INFORME,
-        )
-        (precio,) = resultado.filas_precios
-        assert precio["tir"] is not None
-        assert precio["tir"] != pytest.approx(0.0792)
-        assert "calculo" in precio["fuente"]
+    def test_lo_que_no_se_calcula_queda_vacio_y_declarado(self) -> None:
+        """AL30 cotiza en pesos y paga en dólares: no se descuenta una punta contra la otra.
 
-    def test_el_calculo_propio_no_lo_pisa_el_arrastre_de_ayer(self) -> None:
-        resultado = armar(
-            especies_por_endpoint={"public-bonds": [especie("AL30D")]},
-            filas_cashflow=cronograma("AL30", "HARD_DOLLAR"),
-            metricas_previas={
-                "AL30D": {
-                    "tir": 0.0757,
-                    "duration": 6.7,
-                    "paridad": 0.88,
-                    "convexidad": 0.55,
-                    "residual_value": 100.0,
-                    "fecha_metricas": date(2026, 8, 4),
-                }
-            },
-        )
-        (precio,) = resultado.filas_precios
-        assert precio["tir"] != pytest.approx(0.0757), "una TIR de ayer con el precio de hoy no es"
-        assert precio["convexidad"] == 0.55, "lo que IAMC sí es fuente de, se conserva"
-
-    def test_lo_que_no_se_calcula_sigue_viniendo_de_iamc(self) -> None:
+        Hasta el 26/08/2026 esta fila mostraba la TIR que publicaba IAMC y se rotulaba
+        `byma+iamc`. Sin esa fuente la celda queda vacía y la especie sale nombrada en la alerta:
+        no se le copia la métrica de AL30D, que es la misma emisión pero otro precio.
+        """
         resultado = armar(
             especies_por_endpoint={
                 "public-bonds": [especie("AL30", moneda="ARS", ultimo=86_320.0)]
             },
             filas_cashflow=cronograma("AL30", "HARD_DOLLAR"),
-            filas_iamc=[informe("AL30", tir=7.92)],
-            fecha_informe=FECHA_INFORME,
         )
         (precio,) = resultado.filas_precios
-        assert precio["tir"] == pytest.approx(0.0792)
-        assert precio["fuente"] == "byma+iamc"
+        assert precio["tir"] is None
+        assert precio["fuente"] == "byma"
+
+        alerta = alerta_con(resultado, CODIGO_METRICAS_FUERA_DE_NATURALEZA)
+        assert alerta is not None
+        assert alerta.detalle["por_motivo"][MOTIVO_MONEDA_CRUZADA]["tickers"] == ["AL30"]
+
+    def test_la_convexidad_quedo_sin_fuente(self) -> None:
+        """La publicaba IAMC y nadie más: el cálculo propio no la produce (26/08/2026).
+
+        La columna sigue existiendo y la fila la escribe explícitamente en `None`. Si la omitiera,
+        el upsert la dejaría con lo que hubiera de antes y una convexidad de agosto seguiría
+        publicándose al lado de un precio de hoy.
+        """
+        resultado = armar(
+            especies_por_endpoint={"public-bonds": [especie("AL30D")]},
+            filas_cashflow=cronograma("AL30", "HARD_DOLLAR"),
+        )
+        (precio,) = resultado.filas_precios
+        assert precio["tir"] is not None, "la TIR sí se calcula: es la convexidad la que no tiene"
+        assert precio["convexidad"] is None
+        assert precio["fecha_metricas"] is None
 
     def test_la_tna_sigue_sin_fuente(self) -> None:
         """El solver devuelve efectiva anual; pasarla a nominal exige una convención inventada."""
@@ -282,55 +260,43 @@ class TestCronogramaPersistido:
         assert resultado.filas_cashflow is None, "no se re-persiste lo que no vino de la fuente"
 
 
-class TestContrasteContraIamc:
-    """GWT-4: IAMC pasa de fuente a control."""
+class TestNadaDesapareceSinMotivo:
+    """El fix del 26/08/2026: las especies que caían en `FUENTE_IAMC` volvían `None` sin anotar.
 
-    def test_una_divergencia_grande_alerta_y_conserva_el_calculo(self) -> None:
+    Mientras IAMC publicaba por ellas era una atribución, no un faltante. Eliminada la ingesta
+    quedaban como un agujero silencioso —~535 especies según la medición SQL de `docs/ESTADO.md`—
+    y un faltante sin nombre es un faltante que nadie va a buscar (regla 1).
+    """
+
+    def test_una_especie_sin_tipo_de_tasa_sale_nombrada_en_la_alerta(self) -> None:
+        """Una ON sin cronograma: el endpoint declara la clase, pero nadie declara la naturaleza.
+
+        Es el caso mayoritario del agujero — el `type` del cronograma es la única fuente de
+        `tipo_tasa`, y sin cronograma la ON entra al universo clasificada y sin naturaleza.
+        """
         resultado = armar(
-            especies_por_endpoint={"public-bonds": [especie("AL30D", ultimo=56.7)]},
-            filas_cashflow=cronograma("AL30", "HARD_DOLLAR"),
-            filas_iamc=[informe("AL30", tir=1.0, paridad_pct=98.5, duracion_modificada=6.7)],
-            fecha_informe=FECHA_INFORME,
+            especies_por_endpoint={"negociable-obligations": [especie("YCA6O")]},
+            filas_cashflow=cronograma("OTRA", "ON"),
         )
 
-        alerta = alerta_con(resultado, CODIGO_METRICAS_CONTRASTE_IAMC)
-        assert alerta is not None
         (precio,) = resultado.filas_precios
-        assert precio["tir"] is not None, "el cálculo propio se conserva como dato"
+        assert precio["tir"] is None
+        alerta = alerta_con(resultado, CODIGO_METRICAS_FUERA_DE_NATURALEZA)
+        assert alerta is not None
+        motivo = alerta.detalle["por_motivo"][MOTIVO_SIN_TIPO_TASA]
+        assert motivo["tickers"] == ["YCA6O"]
+        assert motivo["porque"], "el motivo viaja con su porqué, no sólo con la etiqueta"
 
-    def test_las_unidades_se_convierten_antes_de_comparar(self) -> None:
-        """IAMC publica en puntos y nosotros en fracción: comparar 7,92 contra 0,0792 alertaría
-        todos los días en todas las emisiones y taparía las divergencias de verdad."""
-        contraste = ContrasteMetricas(
-            raiz="AL30",
-            ticker_propio="AL30D",
-            ticker_iamc="AL30",
-            tir_propia=0.0792,
-            tir_iamc=0.0792,
-            paridad_propia=0.985,
-            paridad_iamc=0.985,
-            duration_propia=6.7,
-            duration_iamc=6.7,
-        )
-        assert contraste.coincide
+    def test_una_naturaleza_desconocida_sale_nombrada_con_su_motivo(self) -> None:
+        """Si mañana aparece una naturaleza sin regla de cálculo, se declara en vez de callarse."""
+        resultado = ResultadoMetricas()
+        resultado.anotar(MOTIVO_NATURALEZA_DESCONOCIDA, "XYZ9")
 
-    def test_no_se_contrasta_contra_un_faltante(self) -> None:
-        contraste = ContrasteMetricas(
-            raiz="AL30", ticker_propio="AL30D", ticker_iamc="AL30", tir_propia=0.12, tir_iamc=None
-        )
-        assert contraste.coincide, "un faltante no es una divergencia"
-        assert contraste.divergencias() == {}
-
-    def test_una_diferencia_dentro_de_la_tolerancia_no_alerta(self) -> None:
-        """El canje MEP/cable separa las dos puntas todos los días: no es un hallazgo."""
-        contraste = ContrasteMetricas(
-            raiz="AL30",
-            ticker_propio="AL30D",
-            ticker_iamc="AL30",
-            tir_propia=0.0850,
-            tir_iamc=0.0792,
-        )
-        assert contraste.coincide
+        alerta = alerta_con(resultado, CODIGO_METRICAS_FUERA_DE_NATURALEZA)
+        assert alerta is not None
+        motivo = alerta.detalle["por_motivo"][MOTIVO_NATURALEZA_DESCONOCIDA]
+        assert motivo["tickers"] == ["XYZ9"]
+        assert "no se sabe en qué unidad" in motivo["porque"]
 
 
 class TestResumen:
@@ -343,7 +309,29 @@ class TestResumen:
 
         assert resultado.resumen() == {
             "calculadas": 1,
+            "intentadas": 1,
             "sin_metrica": {"cer": 2, "sin_precio": 1},
-            "contrastadas": 0,
-            "divergentes": 0,
         }
+
+    def test_una_especie_que_entro_al_solver_y_no_resolvio_no_cuenta_como_calculada(self) -> None:
+        """El fix del 26/08/2026: `calculadas` se incrementaba en cada `registrar()`, así que el
+        número que la corrida publicaba como "cuántas se calcularon" incluía a las que volvieron
+        con `tir=None`. Un contador de éxitos que sube con los fracasos no informa nada."""
+        resultado = ResultadoMetricas()
+        resultado.registrar("AL30D", MetricasEspecie(0.12, 2.1, 2.3, 0.88, None))
+        resultado.registrar("GD30D", MetricasEspecie(None, None, None, 1.4, "tir_bajo_piso"))
+        resultado.registrar("AE38D", MetricasEspecie(None, None, None, None, "vencida"))
+
+        assert resultado.resumen() == {
+            "calculadas": 1,
+            "intentadas": 3,
+            "sin_metrica": {"tir_bajo_piso": 1, "vencida": 1},
+        }
+
+    def test_las_que_ni_entraron_al_solver_no_suman_a_intentadas(self) -> None:
+        """`anotar` es el camino de las que quedaron fuera antes del cálculo —sin precio, sin
+        cronograma, moneda cruzada—. No pasaron por el solver, así que no son un intento."""
+        resultado = ResultadoMetricas()
+        resultado.anotar(MOTIVO_MONEDA_CRUZADA, "AL30")
+
+        assert resultado.resumen()["intentadas"] == 0

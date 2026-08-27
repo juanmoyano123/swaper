@@ -50,7 +50,12 @@ TOPE_SANIDAD_SEGMENTO: dict[str, float] = {
     "usd_hard": 3.0,  # TIR en USD
     "dollar_linked": 3.0,  # rendimiento dólar linked
     "cer": 1.0,  # tasa REAL sobre CER
-    "tasa_fija": 5.0,  # TNA nominal en pesos
+    # TIR efectiva anual en pesos. Fue letra muerta hasta el 26/08/2026 —el rendimiento del segmento
+    # salía de la columna `tna`, que nunca tuvo fuente, así que la capa 2 nunca tenía qué evaluar—.
+    # Desde que `tasa_fija` declara su TIR, el tope evalúa de verdad. Se mantiene en 5.0: una TIR EA
+    # en pesos y una TNA en pesos no son la misma magnitud, pero el techo de lo posible en pesos es
+    # el mismo orden y bajarlo sin un caso real que lo justifique sería inventar un descarte.
+    "tasa_fija": 5.0,
     "badlar": 5.0,  # TNA nominal en pesos
     "tamar": 5.0,  # TNA nominal en pesos
 }

@@ -148,10 +148,10 @@ def test_un_cer_al_150_por_ciento_de_tasa_real_se_descarta_contra_su_propio_tope
 # --- GWT 4 · Un número enorme en pesos puede ser perfectamente cierto ----------------------------
 
 
-def test_una_tasa_fija_con_tna_nominal_del_480_por_ciento_se_conserva() -> None:
-    """GIVEN un instrumento de tasa fija con TNA nominal de 480 %
+def test_una_tasa_fija_con_tir_del_480_por_ciento_se_conserva() -> None:
+    """GIVEN un instrumento de tasa fija con TIR efectiva anual de 480 %
     WHEN corre el techo por segmento
-    THEN se conserva, porque el tope de TNA nominal es 500 %."""
+    THEN se conserva, porque el tope del segmento es 500 %."""
     resultado = evaluar_sanidad([especie("S30J6", "tasa_fija", 4.80)])
 
     assert resultado.descartes == []
@@ -161,8 +161,23 @@ def test_una_tasa_fija_con_tna_nominal_del_480_por_ciento_se_conserva() -> None:
     assert TOPE_SANIDAD_SEGMENTO["usd_hard"] < 4.80
 
 
+def test_una_tasa_fija_por_encima_de_su_tope_se_descarta() -> None:
+    """El tope de `tasa_fija` fue letra muerta hasta el 26/08/2026: el rendimiento del segmento
+    salía de la columna `tna`, que nunca tuvo fuente, así que la capa 2 nunca tenía qué evaluar.
+    Desde que el segmento declara su TIR, el techo evalúa de verdad — y esto lo fija."""
+    resultado = evaluar_sanidad([especie("S30J6", "tasa_fija", 6.0)])
+
+    (descarte,) = resultado.descartes
+    assert descarte.ticker == "S30J6"
+    assert descarte.motivo is MotivoDescarte.FUERA_DE_RANGO
+    assert descarte.umbral == TOPE_SANIDAD_SEGMENTO["tasa_fija"] == 5.0
+    assert descarte.naturaleza == "tir_ea_ars"
+
+
 def test_los_topes_en_pesos_son_iguales_entre_si_y_distintos_de_los_de_dolares() -> None:
-    """Badlar, Tamar y tasa fija comparten unidad —TNA nominal en pesos— y por eso, tope."""
+    """Badlar, Tamar y tasa fija cotizan todos en pesos y por eso comparten techo de lo posible,
+    aunque desde el 26/08/2026 tasa fija se declare en TIR efectiva anual y los otros dos en TNA:
+    el tope es el orden de magnitud imposible en pesos, no la unidad exacta."""
     assert (
         TOPE_SANIDAD_SEGMENTO["tasa_fija"]
         == TOPE_SANIDAD_SEGMENTO["badlar"]

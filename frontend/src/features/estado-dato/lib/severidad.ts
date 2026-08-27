@@ -8,8 +8,9 @@
  * calendario no cubra todas las emisiones va a estar mañana y pasado, porque la paridad sale del
  * cálculo propio y sólo se puede calcular donde precio y flujo comparten moneda: no hay nada que
  * arreglar. Pintar eso de rojo enseña a ignorar el rojo, y el día que se caiga una fuente de
- * verdad nadie lo va a mirar. La pausa de IAMC (13/08/2026) es del mismo tipo: viaja como `info`
- * y sin acción, porque es una decisión y no una falla.
+ * verdad nadie lo va a mirar. Una fuente que el producto decide no consumir —CAFCI o la CNV en
+ * `false`— es del mismo tipo: viaja como `info` y sin acción, porque es una decisión y no una
+ * falla.
  *
  * Por eso se separan **dos ejes**, y no uno:
  *

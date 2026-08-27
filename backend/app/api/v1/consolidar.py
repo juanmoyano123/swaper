@@ -9,6 +9,11 @@ cerrado no falla: BYMA responde un universo parcial, se escribe igual, y el snap
 frescura de hoy sobre datos de la última rueda de verdad. Ya pasó —una corrida un sábado escribió
 466 filas sin un solo precio— y el costo no es el ruido sino la mentira del indicador. Por eso el
 default es no correr, y forzarlo es un acto deliberado que queda en el log.
+
+**Y hay que estar autorizado para pedirlo** (Tanda 3, 26/08/2026). El guardia de rueda cerrada
+evita el disparo accidental; hasta esa fecha nada evitaba el deliberado, porque el endpoint estaba
+abierto a internet y `forzar=true` se lo saltea. La dependencia va en el router por el mismo
+motivo que en `jobs.py`: para que no dependa de que el próximo endpoint se acuerde de pedirla.
 """
 
 from datetime import UTC, datetime
@@ -18,22 +23,25 @@ import asyncpg
 import structlog
 from fastapi import APIRouter, Depends, Query
 
-from app.api.deps import get_db
+from app.api.deps import cron_o_asesor, get_db
 from app.core.config import Settings, get_settings
 from app.ingesta.consolidacion import consolidar
 from app.jobs.horarios import FueraDeLaRueda, en_ventana_de_rueda
 
 logger = structlog.get_logger()
 
-router = APIRouter(tags=["consolidacion"])
+router = APIRouter(tags=["consolidacion"], dependencies=[Depends(cron_o_asesor)])
 
 
 @router.post(
     "/consolidar",
-    summary="Une BYMA, data912 e IAMC en las tablas de mercado",
+    summary="Une BYMA y data912 en las tablas de mercado",
     responses={
+        401: {"description": "Falta el token de cron o la sesión de asesor, o no son válidos"},
         409: {"description": "Fuera de la ventana de rueda y sin `forzar`"},
-        503: {"description": "La base de datos no está disponible"},
+        503: {
+            "description": ("La base de datos no está disponible, o no se pueden validar sesiones")
+        },
     },
 )
 async def consolidacion(

@@ -4,9 +4,6 @@ Las fuentes se comportan distinto y esa asimetría se resuelve acá, no en `arma
 
 - **BYMA y data912 son asíncronas y no lanzan.** Declaran sus fallos en el snapshot, así que se
   piden juntas con `gather` y lo que salga mal viaja como alerta.
-- **IAMC es síncrona y llega por subida manual.** No se le puede pedir el informe del día: se
-  vuelve a parsear el último aceptado del almacén, que es determinístico. Y sí lanza —
-  `InformeInvalido` cuando el PDF dejó de tener la forma esperada— así que se envuelve.
 - **El cronograma no se le pide a nadie.** Docta era la única fuente que lo publicaba y se dio de
   baja el 12/08/2026 por costo; el flujo contractual sale del que quedó persistido en `cashflow`.
 
@@ -17,44 +14,24 @@ que es la única forma de que un universo incompleto se note.
 import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 
 import structlog
-from starlette.concurrency import run_in_threadpool
 
 from app.core.config import Settings
-from app.ingesta.alertas import CODIGO_FUENTE_CAIDA, Alerta, Severidad, fuente_caida
 from app.ingesta.byma import ingerir_rueda
 from app.ingesta.consolidacion.armado import Consolidacion, armar_consolidacion
 from app.ingesta.consolidacion.overlay import aplicar_overlay
 from app.ingesta.consolidacion.persistencia import (
     Escritura,
     leer_cronograma,
-    leer_metricas_previas,
     leer_monedas,
     persistir,
 )
 from app.ingesta.data912 import ingerir_live
-from app.ingesta.iamc import InformeInvalido, parsear_informe
-from app.ingesta.iamc.almacen import ultimo_informe
 from app.ingesta.snapshot import Snapshot
 
 logger = structlog.get_logger()
-
-ACCION_SUBIR_INFORME = (
-    "Bajar el informe diario de deuda corporativa de IAMC y subirlo por "
-    "POST /api/v1/iamc/informe; hasta entonces el universo queda sin ley, moneda de pago, "
-    "estructura de cupón, TIR, duración ni paridad."
-)
-
-CODIGO_IAMC_PAUSADO = "iamc_pausado"
-MENSAJE_IAMC_PAUSADO = (
-    "IAMC está pausado por decisión del producto: el informe llegaba por subida manual y "
-    "envejecía sin que nada lo declarara. El universo no publica las TIR, duraciones y paridades "
-    "que sólo IAMC calcula —ni convexidad ni valor residual—; lo que sí muestra sale del cálculo "
-    "propio y es del día. La ley, la moneda de pago y el emisor ya conocidos se conservan: son "
-    "atributos de la emisión y no envejecen."
-)
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,72 +76,13 @@ async def _live_de_data912(settings, dormir):
         return None
 
 
-@dataclass(frozen=True, slots=True)
-class Informe:
-    """Lo que quedó del último informe de IAMC guardado, haya salido bien o no."""
-
-    archivo: str | None = None
-    filas: list | None = None
-    fecha: date | None = None
-    alerta: Alerta | None = None
-
-
-def _leer_informe(settings: Settings) -> Informe:
-    """Vuelve a parsear el último informe aceptado del almacén, salvo que IAMC esté pausado.
-
-    Con la pausa activa **el almacén no se toca**: da lo mismo que haya un informe guardado o que
-    no. La alerta que sale es informativa y sin `accion_requerida`, porque no hay nada que arreglar
-    —es una decisión, no una falla—, y un rojo permanente por algo que nadie va a atender enseña a
-    ignorar el rojo (ver `frontend/src/features/estado-dato/lib/severidad.ts`).
-    """
-    if not settings.iamc_habilitado:
-        return Informe(
-            alerta=Alerta(
-                codigo=CODIGO_IAMC_PAUSADO,
-                mensaje=MENSAJE_IAMC_PAUSADO,
-                severidad=Severidad.INFO,
-                accion_requerida=None,
-                detalle={"fuente": "IAMC", "habilitada": False},
-            )
-        )
-
-    guardado = ultimo_informe()
-    if guardado is None:
-        # Es la única fuente cuya caída tiene una acción humana concreta: subir el archivo.
-        # Esperar no la arregla, así que no alcanza con `fuente_caida`.
-        return Informe(
-            alerta=Alerta(
-                codigo=CODIGO_FUENTE_CAIDA,
-                mensaje="IAMC no está disponible: no hay ningún informe aceptado en el almacén.",
-                severidad=Severidad.ERROR,
-                accion_requerida=ACCION_SUBIR_INFORME,
-                detalle={"fuente": "IAMC"},
-            )
-        )
-
-    ruta, contenido = guardado
-    try:
-        resultado = parsear_informe(contenido)
-    except InformeInvalido as exc:
-        return Informe(
-            archivo=ruta.name,
-            alerta=fuente_caida(
-                "IAMC",
-                f"el informe guardado ya no se puede parsear ({exc})",
-                archivo=ruta.name,
-                **exc.detalle,
-            ),
-        )
-    return Informe(archivo=ruta.name, filas=resultado.filas, fecha=resultado.fecha_informe)
-
-
 async def consolidar(
     conn,
     settings: Settings,
     *,
     dormir: Callable[[float], Awaitable[None]] = asyncio.sleep,
 ) -> ResultadoConsolidacion:
-    """Corre las tres fuentes, arma el universo y lo escribe con un único instante de captura.
+    """Corre las fuentes, arma el universo y lo escribe con un único instante de captura.
 
     `conn` llega por parámetro y no de `app.state` para que F-008 pueda invocar esto desde un job,
     fuera del ciclo HTTP.
@@ -173,16 +91,6 @@ async def consolidar(
         _rueda_de_byma(settings, dormir),
         _live_de_data912(settings, dormir),
     )
-    # El parseo del PDF es CPU-bound y síncrono: en el event loop bloquearía al resto del servicio.
-    informe = await run_in_threadpool(_leer_informe, settings)
-    # Lo que ya se sabía de IAMC, para que una corrida sin informe no publique un universo sin TIR.
-    #
-    # **Con IAMC pausado esto no se lee, y ese es el corte que hace que la pausa signifique algo.**
-    # El arrastre existe para que un día sin informe no vacíe el universo; sostenido en el tiempo
-    # hace lo contrario de lo que se busca acá, que es no publicar una métrica vieja. Sin este
-    # corte, `_metricas_de` en `armado.py` seguiría entregando la TIR del último informe para
-    # siempre. Las especies que se calculan solas no dependen de esto: F-051 no mira las previas.
-    metricas_previas = await leer_metricas_previas(conn) if settings.iamc_habilitado else {}
     # La moneda que BYMA ya declaró para cada ticker, para los que en esta corrida sólo trae
     # data912 (que no la declara). Ver `overlay.py` — no es un dato nuevo, es atributo estable.
     monedas_previas = await leer_monedas(conn)
@@ -203,12 +111,6 @@ async def consolidar(
             snapshots["data912"].alertar(alerta)
     logger.info("overlay_data912", **overlay.conteos)
 
-    snapshot_iamc = Snapshot(fuente="IAMC")
-    snapshot_iamc.registrar_tramo("informe", len(informe.filas or []))
-    if informe.alerta is not None:
-        snapshot_iamc.alertar(informe.alerta)
-    snapshots["iamc"] = snapshot_iamc
-
     # Ninguna fuente publica cronogramas desde que se dio de baja Docta, así que el flujo
     # contractual sale siempre del que ya está persistido. No es dato viejo presentado como nuevo:
     # un cronograma es contractual y no envejece — lo que no cambia más es qué especies lo tienen.
@@ -220,12 +122,8 @@ async def consolidar(
     capturado_en = datetime.now(UTC)
     consolidacion = armar_consolidacion(
         especies_por_endpoint=overlay.especies_por_endpoint,
-        filas_iamc=informe.filas,
         filas_cashflow=None,
         cronograma_persistido=cronograma_persistido,
-        archivo_iamc=informe.archivo,
-        fecha_informe=informe.fecha,
-        metricas_previas=metricas_previas,
         hoy=capturado_en.date(),
     )
 
@@ -238,7 +136,6 @@ async def consolidar(
         capturado_en=capturado_en.isoformat(),
         instrumentos=escritura.filas_por_tabla.get("instrumentos", 0),
         alertas=len(consolidacion.alertas) + len(escritura.alertas),
-        informe_iamc=informe.archivo,
     )
     return ResultadoConsolidacion(
         capturado_en=capturado_en,

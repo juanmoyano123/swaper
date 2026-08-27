@@ -132,6 +132,9 @@ export const UNIDAD_NATURALEZA: Record<string, string> = {
   tir_usd: 'TIR USD',
   tir_dolar_linked: 'TIR DL',
   tasa_real_cer: 'Tasa real CER',
+  // Tanda 2 (26/08/2026): `tasa_fija` dejó de compartir naturaleza con badlar y tamar. Su rótulo
+  // dice TIR y el de ellos TNA porque son unidades distintas, y la columna declara la suya.
+  tir_ea_ars: 'TIR EA $',
   tna_nominal_ars: 'TNA $',
   // F-057: espeja `NATURALEZA_FCI` de `app/fci/fondos.py`.
   variacion_cuotaparte: 'Var. VCP %',

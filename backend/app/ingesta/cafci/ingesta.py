@@ -16,7 +16,7 @@ from datetime import UTC, date, datetime
 import structlog
 
 from app.core.config import Settings
-from app.ingesta.alertas import fuente_caida, formato_inesperado
+from app.ingesta.alertas import formato_inesperado, fuente_caida
 from app.ingesta.cafci.almacen import reescribir_fci
 from app.ingesta.cafci.cliente import descargar_planilla
 from app.ingesta.cafci.parser import PlanillaInvalida, parsear_planilla
@@ -47,8 +47,8 @@ async def ingerir_cafci(
     dormir: Callable[[float], Awaitable[None]] = asyncio.sleep,
 ) -> Snapshot:
     """Descarga, parsea y persiste la planilla del día. Con `cafci_habilitado=False` es un no-op
-    declarado, mismo criterio que `iamc_habilitado`. `dormir` es inyectable para que los tests de
-    reintentos no esperen de verdad."""
+    declarado: el snapshot registra el tramo en cero y el segmento FCI queda vacío a la vista.
+    `dormir` es inyectable para que los tests de reintentos no esperen de verdad."""
     snapshot = Snapshot(fuente=FUENTE)
 
     if not settings.cafci_habilitado:

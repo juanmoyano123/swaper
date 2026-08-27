@@ -1,11 +1,11 @@
 """Las dos corridas del job de F-008: la matinal completa y el refresh intra-rueda.
 
 La matinal reusa `consolidar()` de F-007 tal cual (ver `tests/test_consolidar_endpoint.py` para la
-orquestación de las tres fuentes) y acá se prueba lo que F-008 le agrega: el registro de la
-corrida y la clasificación en completa/parcial/fallida.
+orquestación de las fuentes) y acá se prueba lo que F-008 le agrega: el registro de la corrida y la
+clasificación en completa/parcial/fallida.
 
 El refresh es la parte nueva de verdad: arma su propio `Consolidacion` sin volver a pedirle nada a
-IAMC ni a Docta, sólo persiste precios y puntas, y clasifica `public-bonds` (soberanos y
+ninguna otra fuente, sólo persiste precios y puntas, y clasifica `public-bonds` (soberanos y
 subsoberanos) usando el `type` que ya quedó guardado en `cashflow` de una corrida anterior.
 """
 
@@ -61,10 +61,10 @@ class _FakeConexionConRegistro(FakeConexionEscritura):
 
 
 class _FakeConexionRefresh(_FakeConexionConRegistro):
-    """`FakeConexionEscritura.fetch()` siempre devuelve `metricas_previas`, sin mirar la query, y
-    el refresh hace tres `fetch()` distintos (métricas previas, tickers existentes, tipos de
-    cronograma). Acá se despachan por el texto de la consulta, que es la única forma de distinguir
-    -las tres pasan por `conn.fetch`, no por métodos separados.
+    """`FakeConexionEscritura.fetch()` responde lo mismo a cualquier query, y el refresh hace dos
+    `fetch()` distintos (tickers existentes y cronograma persistido). Acá se despachan por el texto
+    de la consulta, que es la única forma de distinguirlos -los dos pasan por `conn.fetch`, no por
+    métodos separados.
     """
 
     def __init__(self, *, tickers_existentes=None, tipos_cronograma=None, **kwargs) -> None:
@@ -82,21 +82,10 @@ class _FakeConexionRefresh(_FakeConexionConRegistro):
 
 
 @pytest.fixture
-def settings_de_prueba(tmp_path, monkeypatch):
-    """`iamc_directorio` va a `tmp_path` y no al default (`fuentes/` en la raíz del repo), que
-    tiene un PDF real: sin esto, `corrida_matinal` lo parsearía de verdad y el resultado de la
-    corrida dejaría de ser determinístico. El almacén lee del caché de `get_settings()`, no del
-    objeto que se le pasa a la corrida, así que hay que parchear las dos cosas -mismo patrón que
-    `tests/test_consolidar_endpoint.py`."""
-    settings = get_settings().model_copy(
-        update={
-            "byma_base_url": BYMA_URL,
-            "iamc_directorio": str(tmp_path),
-            "data912_base_url": DATA912_URL,
-        }
+def settings_de_prueba():
+    return get_settings().model_copy(
+        update={"byma_base_url": BYMA_URL, "data912_base_url": DATA912_URL}
     )
-    monkeypatch.setattr(get_settings(), "iamc_directorio", str(tmp_path))
-    return settings
 
 
 def _montar_byma(mapa: dict[str, list[dict]]) -> None:
@@ -165,8 +154,8 @@ async def test_corrida_matinal_registra_parcial_con_solo_byma(settings_de_prueba
         corrida = await corrida_matinal(conn, settings_de_prueba, dormir=_no_dormir)
 
     assert corrida["tipo"] == "matinal"
-    # Docta no está configurado en absoluto en `settings_de_prueba` (sin token ni URL) y no hay
-    # informe de IAMC en `tmp_path`: esta corrida siempre sale parcial, con sólo BYMA.
+    # BYMA es la única fuente que aporta filas acá (data912 responde relleno sin precio válido):
+    # esta corrida siempre sale parcial.
     assert corrida["estado"] == "parcial"
     assert "byma" in corrida["filas_por_fuente"]
     assert corrida["duracion_ms"] >= 0
@@ -185,8 +174,8 @@ async def test_corrida_matinal_registra_fallida_cuando_byma_esta_caido(settings_
 
         corrida = await corrida_matinal(conn, settings_de_prueba, dormir=_no_dormir)
 
-    # BYMA no aportó nada e IAMC/Docta tampoco están configurados: no hay una sola fuente
-    # completa, pero tampoco hay evidencia de que "algo" haya llegado -> fallida.
+    # Ninguna fuente aportó nada: no hay una sola fuente completa y tampoco hay evidencia de que
+    # "algo" haya llegado -> fallida.
     assert corrida["estado"] == "fallida"
     assert corrida["filas_por_fuente"]["byma"] == 0
 
@@ -300,7 +289,7 @@ async def test_refresh_descarta_precio_fuera_del_universo_y_alerta(settings_de_p
     assert "ticker_fuera_de_universo" in codigos
 
 
-async def test_refresh_no_llama_a_iamc_ni_a_docta(settings_de_prueba) -> None:
+async def test_refresh_no_llama_a_ninguna_otra_fuente(settings_de_prueba) -> None:
     """Si el código intentara pedirle algo a otra fuente, `respx.mock()` -que sólo tiene montado
     BYMA acá- reventaría con un request no simulado. Que el refresh termine sin error es la
     prueba."""
@@ -311,64 +300,6 @@ async def test_refresh_no_llama_a_iamc_ni_a_docta(settings_de_prueba) -> None:
         corrida = await refresh_intra_rueda(conn, settings_de_prueba, dormir=_no_dormir)
 
     assert corrida["estado"] in {"completa", "parcial", "fallida"}
-
-
-async def test_refresh_con_iamc_pausado_no_arrastra_metricas_previas(settings_de_prueba) -> None:
-    """La pausa de IAMC (`iamc_habilitado=False`, el default) corta el arrastre en la matinal
-    (`corrida.py::consolidar`, línea del gate) y tiene que cortarlo también acá: sin este gate el
-    refresh cada 15 minutos re-publicaría la TIR del último informe de IAMC como si fuera de hoy,
-    exactamente lo que la pausa busca evitar. `PLC7O` no tiene cronograma persistido en este fake
-    (F-051 no puede calcular sus propias métricas), así que el único origen posible de `tir` es
-    `metricas_previas` -si aparece en la fila, el gate no está funcionando."""
-    conn = _FakeConexionRefresh(
-        tickers_existentes=["PLC7O"],
-        metricas_previas=[
-            {
-                "ticker": "PLC7O",
-                "tir": 0.055,
-                "duration": 2.1,
-                "paridad": 0.98,
-                "convexidad": None,
-                "residual_value": None,
-                "fecha_metricas": None,
-            }
-        ],
-    )
-    assert settings_de_prueba.iamc_habilitado is False
-    with respx.mock:
-        _montar_byma({"negociable-obligations": [ESPECIE_ON]})
-
-        await refresh_intra_rueda(conn, settings_de_prueba, dormir=_no_dormir)
-
-    fila = next(fila for fila in conn.filas_de("precios") if fila[0] == "PLC7O")
-    assert fila[3] is None  # tir
-
-
-async def test_refresh_con_iamc_habilitado_arrastra_metricas_previas(settings_de_prueba) -> None:
-    """El contraste del test anterior: con `iamc_habilitado=True` el arrastre sigue vigente -es
-    el comportamiento que existía antes de la pausa y el que la matinal ya prueba."""
-    conn = _FakeConexionRefresh(
-        tickers_existentes=["PLC7O"],
-        metricas_previas=[
-            {
-                "ticker": "PLC7O",
-                "tir": 0.055,
-                "duration": 2.1,
-                "paridad": 0.98,
-                "convexidad": None,
-                "residual_value": None,
-                "fecha_metricas": None,
-            }
-        ],
-    )
-    settings_habilitado = settings_de_prueba.model_copy(update={"iamc_habilitado": True})
-    with respx.mock:
-        _montar_byma({"negociable-obligations": [ESPECIE_ON]})
-
-        await refresh_intra_rueda(conn, settings_habilitado, dormir=_no_dormir)
-
-    fila = next(fila for fila in conn.filas_de("precios") if fila[0] == "PLC7O")
-    assert fila[3] == 0.055  # tir
 
 
 async def test_refresh_estado_completa_cuando_byma_responde_bien(settings_de_prueba) -> None:

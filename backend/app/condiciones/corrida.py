@@ -39,7 +39,7 @@ from app.ingesta.cobertura import medir_cobertura
 logger = structlog.get_logger()
 
 # La ruta relativa se resuelve contra la raíz del repo y no contra el cwd, que cambia según se
-# arranque con uvicorn, pytest o Docker. Mismo criterio que `iamc/almacen.py`.
+# arranque con uvicorn, pytest o Docker.
 _RAIZ_REPO = ENV_FILE.parent
 
 

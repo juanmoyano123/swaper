@@ -105,18 +105,18 @@ describe('GWT-1: rendimientos abiertos por naturaleza, nunca promediados', () =>
         especies: [
           especie({ ticker: 'AL30D', naturaleza: 'tir_usd', naturaleza_nombre: 'TIR en dólares (hard dollar)', rendimiento: 0.12 }),
           especie({ ticker: 'TX26', naturaleza: 'tasa_real_cer', naturaleza_nombre: 'Tasa real sobre CER (por encima de inflación)', rendimiento: 0.09, moneda_cupon: 'ARS' }),
-          especie({ ticker: 'LECAP-S31', naturaleza: 'tna_nominal_ars', naturaleza_nombre: 'TNA nominal en pesos', rendimiento: 0.35, moneda_cupon: 'ARS' }),
+          especie({ ticker: 'LECAP-S31', naturaleza: 'tir_ea_ars', naturaleza_nombre: 'TIR efectiva anual en pesos', rendimiento: 0.35, moneda_cupon: 'ARS' }),
         ],
       }),
     })
 
     const modelo = modeloDesdeSnapshot(snapshot, contexto)
 
-    expect(modelo.rendimientos).toHaveLength(4) // las cuatro naturalezas fijas, siempre las mismas
+    expect(modelo.rendimientos).toHaveLength(5) // las cinco naturalezas fijas, siempre las mismas
     const porNaturaleza = new Map(modelo.rendimientos.map((r) => [r.naturaleza, r]))
     expect(porNaturaleza.get('tir_usd')?.rendimientoPond).toBeCloseTo(0.12)
     expect(porNaturaleza.get('tasa_real_cer')?.rendimientoPond).toBeCloseTo(0.09)
-    expect(porNaturaleza.get('tna_nominal_ars')?.rendimientoPond).toBeCloseTo(0.35)
+    expect(porNaturaleza.get('tir_ea_ars')?.rendimientoPond).toBeCloseTo(0.35)
     // Ninguna celda las combina: no existe ningún campo de "rendimiento total" en el modelo.
     expect(Object.keys(modelo.encabezado)).not.toContain('rendimientoTotal')
     expect('rendimientoTotal' in modelo).toBe(false)

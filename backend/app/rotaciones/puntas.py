@@ -17,7 +17,6 @@ paquete tenga que saber de qué tipo las trajo el driver.
 """
 
 from collections.abc import Sequence
-from decimal import Decimal
 from typing import Any
 
 TABLA_PUNTAS = "public.puntas"

@@ -12,7 +12,11 @@
  * TypeScript acepta pasar el tipo más específico donde se pide el más genérico, así que ni el
  * armador ni el diagnóstico necesitan adaptar sus datos para llamar a estas funciones.
  *
- * **Regla 2 del dominio, hecha código**: las cuatro naturalezas nunca se combinan en un número.
+ * **Regla 2 del dominio, hecha código**: las cinco naturalezas nunca se combinan en un número.
+ * Son cinco desde la Tanda 2 (26/08/2026), cuando `tasa_fija` pasó a declarar su TIR efectiva anual
+ * (`tir_ea_ars`) y dejó de compartir la `tna_nominal_ars` de badlar y tamar: una TIR EA en pesos y
+ * una TNA en pesos no son promediables entre sí, aunque las dos cobren en la misma moneda.
+ *
  * El plazo promedio sí se agrega (años es unidad comparable entre naturalezas), la sensibilidad
  * no se agrega entre segmentos (cada uno es una curva distinta, aunque comparta unidad temporal).
  *
@@ -20,7 +24,13 @@
  * cuando la posición se pudo resolver, el pedido si no.
  */
 
-const ORDEN_NATURALEZA = ['tir_usd', 'tir_dolar_linked', 'tasa_real_cer', 'tna_nominal_ars'] as const
+const ORDEN_NATURALEZA = [
+  'tir_usd',
+  'tir_dolar_linked',
+  'tasa_real_cer',
+  'tir_ea_ars',
+  'tna_nominal_ars',
+] as const
 
 /** Lo que estas funciones necesitan de una posición resuelta, sin importar de dónde salió. */
 export interface PosicionPonderada {
@@ -74,6 +84,7 @@ const NOMBRE_FIJO_NATURALEZA: Record<string, string> = {
   tir_usd: 'TIR en dólares (hard dollar)',
   tir_dolar_linked: 'Rendimiento dólar linked',
   tasa_real_cer: 'Tasa real sobre CER (por encima de inflación)',
+  tir_ea_ars: 'TIR efectiva anual en pesos',
   tna_nominal_ars: 'TNA nominal en pesos',
 }
 

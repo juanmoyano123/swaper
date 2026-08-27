@@ -41,17 +41,14 @@ class _FakeConexionConRegistro(FakeConexionEscritura):
 
 
 @pytest.fixture
-def settings_de_prueba(tmp_path, monkeypatch):
-    settings = get_settings().model_copy(
+def settings_de_prueba():
+    return get_settings().model_copy(
         update={
             "byma_base_url": BYMA_URL,
-            "iamc_directorio": str(tmp_path),
             "data912_base_url": DATA912_URL,
             "cafci_url": CAFCI_URL,
         }
     )
-    monkeypatch.setattr(get_settings(), "iamc_directorio", str(tmp_path))
-    return settings
 
 
 def _xlsx_minimo() -> bytes:

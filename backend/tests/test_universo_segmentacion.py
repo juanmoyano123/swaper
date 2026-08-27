@@ -79,15 +79,27 @@ def test_hard_dollar_y_pesos_no_comparten_naturaleza_de_tasa() -> None:
 # --- Qué número mide a cada especie -------------------------------------------------------------
 
 
-def test_la_tasa_fija_se_mide_por_tna_y_el_resto_por_tir() -> None:
-    assert rendimiento_declarado("tasa_fija", tir=0.90, tna=4.80) == 4.80
+def test_badlar_y_tamar_se_miden_por_tna_y_el_resto_por_tir() -> None:
+    assert rendimiento_declarado("badlar", tir=0.90, tna=4.80) == 4.80
+    assert rendimiento_declarado("tamar", tir=0.90, tna=4.80) == 4.80
     assert rendimiento_declarado("usd_hard", tir=0.13, tna=4.80) == 0.13
 
 
-def test_una_tasa_fija_sin_tna_queda_sin_rendimiento_aunque_tenga_tir() -> None:
+def test_la_tasa_fija_declara_su_tir_desde_que_tiene_naturaleza_propia() -> None:
+    """26/08/2026: el segmento pasó de medirse por `tna` —columna que nunca tuvo fuente, así que
+    89 emisiones calculaban su TIR y la mostraban como `s/d`— a declarar su TIR efectiva anual.
+    Va bajo `tir_ea_ars` y no bajo `tna_nominal_ars` para no volverse promediable con las TNAs."""
+    assert rendimiento_declarado("tasa_fija", tir=0.35, tna=None) == 0.35
+    assert NATURALEZA_TASA["tasa_fija"] == "tir_ea_ars"
+    assert NATURALEZA_TASA["tasa_fija"] != NATURALEZA_TASA["badlar"]
+
+
+def test_una_badlar_sin_tna_queda_sin_rendimiento_aunque_tenga_tir() -> None:
     """No se rellena una unidad con la otra: una TNA nominal y una TIR no son el mismo número, y
-    elegir la que esté cargada sería inventar el dato."""
-    assert rendimiento_declarado("tasa_fija", tir=0.35, tna=None) is None
+    elegir la que esté cargada sería inventar el dato. La regla sigue viva donde sigue siendo
+    cierta — badlar y tamar, cuya TNA tampoco tiene fuente y por eso siguen en `s/d`, declarado."""
+    assert rendimiento_declarado("badlar", tir=0.35, tna=None) is None
+    assert rendimiento_declarado("tamar", tir=0.35, tna=None) is None
 
 
 # --- Qué entra al universo comparable y qué no --------------------------------------------------

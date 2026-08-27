@@ -42,6 +42,7 @@ function modeloBase(overrides: Partial<ModeloExport> = {}): ModeloExport {
       { naturaleza: 'tir_usd', nombre: 'TIR en dólares (hard dollar)', pctCartera: 40, rendimientoPond: 0.12, posiciones: 1, posicionesExcluidas: 0, pctExcluido: 0 },
       { naturaleza: 'tir_dolar_linked', nombre: 'Rendimiento dólar linked', pctCartera: 0, rendimientoPond: null, posiciones: 0, posicionesExcluidas: 0, pctExcluido: 0 },
       { naturaleza: 'tasa_real_cer', nombre: 'Tasa real sobre CER (por encima de inflación)', pctCartera: 30, rendimientoPond: 0.09, posiciones: 1, posicionesExcluidas: 0, pctExcluido: 0 },
+      { naturaleza: 'tir_ea_ars', nombre: 'TIR efectiva anual en pesos', pctCartera: 0, rendimientoPond: null, posiciones: 0, posicionesExcluidas: 0, pctExcluido: 0 },
       { naturaleza: 'tna_nominal_ars', nombre: 'TNA nominal en pesos', pctCartera: 30, rendimientoPond: 0.35, posiciones: 1, posicionesExcluidas: 0, pctExcluido: 0 },
     ],
     plazoPromedio: { anios: 3.5, posicionesExcluidas: 0 },
@@ -60,14 +61,15 @@ function tabla(doc: ReturnType<typeof seccionesDesdeModelo>, titulo: string): Ta
 }
 
 describe('GWT-1: rendimientos abiertos por naturaleza, en filas separadas', () => {
-  it('la tabla trae las cuatro naturalezas, cada una en su fila, con su rendimiento propio', () => {
+  it('la tabla trae las cinco naturalezas, cada una en su fila, con su rendimiento propio', () => {
     const doc = seccionesDesdeModelo(modeloBase())
     const t = tabla(doc, 'Rendimientos por naturaleza de tasa')
-    expect(t.filas).toHaveLength(4)
+    expect(t.filas).toHaveLength(5)
     expect(t.filas.map((f) => f[0])).toEqual([
       'TIR en dólares (hard dollar)',
       'Rendimiento dólar linked',
       'Tasa real sobre CER (por encima de inflación)',
+      'TIR efectiva anual en pesos',
       'TNA nominal en pesos',
     ])
     // Ninguna fila de ninguna sección junta dos naturalezas en un solo número.

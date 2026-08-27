@@ -10,6 +10,7 @@ explica sale `None` con su motivo, no sale con la tasa del extremo del bracket.
 """
 
 import csv
+import math
 from datetime import date
 from pathlib import Path
 
@@ -17,9 +18,16 @@ import pytest
 
 from app.calendario.cupones import Pago, indexar_cronograma
 from app.calendario.metricas import (
+    MAX_ITERACIONES,
+    MOTIVO_RESIDUAL_CONTRADICTORIO,
+    MOTIVO_SIN_PRECIO_POSITIVO,
+    MOTIVO_SIN_RESIDUAL_VIGENTE,
     MOTIVO_TIR_BAJO_PISO,
     MOTIVO_TIR_SOBRE_TECHO,
     MOTIVO_VENCIDA,
+    TASA_PISO,
+    TASA_TECHO,
+    TOLERANCIA_SOLVER,
     anios_entre,
     duracion_macaulay,
     duracion_modificada,
@@ -178,6 +186,92 @@ class TestMetricasDe:
     def test_un_precio_de_cero_no_es_un_precio(self) -> None:
         pagos = [pago("2028-01-09", capital=100.0, interes=1.0, residual=0.0)]
         assert metricas_de(pagos, precio_sucio=0.0, hoy=HOY).tir is None
+
+
+class TestCadaMotivoNombraLoQuePaso:
+    """Hasta el 26/08/2026 tres situaciones distintas salían las tres como `vencida`.
+
+    Sólo una es un vencimiento. Las otras dos mandaban a buscar el problema al lugar equivocado:
+    quien lee "vencida" va a mirar la fecha de la emisión, no el precio del día ni el residual del
+    cronograma, que es donde estaba.
+    """
+
+    def test_un_bono_vivo_sin_precio_no_esta_vencido(self) -> None:
+        pagos = [pago("2028-01-09", capital=100.0, interes=1.0, residual=0.0)]
+        m = metricas_de(pagos, precio_sucio=0.0, hoy=HOY)
+        assert m.motivo == MOTIVO_SIN_PRECIO_POSITIVO
+
+    def test_un_precio_negativo_cae_en_el_mismo_motivo(self) -> None:
+        pagos = [pago("2028-01-09", capital=100.0, interes=1.0, residual=0.0)]
+        assert metricas_de(pagos, -1.0, HOY).motivo == MOTIVO_SIN_PRECIO_POSITIVO
+
+    def test_un_residual_que_no_cierra_contra_lo_amortizado_se_nombra_aparte(self) -> None:
+        """La fuente dejó el residual clavado en 100 mientras el bono amortizaba: el pago pasado
+        se llevó 50 de capital y el residual que declara sigue diciendo 100."""
+        pagos = [
+            pago("2026-01-09", capital=50.0, interes=2.0, residual=100.0),
+            pago("2028-01-09", capital=50.0, interes=1.0, residual=0.0),
+        ]
+        m = metricas_de(pagos, precio_sucio=60.0, hoy=HOY)
+        assert m.motivo == MOTIVO_RESIDUAL_CONTRADICTORIO
+        assert m.tir is None
+
+    def test_un_residual_ya_agotado_con_pagos_futuros_tampoco_es_un_vencimiento(self) -> None:
+        """El cronograma sigue proyectando un pago, pero el residual que declara está en cero.
+        No hay valor técnico contra el cual medir, y el bono no venció: le falta el dato."""
+        pagos = [
+            pago("2026-01-09", capital=100.0, interes=2.0, residual=0.0),
+            pago("2028-01-09", capital=0.0, interes=1.0, residual=0.0),
+        ]
+        assert metricas_de(pagos, 60.0, HOY).motivo == MOTIVO_SIN_RESIDUAL_VIGENTE
+
+
+class TestElTechoNoDecideQueRendimientoEsCreible:
+    """El bracket superior era 10.0 (1000 % EA) y cortaba aritmética válida (26/08/2026).
+
+    El antecedente medido está en `docs/ESTADO.md:194`: SNSBO rindiendo 245 % es dato correcto.
+    Esa misma cuenta con plazos más cortos se pasa del 1000 % sin dejar de ser exacta, y el solver
+    la devolvía vacía. Quien filtra por plausibilidad es la capa de sanidad por segmento
+    (`app/universo/sanidad.py`), que **rotula** en vez de vaciar.
+    """
+
+    @staticmethod
+    def bono_corto_muy_barato() -> list[Pago]:
+        """Cupón cero a 60 días al 61 % de su valor técnico: TIR ≈ 1900 % EA.
+
+        Cae justo entre el techo viejo (1000 %) y el nuevo (10.000 %), que es el rango que el
+        cambio recupera.
+        """
+        return [pago("2026-10-06", capital=100.0, interes=0.0, residual=100.0)]
+
+    def test_un_bono_corto_y_barato_ahora_resuelve(self) -> None:
+        m = metricas_de(self.bono_corto_muy_barato(), precio_sucio=61.0, hoy=HOY)
+        assert m.motivo is None
+        assert m.tir is not None and m.tir > 10.0, "por encima del techo viejo"
+
+    def test_y_el_numero_reproduce_el_precio_del_que_se_partio(self) -> None:
+        """La vuelta que ata el solver a la definición de TIR: descontar a la tasa devuelta tiene
+        que dar el precio, no algo parecido."""
+        pagos = self.bono_corto_muy_barato()
+        m = metricas_de(pagos, precio_sucio=61.0, hoy=HOY)
+        assert m.tir is not None
+        t = [anios_entre(HOY, p.fecha) for p in pagos]
+        assert valor_presente(t, [p.total for p in pagos], m.tir) == pytest.approx(61.0)
+
+    def test_por_encima_del_techo_nuevo_se_sigue_declarando_sin_numero(self) -> None:
+        """El techo se movió, no se sacó: un precio que ningún descuento razonable explica sigue
+        saliendo con su motivo en vez de con la tasa del extremo."""
+        pagos = [pago("2026-08-27", capital=100.0, interes=0.0, residual=100.0)]
+        assert metricas_de(pagos, 1.0, HOY).motivo == MOTIVO_TIR_SOBRE_TECHO
+
+    def test_las_iteraciones_alcanzan_para_el_bracket_mas_ancho(self) -> None:
+        """La bisección parte el intervalo al medio, así que necesita n con
+        `(techo - piso) / 2**n < TOLERANCIA_SOLVER`. Con el bracket nuevo son 40; con el viejo
+        eran 37. El tope de 200 sobra, y este test es lo que avisa si alguien lo baja."""
+        ancho = TASA_TECHO - TASA_PISO
+        necesarias = math.ceil(math.log2(ancho / TOLERANCIA_SOLVER))
+        assert necesarias == 40
+        assert necesarias < MAX_ITERACIONES
 
 
 class TestContraElCronogramaReal:

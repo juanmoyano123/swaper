@@ -11,9 +11,11 @@ pero `max(capturado_en)` —lo que `health.py` reporta como "dato de las HH:MM"�
 una corrida y pasaría a nombrar la última fila que se escribió.
 
 **`instrumentos` se actualiza sin pisar con nulos.** El `DO UPDATE` usa
-`COALESCE(EXCLUDED.col, instrumentos.col)`, así que una corrida en la que IAMC no estuvo disponible
-deja la ley y la moneda de pago como estaban en vez de vaciarlas. Es lo que F-008 necesita para
-correr refrescos intradiarios que sólo tocan BYMA sin degradar el universo en cada pasada.
+`COALESCE(EXCLUDED.col, instrumentos.col)`, así que una corrida que no trae la ley ni la moneda de
+pago las deja como estaban en vez de vaciarlas. Es lo que F-008 necesita para correr refrescos
+intradiarios que sólo tocan BYMA sin degradar el universo en cada pasada, y desde que se eliminó
+IAMC (26/08/2026) es lo único que sostiene esos atributos: ninguna corrida vuelve a escribirlos, y
+el COALESCE es lo que hace que la eliminación borre código sin borrar dato.
 
 **Cada bloque tiene su transacción.** Si el cronograma falla a mitad de escritura, los precios y
 las puntas de esa corrida quedan igual. Una sola transacción para todo convertiría cualquier
@@ -81,25 +83,6 @@ COLUMNAS_PRECIOS: tuple[str, ...] = (
     "valor_tecnico",
 )
 
-# Por ticker, las métricas del informe más reciente que se haya llegado a guardar. Lo consulta la
-# corrida antes de armar, para que una pasada sin informe conserve lo que ya se sabía en vez de
-# publicar un universo sin TIR: la vista `resumen` lee una sola fila de precios por ticker, así que
-# lo que no esté en la fila nueva desaparece del universo aunque siga en la tabla.
-SQL_METRICAS_PREVIAS = """
-SELECT DISTINCT ON (ticker)
-       ticker, tir, duration, paridad, convexidad, residual_value, fecha_metricas
-  FROM public.precios
- WHERE fecha_metricas IS NOT NULL
- ORDER BY ticker, fecha_metricas DESC, capturado_en DESC
-"""
-
-
-async def leer_metricas_previas(conn: Any) -> dict[str, dict[str, object]]:
-    """Las últimas métricas de IAMC conocidas, por ticker. Vacío si la tabla todavía no tiene."""
-    filas = await conn.fetch(SQL_METRICAS_PREVIAS)
-    return {fila["ticker"]: dict(fila) for fila in filas}
-
-
 # El cronograma que ya está persistido. Desde que se dio de baja Docta (12/08/2026) ninguna fuente
 # publica cronogramas, así que esta lectura dejó de ser el respaldo y pasó a ser el camino único:
 # el flujo contractual de toda corrida sale de acá. Son las nueve columnas de `COLUMNAS_CASHFLOW`
@@ -121,9 +104,8 @@ async def leer_cronograma(conn: Any) -> list[dict[str, object]]:
 
 
 # Experimento data912: la moneda de cotización que BYMA ya declaró alguna vez, para los tickers
-# que en esta corrida sólo trae data912 (que no declara moneda). No es un dato nuevo — es el mismo
-# atributo estable de la especie que `leer_metricas_previas` arrastra para las métricas — así que
-# leerlo de acá no inventa nada (regla 1).
+# que en esta corrida sólo trae data912 (que no declara moneda). No es un dato nuevo, es un
+# atributo estable de la especie, así que leerlo de acá no inventa nada (regla 1).
 SQL_MONEDAS = """
 SELECT ticker, moneda_cotizacion
   FROM public.instrumentos

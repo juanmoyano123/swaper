@@ -52,7 +52,7 @@ def test_spread_pct_con_relacion_excesiva_es_none() -> None:
     """El caso documentado en `tools/mercado.py`: bid 125 / ask 127.000 son escalas distintas, no
     un spread real."""
     assert spread_pct(125.0, 127_000.0) is None
-    assert MAX_RELACION_PUNTAS == pytest.approx(3.0)
+    assert pytest.approx(3.0) == MAX_RELACION_PUNTAS
     justo_al_borde = 100.0 * MAX_RELACION_PUNTAS
     assert spread_pct(100.0, justo_al_borde) is None  # relación == MAX_RELACION_PUNTAS: excluida
     assert spread_pct(100.0, justo_al_borde - 1.0) is not None

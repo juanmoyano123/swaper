@@ -1,0 +1,79 @@
+# Ingesta programada de 10-Swaper.
+#
+# Por qué acá y no en Vercel: los crons de Vercel en plan Hobby corren una vez por día y sin
+# minuto exacto (disparan en cualquier momento de la hora). El refresh de rueda necesita correr
+# cada 20 minutos, así que el cron vive en GitHub Actions y le pega por HTTP a los endpoints del
+# backend desplegado. Si algún día el proyecto pasa a Vercel Pro, el bloque `crons` de vercel.json
+# reemplaza este archivo sin tocar el backend: los endpoints son los mismos.
+#
+# El scheduler in-process (`backend/app/jobs/scheduler.py`) NO corre en Vercel: vive en el lifespan
+# de un proceso de larga vida y una función serverless muere entre requests. Por eso
+# INGESTA_HABILITADA queda en false allá, y la programación es esta.
+#
+# Los horarios van en UTC. Argentina es UTC-3 fijo, sin horario de verano.
+
+name: Ingesta de mercado
+
+on:
+  schedule:
+    # Matinal: 11:30 ART. Universo completo (BYMA + data912 + CAFCI) y cronograma.
+    - cron: '30 14 * * 1-5'
+    # Refresh de rueda: cada 20 minutos entre las 11:00 y las 16:40 ART.
+    - cron: '*/20 14-19 * * 1-5'
+    # El tick de las 17:00 ART, que el rango de arriba no alcanza.
+    - cron: '0 20 * * 1-5'
+  # Para disparar una corrida a mano desde la pestaña Actions sin esperar al cron.
+  workflow_dispatch:
+    inputs:
+      corrida:
+        description: 'Qué corrida disparar'
+        required: true
+        default: refresh
+        type: choice
+        options: [matinal, refresh]
+
+# Dos corridas simultáneas no se corrompen —el backend toma un advisory lock y la segunda se omite—
+# pero encolarlas tampoco sirve de nada: si una tardó más que el intervalo, el próximo tick trae
+# datos más frescos que los que estaba por pedir la que quedó esperando.
+concurrency:
+  group: ingesta
+  cancel-in-progress: false
+
+jobs:
+  disparar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Elegir la corrida según el disparador
+        id: cual
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "corrida=${{ inputs.corrida }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "30 14 * * 1-5" ]; then
+            echo "corrida=matinal" >> "$GITHUB_OUTPUT"
+          else
+            echo "corrida=refresh" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Disparar la corrida
+        env:
+          BASE: ${{ vars.SWAPER_BASE_URL || 'https://swaper-snowy.vercel.app' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CRON_SECRET}" ]; then
+            echo "::error::Falta el secret CRON_SECRET. Cargalo en Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          # --fail-with-body: un 4xx/5xx corta el job pero deja ver el cuerpo, que es donde el
+          # backend explica el motivo. --max-time cubre la matinal completa (el backend corta
+          # antes por su propio maxDuration).
+          curl --fail-with-body --silent --show-error --max-time 300 \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            "${BASE}/api/v1/jobs/cron/${{ steps.cual.outputs.corrida }}" \
+            | tee respuesta.json
+          echo
+          # Una corrida omitida (fuera de rueda, o con otra en curso) responde 200 y no es un fallo:
+          # el cron de GitHub es best-effort y puede disparar tarde. Se registra y se sigue.
+          if grep -q '"omitida": *true' respuesta.json; then
+            echo "::notice::Corrida omitida por el backend (ver motivo en la respuesta)."
+          fi

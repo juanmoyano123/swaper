@@ -26,7 +26,20 @@ ENV_DE_PRUEBA = {
     "SUPABASE_ANON_KEY": "anon-key-de-prueba-9f3a",
     "SUPABASE_SERVICE_ROLE_KEY": "service-role-de-prueba-7c1b",
     "DATABASE_URL": "postgresql://usuario:contrasena-secreta@localhost:5432/swaper_test",
+    # Tanda 3 — los endpoints de jobs y de consolidación piden credencial. Se configura acá, en el
+    # entorno, y los tests mandan el header de verdad (`AUTORIZACION_DE_CRON`) en vez de
+    # neutralizar `cron_o_asesor` con un `dependency_overrides`. La diferencia no es de estilo: con
+    # el override, el día que la dependencia se rompa o alguien la saque del router, toda la suite
+    # de jobs seguiría en verde y el agujero volvería sin que nada lo grite.
+    "CRON_SECRET": "cron-secret-de-prueba-5e1c",
 }
+
+CRON_SECRET_DE_PRUEBA = ENV_DE_PRUEBA["CRON_SECRET"]
+
+# El header que abre los endpoints de ingesta por el camino del cron. Es el atajo de los tests que
+# no están probando la auth sino lo que hay detrás; los dos caminos y sus rechazos se prueban en
+# `test_cron_auth.py`.
+AUTORIZACION_DE_CRON = {"Authorization": f"Bearer {CRON_SECRET_DE_PRUEBA}"}
 
 
 class FakeConnection:
@@ -109,11 +122,15 @@ class FakeConexionEscritura(FakeConnection):
 
     async def fetch(self, query: str, *args: Any) -> list[Any]:
         # Se rutea comparando contra el SQL exacto de cada lectura y no por substring: la corrida
-        # hace tres consultas distintas antes de armar —cronograma, métricas previas y monedas— y
-        # servirles la misma lista deja a la renta fija sin flujo contractual, o hace explotar la
-        # lectura de monedas con un KeyError cuando el test sí carga métricas. Comparar por
-        # `FROM public.instrumentos` a secas tampoco alcanza: `renta_variable/perfiles.py` consulta
-        # esa misma tabla para otra cosa.
+        # hace dos consultas distintas antes de armar —cronograma y monedas— y servirles la misma
+        # lista deja a la renta fija sin flujo contractual, o hace explotar la lectura de monedas
+        # con un KeyError. Comparar por `FROM public.instrumentos` a secas tampoco alcanza:
+        # `renta_variable/perfiles.py` consulta esa misma tabla para otra cosa.
+        #
+        # `metricas_previas` quedó como respuesta por defecto para cualquier otra query. Se llamaba
+        # así porque la corrida leía las métricas del último informe de IAMC; esa lectura se
+        # eliminó el 26/08/2026 y el atributo sobrevive con dos usos: ser el catch-all, y dejar que
+        # un test cargue métricas en la base para probar que **no** se arrastran.
         self._registrar(query)
         if query == SQL_CRONOGRAMA_PERSISTIDO:
             return self.cronograma

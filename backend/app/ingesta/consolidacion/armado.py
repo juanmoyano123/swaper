@@ -10,26 +10,27 @@ fuente posible y ninguna se completa desde otra:
 |--------------------------------------------------|-----------------|----------------|
 | moneda_cotizacion, plazo_liquidacion, maturity   | BYMA            | especie        |
 | last_price, effective_volume, px_bid, px_ask     | BYMA            | especie        |
-| law, coupon_currency, underlying, estructura     | IAMC (pausado)  | emisión (raíz) |
+| law, coupon_currency, estructura_cupon           | ninguna         | —              |
+| underlying — sólo soberanos                      | la clase        | especie        |
 | tir, duration, paridad — especies calculables    | cálculo propio  | especie        |
-| tir, duration, paridad — el resto                | IAMC (pausado)  | ticker exacto  |
+| tir, duration, paridad — el resto                | ninguna         | —              |
 | residual_value, valor_tecnico — con cronograma   | cálculo propio  | especie        |
-| residual_value — el resto (sin cronograma)       | IAMC (pausado)  | ticker exacto  |
-| convexidad                                       | IAMC (pausado)  | ticker exacto  |
+| residual_value — el resto (sin cronograma)       | ninguna         | —              |
+| convexidad                                       | ninguna         | —              |
 | clase_activo, tipo_tasa                          | cronograma      | emisión (raíz) |
 | el cronograma entero                             | `public.cashflow` | ticker exacto |
 | tna                                              | ninguna         | —              |
 
-**IAMC está pausado desde el 13/08/2026** (`settings.iamc_habilitado`, default False). El informe
-llegaba por subida manual y envejecía sin que nada lo declarara: el universo mostraba una TIR de
-ocho días antes al lado de un precio de hoy. Con la pausa, `corrida.py` no lee el informe **y
-además no arrastra las métricas guardadas** —lo segundo es lo que hace que la pausa signifique
-algo—, así que `tir`, `duration` y `paridad` salen sólo del cálculo propio, y `convexidad` queda
-vacía en todo el universo. `residual_value` **no** queda vacía: desde el 16/08/2026 se calcula
-del propio cronograma para toda especie que tenga uno, sea o no calculable por moneda — es
-contractual y no dependía de IAMC más que porque nadie lo había expuesto antes. Los atributos de
-la emisión ya escritos sobreviven porque el upsert los protege con COALESCE: la ley de un bono no
-envejece. Prender `IAMC_HABILITADO=true` devuelve `convexidad` a su fuente original.
+**IAMC se eliminó del código el 26/08/2026.** Estaba pausado desde el 13/08 —el informe llegaba por
+subida manual y envejecía sin que nada lo declarara, así que el universo mostraba una TIR de ocho
+días antes al lado de un precio de hoy— y la pausa se volvió definitiva. Lo que se borró es el
+código, no el dato: `law`, `coupon_currency`, `underlying` y `estructura_cupon` viajan `None` en
+cada fila y el upsert de `persistencia.py` los conserva con COALESCE, porque la ley de un bono no
+envejece y el valor ya escrito sigue siendo el bueno. Lo que sí quedó sin fuente es `convexidad`:
+ninguna otra la publica y el cálculo propio no la produce, así que la columna existe declarada y
+vacía en todo el universo. `residual_value` **no** quedó vacía — desde el 16/08/2026 sale del
+propio cronograma para toda especie que tenga uno, sea o no calculable por moneda, porque es
+contractual y sólo dependía de IAMC por no haberse expuesto antes.
 
 **El cronograma ya no tiene fuente viva.** Docta era la única que lo publicaba y se dio de baja el
 12/08/2026 por costo: el flujo contractual sale de lo que quedó persistido en `public.cashflow`, que
@@ -38,20 +39,18 @@ contractual y no envejece—, pero sí quedó **cerrado**: una emisión que empi
 más entra sin cronograma, y por lo tanto sin `tipo_tasa` y sin métricas propias. Se declara faltante
 y no se clasifica por analogía con una especie hermana (regla 1).
 
-Dos granos distintos para IAMC, y la diferencia es de fondo. Ley y moneda de pago son atributos de
-la emisión: AL30, AL30D y AL30C se pagan bajo la misma ley, así que se heredan por raíz. La TIR no:
-depende del precio de cada especie y de la moneda en que ese precio está, y AL30 y AL30D tienen TIR
-distintas aunque sean el mismo bono. Escribir la TIR de una en la otra sería inventar un número que
-nadie calculó, y eso sigue prohibido — **con cálculo propio o sin él**.
+**La TIR es de la especie, no de la emisión, y eso no se relaja.** AL30 y AL30D son el mismo bono y
+se pagan bajo la misma ley, pero tienen TIR distintas porque cada una depende del precio propio y de
+la moneda en la que ese precio está. Escribir la de una en la otra sería inventar un número que
+nadie calculó, y sigue prohibido — **con cálculo propio o sin él**.
 
 **F-051 movió tir, duration y paridad de "ingeridas" a "calculadas" donde se puede calcularlas.**
 Se descuenta el flujo contractual persistido contra el precio de BYMA de esa especie, y por eso el
 requisito es que los dos estén en la misma moneda: AL30D contra su precio en dólares sí, AL30 —que
 cotiza en pesos y paga en dólares— no. La decisión de qué especie entra la toma `metricas.py` de
 este mismo paquete, que también explica por qué CER, dollar-linked, badlar y tamar quedan afuera.
-Para lo que no se calcula, IAMC sigue siendo fuente donde publica; la columna `fuente` de cada fila
-dice de dónde salió su número, y el cálculo propio nunca es pisado por lo publicado ni por el
-arrastre de la corrida anterior.
+Lo que no se calcula queda vacío y declarado: `metricas.py` nombra a cada especie excluida con su
+motivo y las junta en una alerta. La columna `fuente` de cada fila dice de dónde salió su número.
 
 `tna` sigue sin fuente: venía de un endpoint de Docta que ya no se consume, y **el cálculo propio
 no la llena**. La TIR que resuelve el solver es efectiva anual; convertirla a
@@ -65,7 +64,11 @@ from dataclasses import dataclass, field
 from datetime import date
 
 from app.calendario.cupones import Cronograma, componentes_valor_tecnico, indexar_cronograma
-from app.calendario.metricas import MetricasEspecie, metricas_de
+from app.calendario.metricas import (
+    MOTIVO_RESIDUAL_CONTRADICTORIO,
+    MetricasEspecie,
+    metricas_de,
+)
 from app.ingesta.alertas import (
     Alerta,
     Severidad,
@@ -85,16 +88,12 @@ from app.ingesta.consolidacion.clasificacion import (
 )
 from app.ingesta.consolidacion.metricas import (
     FUENTE_CALCULO,
-    FUENTE_FUERA,
-    MOTIVO_RESIDUAL_CONTRADICTORIO,
     MOTIVO_SIN_CRONOGRAMA,
     MOTIVO_SIN_PRECIO,
-    ContrasteMetricas,
     ResultadoMetricas,
     fuente_de_metricas,
     motivo_de_exclusion,
 )
-from app.ingesta.iamc.parser import FilaInforme
 from app.ingesta.raiz import raiz_emision
 
 CLASES_RENTA_VARIABLE = ("accion", "cedear")
@@ -115,28 +114,6 @@ COLUMNAS_CASHFLOW: tuple[str, ...] = (
     "residual_value",
     "cash_flow",
 )
-
-# Los cuatro atributos de la emisión que se heredan entre especies, con el campo de IAMC del que
-# sale cada uno. Es la misma lista que propagaba el motor viejo, menos `lamina` y `calificacion`,
-# que ninguna fuente de F-007 publica y que llegan con F-009 desde el CSV curado.
-HERENCIA_POR_RAIZ: dict[str, str] = {
-    "law": "ley",
-    "coupon_currency": "moneda_pago",
-    "underlying": "emisor",
-    "estructura_cupon": "estructura_cupon",
-}
-
-# Métricas del día que IAMC publica por especie. No se heredan (ver docstring del módulo).
-# El valor es el campo de `FilaInforme`; `divide_por_cien` marca las que vienen en puntos
-# porcentuales y el contrato del Resumen guarda en fracción (verificado el 06/08/2026: el
-# consolidado histórico tiene AL30 con tir 0.0757 y paridad 0.8807).
-METRICAS_POR_TICKER: dict[str, tuple[str, bool]] = {
-    "tir": ("tir", True),
-    "paridad": ("paridad_pct", True),
-    "duration": ("duracion_modificada", False),
-    "convexidad": ("convexidad", False),
-    "residual_value": ("valor_residual", False),
-}
 
 CAMPOS_COBERTURA_INSTRUMENTOS = (
     "clase_activo",
@@ -161,7 +138,6 @@ CAMPOS_COBERTURA_PRECIOS = (
 CAMPOS_COBERTURA_PUNTAS = ("px_bid", "px_ask")
 
 CODIGO_SIN_TICKER = "especie_sin_ticker"
-CODIGO_HERENCIA_CONTRADICTORIA = "herencia_contradictoria"
 CODIGO_ESPECIE_REPETIDA = "especie_en_varios_endpoints"
 
 
@@ -234,60 +210,6 @@ def _indice_cronograma(
     return tipos
 
 
-def _indice_iamc(
-    filas_iamc: list[FilaInforme] | None,
-) -> tuple[dict[str, dict[str, object]], set[str], list[Alerta]]:
-    """Raíz → atributos de la emisión, más las raíces cuyos valores se contradicen.
-
-    Cuando dos filas del informe caen en la misma raíz declarando valores distintos para un campo,
-    ese campo no se propaga a esa raíz y la emisión queda marcada para revisión. No se elige una de
-    las dos por cuenta propia y tampoco se vacía lo que ya estuviera guardado: vaciar es tarea de
-    F-009, que es quien tiene el dato curado para desempatar.
-    """
-    por_raiz: dict[str, dict[str, object]] = {}
-    valores: dict[str, dict[str, set[object]]] = defaultdict(lambda: defaultdict(set))
-
-    for fila in filas_iamc or []:
-        raiz = raiz_emision(fila["ticker"])
-        destino = por_raiz.setdefault(raiz, {})
-        for columna, campo in HERENCIA_POR_RAIZ.items():
-            valor = fila[campo]  # type: ignore[literal-required]
-            if valor is None:
-                continue
-            valores[raiz][columna].add(valor)
-            destino.setdefault(columna, valor)
-
-    contradictorias: set[str] = set()
-    detalle: dict[str, list[str]] = defaultdict(list)
-    for raiz, campos in valores.items():
-        for columna, distintos in campos.items():
-            if len(distintos) > 1:
-                contradictorias.add(raiz)
-                detalle[columna].append(raiz)
-                por_raiz[raiz].pop(columna, None)
-
-    alertas: list[Alerta] = []
-    if detalle:
-        resumen = "; ".join(
-            f"{columna}: {len(raices)} ({', '.join(sorted(raices)[:5])})"
-            for columna, raices in sorted(detalle.items())
-        )
-        alertas.append(
-            Alerta(
-                codigo=CODIGO_HERENCIA_CONTRADICTORIA,
-                mensaje=(
-                    f"Emisiones cuyas especies declaran valores distintos para el mismo atributo "
-                    f"({resumen}). Esos campos no se propagaron y las especies quedaron marcadas "
-                    f"para revisión."
-                ),
-                severidad=Severidad.ADVERTENCIA,
-                accion_requerida=None,
-                detalle={c: sorted(r) for c, r in detalle.items()},
-            )
-        )
-    return por_raiz, contradictorias, alertas
-
-
 def _colapsar(
     especies_por_endpoint: dict[str, list[FilaRueda]],
 ) -> tuple[dict[str, tuple[str, FilaRueda, bool]], list[Alerta]]:
@@ -341,69 +263,35 @@ def _colapsar(
 
 
 def _metricas_de(
-    del_informe: FilaInforme | None,
-    fecha_informe: date | None,
-    previas: dict[str, object] | None,
     *,
     propias: MetricasEspecie | None = None,
     residual: float | None = None,
     valor_tecnico: float | None = None,
 ) -> dict[str, object]:
-    """Las métricas de una especie: las propias si se calcularon, y las de IAMC para el resto.
+    """Las siete columnas de métricas de una especie. Las que nadie calcula van `None`, declaradas.
 
-    Que la corrida no traiga informe no borra lo que ya se sabía: la fila conserva el valor de IAMC
-    y lo rotula con `fecha_metricas`, que es la fecha del informe del que salió. Sin ese rótulo esto
-    sería presentar el dato de un día como el de otro; con él, la fila dice exactamente qué está
-    mostrando y de cuándo.
-
-    **Cuando la especie se calcula, `propias` gana y no hay arrastre que la pise.** Las tres
-    columnas calculadas salen del cálculo o quedan vacías —aunque IAMC las publique y aunque la
-    corrida anterior las tuviera—, porque una TIR es de un precio: la de ayer con el precio de hoy
-    no es de nadie. `convexidad` sigue viniendo de IAMC en todos los casos.
+    `convexidad` y `fecha_metricas` **siguen en el dict aunque siempre valgan `None`** desde que se
+    eliminó IAMC (26/08/2026). Eran suyas: la convexidad la publicaba el informe y nadie más la
+    calcula, y `fecha_metricas` rotulaba de qué informe salía cada número. Se conservan porque las
+    columnas existen en `precios` y una columna que la fila deja de nombrar no queda vacía: queda
+    con lo que hubiera antes. Escribir `None` explícito es lo que declara el faltante, que es
+    exactamente lo que ya pasaba con la pausa activa.
 
     **`residual_value` y `valor_tecnico` son cálculo propio siempre que haya cronograma** —
-    relevamiento de confiabilidad de datos, 16/08/2026: `componentes_valor_tecnico` no necesita
-    que la moneda del flujo y la de cotización coincidan (a diferencia de `tir`/`paridad`, que sí
-    la necesitan para poder comparar contra el precio), así que se calculan aunque `propias` sea
-    `None` — un CER o un bono en moneda cruzada declaran su residual igual. El llamador ya decidió
-    esto: acá sólo se prioriza cálculo propio sobre IAMC cuando `residual` no es `None`. `IAMC`
-    nunca alimentó `valor_tecnico` (parsea el campo VT y lo descarta, ver `iamc/parser.py`), así
-    que ese campo no tiene arrastre: es `None` hasta que hay cálculo propio.
+    relevamiento de confiabilidad de datos, 16/08/2026: `componentes_valor_tecnico` no necesita que
+    la moneda del flujo y la de cotización coincidan (a diferencia de `tir`/`paridad`, que sí la
+    necesitan para poder comparar contra el precio), así que llegan con valor aunque `propias` sea
+    `None` — un CER o un bono en moneda cruzada declaran su residual igual.
     """
-    if propias is not None:
-        de_iamc = _metricas_de(del_informe, fecha_informe, previas)
-        return {
-            **de_iamc,
-            "tir": propias.tir,
-            "duration": propias.duration,
-            "paridad": propias.paridad,
-            "residual_value": residual,
-            "valor_tecnico": valor_tecnico,
-        }
-
-    del_hoy: dict[str, object] = {}
-    if del_informe is not None and fecha_informe is not None:
-        for columna, (campo, en_puntos) in METRICAS_POR_TICKER.items():
-            valor = del_informe[campo]  # type: ignore[literal-required]
-            del_hoy[columna] = valor / 100 if (en_puntos and valor is not None) else valor
-        del_hoy["fecha_metricas"] = fecha_informe
-
-    fecha_previa = (previas or {}).get("fecha_metricas")
-    # Que el informe de hoy sea más viejo que el guardado no debería pasar, pero si pasa gana el
-    # más reciente: nunca se retrocede a una métrica anterior a la que ya está publicada.
-    if del_hoy and (fecha_previa is None or fecha_informe >= fecha_previa):
-        resultado = del_hoy
-    elif previas:
-        resultado = {
-            columna: previas.get(columna) for columna in (*METRICAS_POR_TICKER, "fecha_metricas")
-        }
-    else:
-        resultado = dict.fromkeys((*METRICAS_POR_TICKER, "fecha_metricas"))
-
-    if residual is not None:
-        resultado = {**resultado, "residual_value": residual}
-    resultado["valor_tecnico"] = valor_tecnico
-    return resultado
+    return {
+        "tir": propias.tir if propias is not None else None,
+        "paridad": propias.paridad if propias is not None else None,
+        "duration": propias.duration if propias is not None else None,
+        "convexidad": None,
+        "residual_value": residual,
+        "fecha_metricas": None,
+        "valor_tecnico": valor_tecnico,
+    }
 
 
 def _calcular_metricas(
@@ -420,9 +308,13 @@ def _calcular_metricas(
 ) -> MetricasEspecie | None:
     """Las métricas propias de una especie, o `None` si esta especie no se calcula.
 
-    Devolver `None` no es un error: significa "esta columna la sigue llenando IAMC". Cada motivo se
-    anota en `resultado` para que la alerta pueda nombrar a la especie, que es lo que la regla 1
-    pide — un faltante sin nombre es un faltante que nadie va a buscar.
+    Devolver `None` no es un error, pero **nunca es silencioso**: cada motivo se anota en
+    `resultado` para que la alerta pueda nombrar a la especie, que es lo que la regla 1 pide — un
+    faltante sin nombre es un faltante que nadie va a buscar. Hasta el 26/08/2026 había una
+    excepción: las especies sin `tipo_tasa` y las de naturaleza sin regla caían en `FUENTE_IAMC` y
+    volvían `None` sin anotar nada, porque se daba por hecho que IAMC las llenaba. Eliminada esa
+    fuente, `fuente_de_metricas` las manda a `FUENTE_FUERA` con motivo propio y aparecen en la
+    alerta como todas las demás.
 
     **Un precio `data912-arrastre` se calcula igual, a propósito**: el arrastre es el último cierre
     conocido de una fecha que la fuente no declara, y el caso típico es un sábado con el cierre del
@@ -434,11 +326,8 @@ def _calcular_metricas(
         return None  # una acción no tiene TIR, y no es un faltante que haya que declarar
 
     moneda = moneda_cotizacion if isinstance(moneda_cotizacion, str) else None
-    fuente = fuente_de_metricas(tipo_tasa, moneda)
-    if fuente == FUENTE_FUERA:
+    if fuente_de_metricas(tipo_tasa, moneda) != FUENTE_CALCULO:
         resultado.anotar(motivo_de_exclusion(tipo_tasa, moneda), ticker)
-        return None
-    if fuente != FUENTE_CALCULO:
         return None
 
     pagos = cronograma.pagos_de(raiz)
@@ -454,45 +343,7 @@ def _calcular_metricas(
     return propias
 
 
-def _registrar_contraste(
-    *,
-    ticker: str,
-    raiz: str,
-    propias: MetricasEspecie | None,
-    publicado: FilaInforme | None,
-    resultado: ResultadoMetricas,
-) -> None:
-    """Anota lo calculado contra lo que IAMC publica para la misma emisión, si publica algo.
-
-    IAMC trae la TIR y la paridad en puntos porcentuales y nosotros las manejamos en fracción: la
-    conversión se hace acá y no se delega, porque comparar 7,92 contra 0,0792 daría una divergencia
-    de manual en todas las emisiones y taparía las de verdad.
-    """
-    if propias is None or publicado is None:
-        return
-    resultado.contrastes.append(
-        ContrasteMetricas(
-            raiz=raiz,
-            ticker_propio=ticker,
-            ticker_iamc=publicado["ticker"],
-            tir_propia=propias.tir,
-            tir_iamc=_en_fraccion(publicado["tir"]),
-            duration_propia=propias.duration,
-            duration_iamc=publicado["duracion_modificada"],
-            paridad_propia=propias.paridad,
-            paridad_iamc=_en_fraccion(publicado["paridad_pct"]),
-        )
-    )
-
-
-def _en_fraccion(valor: float | None) -> float | None:
-    """De puntos porcentuales a fracción, que es como el contrato del universo guarda estas dos."""
-    return None if valor is None else valor / 100
-
-
-def _fuente_de(
-    propias: MetricasEspecie | None, fecha_metricas: object, *, origen: str = "byma"
-) -> str:
+def _fuente_de(propias: MetricasEspecie | None, *, origen: str = "byma") -> str:
     """De dónde salió lo que esta fila muestra. Se componen los términos que efectivamente hay.
 
     `origen` es el experimento data912: `_colapsar` conserva `fila["origen_precio"]` cuando el
@@ -508,32 +359,21 @@ def _fuente_de(
         propias.tir is not None or propias.duration is not None or propias.paridad is not None
     ):
         partes.append("calculo")
-    if fecha_metricas:
-        partes.append("iamc")
     return "+".join(partes)
 
 
 def armar_consolidacion(
     *,
     especies_por_endpoint: dict[str, list[FilaRueda]],
-    filas_iamc: list[FilaInforme] | None = None,
     filas_cashflow: list[dict[str, object]] | None = None,
     cronograma_persistido: list[dict[str, object]] | None = None,
-    archivo_iamc: str | None = None,
-    fecha_informe: date | None = None,
-    metricas_previas: dict[str, dict[str, object]] | None = None,
     hoy: date,
 ) -> Consolidacion:
-    """Une las tres fuentes en las filas que van a las cuatro tablas de mercado.
+    """Une las fuentes en las filas que van a las cuatro tablas de mercado.
 
-    Cada fuente puede faltar y la consolidación sigue: sin IAMC el universo queda sin atributos de
-    emisión, sin cronograma la renta fija queda sin clasificar. Lo que falta se declara en la
-    cobertura y en las alertas, nunca se completa desde otra fuente.
-
-    `metricas_previas` son las métricas del último informe conocido, por ticker, tal como quedaron
-    en la base. Se usan sólo cuando esta corrida no trae informe para ese ticker, y viajan con su
-    `fecha_metricas`: es la diferencia entre conservar un dato rotulado y presentar el de ayer como
-    si fuera el de hoy.
+    Cada fuente puede faltar y la consolidación sigue: sin cronograma la renta fija queda sin
+    clasificar y sin métricas propias. Lo que falta se declara en la cobertura y en las alertas,
+    nunca se completa desde otra fuente.
 
     `cronograma_persistido` es el cashflow que ya está en la base, para las corridas que no traen
     uno nuevo. **El cronograma es contractual y no envejece**: reusarlo no es presentar un dato
@@ -553,15 +393,6 @@ def armar_consolidacion(
     cronograma = indexar_cronograma(pagos_crudos)
     tipo_por_raiz = _indice_cronograma(pagos_crudos)
     resultado_metricas = ResultadoMetricas()
-    iamc_por_raiz, raices_contradictorias, alertas_iamc = _indice_iamc(filas_iamc)
-    iamc_por_ticker = {f["ticker"]: f for f in filas_iamc or []}
-    # Para el contraste hace falta la fila entera de IAMC de la emisión, no sólo los atributos que
-    # se heredan: IAMC publica una especie por emisión y esa es la que se compara contra la que
-    # nosotros calculamos, que suele ser otra (la D).
-    iamc_metricas_por_raiz: dict[str, FilaInforme] = {}
-    for fila_informe in filas_iamc or []:
-        iamc_metricas_por_raiz.setdefault(raiz_emision(fila_informe["ticker"]), fila_informe)
-    alertas.extend(alertas_iamc)
 
     elegidas, alertas_colapso = _colapsar(especies_por_endpoint)
     alertas.extend(alertas_colapso)
@@ -600,36 +431,41 @@ def armar_consolidacion(
             discrepantes.append((ticker, tipo_cronograma or ""))
 
         clase_activo, tipo_tasa = clasificacion
-        heredado = iamc_por_raiz.get(raiz, {}) if clase_activo not in CLASES_RENTA_VARIABLE else {}
 
         maturity = _a_fecha(fila["vencimiento"])
         if fila["vencimiento"] and maturity is None:
             vencimientos_ilegibles += 1
 
-        law = heredado.get("law")
-        underlying = heredado.get("underlying")
-        if underlying is None and clase_activo == "bono_soberano":
-            # El Tesoro no aparece como emisor en ninguna fuente: no es un dato que falte, es uno
-            # que la clase ya determina.
-            underlying = EMISOR_SOBERANO
+        # El Tesoro no aparece como emisor en ninguna fuente: no es un dato que falte, es uno que
+        # la clase ya determina. Es el único `underlying` que este módulo escribe desde que se
+        # eliminó IAMC; el del resto viaja `None` y el COALESCE del upsert conserva el que haya.
+        underlying = EMISOR_SOBERANO if clase_activo == "bono_soberano" else None
 
         instrumentos.append(
             {
                 "ticker": ticker,
                 "clase_activo": clase_activo,
                 "tipo_tasa": tipo_tasa,
-                "subtipo": subtipo_de(tipo_tasa, law if isinstance(law, str) else None),
+                # Sin `law` en la fila el subtipo no puede afinarse por legislación. No se lee la
+                # que ya está persistida para desempatar: eso es tarea de F-009, que tiene el CSV
+                # curado, y adivinarla acá sería completar por analogía (regla 1).
+                "subtipo": subtipo_de(tipo_tasa, None),
                 "underlying": underlying,
                 "sector": SECTOR_POR_CLASE.get(clase_activo),
                 "maturity": maturity,
-                "law": law,
-                "coupon_currency": heredado.get("coupon_currency"),
+                # Atributos de la emisión que sólo publicaba IAMC. Van `None` y el upsert los
+                # conserva con COALESCE: la ley de un bono no envejece, así que lo ya escrito sigue
+                # siendo el dato bueno y esta corrida no tiene con qué mejorarlo ni por qué pisarlo.
+                "law": None,
+                "coupon_currency": None,
                 "lamina": None,
                 "calificacion": None,
-                "revisar": raiz in raices_contradictorias,
+                # Sin herencia por raíz no hay dos especies que puedan contradecirse entre sí, así
+                # que ninguna fila nace marcada para revisión.
+                "revisar": False,
                 "duplicado": duplicado,
-                "archivo_origen": archivo_iamc if heredado else "BYMA",
-                "estructura_cupon": heredado.get("estructura_cupon"),
+                "archivo_origen": "BYMA",
+                "estructura_cupon": None,
                 "moneda_cotizacion": fila["moneda_cotizacion"],
                 "plazo_liquidacion": fila["plazo_liquidacion"],
             }
@@ -655,22 +491,19 @@ def armar_consolidacion(
             if clase_activo not in CLASES_RENTA_VARIABLE
             else None
         )
-        if componentes is not None and not componentes.coherente:
+        # `propias is None` evita anotar dos veces el mismo ticker: desde el 26/08/2026
+        # `metricas_de` devuelve este mismo motivo cuando el residual no cierra, y las especies que
+        # pasaron por el cálculo ya lo tienen anotado vía `registrar`. Lo que queda para este
+        # bloque son las que no llegaron al solver —fuera por moneda o por naturaleza, sin precio,
+        # sin cronograma— y que igual arrastran el problema en el cronograma de su raíz: si no se
+        # anotaran acá, el residual roto de una emisión sólo se vería a través de una de sus
+        # especies.
+        if componentes is not None and not componentes.coherente and propias is None:
             resultado_metricas.anotar(MOTIVO_RESIDUAL_CONTRADICTORIO, ticker)
         metricas = _metricas_de(
-            iamc_por_ticker.get(ticker),
-            fecha_informe,
-            (metricas_previas or {}).get(ticker),
             propias=propias,
             residual=componentes.residual_vigente if componentes else None,
             valor_tecnico=componentes.valor_tecnico if componentes else None,
-        )
-        _registrar_contraste(
-            ticker=ticker,
-            raiz=raiz,
-            propias=propias,
-            publicado=iamc_metricas_por_raiz.get(raiz),
-            resultado=resultado_metricas,
         )
         precios.append(
             {
@@ -678,9 +511,7 @@ def armar_consolidacion(
                 "last_price": precio,
                 "tna": None,
                 "effective_volume": fila["monto_operado"],
-                "fuente": _fuente_de(
-                    propias, metricas["fecha_metricas"], origen=fila.get("origen_precio", "byma")
-                ),
+                "fuente": _fuente_de(propias, origen=fila.get("origen_precio", "byma")),
                 "cierre_anterior": _precio(fila["precio_cierre_anterior"]),
                 # Siempre de BYMA, aunque `fuente` diga data912: el overlay no los pisa (no están
                 # en `CAMPOS_PISADOS`) y una fila sólo-data912 los trae `None` de fábrica. Por

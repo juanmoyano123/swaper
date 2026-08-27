@@ -26,13 +26,15 @@ cambio no interviene, porque la paridad ya es adimensional.
 
 ## Lo que este servicio hereda y no puede arreglar
 
-`flujos_por_peso` necesita paridad, y la paridad la publica IAMC **sólo para el ticker exacto que su
-informe nombra**. Medido contra la base del 7 de agosto de 2026:
+`flujos_por_peso` necesita paridad, y la paridad existe **sólo para el ticker exacto que la tiene
+calculada** — hoy, las especies donde el precio y el flujo comparten moneda; en la medición de
+abajo, las que IAMC nombraba en su informe. La forma del agujero es la misma en los dos casos: la
+paridad es de una especie y no se copia a sus hermanas. Medido contra la base del 7/08/2026:
 
 - 241 de 2.894 filas de `resumen` tienen paridad, y 240 tienen TIR. Son casi las mismas filas.
 - Sobre la vista **colapsada**, de 431 emisiones el calendario calcula **70**. Las 360 restantes
   quedan afuera por falta de paridad, y **ninguna de ellas declara rendimiento ni duración**: el
-  representante que eligió F-011 no es el ticker que IAMC nombra. Es exactamente el efecto que
+  representante que eligió F-011 no era el ticker con métricas. Es exactamente el efecto que
   `emisiones.py` cuenta como `rendimiento_perdido_al_colapsar`, llegando hasta acá.
 - Los cuatro tickers del GWT-4 de la spec —RUCED, SBC2D, CS47D y LOC5D— **hoy no se pueden
   calcular** con el dato de la base: sus métricas están en RUCEO, SBC2O, CS47O y LOC5O. En el

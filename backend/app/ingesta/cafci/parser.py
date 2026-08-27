@@ -1,9 +1,8 @@
 """Parser de la planilla diaria de CAFCI: del XLSX crudo a filas tipadas, o aborto sin filas
 parciales.
 
-Con `openpyxl`, no `pandas` — el proyecto no importa `pandas` desde `app/` (ver el docstring de
-`app/ingesta/iamc/parser.py`, que es el precedente de un documento con encabezado complejo y
-secciones intercaladas, aunque ahí sea PDF con `pdfplumber`; acá la mecánica de celdas es propia).
+Con `openpyxl`, no `pandas`: el proyecto no importa `pandas` desde `app/`. La mecánica de celdas
+es propia de este parser.
 
 ## La estructura del archivo, medida el 23/08/2026
 
@@ -242,7 +241,7 @@ def parsear_planilla(contenido: bytes) -> ResultadoPlanilla:
     # memoria, `.cell()` es O(1) — el archivo pesa ~950 KB, trivial para cargar completo.
     try:
         libro = openpyxl.load_workbook(BytesIO(contenido), data_only=True)
-    except Exception as exc:  # noqa: BLE001 — cualquier XLSX ilegible es una planilla inválida
+    except Exception as exc:
         raise PlanillaInvalida(f"el archivo no es un XLSX legible: {exc}") from exc
 
     try:

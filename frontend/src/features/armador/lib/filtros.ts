@@ -67,8 +67,14 @@ export const CALIFICACION_NO_INFORMADA = 'calificacion_no_informada'
 
 /** Las únicas naturalezas donde "TIR" es la unidad — ver `UNIDAD_NATURALEZA` en
  *  `@/components/SelectorSegmento`. `tasa_real_cer` y `tna_nominal_ars` no tienen TIR: con
- *  `tirMin` activo quedan afuera, no se comparan contra un umbral que no es su unidad. */
-export const NATURALEZAS_CON_TIR = ['tir_usd', 'tir_dolar_linked'] as const
+ *  `tirMin` activo quedan afuera, no se comparan contra un umbral que no es su unidad.
+ *
+ *  `tir_ea_ars` entró en la Tanda 2 (26/08/2026): el segmento `tasa_fija` pasó a declarar su TIR
+ *  efectiva anual, así que el umbral sí es su unidad y filtrarlo por `tirMin` es legítimo. Que el
+ *  umbral cruce monedas —una TIR en dólares y una TIR en pesos contra el mismo 6 %— es lo que ya
+ *  hacía con `tir_dolar_linked`: `tirMin` es un piso de descarte, no un eje de comparación, y el
+ *  eje sigue separado por naturaleza en la columna y en la curva. */
+export const NATURALEZAS_CON_TIR = ['tir_usd', 'tir_dolar_linked', 'tir_ea_ars'] as const
 
 export const FILTROS_ARMADOR_VACIOS: FiltrosArmador = {
   segmento: null,

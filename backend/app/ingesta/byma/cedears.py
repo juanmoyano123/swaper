@@ -8,7 +8,7 @@ subyacente. Son 413 papeles.
 
 BYMA lo publica como PDF, y **la URL cambia en cada actualización** —lleva un hash del CDN—, así
 que no se puede clavar: hay que leer `byma.com.ar/en/products/financial-products/cedears` y sacar
-el link de ahí. El parseo del PDF reusa `pdfplumber`, que ya es dependencia por el informe de IAMC.
+el link de ahí. El parseo del PDF usa `pdfplumber`.
 
 ## Dos cosas que la fuente hace mal, y cómo se las trata
 
@@ -93,7 +93,7 @@ def parsear_lista(texto_por_pagina: list[str]) -> ResultadoLista:
     """Los renglones de la tabla, con los códigos en conflicto declarados y fuera.
 
     Recibe el texto ya extraído de cada página —no el PDF— para que esto se pueda probar sin
-    archivo, igual que `iamc/parser.py` separa la extracción del análisis.
+    archivo: la extracción y el análisis se separan a propósito.
     """
     por_codigo: dict[str, list[CedearDeByma]] = defaultdict(list)
     for pagina in texto_por_pagina:

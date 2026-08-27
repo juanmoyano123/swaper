@@ -71,9 +71,10 @@ def cobertura_del_calendario(
         ),
         severidad=Severidad.ADVERTENCIA if afuera else Severidad.INFO,
         accion_requerida=(
-            "La paridad la publica IAMC sólo para el ticker exacto que su informe nombra: no hay "
-            "nada que corregir en el dato. Si la grilla tiene que cubrir más universo, lo que hay "
-            "que decidir es el criterio de qué especie representa a una emisión (F-011)."
+            "La paridad sale del cálculo propio y sólo se puede calcular donde el precio y el "
+            "flujo comparten moneda: no hay nada que corregir en el dato. Si la grilla tiene que "
+            "cubrir más universo, lo que hay que decidir es el criterio de qué especie representa "
+            "a una emisión (F-011)."
         )
         if afuera
         else None,
@@ -149,8 +150,8 @@ def posiciones_sin_calendario(motivos: Mapping[str, str]) -> Alerta:
     Sin esto, el caso real es una cartera que devuelve doce meses de renta cero, sin una sola
     alerta, y que se lee como "este bono no paga nada" cuando lo que pasa es que no se lo pudo
     valuar. Medido contra la base del 7 de agosto de 2026: RUCED, SBC2D, CS47D y LOC5D —las cuatro
-    posiciones del GWT-4 de la spec— caen exactamente ahí, porque IAMC publicó las métricas del día
-    en la especie O de cada emisión y no en la D.
+    posiciones del GWT-4 de la spec— caían exactamente ahí cuando se midió, porque las métricas del
+    día estaban escritas en la especie O de cada emisión y no en la D.
     """
     nombrados = ", ".join(f"{ticker} ({motivo})" for ticker, motivo in sorted(motivos.items())[:3])
     return Alerta(

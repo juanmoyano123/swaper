@@ -104,9 +104,10 @@ def hay_discrepancia(endpoint: str, tipo_cronograma: str | None) -> bool:
 def subtipo_de(tipo_tasa: str | None, law: str | None) -> str | None:
     """Global o bonar: la misma derivación del motor viejo, sobre hard-dollar y por ley.
 
-    Devuelve `None` mientras no haya ley, que en F-007 es casi siempre: la ley llega por IAMC, que
-    cubre 242 emisiones. F-009 va a sembrar el resto desde el CSV curado y tiene que re-derivar
-    esta columna cuando lo haga.
+    Devuelve `None` mientras no haya ley, que desde la consolidación es siempre: la ley la traía
+    IAMC —242 emisiones— y esa ingesta se eliminó el 26/08/2026, así que `armado.py` ya no la pasa.
+    La que está persistida sigue ahí (el upsert la conserva con COALESCE), pero no se lee de vuelta
+    para desempatar acá: F-009 siembra desde el CSV curado y es quien re-deriva esta columna.
     """
     if tipo_tasa != "hard-dollar" or not law:
         return None

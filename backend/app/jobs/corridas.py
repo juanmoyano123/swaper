@@ -1,19 +1,18 @@
 """Las dos corridas que orquesta el job de F-008, cada una envolviendo lo que F-004 a F-007 ya
 dejaron listo y dejando su registro auditable en `corridas_ingesta`.
 
-**La matinal** es `consolidar()` de F-007 tal cual: BYMA, data912 e IAMC ya corren ahí en el orden
+**La matinal** es `consolidar()` de F-007 tal cual: BYMA y data912 ya corren ahí en el orden
 correcto, con la asimetría entre fuentes ya resuelta. Acá sólo se cronometra y se registra.
 
-**El refresh intra-rueda** arma su propio `Consolidacion` a partir de `armar_consolidacion()`,
-pero sin `filas_iamc` (no se vuelve a leer el informe del día) y con el cronograma leído de
-`cashflow` y no pedido a ninguna fuente —es la única forma de que `public-bonds` (soberanos y
-subsoberanos, que sólo se clasifican por el `type` del cronograma) no queden afuera de cada
-refresco—. Desde F-051 se lee el cronograma **entero** y no sólo su `type`, porque de él salen
-además las métricas propias: cada refresco vuelve a calcular TIR, duración y paridad contra el
-precio que acaba de traer, que es lo que hace que el monitor muestre rendimientos vivos y no los de
-la matinal. Sólo se persisten precios y puntas: `filas_instrumentos` se vacía antes de llamar a
-`persistir()` y `filas_cashflow` queda en `None`, que es el contrato ya existente de F-007 para
-"no tocar esta tabla".
+**El refresh intra-rueda** arma su propio `Consolidacion` a partir de `armar_consolidacion()`, con
+el cronograma leído de `cashflow` y no pedido a ninguna fuente —es la única forma de que
+`public-bonds` (soberanos y subsoberanos, que sólo se clasifican por el `type` del cronograma) no
+queden afuera de cada refresco—. Desde F-051 se lee el cronograma **entero** y no sólo su `type`,
+porque de él salen las métricas propias: cada refresco vuelve a calcular TIR, duración y paridad
+contra el precio que acaba de traer, que es lo que hace que el monitor muestre rendimientos vivos
+y no los de la matinal. Sólo se persisten precios y puntas: `filas_instrumentos` se vacía antes de
+llamar a `persistir()` y `filas_cashflow` queda en `None`, que es el contrato ya existente de F-007
+para "no tocar esta tabla".
 
 Ninguna de las dos corridas se aborta por una fuente caída: es la propiedad que ya tienen
 `consolidar()` y `ingerir_rueda()`, y acá se hereda sin agregar un solo `try` nuevo alrededor de
@@ -21,7 +20,8 @@ las fuentes.
 """
 
 import asyncio
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
+from contextlib import asynccontextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
@@ -33,11 +33,7 @@ from app.ingesta.alertas import Alerta, Severidad, fuente_caida
 from app.ingesta.byma import ingerir_rueda
 from app.ingesta.cafci import ingerir_cafci
 from app.ingesta.consolidacion import armar_consolidacion, consolidar
-from app.ingesta.consolidacion.persistencia import (
-    leer_cronograma,
-    leer_metricas_previas,
-    persistir,
-)
+from app.ingesta.consolidacion.persistencia import leer_cronograma, persistir
 from app.ingesta.snapshot import Snapshot
 from app.jobs.registro import EstadoCorrida, TipoCorrida, registrar_corrida
 from app.jobs.universo import filtrar_precios_al_universo, leer_tickers_existentes
@@ -45,6 +41,13 @@ from app.jobs.universo import filtrar_precios_al_universo, leer_tickers_existent
 logger = structlog.get_logger()
 
 CODIGO_TICKER_FUERA_DE_UNIVERSO = "ticker_fuera_de_universo"
+
+# Clave del advisory lock que serializa las corridas de ingesta. El número es `8` —F-008, la
+# feature del job programado— y no un valor al azar: el espacio de claves de `pg_advisory_lock` es
+# global a la base y compartido por cualquier otro código que use el mecanismo, así que la clave
+# tiene que poder rastrearse hasta quién la reservó. Si alguna vez hace falta una segunda, la
+# convención es el número de la feature que la pide.
+CLAVE_LOCK_INGESTA = 8
 
 
 def _ticker_fuera_de_universo(tickers: list[str]) -> Alerta:
@@ -64,6 +67,42 @@ def _ticker_fuera_de_universo(tickers: list[str]) -> Alerta:
     )
 
 
+@asynccontextmanager
+async def lock_de_ingesta(conn: Any) -> AsyncIterator[bool]:
+    """Toma el lock que serializa las corridas de ingesta. Rinde `True` si lo consiguió.
+
+    **Qué protege.** Hasta el 26/08/2026 nada impedía dos corridas simultáneas —el cron
+    disparando mientras un asesor aprieta el botón, o un tick que llega antes de que termine el
+    anterior—. Verificado sobre el código: no se corrompe nada (`registrar_corrida` sólo inserta y
+    `persistir` upsertea), pero las dos pasadas intercalan sus `capturado_en` y dejan dos filas en
+    `corridas_ingesta` para un solo evento. El resultado es que el indicador de frescura publica el
+    `capturado_en` de la corrida que terminó última, que no tiene por qué ser la que trajo el
+    precio más nuevo.
+
+    **Por qué un advisory lock y no una tabla de estado.** Una fila "corrida en curso" hay que
+    borrarla, y el caso que importa es justamente aquel en el que nadie la borra: el proceso que la
+    escribió murió a mitad de camino —una función serverless que se pasó de `maxDuration`, un
+    deploy en el medio—. A partir de ahí la tabla dice "en curso" para siempre y la ingesta queda
+    trabada hasta que alguien lo note a mano. El advisory lock es de sesión: cuando la conexión se
+    cierra, Postgres lo suelta solo, sin depender de que nuestro código llegue al `finally`. El
+    `finally` de acá es para el caso normal, donde la conexión vuelve al pool y sigue viva.
+
+    Va sobre la conexión ya adquirida y no sobre una nueva a propósito: el lock pertenece a la
+    sesión que lo pidió, así que tomarlo en otra conexión no protegería el trabajo que se hace en
+    ésta.
+    """
+    # `::bigint` explícito: `pg_try_advisory_lock` está sobrecargada —una versión toma un bigint y
+    # otra dos int—, y dejar que el tipo del parámetro lo infiera el driver hace que cuál de las
+    # dos se resuelve dependa de él y no de este código.
+    sql = "SELECT pg_try_advisory_lock($1::bigint)"
+    tomado = bool(await conn.fetchval(sql, CLAVE_LOCK_INGESTA))
+    try:
+        yield tomado
+    finally:
+        if tomado:
+            await conn.fetchval("SELECT pg_advisory_unlock($1::bigint)", CLAVE_LOCK_INGESTA)
+
+
 async def _ingerir_fci_sin_lanzar(
     conn: Any,
     settings: Settings,
@@ -72,11 +111,11 @@ async def _ingerir_fci_sin_lanzar(
     """La planilla de CAFCI (F-057), en su propio try/except: no pasa por el consolidador —no es
     una especie negociable, ver la ficha de F-057— y una excepción no vista (p. ej. la escritura a
     `fci` fallando a mitad de transacción) no puede tirar abajo la corrida matinal entera, que ya
-    trajo BYMA, data912 e IAMC para cuando esto corre.
+    trajo BYMA y data912 para cuando esto corre.
     """
     try:
         return await ingerir_cafci(conn, settings, dormir=dormir)
-    except Exception as exc:  # noqa: BLE001 — nunca deja escapar hacia la matinal
+    except Exception as exc:
         logger.warning("cafci_ingesta_fallo_inesperado", error=str(exc))
         snapshot = Snapshot(fuente="CAFCI")
         snapshot.registrar_tramo("planilla", 0)
@@ -102,7 +141,7 @@ async def corrida_matinal(
     *,
     dormir: Callable[[float], Awaitable[None]] = asyncio.sleep,
 ) -> dict[str, object]:
-    """BYMA + data912 + IAMC + consolidación, en ese orden — el orden ya lo fija `consolidar()`.
+    """BYMA + data912 + consolidación, en ese orden — el orden ya lo fija `consolidar()`.
 
     CAFCI corre al final, fuera de `consolidar()`: no es una fuente que se consolide contra el
     universo de renta fija/variable, es un universo propio (F-057). Sólo se pide acá y no en cada
@@ -148,7 +187,7 @@ async def refresh_intra_rueda(
     *,
     dormir: Callable[[float], Awaitable[None]] = asyncio.sleep,
 ) -> dict[str, object]:
-    """Sólo precios y puntas desde BYMA. No vuelve a leer el informe de IAMC ni el cronograma."""
+    """Sólo precios y puntas desde BYMA. No toca `instrumentos` ni la tabla `cashflow`."""
     inicio = datetime.now(UTC)
     rueda = await ingerir_rueda(settings=settings, dormir=dormir)
 
@@ -156,16 +195,10 @@ async def refresh_intra_rueda(
     # **y** las métricas propias de F-051. Con las dos columnas que este refresh leía antes, cada
     # pasada intradiaria dejaría la fila de precios sin TIR y la vista —que toma una sola fila por
     # ticker— publicaría el universo sin rendimiento hasta la matinal siguiente.
-    #
-    # `metricas_previas` sólo se lee con IAMC habilitado — mismo corte que `corrida.py::consolidar`.
-    # Sin este gate el refresh re-arrastraría la TIR del último informe de IAMC durante la pausa,
-    # que es exactamente lo que la pausa busca cortar. F-051 no depende de esto: se recalcula solo.
     cronograma = await leer_cronograma(conn)
-    metricas_previas = await leer_metricas_previas(conn) if settings.iamc_habilitado else {}
     consolidacion = armar_consolidacion(
         especies_por_endpoint=rueda.especies_por_endpoint,
         cronograma_persistido=cronograma,
-        metricas_previas=metricas_previas,
         hoy=inicio.date(),
     )
 

@@ -1,8 +1,8 @@
 /**
  * `PanelRendimientos` vista desde la pantalla — F-022, mismo patrón que `PanelRenta.test.tsx`: mock
  * de `fetch` por URL, sin montar el backend. El motor puro se cubre aparte en `rendimientos.test.ts`;
- * acá lo que importa es que las cuatro tarjetas aparezcan siempre en el mismo orden, que la leyenda
- * de exclusión sea condicional, y que no exista ningún control que combine las cuatro naturalezas
+ * acá lo que importa es que las cinco tarjetas aparezcan siempre en el mismo orden, que la leyenda
+ * de exclusión sea condicional, y que no exista ningún control que combine las cinco naturalezas
  * (regla 2 del dominio).
  */
 
@@ -110,7 +110,7 @@ function renderizar() {
   )
 }
 
-const LAS_CUATRO_UNIDADES = ['TIR USD', 'TIR DL', 'Tasa real CER', 'TNA $']
+const LAS_CINCO_UNIDADES = ['TIR USD', 'TIR DL', 'Tasa real CER', 'TIR EA $', 'TNA $']
 
 describe('sin posiciones', () => {
   it('dice qué falta en vez de mostrar tarjetas vacías sin explicación', () => {
@@ -124,7 +124,7 @@ describe('sin posiciones', () => {
 })
 
 describe('con una cartera 100% hard-dollar', () => {
-  it('GWT-1/GWT-2: muestra las cuatro tarjetas siempre, en el mismo orden, con s/d donde no hay dato', async () => {
+  it('GWT-1/GWT-2: muestra las cinco tarjetas siempre, en el mismo orden, con s/d donde no hay dato', async () => {
     responderCon({ especies: [especie({ rendimiento: 0.11 })] })
     renderizar()
 
@@ -132,22 +132,22 @@ describe('con una cartera 100% hard-dollar', () => {
     await userEvent.click(screen.getByRole('button', { name: 'peso AL30 a 100' }))
     await userEvent.click(screen.getByRole('button', { name: 'monto 10.000' }))
 
-    // Las cuatro unidades presentes, en el orden fijo del dominio.
-    const rotulos = await Promise.all(LAS_CUATRO_UNIDADES.map((u) => screen.findByText(u)))
+    // Las cinco unidades presentes, en el orden fijo del dominio.
+    const rotulos = await Promise.all(LAS_CINCO_UNIDADES.map((u) => screen.findByText(u)))
     const orden = rotulos.map((nodo) => nodo.textContent)
-    expect(orden).toEqual(LAS_CUATRO_UNIDADES)
+    expect(orden).toEqual(LAS_CINCO_UNIDADES)
 
     // La naturaleza presente muestra su número.
     expect(await screen.findByText('11,00%')).toBeInTheDocument()
 
-    // Las tres restantes, en cero por ciento de la cartera y `s/d`, no ausentes.
+    // Las cuatro restantes, en cero por ciento de la cartera y `s/d`, no ausentes.
     const sinDato = screen.getAllByText('s/d')
-    expect(sinDato.length).toBeGreaterThanOrEqual(3)
+    expect(sinDato.length).toBeGreaterThanOrEqual(4)
     const ceros = screen.getAllByText('0,0% de la cartera')
-    expect(ceros).toHaveLength(3)
+    expect(ceros).toHaveLength(4)
   })
 
-  it('no hay ningún control que combine las cuatro naturalezas en un promedio', async () => {
+  it('no hay ningún control que combine las cinco naturalezas en un promedio', async () => {
     responderCon({ especies: [especie({ rendimiento: 0.11 })] })
     renderizar()
 

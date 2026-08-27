@@ -92,7 +92,7 @@ def _contraste_fuentes(muestra: list[tuple[str, float, float]], tolerancia: floa
     """BYMA y data912 declaran precios distintos para el mismo ticker, más allá de la tolerancia.
 
     Es INFO y no ADVERTENCIA: no invalida nada — el precio elegido sigue siendo el de data912 — y
-    vale la pena verlo, no actuar sobre él. Estilo `contraste_iamc` de `consolidacion/metricas.py`.
+    vale la pena verlo, no actuar sobre él.
     """
     visibles = sorted(muestra, key=lambda t: t[0])[:MUESTRA_ALERTA]
     resto = len(muestra) - len(visibles)

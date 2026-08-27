@@ -133,8 +133,9 @@ COLUMNAS: tuple[str, ...] = (
     # `20260808120000_data912_fuente_resumen.sql`; antes de esa migración `resumen` la descartaba.
     "fuente",
     # Relevamiento de confiabilidad de datos (16/08/2026): la antigüedad de la fila, para detectar
-    # especies huérfanas (`Segmentacion.huerfanas`) y la fecha del informe de IAMC cuando la métrica
-    # vino de ahí. La vista las expone desde `20260816200000_capturado_en_resumen.sql`.
+    # especies huérfanas (`Segmentacion.huerfanas`) y la fecha del informe de IAMC en las filas que
+    # se escribieron mientras esa ingesta existió. La vista las expone desde
+    # `20260816200000_capturado_en_resumen.sql`.
     "capturado_en",
     "fecha_metricas",
 )

@@ -1,10 +1,11 @@
 /**
  * F-022 — rendimientos por naturaleza de tasa, plazo promedio y sensibilidad por segmento.
  *
- * **Regla 2 del dominio, hecha pantalla**: cuatro tarjetas, siempre las cuatro, nunca un promedio.
- * Una TIR en dólares, un rendimiento dólar-linked, una tasa real sobre CER y una TNA nominal en
- * pesos son magnitudes distintas — no hay acá ni va a haber un control que las combine en un
- * número. El plazo promedio sí se agrega (la duración es años, unidad comparable entre
+ * **Regla 2 del dominio, hecha pantalla**: cinco tarjetas, siempre las cinco, nunca un promedio.
+ * Una TIR en dólares, un rendimiento dólar-linked, una tasa real sobre CER, una TIR efectiva anual
+ * en pesos y una TNA nominal en pesos son magnitudes distintas — no hay acá ni va a haber un
+ * control que las combine en un número. Las dos últimas cobran en la misma moneda y aun así van
+ * separadas: una tasa efectiva y una nominal no son el mismo número (Tanda 2, 26/08/2026). El plazo promedio sí se agrega (la duración es años, unidad comparable entre
  * naturalezas), la sensibilidad de precio no se agrega entre segmentos: cada segmento es una curva
  * propia, aunque comparta unidad temporal con las demás.
  *

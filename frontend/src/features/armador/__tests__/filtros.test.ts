@@ -429,13 +429,17 @@ describe('pasaFiltros', () => {
     expect(pasaFiltros(datoBase({ rendimiento: null }), FILTROS_ARMADOR_VACIOS)).toBe(true)
   })
 
-  it('tirMin: sólo aplica a naturalezas de TIR (tir_usd, tir_dolar_linked); CER y TNA quedan afuera', () => {
+  it('tirMin: sólo aplica a naturalezas de TIR; CER y TNA quedan afuera', () => {
     const filtros = { ...FILTROS_ARMADOR_VACIOS, tirMin: '6' }
     expect(pasaFiltros(datoBase({ rendimiento: 0.5, naturaleza: 'tasa_real_cer' }), filtros)).toBe(false)
     expect(pasaFiltros(datoBase({ rendimiento: 0.5, naturaleza: 'tna_nominal_ars' }), filtros)).toBe(false)
     expect(pasaFiltros(datoBase({ rendimiento: 0.08, naturaleza: 'tir_dolar_linked' }), filtros)).toBe(
       true,
     )
+    // Tanda 2 (26/08/2026): la tasa fija en pesos declara TIR efectiva anual, así que el umbral sí
+    // es su unidad y el filtro la evalúa en vez de dejarla afuera por no tener TIR.
+    expect(pasaFiltros(datoBase({ rendimiento: 0.5, naturaleza: 'tir_ea_ars' }), filtros)).toBe(true)
+    expect(pasaFiltros(datoBase({ rendimiento: 0.02, naturaleza: 'tir_ea_ars' }), filtros)).toBe(false)
   })
 
   it('tirMin vacío no filtra: cualquier naturaleza y rendimiento pasan', () => {

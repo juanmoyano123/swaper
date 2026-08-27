@@ -1,5 +1,5 @@
 """Lo que el refresh intra-rueda necesita leer del universo ya persistido, para no volver a
-volver a leer el informe de IAMC.
+pedirle nada a las fuentes.
 
 Dos cosas puntuales:
 

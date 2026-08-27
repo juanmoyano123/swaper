@@ -60,7 +60,7 @@ NATURALEZA_TASA: dict[str, str] = {
     "usd_hard": "tir_usd",
     "dollar_linked": "tir_dolar_linked",
     "cer": "tasa_real_cer",
-    "tasa_fija": "tna_nominal_ars",
+    "tasa_fija": "tir_ea_ars",
     "badlar": "tna_nominal_ars",
     "tamar": "tna_nominal_ars",
 }
@@ -69,6 +69,7 @@ NOMBRE_NATURALEZA: dict[str, str] = {
     "tir_usd": "TIR en dólares (hard dollar)",
     "tir_dolar_linked": "Rendimiento dólar linked",
     "tasa_real_cer": "Tasa real sobre CER (por encima de inflación)",
+    "tir_ea_ars": "TIR efectiva anual en pesos",
     "tna_nominal_ars": "TNA nominal en pesos",
 }
 
@@ -81,9 +82,21 @@ DESC_SEGMENTO: dict[str, str] = {
     "tamar": "Tamar (pesos, tasa variable)",
 }
 
-# El único segmento que no cotiza por TIR. Una LECAP se negocia por TNA y su TIR, cuando existe, no
-# es el número con el que el mercado la mira.
-SEGMENTO_POR_TNA = "tasa_fija"
+# Los segmentos cuyo número declarado es una TNA y no una TIR. **`tasa_fija` salió de acá el
+# 26/08/2026**: la columna `tna` nunca tuvo fuente —se escribe `None` en toda la ingesta—, así que
+# las 89 emisiones de tasa fija en pesos calculaban su TIR, la persistían en `precios.tir` y la
+# pantalla mostraba `s/d`. El cálculo se hacía y se tiraba.
+#
+# Una TIR efectiva anual es aritmética sobre el cronograma contractual y el precio publicado, no una
+# inferencia (regla 11), así que se puede mostrar. Lo que no se puede es publicarla bajo
+# `tna_nominal_ars`: eso la haría promediable contra las TNAs de badlar y tamar y la rotularía
+# "TNA $" en toda la pantalla, que es exactamente lo que la regla 2 prohíbe. Por eso `tasa_fija`
+# tiene naturaleza propia, `tir_ea_ars`.
+#
+# Badlar y tamar se quedan: su rendimiento sigue siendo una TNA sin fuente y siguen en `s/d`,
+# declarado. El invariante que sostiene esta constante es que naturaleza `tna_*` ⇔ el número
+# declarado es una TNA, y naturaleza `tir_*` ⇔ es una TIR.
+SEGMENTOS_POR_TNA = frozenset({"badlar", "tamar"})
 
 
 def asignar_segmento(tipo_tasa: str | None) -> str | None:
@@ -100,10 +113,11 @@ def asignar_segmento(tipo_tasa: str | None) -> str | None:
 def rendimiento_declarado(segmento: str, tir: float | None, tna: float | None) -> float | None:
     """El número con el que se mide una especie, en la unidad de su segmento.
 
-    TIR para todo, salvo tasa fija, que cotiza por TNA. No hay conversión entre las dos ni relleno
-    de una con la otra: son unidades distintas y elegir la que esté cargada sería inventar el dato.
+    TIR para todo, salvo badlar y tamar, que se miden por TNA. No hay conversión entre las dos ni
+    relleno de una con la otra: son unidades distintas y elegir la que esté cargada sería inventar
+    el dato. Una badlar con TIR cargada y sin TNA queda sin rendimiento, y eso es correcto.
     """
-    return tna if segmento == SEGMENTO_POR_TNA else tir
+    return tna if segmento in SEGMENTOS_POR_TNA else tir
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,9 +196,10 @@ class EspecieUniverso:
     fuente: str | None = None
     """Experimento data912 (rama `experimento/data912`): de dónde salió el precio de esta fila —
     `data912`, `data912-arrastre` (precio de fecha desconocida, regla 11) o `byma`, compuesto con
-    `+calculo`/`+iamc`. `None` en cualquier corrida anterior a la migración que la expone en la
-    vista. No se usa para calcular nada; es sólo lo que la nota de cobertura del monitor y la
-    ficha del instrumento muestran."""
+    `+calculo`. El sufijo `+iamc` no lo escribe ninguna corrida desde que se eliminó esa ingesta
+    (26/08/2026), pero sigue llegando en filas escritas antes. `None` en cualquier corrida anterior
+    a la migración que la expone en la vista. No se usa para calcular nada; es sólo lo que la nota
+    de cobertura del monitor y la ficha del instrumento muestran."""
 
     tipo_tasa: str | None = None
     """El tipo de tasa crudo de la vista, antes de agruparlo en segmento (`asignar_segmento`).
@@ -211,11 +226,10 @@ class EspecieUniverso:
 
     fecha_metricas: date | None = None
     """La fecha del informe de IAMC del que salieron `tir`/`duration`/`paridad`/`convexidad` de
-    esta fila, cuando esas métricas vinieron de IAMC y no del cálculo propio de F-051 (`_metricas_
-    de` en `armado.py` rotula así el arrastre). `None` cuando la especie se calcula sola o cuando
-    nunca hubo informe. No se usa para decidir nada acá: es la fecha que la regla 11 exige que
-    viaje junto a cualquier métrica que no sea de hoy. **No cubre `residual`**: desde el
-    17/08/2026 ese campo es cálculo propio para toda especie con cronograma, nunca arrastre."""
+    esta fila, para las filas escritas mientras esa ingesta existió. Es la fecha que la regla 11
+    exige que viaje junto a cualquier métrica que no sea de hoy. **Ninguna corrida la escribe desde
+    el 26/08/2026**: eliminada la ingesta, toda métrica publicada es cálculo propio contra el
+    precio del día y no hay nada viejo que rotular. No se usa para decidir nada acá."""
 
     residual: float | None = None
     """Cuánto capital queda vivo hoy, cada 100 nominales — `residualValue` de la vista, cálculo
@@ -228,9 +242,8 @@ class EspecieUniverso:
 
     valor_tecnico: float | None = None
     """Residual vigente + cupón corrido, cada 100 nominales — el denominador de `paridad`. Cálculo
-    propio, sin equivalente en IAMC (el informe trae un campo VT que se parsea y se descarta, ver
-    `iamc/parser.py`). Mismas condiciones de `None` que `residual`: sin cronograma, vencido, o
-    residual incoherente."""
+    propio: ninguna fuente lo publicó nunca. Mismas condiciones de `None` que `residual`: sin
+    cronograma, vencido, o residual incoherente."""
 
     @property
     def naturaleza(self) -> str:

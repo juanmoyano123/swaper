@@ -1,4 +1,4 @@
-"""Qué especie tiene métricas propias, cuál conserva las de IAMC, y cuál no tiene ninguna — F-051.
+"""Qué especie tiene métricas propias y cuál no, cada una con su motivo nombrado — F-051.
 
 `app/calendario/metricas.py` sabe resolver una TIR. Este módulo sabe **cuándo tiene sentido
 pedirla**, que es la parte que las reglas del dominio deciden y la matemática no.
@@ -13,8 +13,9 @@ la pelada — es decir, del propio bono. Usarlo sería derivar la TIR de AL30 de
 copiarle la métrica a la hermana: exactamente lo que la regla 1 prohíbe y lo que el test
 `test_la_tir_de_una_especie_no_se_copia_a_sus_hermanas` viene cuidando desde F-007.
 
-Para esas especies **IAMC sigue siendo fuente** donde publica. No es una excepción silenciosa: la
-columna `fuente` de cada fila dice de dónde salió su número.
+Esas especies quedan **sin métrica y con el motivo declarado**. Hasta el 26/08/2026 conservaban lo
+que IAMC publicara; desde que se eliminó esa ingesta no hay nada que conservar, y la celda vacía con
+su porqué es la única respuesta honesta.
 
 ## Las naturalezas que quedan afuera, y por qué cada una
 
@@ -36,15 +37,18 @@ segmento reporta.
 En los cuatro casos la especie queda fuera **con su motivo nombrado**, y jamás se le reporta la tasa
 de otra naturaleza para llenar la celda.
 
-## El contraste contra IAMC
+## Dos destinos, no tres (26/08/2026)
 
-IAMC deja de ser fuente para lo que calculamos y pasa a ser control, el mismo movimiento que F-012
-hizo con el Índice Dólar de BYMA. Se compara por raíz de emisión porque TIR en dólares, duración y
-paridad son magnitudes de la emisión y no de la especie de liquidación —es el mismo hecho que F-011
-usa para agrupar—, así que el valor que IAMC publica para la especie pelada es contrastable contra
-el que calculamos para la D. Lo que los separa es el canje MEP/cable, y las tolerancias están
-fijadas por encima de él a propósito: una alerta que grita todos los días por un spread
-estructural es una alerta que nadie mira.
+Mientras IAMC existió, `fuente_de_metricas` tenía un tercer destino —`FUENTE_IAMC`— para las
+especies sin `tipo_tasa` y para las naturalezas que no figuran en `MONEDAS_DEL_FLUJO`. Ese destino
+tapaba un agujero: `armado.py` las devolvía `None` **sin anotar motivo**, así que ~535 especies
+desaparecían del cálculo sin nombre y sin alerta (medición SQL en `docs/ESTADO.md`). Era razonable
+mientras había una fuente publicando por ellas; sin esa fuente pasó a ser un faltante silencioso,
+que es justo lo que la regla 1 prohíbe.
+
+Ahora hay dos destinos y nada más: se calcula, o queda fuera con su motivo. Una naturaleza de tasa
+que no tenga regla de cálculo declarada cae en `naturaleza_desconocida` y entra a la alerta con
+nombre y apellido, en vez de irse en silencio esperando que otro la llene.
 """
 
 from collections.abc import Mapping, Sequence
@@ -91,54 +95,40 @@ NATURALEZAS_FUERA: dict[str, str] = {
 }
 
 FUENTE_CALCULO = "calculo"
-FUENTE_IAMC = "iamc"
 FUENTE_FUERA = "fuera"
 
 MOTIVO_MONEDA_CRUZADA = "moneda_cruzada"
+MOTIVO_NATURALEZA_DESCONOCIDA = "naturaleza_desconocida"
 MOTIVO_SIN_PRECIO = "sin_precio"
 MOTIVO_SIN_CRONOGRAMA = "sin_cronograma"
 MOTIVO_SIN_TIPO_TASA = "sin_tipo_de_tasa"
-MOTIVO_RESIDUAL_CONTRADICTORIO = "residual_contradictorio"
-"""Relevamiento de confiabilidad de datos (16/08/2026): el residual que declara el cronograma
-para el último pago pasado no coincide con `100 - Σ capital` de los pagos ya cobrados (ver
-`cupones.componentes_valor_tecnico`) — la fuente dejó el residual clavado en 100 mientras el bono
-amortizaba. Cae en el balde de "sin insumo" (no en `NATURALEZAS_FUERA_O_CRUCE`): es un faltante
-del dato de hoy, no una decisión de diseño."""
 
-# Cuánto pueden separarse el cálculo propio y lo publicado antes de que valga la pena mirarlo.
-# La TIR: 100 pb absolutos. El canje MEP/cable (~3,6 % de precio) sobre una duración de 5 a 7 años
-# ya explica 50 a 70 pb, y encima se suman la base de días y la hora de captura —IAMC cierra al
-# final de la rueda y BYMA es intradía—. Por debajo de 100 pb la diferencia es convención, no dato.
-TOLERANCIA_TIR = 0.01
-
-# La duración: media año. La diferencia de convención de capitalización entre su modificada y la
-# nuestra mueve décimas; medio año es holgado para eso y sigue siendo chico contra una duración mal
-# calculada, que se iría en años.
-TOLERANCIA_DURATION = 0.5
-
-# La paridad: 5 %, el mismo `TOLERANCIA_CONTRASTE` que F-012 usa para el tipo de cambio, y por la
-# misma razón: está por encima del canje conocido.
-TOLERANCIA_PARIDAD = 0.05
+# `MOTIVO_RESIDUAL_CONTRADICTORIO` vivió acá hasta el 26/08/2026 y se mudó a
+# `app.calendario.metricas`. El motivo del traslado: desde esa fecha `metricas_de` también lo
+# emite —antes ese caso salía rotulado `vencida`, que era falso—, y este módulo importa de aquél,
+# así que la constante tiene que estar del lado que no importa a nadie. Quien la necesite la trae
+# de `app.calendario.metricas`. Sigue cayendo en el balde "sin insumo" (no está en
+# `NATURALEZAS_FUERA_O_CRUCE`): es un faltante del dato de hoy, no una decisión de diseño.
 
 CODIGO_METRICAS_SIN_INSUMO = "metricas_propias_sin_insumo"
 CODIGO_METRICAS_FUERA_DE_NATURALEZA = "metricas_fuera_de_naturaleza"
-CODIGO_METRICAS_CONTRASTE_IAMC = "metricas_contraste_iamc"
 
 
 def fuente_de_metricas(tipo_tasa: str | None, moneda_cotizacion: str | None) -> str:
-    """De dónde salen `tir`, `duration` y `paridad` para esta especie.
+    """De dónde salen `tir`, `duration` y `paridad` para esta especie: se calculan, o no hay.
 
-    `FUENTE_CALCULO` si el flujo y el precio comparten moneda; `FUENTE_FUERA` si la naturaleza de la
-    tasa no se puede calcular con el flujo disponible o si las monedas no coinciden; `FUENTE_IAMC`
-    si el tipo de tasa no se conoce, único caso en el que lo publicado es todo lo que hay.
+    `FUENTE_CALCULO` si el flujo y el precio comparten moneda; `FUENTE_FUERA` en todo el resto —
+    sin tipo de tasa, con una naturaleza que no se puede calcular contra el flujo disponible, con
+    una naturaleza que no tiene regla declarada, o con monedas que no coinciden—. Cada uno de esos
+    cuatro caminos tiene su motivo en `motivo_de_exclusion`, y ninguno sale sin nombrarlo.
     """
     if tipo_tasa is None:
-        return FUENTE_IAMC
+        return FUENTE_FUERA
     if tipo_tasa in NATURALEZAS_FUERA:
         return FUENTE_FUERA
-    monedas = MONEDAS_DEL_FLUJO.get(tipo_tasa)
-    if monedas is None:
-        return FUENTE_IAMC  # naturaleza nueva sin tabla: se conserva lo publicado, no se improvisa
+    if tipo_tasa not in MONEDAS_DEL_FLUJO:
+        return FUENTE_FUERA
+    monedas = MONEDAS_DEL_FLUJO[tipo_tasa]
     if moneda_cotizacion is None or moneda_cotizacion not in monedas:
         return FUENTE_FUERA
     return FUENTE_CALCULO
@@ -150,82 +140,38 @@ def motivo_de_exclusion(tipo_tasa: str | None, moneda_cotizacion: str | None) ->
         return MOTIVO_SIN_TIPO_TASA
     if tipo_tasa in NATURALEZAS_FUERA:
         return tipo_tasa
-    del moneda_cotizacion  # la única otra razón de exclusión es que no coincida con el flujo
+    if tipo_tasa not in MONEDAS_DEL_FLUJO:
+        return MOTIVO_NATURALEZA_DESCONOCIDA
+    del moneda_cotizacion  # la única razón que queda es que no coincida con la del flujo
     return MOTIVO_MONEDA_CRUZADA
-
-
-@dataclass(frozen=True, slots=True)
-class ContrasteMetricas:
-    """Lo calculado contra lo que IAMC publica para la misma emisión.
-
-    `ticker_propio` y `ticker_iamc` pueden ser distintos: IAMC nombra una especie por emisión —casi
-    siempre la pelada— y nosotros calculamos las que cotizan en la moneda del flujo. Se contrastan
-    igual porque la TIR en dólares es de la emisión, no de la especie.
-    """
-
-    raiz: str
-    ticker_propio: str
-    ticker_iamc: str
-    tir_propia: float | None = None
-    tir_iamc: float | None = None
-    duration_propia: float | None = None
-    duration_iamc: float | None = None
-    paridad_propia: float | None = None
-    paridad_iamc: float | None = None
-
-    def divergencias(self) -> dict[str, dict[str, float]]:
-        """Las métricas que se separan más allá de su tolerancia. Vacío es coincidencia."""
-        pares = (
-            ("tir", self.tir_propia, self.tir_iamc, TOLERANCIA_TIR),
-            ("duration", self.duration_propia, self.duration_iamc, TOLERANCIA_DURATION),
-            ("paridad", self.paridad_propia, self.paridad_iamc, TOLERANCIA_PARIDAD),
-        )
-        fuera: dict[str, dict[str, float]] = {}
-        for nombre, propio, publicado, tolerancia in pares:
-            if propio is None or publicado is None:
-                continue  # no se contrasta contra un faltante: no hay divergencia que medir
-            diferencia = propio - publicado
-            if abs(diferencia) > tolerancia:
-                fuera[nombre] = {
-                    "propio": propio,
-                    "publicado": publicado,
-                    "diferencia": diferencia,
-                    "tolerancia": tolerancia,
-                }
-        return fuera
-
-    @property
-    def coincide(self) -> bool:
-        return not self.divergencias()
-
-    def como_dict(self) -> dict[str, object]:
-        return {
-            "raiz": self.raiz,
-            "ticker_propio": self.ticker_propio,
-            "ticker_iamc": self.ticker_iamc,
-            "divergencias": self.divergencias(),
-        }
 
 
 @dataclass
 class ResultadoMetricas:
-    """Qué se calculó en una corrida, qué quedó afuera y por qué, y qué dijo el contraste."""
+    """Qué se calculó en una corrida, y qué quedó afuera con qué motivo."""
 
     calculadas: int = 0
+    """Las que **produjeron** un rendimiento. Hasta el 26/08/2026 este contador se incrementaba en
+    cada `registrar()`, así que sumaba también las que volvían con `tir=None` por bracket o por
+    vencimiento: el número que la corrida publicaba como "cuántas se calcularon" venía inflado por
+    los fallos, que son justo lo que hay que poder ver."""
+
+    intentadas: int = 0
+    """Las que entraron al solver, hayan resuelto o no. Es el denominador de `calculadas` y por eso
+    se sigue reportando: sin él, una caída de calculadas no distingue "entraron menos especies" de
+    "entraron las mismas y fallaron más"."""
+
     por_motivo: dict[str, list[str]] = field(default_factory=dict)
-    contrastes: list[ContrasteMetricas] = field(default_factory=list)
 
     def registrar(self, ticker: str, metricas: MetricasEspecie) -> None:
-        self.calculadas += 1
+        self.intentadas += 1
+        if metricas.tir is not None:
+            self.calculadas += 1
         if metricas.motivo is not None:
             self.anotar(metricas.motivo, ticker)
 
     def anotar(self, motivo: str, ticker: str) -> None:
         self.por_motivo.setdefault(motivo, []).append(ticker)
-
-    @property
-    def divergentes(self) -> list[ContrasteMetricas]:
-        return [c for c in self.contrastes if not c.coincide]
 
     @property
     def alertas(self) -> list[Alerta]:
@@ -238,16 +184,13 @@ class ResultadoMetricas:
             alertas.append(metricas_sin_insumo(sin_insumo))
         if fuera:
             alertas.append(metricas_fuera_de_naturaleza(fuera))
-        if self.divergentes:
-            alertas.append(contraste_iamc(self.divergentes))
         return alertas
 
     def resumen(self) -> dict[str, object]:
         return {
             "calculadas": self.calculadas,
+            "intentadas": self.intentadas,
             "sin_metrica": {motivo: len(t) for motivo, t in sorted(self.por_motivo.items())},
-            "contrastadas": len(self.contrastes),
-            "divergentes": len(self.divergentes),
         }
 
 
@@ -257,6 +200,7 @@ class ResultadoMetricas:
 NATURALEZAS_FUERA_O_CRUCE = frozenset(NATURALEZAS_FUERA) | {
     MOTIVO_MONEDA_CRUZADA,
     MOTIVO_SIN_TIPO_TASA,
+    MOTIVO_NATURALEZA_DESCONOCIDA,
 }
 
 
@@ -301,8 +245,8 @@ def metricas_fuera_de_naturaleza(por_motivo: Mapping[str, Sequence[str]]) -> Ale
         codigo=CODIGO_METRICAS_FUERA_DE_NATURALEZA,
         mensaje=(
             f"{total} especies quedan fuera del cálculo propio porque su flujo no permite la "
-            f"unidad de su segmento: {', '.join(sorted(por_motivo))}. Conservan lo que IAMC "
-            "publique y no se les reporta una tasa de otra naturaleza."
+            f"unidad de su segmento: {', '.join(sorted(por_motivo))}. Quedan sin métrica, cada "
+            "una declarada con su motivo, y no se les reporta una tasa de otra naturaleza."
         ),
         severidad=Severidad.INFO,
         detalle={"cantidad": total, "por_motivo": detalle},
@@ -315,22 +259,9 @@ _PORQUE_CRUCE = {
         "el único disponible se deriva de su propia emisión"
     ),
     MOTIVO_SIN_TIPO_TASA: "sin tipo de tasa reconocible no se sabe en qué unidad reportar",
+    MOTIVO_NATURALEZA_DESCONOCIDA: (
+        "naturaleza de tasa sin regla de cálculo declarada: no se sabe en qué unidad reportar el "
+        "rendimiento, y elegir una sería inventarla"
+    ),
 }
 
-
-def contraste_iamc(divergentes: Sequence[ContrasteMetricas]) -> Alerta:
-    """El cálculo propio se separó de lo publicado. **El propio se conserva como dato.**"""
-    return Alerta(
-        codigo=CODIGO_METRICAS_CONTRASTE_IAMC,
-        mensaje=(
-            f"{len(divergentes)} emisiones donde la métrica propia difiere de la publicada por "
-            f"IAMC más allá de la tolerancia: {_muestra([c.raiz for c in divergentes])}. Se "
-            "conserva el cálculo propio."
-        ),
-        severidad=Severidad.ADVERTENCIA,
-        accion_requerida=(
-            "Contrastar contra el informe del día. Una divergencia grande suele ser un precio "
-            "desactualizado en una de las dos puntas, no un error de cálculo."
-        ),
-        detalle={"cantidad": len(divergentes), "emisiones": [c.como_dict() for c in divergentes]},
-    )

@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.router import router as v1_router
 from app.core.config import Settings, get_settings
 from app.core.errors import register_exception_handlers
-from app.core.logging import RequestLoggingMiddleware, configure_logging
+from app.core.logging import REQUEST_ID_HEADER, RequestLoggingMiddleware, configure_logging
 from app.db.pool import close_pool, create_pool
 from app.jobs.scheduler import Scheduler
 
@@ -49,12 +49,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.pool = None
 
+    # `allow_credentials=False` a propósito: la sesión del asesor viaja en el header Authorization
+    # (ver `frontend/src/lib/api/client.ts`), no en una cookie, así que el navegador no tiene nada
+    # que "incluir" y pedirlo sólo agrandaría la superficie.
+    #
+    # `expose_headers` es la contracara de `X-Request-ID`: el backend lo emite en cada respuesta
+    # (`core/logging.py`) y el cliente lo lee para poder nombrar un error concreto al reportarlo.
+    # Sin exponerlo, en cualquier escenario cross-origin `headers.get('X-Request-ID')` vuelve null
+    # en silencio y se pierde la trazabilidad justo cuando más hace falta. Hoy en Vercel el
+    # frontend y el backend comparten dominio (los rewrites de `vercel.json`) y el header pasa
+    # igual; esto es para el día que el backend viva en otro host.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()],
-        allow_credentials=True,
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=[REQUEST_ID_HEADER],
     )
     app.add_middleware(RequestLoggingMiddleware)
     register_exception_handlers(app)

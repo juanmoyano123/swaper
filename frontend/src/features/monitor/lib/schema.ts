@@ -52,9 +52,9 @@ export const esquemaEspecie = z.object({
   hermanas: z.array(z.string()),
   /** Experimento data912 (rama `experimento/data912`): de dónde salió `precio`. `'data912'` |
    * `'data912-arrastre'` (precio de fecha desconocida, regla 11) | `'byma'`, compuesto con
-   * `+calculo` según de dónde salga la métrica. `+iamc` ya no aparece en corridas nuevas: el
-   * consumo de IAMC está pausado desde el 13/08/2026, pero sigue llegando en filas anteriores.
-   * `null` en cualquier corrida anterior a la migración que lo expone. */
+   * `+calculo` según de dónde salga la métrica. `+iamc` no lo escribe ninguna corrida nueva —esa
+   * ingesta se eliminó el 26/08/2026, tras estar pausada desde el 13/08— pero sigue llegando en
+   * filas escritas antes. `null` en cualquier corrida anterior a la migración que lo expone. */
   fuente: z.string().nullable(),
 })
 

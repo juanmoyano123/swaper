@@ -92,8 +92,8 @@ FILAS_UNIVERSO: list[dict[str, Any]] = [
         "ticker": "S30J6",
         "clase_activo": "bono_soberano",
         "tipo_tasa": "tasa-fija",
-        "tir": None,
-        "tna": 0.35,
+        "tir": 0.35,
+        "tna": None,
         "duration": 0.5,
         "maturity": date(2027, 6, 30),
         "law": "Ley Argentina",
@@ -103,6 +103,44 @@ FILAS_UNIVERSO: list[dict[str, Any]] = [
         "effectiveVolume": 9_000.0,
         "moneda_cotizacion": "ARS",
         "paridad": 0.98,
+    },
+    {
+        # Tasa fija con cronograma: el caso que hace calculable la sensibilidad desde el 26/08/2026,
+        # cuando el segmento pasó a declarar su TIR efectiva anual. S30J6 no sirve para esto porque
+        # es, a propósito, el ticker sin cashflow cargado.
+        "ticker": "T15D6",
+        "clase_activo": "bono_soberano",
+        "tipo_tasa": "tasa-fija",
+        "tir": 0.30,
+        "tna": None,
+        "duration": 0.8,
+        "maturity": date(2027, 12, 15),
+        "law": "Ley Argentina",
+        "couponCurrency": "ARS",
+        "underlying": "Gobierno Argentino",
+        "lastPrice": 118.0,
+        "effectiveVolume": 7_000.0,
+        "moneda_cotizacion": "ARS",
+        "paridad": 0.95,
+    },
+    {
+        # Badlar con TIR cargada y sin TNA: el espejo de la regla. Su unidad declarada sigue siendo
+        # la TNA, así que no tiene rendimiento y su sensibilidad no se calcula — la TIR que está en
+        # la fila no se usa para rellenar la unidad que falta.
+        "ticker": "PBA25",
+        "clase_activo": "bono_subsoberano",
+        "tipo_tasa": "badlar",
+        "tir": 0.42,
+        "tna": None,
+        "duration": 1.2,
+        "maturity": date(2028, 3, 20),
+        "law": "Ley Argentina",
+        "couponCurrency": "ARS",
+        "underlying": "Provincia de Buenos Aires",
+        "lastPrice": 102.0,
+        "effectiveVolume": 4_000.0,
+        "moneda_cotizacion": "ARS",
+        "paridad": 0.99,
     },
     {
         "ticker": "TLCMO",
@@ -144,6 +182,16 @@ FILAS_CASHFLOW: list[dict[str, Any]] = [
         "interest_amount": 1.5,
         "residual_value": 0.0,
         "cash_flow": 101.5,
+    },
+    {
+        # Bullet de tasa fija en pesos: un solo pago futuro, capital más renta al vencimiento.
+        "ticker": "T15D6",
+        "issue_date": date(2026, 6, 15),
+        "payment_date": date(2027, 12, 15),
+        "capital": 100.0,
+        "interest_amount": 22.0,
+        "residual_value": 0.0,
+        "cash_flow": 122.0,
     },
 ]
 
@@ -456,16 +504,39 @@ async def test_sensibilidad_de_un_bono_usd_hard_repricea_los_ocho_escenarios(
     assert apertura["retorno"] < 0
 
 
-async def test_sensibilidad_de_tasa_fija_declara_tna_nominal_y_no_calcula(
+async def test_sensibilidad_de_tasa_fija_repricea_a_su_tir_efectiva_anual(
     app_con_instrumentos,
 ) -> None:
-    """S30J6 es tasa_fija: su rendimiento es TNA nominal, no una tasa efectiva descontable."""
+    """T15D6 es tasa_fija y desde el 26/08/2026 declara TIR efectiva anual en pesos, que sí es una
+    tasa descontable: el repricing por TIR es válido y el segmento dejó de estar rechazado."""
     async with cliente(app_con_instrumentos()) as http:
-        respuesta = await http.get(SENSIBILIDAD.format(ticker="S30J6"))
+        respuesta = await http.get(SENSIBILIDAD.format(ticker="T15D6"))
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["calculable"] is True
+    assert cuerpo["naturaleza"] == "tir_ea_ars"
+    assert cuerpo["naturaleza_nombre"] == "TIR efectiva anual en pesos"
+    assert cuerpo["tir_actual"] == pytest.approx(0.30)
+
+    escenarios = cuerpo["escenarios"]
+    assert [e["delta_bps"] for e in escenarios] == [-500, -400, -300, -200, -100, 0, 100, 200]
+    nulo = next(e for e in escenarios if e["delta_bps"] == 0)
+    assert nulo["retorno"] == pytest.approx(0.0)
+
+
+async def test_sensibilidad_de_badlar_declara_tna_nominal_y_no_calcula(
+    app_con_instrumentos,
+) -> None:
+    """PBA25 es badlar: su rendimiento es TNA nominal, no una tasa efectiva descontable. La fila
+    trae `tir` cargada y aun así no se calcula — la TIR no rellena la unidad que le falta."""
+    async with cliente(app_con_instrumentos()) as http:
+        respuesta = await http.get(SENSIBILIDAD.format(ticker="PBA25"))
 
     assert respuesta.status_code == 200
     cuerpo = respuesta.json()
     assert cuerpo["calculable"] is False
+    assert cuerpo["naturaleza"] == "tna_nominal_ars"
     assert "TNA nominal" in cuerpo["motivo"]
     assert cuerpo["escenarios"] == []
     # Nunca un número derivado de duración: ningún campo numérico de escenario en la respuesta.

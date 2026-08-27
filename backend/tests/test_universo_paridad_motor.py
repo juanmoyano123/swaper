@@ -54,7 +54,15 @@ def _segmentado_por_el_motor():
 
 @pytest.fixture(scope="module")
 def veredicto_del_motor(universo: list[dict]) -> set[str]:
-    """Lo que descarta `tools/segmentos.py`, corrido tal cual está y sin tocarle una línea."""
+    """Lo que descarta `tools/segmentos.py`, corrido tal cual está y sin tocarle una línea.
+
+    **Divergencia conocida desde el 26/08/2026 (Tanda 2).** El backend dejó de medir `tasa_fija`
+    por `tna` y pasó a declarar su TIR; el motor sigue como está, y estas dos líneas lo reproducen
+    a propósito. La paridad sigue dando verde porque en el consolidado histórico las 18 filas de
+    tasa fija están las dos muy por debajo del tope de 5,0 y ninguna se despega de una hermana:
+    ningún camino produce un descarte, así que el veredicto coincide **por los datos, no por el
+    criterio**. Si el motor se sigue usando, esto es lo primero que hay que alinear.
+    """
     motor, df = _segmentado_por_el_motor()
     df = df[df["segmento"].notna()].copy()
     df["rendimiento"] = df["tir"]

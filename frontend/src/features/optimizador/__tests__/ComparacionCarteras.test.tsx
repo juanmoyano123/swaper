@@ -215,7 +215,7 @@ describe('ComparacionCarteras', () => {
     expect(screen.queryByLabelText('Comparación de la cartera original contra la propuesta')).not.toBeInTheDocument()
   })
 
-  it('al aceptar, aparecen las dos columnas con las mismas 4 naturalezas y los 6 ejes cada una (GWT-1)', async () => {
+  it('al aceptar, aparecen las dos columnas con las mismas 5 naturalezas y los 6 ejes cada una (GWT-1)', async () => {
     const usuario = userEvent.setup()
     renderizar(candidata(COSTO_VERIFICABLE, 0.13), ESPECIES)
 
@@ -226,10 +226,11 @@ describe('ComparacionCarteras', () => {
     const propuesta = within(screen.getByLabelText('Cartera propuesta'))
     expect(original.getByLabelText('Vector de riesgo')).toBeInTheDocument()
     expect(propuesta.getByLabelText('Vector de riesgo')).toBeInTheDocument()
-    // Las cuatro naturalezas fijas aparecen en las dos columnas, aunque una (tna_nominal_ars) no
-    // tenga ninguna posición en ninguna cartera — nunca se omite una fila por falta de dato.
-    expect(original.getAllByText(/de la cartera/)).toHaveLength(4)
-    expect(propuesta.getAllByText(/de la cartera/)).toHaveLength(4)
+    // Las cinco naturalezas fijas aparecen en las dos columnas, aunque algunas (tir_ea_ars,
+    // tna_nominal_ars) no tengan ninguna posición en ninguna cartera — nunca se omite una fila por
+    // falta de dato.
+    expect(original.getAllByText(/de la cartera/)).toHaveLength(5)
+    expect(propuesta.getAllByText(/de la cartera/)).toHaveLength(5)
   })
 
   it('marca el mes que se vacía y el que se llena en la cordillera propuesta (GWT-2)', async () => {

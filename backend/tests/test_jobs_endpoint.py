@@ -4,13 +4,18 @@ La orquestación de cada corrida ya está probada en `test_jobs_corridas.py` sin
 sólo se prueba el router -que responda 503 sin base, que el límite del historial tenga tope, y que
 delegue en las funciones correctas- así que `corrida_matinal`/`refresh_intra_rueda` se reemplazan
 por dobles.
+
+Todos los pedidos van con credencial: desde la Tanda 3 el router entero está detrás de
+`cron_o_asesor`. Los tests mandan el header de cron real en vez de neutralizar la dependencia, así
+que cada uno de estos casos vuelve a ejercitar la auth. Los caminos de la puerta en sí -y el 401
+sin header- están en `test_cron_auth.py`.
 """
 
 from datetime import UTC, datetime
 
 import app.api.v1.jobs as modulo_jobs
 from app.core.config import get_settings
-from tests.conftest import FakeConnection, cliente
+from tests.conftest import AUTORIZACION_DE_CRON, FakeConnection, cliente
 
 
 class _FakeConexionCorridas(FakeConnection):
@@ -42,7 +47,7 @@ async def test_corridas_devuelve_el_historial(crear_app) -> None:
     app = crear_app(_FakeConexionCorridas([_fila_cruda()]))
 
     async with cliente(app) as http:
-        respuesta = await http.get("/api/v1/jobs/corridas")
+        respuesta = await http.get("/api/v1/jobs/corridas", headers=AUTORIZACION_DE_CRON)
 
     assert respuesta.status_code == 200
     cuerpo = respuesta.json()
@@ -55,7 +60,7 @@ async def test_corridas_sin_base_responde_503(crear_app) -> None:
     app = crear_app(None)
 
     async with cliente(app) as http:
-        respuesta = await http.get("/api/v1/jobs/corridas")
+        respuesta = await http.get("/api/v1/jobs/corridas", headers=AUTORIZACION_DE_CRON)
 
     assert respuesta.status_code == 503
 
@@ -65,7 +70,9 @@ async def test_corridas_limita_el_maximo_pedido(crear_app) -> None:
     app = crear_app(conn)
 
     async with cliente(app) as http:
-        respuesta = await http.get("/api/v1/jobs/corridas?limite=9999")
+        respuesta = await http.get(
+            "/api/v1/jobs/corridas?limite=9999", headers=AUTORIZACION_DE_CRON
+        )
 
     assert respuesta.status_code == 200
     assert conn.limite_pedido == modulo_jobs.LIMITE_MAXIMO
@@ -84,7 +91,7 @@ async def test_disparar_matinal_delega_en_corrida_matinal(crear_app, monkeypatch
     app.dependency_overrides[get_settings] = lambda: get_settings()
 
     async with cliente(app) as http:
-        respuesta = await http.post("/api/v1/jobs/corridas/matinal")
+        respuesta = await http.post("/api/v1/jobs/corridas/matinal", headers=AUTORIZACION_DE_CRON)
 
     assert respuesta.status_code == 200
     assert respuesta.json() == {"tipo": "matinal", "estado": "completa"}
@@ -99,7 +106,7 @@ async def test_disparar_refresh_delega_en_refresh_intra_rueda(crear_app, monkeyp
     app = crear_app(_FakeConexionCorridas())
 
     async with cliente(app) as http:
-        respuesta = await http.post("/api/v1/jobs/corridas/refresh")
+        respuesta = await http.post("/api/v1/jobs/corridas/refresh", headers=AUTORIZACION_DE_CRON)
 
     assert respuesta.status_code == 200
     assert respuesta.json() == {"tipo": "refresh", "estado": "parcial"}
@@ -109,6 +116,6 @@ async def test_disparar_matinal_sin_base_responde_503(crear_app) -> None:
     app = crear_app(None)
 
     async with cliente(app) as http:
-        respuesta = await http.post("/api/v1/jobs/corridas/matinal")
+        respuesta = await http.post("/api/v1/jobs/corridas/matinal", headers=AUTORIZACION_DE_CRON)
 
     assert respuesta.status_code == 503

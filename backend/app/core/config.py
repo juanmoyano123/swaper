@@ -42,31 +42,11 @@ class Settings(BaseSettings):
     # una (regla 11) —, así que no hay `data912_demora_minutos`.
     data912_base_url: str = "https://data912.com"
 
-    # IAMC: el informe diario llega por subida manual, no por descarga. Esta ruta es dónde se
-    # guardan los que se van subiendo.
-    iamc_directorio: str = "fuentes"
-
-    # **El consumo de IAMC está pausado desde el 13/08/2026, y el default es la pausa.** El informe
-    # llega a mano: el que estaba cargado en producción era del 05/08 y cada corrida lo volvía a
-    # parsear, así que el universo mostraba una TIR de ocho días antes al lado de un precio de hoy
-    # y nada lo declaraba —ni `/estado-del-dato` ni la ficha exponen la fecha del informe—. Un dato
-    # viejo sin rótulo es peor que un dato ausente: el asesor no tiene cómo saber que lo es.
-    #
-    # Lo que se pausa es **el consumo**, no el código: el parser, el almacén y `POST /iamc/informe`
-    # quedan intactos, y poner esto en True devuelve el comportamiento anterior sin tocar nada más.
-    # Se reactiva cuando la descarga del informe sea automática (F-055, diferida a Stage 3 el
-    # 23/08/2026).
-    #
-    # Con la pausa activa también se corta el arrastre de las métricas ya guardadas (ver
-    # `consolidacion/corrida.py`): sin eso la TIR del último informe seguiría publicándose para
-    # siempre, que es exactamente lo que la pausa existe para evitar.
-    iamc_habilitado: bool = False
-
     # F-057 — la planilla diaria de CAFCI (fondos comunes de inversión). API pública sin token que
     # siempre devuelve el último día hábil: no hay parámetro de fecha que pedir (verificado el
     # 23/08/2026 contra `?fecha=`, `?date=`, `?f=`, `?tipo=`). Con esto en `False` la corrida
-    # matinal no la pide y el segmento FCI del monitor queda vacío, declarado — mismo criterio que
-    # `iamc_habilitado`.
+    # matinal no la pide y el segmento FCI del monitor queda vacío, declarado: una fuente apagada
+    # se nombra, no se disimula con un panel que parece completo.
     cafci_habilitado: bool = False
     cafci_url: str = "https://api.pub.cafci.org.ar/pb_get"
 
@@ -161,13 +141,33 @@ class Settings(BaseSettings):
     # dominio verificado, no configuración: hacerlos ajustables por entorno invitaría a subirlos
     # cuando descarten algo molesto, y lo que descartan es dato roto.
 
+    # Tanda 3 — el secreto con el que un cron externo dispara los jobs de ingesta. Hasta el
+    # 26/08/2026 `POST /api/v1/jobs/*` y `POST /api/v1/consolidar` estaban abiertos a internet:
+    # cualquiera podía forzar una corrida completa contra BYMA y escribir en la base.
+    #
+    # **Opcional a propósito, con el camino cerrado cuando falta.** Sin la variable, el camino
+    # "token de cron" queda deshabilitado entero —nunca se compara contra vacío ni contra None— y
+    # los endpoints sólo se abren con sesión de asesor. Hacerla obligatoria obligaría a inventar
+    # un default, que sería un secreto conocido; y rompería el desarrollo local y los tests sin
+    # ganar nada. Con este diseño, un deploy al que se le olvidó la variable queda cerrado, no
+    # abierto: el peor caso es que el cron no pueda disparar, no que pueda disparar cualquiera.
+    cron_secret: str | None = None
+
     log_level: str = "INFO"
     environment: str = "development"
 
-    # CORS: el frontend en Netlify y el navegador local son orígenes distintos del backend
-    # (Render, u otro host), así que sin esto el browser bloquea toda request antes de que
-    # llegue acá. Lista separada por comas — se sobreescribe por env si el dominio cambia.
-    cors_origins: str = "http://localhost:5173,https://swappt.netlify.app"
+    # CORS: qué orígenes pueden llamar al backend desde un navegador. Lista separada por comas,
+    # se sobreescribe por env si aparece un dominio nuevo.
+    #
+    # En el deploy actual de Vercel esto no se ejercita: los rewrites de `vercel.json` sirven el
+    # frontend y el backend bajo el mismo host, así que las llamadas son same-origin y el browser
+    # ni manda `Origin`. El dominio está igual en la lista porque el día que el backend se mude a
+    # otro host —el escenario para el que este middleware existe— el default tiene que ser el
+    # correcto y no el de un deploy anterior: hasta el 26/08/2026 acá figuraba sólo Netlify, que
+    # habría bloqueado el 100 % de las requests sin que nadie lo notara hasta ese momento.
+    cors_origins: str = (
+        "http://localhost:5173,https://swaper-snowy.vercel.app,https://swappt.netlify.app"
+    )
 
 
 def _missing_variable_names(exc: ValidationError) -> list[str]:

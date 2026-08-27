@@ -39,6 +39,11 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+# RUF002/RUF003 marcan como "confundibles" a los simbolos matematicos que la prosa de este repo usa
+# a proposito: `x` en "6 ejes x 3 naturalezas" y `U` en la union de dos conjuntos de motivos. Son los
+# caracteres correctos, no un error de tipeo de sus homoglifos ASCII, asi que se permiten en vez de
+# degradar el texto.
+allowed-confusables = ["\u00d7", "\u222a"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["B011"]

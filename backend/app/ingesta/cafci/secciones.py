@@ -1,9 +1,9 @@
 """Catálogo declarativo de los títulos de sección de la planilla diaria de CAFCI.
 
 Medido contra el archivo real del 21/08/2026 (`20260821_Planilla_Diaria_A.xlsx`, 4.251 filas de
-datos, 39 títulos de fila-de-sección — una fila donde sólo la columna A tiene valor). Igual que el
-catálogo de IAMC (`app/ingesta/iamc/secciones.py`): un título que no está acá aborta el parseo
-(`PlanillaInvalida`) en vez de heredar en silencio la clasificación de la sección anterior.
+datos, 39 títulos de fila-de-sección — una fila donde sólo la columna A tiene valor). Un título que
+no está acá aborta el parseo (`PlanillaInvalida`) en vez de heredar en silencio la clasificación de
+la sección anterior.
 
 **No todo título de sección es una sección con datos propios.** La planilla anida categorías —
 "Fondos en Proceso de Liquidacion" no tiene filas de fondo directamente debajo; las tiene su hija

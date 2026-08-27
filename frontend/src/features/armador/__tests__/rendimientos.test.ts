@@ -73,8 +73,8 @@ describe('rendimientosPorNaturaleza', () => {
       }),
       especie({
         ticker: 'S31O5',
-        naturaleza: 'tna_nominal_ars',
-        naturaleza_nombre: 'TNA nominal en pesos',
+        naturaleza: 'tir_ea_ars',
+        naturaleza_nombre: 'TIR efectiva anual en pesos',
         rendimiento: 0.4,
       }),
     ]
@@ -90,6 +90,7 @@ describe('rendimientosPorNaturaleza', () => {
       'tir_usd',
       'tir_dolar_linked',
       'tasa_real_cer',
+      'tir_ea_ars',
       'tna_nominal_ars',
     ])
 
@@ -101,9 +102,15 @@ describe('rendimientosPorNaturaleza', () => {
     expect(cer.pctCartera).toBeCloseTo(30)
     expect(cer.rendimientoPond).toBeCloseTo(0.06)
 
+    const tirPesos = resultado.find((r) => r.naturaleza === 'tir_ea_ars')!
+    expect(tirPesos.pctCartera).toBeCloseTo(20)
+    expect(tirPesos.rendimientoPond).toBeCloseTo(0.4)
+
+    // La TIR en pesos de la LECAP no se mezcló con la TNA de badlar/tamar, que sigue siendo su
+    // propia naturaleza y queda en cero (Tanda 2, 26/08/2026).
     const tna = resultado.find((r) => r.naturaleza === 'tna_nominal_ars')!
-    expect(tna.pctCartera).toBeCloseTo(20)
-    expect(tna.rendimientoPond).toBeCloseTo(0.4)
+    expect(tna.pctCartera).toBe(0)
+    expect(tna.rendimientoPond).toBeNull()
 
     const dl = resultado.find((r) => r.naturaleza === 'tir_dolar_linked')!
     expect(dl.pctCartera).toBe(0)
@@ -111,14 +118,19 @@ describe('rendimientosPorNaturaleza', () => {
     expect(dl.posiciones).toBe(0)
   })
 
-  it('GIVEN una cartera 100% hard-dollar THEN las otras tres aparecen en cero por ciento, no ausentes', () => {
+  it('GIVEN una cartera 100% hard-dollar THEN las otras cuatro aparecen en cero por ciento, no ausentes', () => {
     const especies = [especie({ ticker: 'GD30', naturaleza: 'tir_usd', rendimiento: 0.11 })]
     const posiciones = [posicion({ ticker: 'GD30', peso: 100, pesoReal: 100 })]
 
     const resultado = rendimientosPorNaturaleza(posiciones, mapaDeEspecies(especies))
 
-    expect(resultado).toHaveLength(4)
-    for (const naturaleza of ['tir_dolar_linked', 'tasa_real_cer', 'tna_nominal_ars']) {
+    expect(resultado).toHaveLength(5)
+    for (const naturaleza of [
+      'tir_dolar_linked',
+      'tasa_real_cer',
+      'tir_ea_ars',
+      'tna_nominal_ars',
+    ]) {
       const fila = resultado.find((r) => r.naturaleza === naturaleza)!
       expect(fila.pctCartera).toBe(0)
       expect(fila.rendimientoPond).toBeNull()
@@ -181,10 +193,10 @@ describe('rendimientosPorNaturaleza', () => {
     expect(hard.rendimientoPond).toBeNull()
   })
 
-  it('GIVEN una cartera vacía THEN las cuatro naturalezas quedan en pctCartera 0 y rendimientoPond null', () => {
+  it('GIVEN una cartera vacía THEN las cinco naturalezas quedan en pctCartera 0 y rendimientoPond null', () => {
     const resultado = rendimientosPorNaturaleza([], new Map())
 
-    expect(resultado).toHaveLength(4)
+    expect(resultado).toHaveLength(5)
     for (const fila of resultado) {
       expect(fila.pctCartera).toBe(0)
       expect(fila.rendimientoPond).toBeNull()
@@ -254,18 +266,18 @@ describe('sensibilidadPorSegmento', () => {
     expect(resultado[0].segmento).toBe('usd_hard')
   })
 
-  it('dos segmentos en pesos con la misma naturaleza (tasa_fija y badlar) se reportan separados', () => {
+  it('dos segmentos en pesos con la misma naturaleza (badlar y tamar) se reportan separados', () => {
     const especies = [
-      especie({ ticker: 'S31O5', segmento: 'tasa_fija', naturaleza: 'tna_nominal_ars', duracion: 0.5 }),
       especie({ ticker: 'BADLAR1', segmento: 'badlar', naturaleza: 'tna_nominal_ars', duracion: 1 }),
+      especie({ ticker: 'TAMAR1', segmento: 'tamar', naturaleza: 'tna_nominal_ars', duracion: 2 }),
     ]
     const posiciones = [
-      posicion({ ticker: 'S31O5', peso: 50, pesoReal: 50 }),
       posicion({ ticker: 'BADLAR1', peso: 50, pesoReal: 50 }),
+      posicion({ ticker: 'TAMAR1', peso: 50, pesoReal: 50 }),
     ]
 
     const resultado = sensibilidadPorSegmento(posiciones, mapaDeEspecies(especies))
 
-    expect(resultado.map((s) => s.segmento).sort()).toEqual(['badlar', 'tasa_fija'])
+    expect(resultado.map((s) => s.segmento).sort()).toEqual(['badlar', 'tamar'])
   })
 })

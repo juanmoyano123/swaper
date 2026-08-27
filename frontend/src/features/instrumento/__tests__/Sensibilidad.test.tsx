@@ -189,8 +189,10 @@ describe('la tabla de sensibilidad', () => {
 describe('un instrumento sin sensibilidad calculable', () => {
   it('muestra el motivo del backend y no renderiza ninguna tabla', async () => {
     mockearRutas(
-      rutasOk('S30J6', {
-        [RUTA_SENSIBILIDAD('S30J6')]: {
+      // Badlar y no una LECAP: desde la Tanda 2 (26/08/2026) la tasa fija declara TIR efectiva
+      // anual y su sensibilidad sí se calcula. El motivo de TNA nominal quedó para badlar y tamar.
+      rutasOk('PBA25', {
+        [RUTA_SENSIBILIDAD('PBA25')]: {
           body: sensibilidad({
             calculable: false,
             tir_actual: null,
@@ -204,7 +206,7 @@ describe('un instrumento sin sensibilidad calculable', () => {
       }),
     )
 
-    renderizar('S30J6')
+    renderizar('PBA25')
 
     expect(
       await screen.findByText('el rendimiento de este segmento es TNA nominal en pesos, no una tasa efectiva descontable: no se calcula'),
