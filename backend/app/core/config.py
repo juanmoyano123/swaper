@@ -163,11 +163,8 @@ class Settings(BaseSettings):
     # frontend y el backend bajo el mismo host, así que las llamadas son same-origin y el browser
     # ni manda `Origin`. El dominio está igual en la lista porque el día que el backend se mude a
     # otro host —el escenario para el que este middleware existe— el default tiene que ser el
-    # correcto y no el de un deploy anterior: hasta el 26/08/2026 acá figuraba sólo Netlify, que
-    # habría bloqueado el 100 % de las requests sin que nadie lo notara hasta ese momento.
-    cors_origins: str = (
-        "http://localhost:5173,https://swaper-snowy.vercel.app,https://swappt.netlify.app"
-    )
+    # correcto. El deploy de Netlify salió de acá el 27/08/2026: el proyecto quedó todo en Vercel.
+    cors_origins: str = "http://localhost:5173,https://swaper-snowy.vercel.app"
 
 
 def _missing_variable_names(exc: ValidationError) -> list[str]:
