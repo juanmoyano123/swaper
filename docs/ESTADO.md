@@ -664,3 +664,79 @@ conservan a propósito (regla 11).
 - Un test nuevo (`backend/tests/test_dependencias_declaradas.py`) impide que `pyproject.toml` y
   `requirements.txt` declaren versiones distintas: ese desfasaje tumbó el deploy del 26/08 y nada lo
   verificaba.
+
+---
+
+## 27/08/2026 — La ingesta pasa a la base, y BYMA venía entregando medio panel
+
+### Quién estaba corriendo la ingesta (no era el servidor)
+
+El trigger de la ingesta era **un `uvicorn --reload` en la notebook del asesor**: el scheduler
+in-process con `INGESTA_HABILITADA=true` en el `.env` local y `DATABASE_URL` apuntando a producción.
+Llevaba corriendo desde el domingo. Las 275 corridas registradas salieron todas de ahí, y **todas
+son de tipo `refresh`**: la matinal —la que trae el universo, las monedas y los vencimientos— no
+corría nunca. Por eso la metadata del universo estaba congelada en el 17/08.
+
+Los intervalos eran erráticos (15, 16, 27, 29, 33 minutos donde deberían ser 20) porque cada
+`--reload` reinicia el proceso y con él el reloj del scheduler.
+
+**El cron de GitHub Actions puesto el 26/08 no sirvió**: no disparó **ninguna** de las ~20 veces que
+le tocaba el 27/08, con el workflow activo, Actions habilitado y el disparo manual funcionando. Sus
+schedules son best-effort y se saltean sin avisar. Vercel Cron tampoco alcanza: el proyecto está en
+plan Hobby, donde los crons corren una vez por día y sin minuto exacto.
+
+**La ingesta programada ahora vive en la base**, con `pg_cron` (ver
+`supabase/migrations/20260827210000_cron_ingesta.sql`). Postgres ya está siempre encendido y no
+depende de la máquina de nadie. La base sólo toca el timbre: le pega por HTTP a los endpoints de
+cron que ya existían, así que la lógica de ingesta no se duplica. El secreto va en Vault y no en el
+cuerpo del job, que es texto plano legible por cualquiera con acceso a la base. El workflow de
+GitHub queda como puerta de emergencia, sólo con disparo manual.
+
+### La alerta que faltaba
+
+`sin_corrida_registrada` sólo mira si `corridas_ingesta` está **vacía**, y la tabla tenía 275 filas
+mientras la matinal llevaba diez días sin correr. Una ingesta que se detiene sin avisar es peor que
+una que nunca arrancó: la pantalla sigue mostrando números y nada dice que envejecieron.
+
+`corrida_atrasada` (`backend/app/estado/alertas.py`) cuenta **ruedas perdidas**, no horas — así un
+fin de semana no dispara un falso positivo todos los lunes—, tolera una (un tick salteado que
+engancha el siguiente no es una falla) y sale como ERROR: a diferencia de la otra, acá el dato que
+se muestra es viejo, y decidir con un precio de hace tres ruedas es peor que no decidir.
+
+### BYMA entregaba la mitad del panel
+
+**`excludeZeroPxAndQty` nunca se le mandó.** Por default BYMA deja afuera toda especie con precio y
+cantidad en cero, o sea la que no operó ni tiene punta en la rueda. Medido el 27/08 contra la
+fuente: `negociable-obligations` devuelve 2.196 filas con el default y **5.054** con el flag en
+`false`; `cedears` pasa de 1.175 a 1.278 tickers; `public-bonds`, `general-equity` y
+`leading-equity` no cambian.
+
+El costo no se veía como faltante, y ese es el punto. Esas especies entraban igual al universo por
+el overlay de data912 —que sí las publica, con precio de arrastre— pero por un camino que **no puede
+aportar moneda ni vencimiento**, porque data912 no los declara. Quedaban en `instrumentos` con
+`moneda_cotizacion` y `maturity` en NULL para siempre: BYMA nunca volvía a traer la fila, así que el
+COALESCE del upsert conservaba el nulo corrida tras corrida. Es también la regla 9 incumplida sin
+que nadie lo hubiera decidido: que una especie no haya operado no la vuelve menos negociable.
+
+Efecto medido corriendo la consolidación con el fix: **3.422 → 4.761 instrumentos**, 103 recuperan
+moneda y 32 vencimiento. Las TIR no suben —siguen en 248— y es correcto: las especies recuperadas no
+cotizaron, y sin precio no hay nada que descontar. Caso testigo: PS38D pasa de nada a `USD` con
+vencimiento 2027-03-26; PS38C queda en `EXT` con su vencimiento, que es lo que la regla 11 manda.
+
+**Un segundo problema salió a la luz con el panel completo.** El colapso por plazo de liquidación
+(`_elegir_por_plazo`) desempataba prefiriendo el plazo 2. Con el panel recortado casi toda fila
+traía precio y alcanzaba; con el panel entero entra también la fila que no operó, y ésa ganaba por
+ser plazo 2, dejando sin `last_price` a especies que la fuente sí cotiza en el otro plazo. Son 52
+tickers —BYZ1X cotiza 160.200 en plazo 1 contra una fila de plazo 2 en cero—. El desempate ahora
+mira primero si hay precio: un plazo sin precio no es una cotización.
+
+### Lo que sigue abierto
+
+- **El panel `lebacs` de BYMA no se consume.** Son 175 letras; 157 no existen en el universo y las
+  18 que están entraron por data912, sin moneda ni vencimiento, y por eso sin TIR pese a operar
+  miles de millones. Es además el único camino declarado hacia la subclasificación de soberanos
+  (letra / bonar / global), porque `securityType` y `securitySubType` son constantes por panel —
+  `CORP`, `B`, `E`— y no distinguen instrumentos.
+- **VWCHO** sigue sin moneda ni vencimiento: el 26/08 BYMA la publicaba con `ARS`, el 27/08 no vino
+  en el panel. Queda declarado como faltante, no interpretado.
+- **Netlify salió del proyecto** el 27/08: todo quedó en Vercel.
