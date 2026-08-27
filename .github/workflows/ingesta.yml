@@ -1,28 +1,20 @@
-# Ingesta programada de 10-Swaper.
+# Disparo MANUAL de la ingesta de 10-Swaper.
 #
-# Por qué acá y no en Vercel: los crons de Vercel en plan Hobby corren una vez por día y sin
-# minuto exacto (disparan en cualquier momento de la hora). El refresh de rueda necesita correr
-# cada 20 minutos, así que el cron vive en GitHub Actions y le pega por HTTP a los endpoints del
-# backend desplegado. Si algún día el proyecto pasa a Vercel Pro, el bloque `crons` de vercel.json
-# reemplaza este archivo sin tocar el backend: los endpoints son los mismos.
+# **La ingesta programada NO vive acá.** Vive en la base, con pg_cron: ver
+# `supabase/migrations/20260827210000_cron_ingesta.sql`.
 #
-# El scheduler in-process (`backend/app/jobs/scheduler.py`) NO corre en Vercel: vive en el lifespan
-# de un proceso de larga vida y una función serverless muere entre requests. Por eso
-# INGESTA_HABILITADA queda en false allá, y la programación es esta.
+# Por qué se movió: este workflow tuvo los tres crons declarados el 26/08/2026 y el 27/08 no
+# disparó **ninguna** de las ~20 veces que le tocaba, con el workflow activo, Actions habilitado y
+# el disparo manual funcionando. Los schedules de GitHub son best-effort y se saltean sin avisar;
+# para algo que tiene que correr todos los días de rueda no alcanza. pg_cron corre dentro del
+# Postgres que ya está siempre encendido.
 #
-# Los horarios van en UTC. Argentina es UTC-3 fijo, sin horario de verano.
+# Esto queda como la puerta de emergencia: disparar una corrida a mano desde la pestaña Actions,
+# sin abrir una terminal ni tener el secreto a mano. Le pega a los mismos endpoints que el cron.
 
-name: Ingesta de mercado
+name: Ingesta de mercado (manual)
 
 on:
-  schedule:
-    # Matinal: 11:30 ART. Universo completo (BYMA + data912 + CAFCI) y cronograma.
-    - cron: '30 14 * * 1-5'
-    # Refresh de rueda: cada 20 minutos entre las 11:00 y las 16:40 ART.
-    - cron: '*/20 14-19 * * 1-5'
-    # El tick de las 17:00 ART, que el rango de arriba no alcanza.
-    - cron: '0 20 * * 1-5'
-  # Para disparar una corrida a mano desde la pestaña Actions sin esperar al cron.
   workflow_dispatch:
     inputs:
       corrida:
@@ -32,9 +24,8 @@ on:
         type: choice
         options: [matinal, refresh]
 
-# Dos corridas simultáneas no se corrompen —el backend toma un advisory lock y la segunda se omite—
-# pero encolarlas tampoco sirve de nada: si una tardó más que el intervalo, el próximo tick trae
-# datos más frescos que los que estaba por pedir la que quedó esperando.
+# El backend toma un advisory lock, así que un disparo manual que caiga sobre una corrida del cron
+# se omite en vez de duplicarse. Igual se serializa acá para no encolar trabajo inútil.
 concurrency:
   group: ingesta
   cancel-in-progress: false
@@ -43,17 +34,6 @@ jobs:
   disparar:
     runs-on: ubuntu-latest
     steps:
-      - name: Elegir la corrida según el disparador
-        id: cual
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "corrida=${{ inputs.corrida }}" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event.schedule }}" = "30 14 * * 1-5" ]; then
-            echo "corrida=matinal" >> "$GITHUB_OUTPUT"
-          else
-            echo "corrida=refresh" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Disparar la corrida
         env:
           BASE: ${{ vars.SWAPER_BASE_URL || 'https://swaper-snowy.vercel.app' }}
@@ -69,11 +49,10 @@ jobs:
           # antes por su propio maxDuration).
           curl --fail-with-body --silent --show-error --max-time 300 \
             --header "Authorization: Bearer ${CRON_SECRET}" \
-            "${BASE}/api/v1/jobs/cron/${{ steps.cual.outputs.corrida }}" \
+            "${BASE}/api/v1/jobs/cron/${{ inputs.corrida }}" \
             | tee respuesta.json
           echo
-          # Una corrida omitida (fuera de rueda, o con otra en curso) responde 200 y no es un fallo:
-          # el cron de GitHub es best-effort y puede disparar tarde. Se registra y se sigue.
+          # Una corrida omitida (fuera de rueda, o con otra en curso) responde 200 y no es un fallo.
           if grep -q '"omitida": *true' respuesta.json; then
             echo "::notice::Corrida omitida por el backend (ver motivo en la respuesta)."
           fi

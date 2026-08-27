@@ -414,3 +414,65 @@ class TestCosto:
         contraste = estado.analisis.tipo_de_cambio["contraste_evaluado"]
         assert contraste["evaluado"] is False
         assert "universo/tipo-de-cambio" in str(contraste["donde_verlo"])
+
+
+class TestCorridaAtrasada:
+    """La ingesta que se detiene sin avisar — el caso que motivó la alerta (27/08/2026)."""
+
+    def test_una_rueda_perdida_se_tolera(self) -> None:
+        # Un cron que se saltea un disparo y engancha el siguiente no es una falla: el refresh
+        # siguiente trae lo mismo que habría traído el que faltó.
+        from datetime import UTC, datetime
+
+        from app.core.config import Settings
+        from app.estado.servicio import _alertas_del_estado
+
+        ajustes = Settings(
+            supabase_url="https://x.supabase.co",
+            supabase_anon_key="a",
+            supabase_service_role_key="b",
+            database_url="postgresql://u:p@h:5432/d",
+        )
+        corrida = {"iniciado_en": datetime(2026, 8, 26, 14, 30, tzinfo=UTC)}
+        ahora = datetime(2026, 8, 27, 18, 0, tzinfo=UTC)
+        alertas = _alertas_del_estado(corrida, [], ajustes, ahora)
+        assert [a.codigo for a in alertas] == []
+
+    def test_dos_ruedas_perdidas_alertan_con_la_fecha_de_la_ultima(self) -> None:
+        from datetime import UTC, datetime
+
+        from app.core.config import Settings
+        from app.estado.alertas import CODIGO_CORRIDA_ATRASADA
+        from app.estado.servicio import _alertas_del_estado
+
+        ajustes = Settings(
+            supabase_url="https://x.supabase.co",
+            supabase_anon_key="a",
+            supabase_service_role_key="b",
+            database_url="postgresql://u:p@h:5432/d",
+        )
+        # Lunes 24 la última corrida; jueves 27 ya se perdieron martes, miércoles y jueves.
+        corrida = {"iniciado_en": datetime(2026, 8, 24, 14, 30, tzinfo=UTC)}
+        ahora = datetime(2026, 8, 27, 18, 0, tzinfo=UTC)
+        alertas = _alertas_del_estado(corrida, [], ajustes, ahora)
+        assert [a.codigo for a in alertas] == [CODIGO_CORRIDA_ATRASADA]
+        assert alertas[0].detalle["ruedas_perdidas"] == 3
+
+    def test_el_fin_de_semana_no_dispara_la_alerta(self) -> None:
+        # Del viernes al lunes pasan 60 horas y cero ruedas: contar en días daría un falso positivo
+        # todos los lunes a la mañana.
+        from datetime import UTC, datetime
+
+        from app.core.config import Settings
+        from app.estado.servicio import _alertas_del_estado
+
+        ajustes = Settings(
+            supabase_url="https://x.supabase.co",
+            supabase_anon_key="a",
+            supabase_service_role_key="b",
+            database_url="postgresql://u:p@h:5432/d",
+        )
+        corrida = {"iniciado_en": datetime(2026, 8, 21, 20, 0, tzinfo=UTC)}  # viernes
+        ahora = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
+        alertas = _alertas_del_estado(corrida, [], ajustes, ahora)
+        assert [a.codigo for a in alertas] == []

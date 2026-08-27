@@ -39,10 +39,11 @@ from typing import Any
 
 from app.core.config import Settings
 from app.db.health import get_last_snapshot
-from app.estado.alertas import sin_corrida_registrada, sin_dato_de_mercado
+from app.estado.alertas import corrida_atrasada, sin_corrida_registrada, sin_dato_de_mercado
 from app.estado.analisis import Analisis, CacheDelAnalisis, analizar
 from app.estado.fuentes import diagnosticar
 from app.ingesta.alertas import Alerta, Severidad
+from app.jobs.horarios import es_dia_habil, zona
 from app.jobs.registro import ultima_corrida
 
 # La fuente cuya demora se declara. Experimento data912 (rama `experimento/data912`): el precio de
@@ -177,7 +178,7 @@ async def estado_del_dato(
         _clave_de_cache(corrida, capturado_en), lambda: analizar(conn, hoy=hoy)
     )
 
-    del_estado = [*_alertas_del_estado(corrida, avisos), *analisis.alertas]
+    del_estado = [*_alertas_del_estado(corrida, avisos, settings, ahora), *analisis.alertas]
     alertas = ordenar(
         [
             *(_serializada(a, ORIGEN_INGESTA) for a in alertas_de_ingesta),
@@ -224,13 +225,56 @@ def _alertas_de(corrida: dict[str, object] | None) -> list[dict[str, object]]:
     return [a for a in guardadas if isinstance(a, dict) and "codigo" in a and "severidad" in a]
 
 
-def _alertas_del_estado(corrida: dict[str, object] | None, avisos: Sequence[str]) -> list[Alerta]:
-    """Los dos huecos que sólo esta feature ve: sin corrida registrada y sin dato de mercado."""
+# Cuántas ruedas puede pasar la ingesta sin correr antes de que valga la pena gritar. Una es
+# tolerancia sana: un cron que se saltea un disparo y engancha el siguiente no es una falla, y el
+# refresh siguiente trae lo mismo. Dos ruedas seguidas ya no es un tick perdido, es algo roto.
+RUEDAS_PERDIDAS_TOLERADAS = 1
+
+
+def _ruedas_habiles_entre(desde: date, hasta: date) -> int:
+    """Días hábiles estrictamente posteriores a `desde` y hasta `hasta` inclusive.
+
+    Se cuentan ruedas y no horas para que un fin de semana o un fin de semana largo no disparen la
+    alerta: el lunes a la mañana pasaron 60 horas desde el viernes y no se perdió ni una rueda.
+    No sabe de feriados, igual que `es_dia_habil` — un feriado suma un falso positivo de una rueda,
+    que la tolerancia absorbe.
+    """
+    dias = (hasta - desde).days
+    if dias <= 0:
+        return 0
+    return sum(1 for n in range(1, dias + 1) if es_dia_habil(desde + timedelta(days=n)))
+
+
+def _alertas_del_estado(
+    corrida: dict[str, object] | None,
+    avisos: Sequence[str],
+    settings: Settings,
+    ahora: datetime,
+) -> list[Alerta]:
+    """Los huecos que sólo esta feature ve: sin corrida, corrida atrasada y sin dato de mercado."""
     alertas: list[Alerta] = []
     if corrida is None:
         alertas.append(sin_corrida_registrada())
+    else:
+        alertas.extend(_atraso_de(corrida, settings, ahora))
     alertas.extend(sin_dato_de_mercado(aviso) for aviso in avisos)
     return alertas
+
+
+def _atraso_de(corrida: dict[str, object], settings: Settings, ahora: datetime) -> list[Alerta]:
+    """Alerta si desde la última corrida pasaron más ruedas de las toleradas.
+
+    La fecha viene de la corrida registrada, no del último precio: un precio puede ser viejo porque
+    la especie no operó, que es normal; una corrida vieja significa que nadie fue a preguntar.
+    """
+    inicio = corrida.get("iniciado_en")
+    if not isinstance(inicio, datetime):
+        return []
+    tz = zona(settings)
+    perdidas = _ruedas_habiles_entre(inicio.astimezone(tz).date(), ahora.astimezone(tz).date())
+    if perdidas <= RUEDAS_PERDIDAS_TOLERADAS:
+        return []
+    return [corrida_atrasada(inicio.astimezone(tz), perdidas)]
 
 
 def _serializada(alerta: dict[str, object], origen: str) -> dict[str, object]:

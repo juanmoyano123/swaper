@@ -19,10 +19,13 @@ explica en F-015: el número va crudo, con la hora exacta y la demora declarada 
 y la decisión la toma quien la lee. La barra informa la edad del dato; no la juzga.
 """
 
+from datetime import datetime
+
 from app.ingesta.alertas import Alerta, Severidad
 
 CODIGO_SIN_CORRIDA = "sin_corrida_registrada"
 CODIGO_SIN_DATO_DE_MERCADO = "sin_dato_de_mercado"
+CODIGO_CORRIDA_ATRASADA = "corrida_atrasada"
 
 
 def sin_corrida_registrada() -> Alerta:
@@ -68,4 +71,43 @@ def sin_dato_de_mercado(motivo: str) -> Alerta:
         severidad=Severidad.ERROR,
         accion_requerida="Correr una ingesta de mercado antes de usar cualquier pantalla.",
         detalle={},
+    )
+
+
+def corrida_atrasada(desde: datetime, ruedas_perdidas: int) -> Alerta:
+    """La ingesta dejó de correr y nadie se enteró. `desde` es el inicio de la última corrida.
+
+    Esta alerta existe por un caso real. Hasta el 27/08/2026 la ingesta "automática" era un
+    `uvicorn --reload` en la notebook del asesor —el scheduler in-process apuntando a la base de
+    producción— y sólo disparaba el refresh, nunca la matinal. La consecuencia se descubrió por
+    casualidad diez días después: la metadata del universo estaba congelada en el 17/08 y nadie
+    tenía cómo notarlo, porque `sin_corrida_registrada` sólo mira si la tabla está **vacía** y la
+    tabla tenía 275 filas. Una ingesta que se detiene sin avisar es peor que una que nunca arrancó:
+    la pantalla sigue mostrando números y no hay nada que diga que envejecieron.
+
+    Se cuenta en **ruedas perdidas** y no en horas para no gritar los fines de semana ni los
+    feriados largos: lo que importa no es cuánto tiempo pasó sino cuántas veces debería haber
+    corrido y no corrió.
+
+    Severidad ERROR y no advertencia: a diferencia de `sin_corrida_registrada` —donde el dato está
+    y lo único que falta es su traza— acá el dato que se está mostrando es viejo, y decidir con un
+    precio de hace tres ruedas es peor que no decidir.
+    """
+    return Alerta(
+        codigo=CODIGO_CORRIDA_ATRASADA,
+        mensaje=(
+            f"La última corrida de ingesta empezó el {desde.date().isoformat()} y desde entonces "
+            f"pasaron {ruedas_perdidas} ruedas sin ninguna. Los precios y las métricas en pantalla "
+            "son de esa fecha."
+        ),
+        severidad=Severidad.ERROR,
+        accion_requerida=(
+            "Revisar el cron de la base (`cron.job_run_details` en Supabase, jobs `ingesta-*`) y "
+            "que el backend responda en /api/v1/health. Se puede disparar una corrida a mano con "
+            "POST /api/v1/jobs/corridas/matinal."
+        ),
+        detalle={
+            "ultima_corrida": desde.isoformat(),
+            "ruedas_perdidas": ruedas_perdidas,
+        },
     )
