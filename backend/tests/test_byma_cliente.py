@@ -15,6 +15,7 @@ import respx
 from app.ingesta.alertas import CODIGO_FORMATO_INESPERADO
 from app.ingesta.byma.cliente import (
     CODIGO_PAGINACION_INCOMPLETA,
+    EXCLUIR_SIN_COTIZACION,
     TAMANO_PAGINA,
     descargar_endpoint,
 )
@@ -168,3 +169,29 @@ async def test_una_respuesta_vacia_se_reintenta_antes_de_declarar_el_fallo() -> 
         assert resultado.filas == [{"symbol": "ONX"}]
         assert resultado.alertas == []
         assert ruta.call_count == 3
+
+
+async def test_el_payload_le_pide_a_byma_el_panel_completo_en_cada_pagina() -> None:
+    """`excludeZeroPxAndQty: false` en todas las páginas, no sólo en la primera.
+
+    Sin el flag BYMA recorta el panel a lo que operó: medido el 27/08/2026,
+    `negociable-obligations` devuelve 1.328 tickers con el default y 2.709 con el flag. Los que
+    faltan entran igual al universo por el overlay de data912 —que no declara moneda ni
+    vencimiento—, así que quedaban en `instrumentos` con esas dos columnas en NULL para siempre.
+    """
+    paginas = {
+        1: _pagina([{"symbol": f"ON{i}"} for i in range(500)], 1, 2, 600),
+        2: _pagina([{"symbol": f"ON{i}"} for i in range(500, 600)], 2, 2, 600),
+    }
+
+    with respx.mock:
+        ruta = respx.post(f"{BASE_URL}/public-bonds").mock(side_effect=_armar_respondedor(paginas))
+
+        async with crear_cliente() as cliente:
+            await descargar_endpoint(cliente, BASE_URL, "public-bonds", dormir=_no_dormir)
+
+        cuerpos = [json.loads(llamada.request.content) for llamada in ruta.calls]
+
+    assert len(cuerpos) == 2
+    assert all(cuerpo["excludeZeroPxAndQty"] is False for cuerpo in cuerpos)
+    assert EXCLUIR_SIN_COTIZACION is False, "prenderlo volvería a recortar el panel"

@@ -358,6 +358,61 @@ def test_a_igualdad_de_plazo_gana_la_que_mas_opero() -> None:
     assert resultado.filas_precios[0]["last_price"] == 2.0
 
 
+def test_un_plazo_sin_cotizacion_no_le_gana_al_plazo_que_si_cotizo() -> None:
+    """El plazo 2 gana entre dos cotizaciones, no entre una cotización y un hueco.
+
+    Es la fila que aparece desde que el cliente pide el panel completo (`EXCLUIR_SIN_COTIZACION` en
+    `byma/cliente.py`): BYMA declara la especie en los dos plazos y sólo uno operó. Caso real
+    medido el 27/08/2026 — BYZ1X trae 160.200 en plazo 1 y todo en cero en plazo 2, y con el
+    criterio anterior ganaba la de plazo 2 y la especie salía publicada sin precio. Eran 52 tickers.
+    La metadata no depende de cuál gane: verificado que ninguno de los 4.018 tickers repetidos del
+    panel completo difiere en moneda ni en vencimiento entre sus filas.
+    """
+    resultado = armar_consolidacion(
+        hoy=HOY,
+        especies_por_endpoint={
+            "public-bonds": [
+                especie("BYZ1X", plazo="1", ultimo=160200.0, monto=1602000000.0),
+                especie("BYZ1X", plazo="2", ultimo=0.0, monto=0.0),
+            ]
+        },
+        filas_cashflow=[cashflow("BYZ1X", "HARD_DOLLAR")],
+    )
+
+    (instrumento,) = resultado.filas_instrumentos
+    (precio,) = resultado.filas_precios
+    assert precio["last_price"] == 160200.0
+    assert instrumento["plazo_liquidacion"] == "1", "se guarda el plazo de la cotización elegida"
+    assert instrumento["moneda_cotizacion"] == "ARS"
+    assert instrumento["maturity"] == date(2030, 7, 9)
+
+
+def test_sin_cotizacion_en_ningun_plazo_sigue_ganando_el_plazo_estandar() -> None:
+    """Una especie que no operó en ninguno de los dos plazos entra igual, con su metadata.
+
+    Es el caso que el panel completo agrega de a miles: sin precio no hay `last_price` ni métricas
+    —se declaran faltantes—, pero moneda y vencimiento los publica BYMA y se guardan.
+    """
+    resultado = armar_consolidacion(
+        hoy=HOY,
+        especies_por_endpoint={
+            "negociable-obligations": [
+                especie("PS38C", moneda="EXT", plazo="1", ultimo=0.0, monto=0.0),
+                especie("PS38C", moneda="EXT", plazo="2", ultimo=0.0, monto=0.0),
+            ]
+        },
+        filas_cashflow=[],
+    )
+
+    (instrumento,) = resultado.filas_instrumentos
+    (precio,) = resultado.filas_precios
+    assert instrumento["plazo_liquidacion"] == "2"
+    assert instrumento["moneda_cotizacion"] == "EXT", "código propietario, se guarda sin traducir"
+    assert instrumento["maturity"] == date(2030, 7, 9)
+    assert precio["last_price"] is None, "no operó: el hueco se declara, no se rellena"
+    assert precio["tir"] is None
+
+
 def test_una_especie_que_solo_cotiza_en_un_plazo_no_se_marca_duplicada() -> None:
     resultado = armar_consolidacion(
         hoy=HOY,

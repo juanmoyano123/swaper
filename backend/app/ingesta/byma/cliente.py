@@ -44,6 +44,34 @@ ENDPOINT_INDICE = "index-price"
 TAMANO_PAGINA = 500
 CODIGO_PAGINACION_INCOMPLETA = "paginacion_incompleta"
 
+# BYMA recorta el panel por default: si no se le pide lo contrario, deja afuera toda especie con
+# precio y cantidad en cero —o sea, la que no operó ni tiene punta en la rueda—. Medido el
+# 27/08/2026 contra la fuente: `negociable-obligations` devuelve 2.196 filas / 1.328 tickers con el
+# default y 5.054 / 2.709 con el flag en `false`; `cedears` pasa de 1.175 a 1.278 tickers.
+# `public-bonds`, `general-equity` y `leading-equity` devuelven exactamente lo mismo con y sin él.
+#
+# No pedirlo tenía un costo que no se veía como faltante: esas especies entraban igual al universo
+# por el overlay de data912 —que sí las publica, con precio de arrastre— pero por el camino
+# `solo_data912`, que no puede aportar moneda ni vencimiento porque data912 no los declara. Quedaban
+# en `instrumentos` con `moneda_cotizacion` y `maturity` en NULL para siempre: BYMA nunca volvía a
+# traer la fila, así que el COALESCE del upsert conservaba el nulo corrida tras corrida. Verificado
+# sobre la base de producción ese mismo día: de 219 instrumentos sin moneda, 110 los publica BYMA
+# con el flag y sólo 7 sin él (PS38C y TY38C entre ellos, con `denominationCcy` y `maturityDate`).
+#
+# Que la especie no haya operado no la vuelve menos negociable, y filtrarla es justo lo que prohíbe
+# la regla 9 del dominio. El nombre del flag es de BYMA, no nuestro; se manda a los cinco endpoints
+# porque los que no lo usan lo ignoran sin cambiar la respuesta.
+EXCLUIR_SIN_COTIZACION = False
+
+
+def cuerpo_de_pagina(pagina: int) -> dict[str, Any]:
+    """El payload de un pedido a BYMA. Ver `EXCLUIR_SIN_COTIZACION` por el tercer campo."""
+    return {
+        "page_size": TAMANO_PAGINA,
+        "page_number": pagina,
+        "excludeZeroPxAndQty": EXCLUIR_SIN_COTIZACION,
+    }
+
 
 def paginacion_incompleta(endpoint: str, esperadas: int, obtenidas: int, paginas: int) -> Alerta:
     """El total bajado no cierra contra `total_elements_count`. Las filas se entregan igual."""
@@ -99,9 +127,9 @@ async def descargar_endpoint(
 ) -> ResultadoDescarga:
     """Baja un endpoint entero, paginando si hace falta, y verifica el total contra lo declarado.
 
-    El payload es siempre `{"page_size": 500, "page_number": N}`: verificado que los endpoints de
-    lista plana lo ignoran, así que no hace falta ramificar el pedido por forma de respuesta, sólo
-    la lectura de la respuesta.
+    El payload lo arma `cuerpo_de_pagina` y es siempre el mismo: verificado que los endpoints de
+    lista plana ignoran la paginación, así que no hace falta ramificar el pedido por forma de
+    respuesta, sólo la lectura de la respuesta.
     """
     filas: list[dict[str, Any]] = []
     alertas: list[Alerta] = []
@@ -111,9 +139,9 @@ async def descargar_endpoint(
     total_paginas = 1
 
     while pagina <= total_paginas:
-        cuerpo = {"page_size": TAMANO_PAGINA, "page_number": pagina}
+        cuerpo = cuerpo_de_pagina(pagina)
 
-        async def _operacion(cuerpo: dict[str, int] = cuerpo) -> httpx.Response:
+        async def _operacion(cuerpo: dict[str, Any] = cuerpo) -> httpx.Response:
             return await pedir(
                 cliente,
                 "POST",

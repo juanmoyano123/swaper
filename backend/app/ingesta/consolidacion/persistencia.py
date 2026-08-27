@@ -128,9 +128,10 @@ COLUMNAS_PUNTAS: tuple[str, ...] = (
     "fuente",
 )
 
-# Los ~5.700 upserts de una corrida entran cómodos en el command_timeout de 30 s del pool, pero
-# se trocean igual: un lote gigante mantiene una sola sentencia abierta el tiempo entero y
-# cualquier hipo de red la pierde completa.
+# Los ~13.600 upserts de una corrida (4.389 instrumentos + 4.389 precios + 4.855 puntas, medido el
+# 27/08/2026, cuando el cliente empezó a pedirle a BYMA el panel completo) entran en el
+# command_timeout de 30 s del pool porque se trocean: un lote gigante mantiene una sola sentencia
+# abierta el tiempo entero y cualquier hipo de red la pierde completa.
 TAMANO_LOTE = 1000
 
 

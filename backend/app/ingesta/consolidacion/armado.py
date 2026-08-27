@@ -182,12 +182,27 @@ def _elegir_por_plazo(filas: list[FilaRueda]) -> FilaRueda:
 
     Verificado el 06/08/2026 contra la fuente: 2.418 de 3.325 tickers vienen en plazo 1 y en plazo
     2, y ninguno difiere en moneda de cotización ni en vencimiento entre los dos: sólo cambian
-    precio y volumen. Así que el colapso no puede perder un atributo, sólo elegir una cotización.
-    Se prefiere el plazo 2 —el estándar de liquidación— y a igualdad, la que más operó.
+    precio y volumen. Revalidado el 27/08/2026 sobre el panel completo, que es más grande: de 4.814
+    tickers, 4.018 traen más de una fila y **cero** difieren en moneda o en vencimiento. Así que el
+    colapso no puede perder un atributo, sólo elegir una cotización.
+
+    El orden: primero la fila que tiene precio, después el plazo 2 —el estándar de liquidación— y a
+    igualdad, la que más operó. **El precio va antes que el plazo desde el 27/08/2026**, cuando el
+    cliente empezó a pedirle a BYMA el panel completo (ver `EXCLUIR_SIN_COTIZACION` en
+    `byma/cliente.py`): con el panel recortado casi todas las filas traían cotización y el desempate
+    por plazo alcanzaba, pero el panel completo incluye la fila que no operó y ésa venía ganando por
+    ser plazo 2, dejando la especie sin `last_price` aunque la fuente lo publicara en el otro plazo.
+    Medido ese día: 52 tickers cotizan sólo fuera del plazo 2 —BYZ1X con 160.200 en plazo 1 contra
+    una fila de plazo 2 en cero es el caso testigo— y con el criterio viejo los 52 quedaban sin
+    precio. No es preferir una cotización peor: un plazo sin precio no es una cotización.
     """
     return max(
         filas,
-        key=lambda f: (f["plazo_liquidacion"] == "2", f["monto_operado"] or float("-inf")),
+        key=lambda f: (
+            bool(f["precio_ultimo"]),
+            f["plazo_liquidacion"] == "2",
+            f["monto_operado"] or float("-inf"),
+        ),
     )
 
 
