@@ -15,8 +15,11 @@
 > 1. `data/condiciones_estaticas.csv` y `condiciones_monitor.csv` **ya no existen**. Sus datos
 >    se rescataron a `data/condiciones_emision.csv` (823 tickers). Todo lo que este documento
 >    diga sobre esos dos archivos es histórico.
-> 2. **Las fuentes cambian**: BYMA (API abierta, sin token) para precios y puntas, IAMC para
->    las condiciones del instrumento, y Docta **sólo** para el cronograma de pagos.
+> 2. **Las fuentes cambian**, y desde entonces cambiaron otra vez. Hoy (26/08/2026) son cinco:
+>    data912 para el precio, BYMA para el universo y como precio de respaldo, SEC EDGAR para la
+>    clasificación de renta variable, CNV para prospectos, y CAFCI para fondos. Docta se dio de
+>    baja el 12/08 e IAMC se eliminó el 26/08; el cronograma de pagos quedó sin fuente viva y su
+>    conjunto está cerrado. Ver la entrada del 26/08/2026 al final.
 > 3. **No correr `tools/consolidar_universo.py`**: fusiona desde un CSV borrado y dejaría el
 >    universo sin ley, moneda, lámina, calificación ni sector.
 
@@ -518,3 +521,146 @@ informado, el armado lo declara con la alerta `rv_sin_perfil_sectorial` en vez d
 `nombre_corto`, `sector`, `industria` y `pais` — sólo las escribía el job de Yahoo, hoy nada las
 escribe y nada las lee. Están vacías en producción (la tabla nunca se pobló). Se dejan en su lugar
 a propósito: las migraciones ya aplicadas no se tocan.
+
+---
+
+## 26/08/2026 — Relevamiento completo: se cierran los jobs, se programa la ingesta y se declara lo que no se calcula
+
+Revisión de todo el proyecto pedida por el dueño del producto, con cuatro preguntas: qué está roto,
+qué pasa con CORS, por qué no se calculan todas las TIR, y si las fuentes son las oficiales.
+
+**Las fuentes son las que tienen que ser.** BYMA (universo, metadata, precio de respaldo), data912
+(precio primario y el histórico on-demand), SEC EDGAR (clasificación sectorial, ficha de CEDEAR,
+calendario de balances) y CNV (prospectos de ON, enlace a la cartera de FCI) están las cuatro
+integradas y con tests. CAFCI se suma como quinta —ninguna de las otras cubre fondos— y quedó
+prendida: la feature estaba cerrada desde el 23/08 pero `CAFCI_HABILITADO` nunca se había cargado,
+así que el segmento FCI del monitor corría vacío.
+
+### Los endpoints de ingesta estaban abiertos a internet
+
+`POST /api/v1/jobs/*` y `POST /api/v1/consolidar` disparan corridas completas contra BYMA y escriben
+en la base, y no pedían ninguna credencial: con la URL del deploy alcanzaba para forzar una ingesta.
+Ahora pasan por `cron_o_asesor` (`backend/app/api/deps.py`), que acepta dos credenciales por el
+mismo header `Authorization`: el secreto del cron o el JWT de un asesor logueado.
+
+El secreto se compara primero y con `compare_digest`. Primero, porque probar el JWT antes mandaría
+el `CRON_SECRET` a decodificar contra el JWKS de Supabase en cada tick, dejando un "token inválido"
+periódico en el log, indistinguible de un intento real de entrar. Con `compare_digest`, porque `==`
+corta en el primer byte distinto y ese tiempo desigual permite adivinar un secreto de a un carácter.
+
+**`CRON_SECRET` es opcional y su ausencia cierra, no abre**: sin la variable esa rama ni se evalúa y
+los endpoints sólo se abren con sesión de asesor. No hay default posible que no sea un secreto
+conocido, y un deploy al que se le olvidó la variable tiene que quedar cerrado.
+
+### La ingesta programada nunca había corrido
+
+`corridas_ingesta` estaba vacía: todo el dato del sistema había entrado por corridas manuales, sin
+traza de fuente ni fecha. El motivo es estructural: `Scheduler` vive en el `lifespan` del proceso
+ASGI y una función serverless muere entre requests, así que en Vercel nunca arrancó (y de haber
+arrancado, cada instancia habría corrido su propia copia).
+
+Los crons de Vercel en plan Hobby corren **una vez por día y sin minuto exacto** (verificado contra
+la cuenta: `billing.plan = hobby`), así que un refresh cada 20 minutos ni siquiera deploya. La
+programación quedó en `.github/workflows/ingesta.yml`, que le pega por HTTP a dos endpoints GET
+nuevos —`GET /api/v1/jobs/cron/{matinal,refresh}`— con el secreto compartido. GET y no POST porque
+es lo único que hacen los disparadores de cron. Si el proyecto pasa a Pro, el bloque `crons` de
+`vercel.json` reemplaza el workflow sin tocar el backend: los endpoints son los mismos.
+
+Dos guardas nuevas, las dos respondiendo **200 y no 4xx**:
+
+- **Fuera de la ventana de rueda** (11:00 a 17:00 ART, días hábiles) la corrida se omite con su
+  motivo. El cron de GitHub es best-effort y puede disparar tarde; un cron que "falla" cada feriado
+  y cada tick tardío enseña a ignorar el log, y una alerta que nadie mira no es una alerta.
+- **Advisory lock de Postgres** (`pg_try_advisory_lock`) contra el solapamiento. Dos corridas
+  simultáneas no se corrompían —`persistir` upsertea— pero intercalaban `capturado_en` y duplicaban
+  filas de `corridas_ingesta`.
+
+Verificado de punta a punta el 26/08: el workflow autentica, el backend acepta, y la respuesta
+`{"omitida": true, "motivo": "fuera de la ventana de rueda"}` llega como aviso, no como fallo.
+
+### Por qué no se calculaban todas las TIR
+
+De las 816 emisiones con cronograma, 310 quedan fuera **por naturaleza de tasa** —CER, dollar-linked,
+badlar y tamar— y eso es correcto y está documentado: sus flujos no alcanzan para la unidad que el
+segmento reporta. Lo que sí eran defectos:
+
+**El segmento de tasa fija calculaba su TIR y la tiraba.** `rendimiento_declarado` devolvía `tna`
+para ese segmento, y `tna` no tiene fuente en ningún lado del sistema: se escribe `None` siempre. La
+TIR se resolvía, se persistía en `precios.tir`, y la pantalla mostraba `s/d` porque el frontend sólo
+lee `rendimiento`. Ahora ese segmento declara su TIR bajo **naturaleza propia `tir_ea_ars`** — no la
+`tna_nominal_ars` que compartía con badlar y tamar. La naturaleza separada no es cosmética: bajo la
+vieja, el número habría quedado promediable con TNAs y rotulado "TNA $" en todo el frontend, que es
+exactamente lo que la regla 2 prohíbe. Badlar y tamar siguen en `tna_nominal_ars`, sin número y
+declarado: su TNA sigue sin fuente y una TIR no la reemplaza.
+
+Medido contra la base el 26/08: el segmento pasó de 0 a 8 rendimientos declarados sobre 25 especies
+(las 17 restantes no tienen precio del día). El total del universo pasó de 212 a 220.
+
+**Las especies sin `tipo_tasa` desaparecían sin motivo ni alerta.** `fuente_de_metricas` tenía un
+tercer destino, `FUENTE_IAMC`, adonde caían las especies sin tipo de tasa y las de naturaleza sin
+regla declarada. Mientras IAMC publicaba por ellas era razonable; con IAMC pausado desde el 13/08
+pasó a ser un faltante silencioso —el `armado.py` las devolvía `None` **sin anotar motivo**—, que es
+justo lo que la regla 1 prohíbe. Hoy hay dos destinos y nada más: se calcula, o queda fuera con su
+porqué. Una naturaleza sin regla cae en `naturaleza_desconocida` y entra a la alerta con nombre y
+apellido.
+
+**El techo del solver cortaba rendimientos reales.** `TASA_TECHO` estaba en 10.0 (1000 % efectivo
+anual): un bono a 20 días al 60 % de paridad anualiza por encima y salía `tir_sobre_techo`, sin
+número, cuando el dato es aritmética válida —el antecedente es SNSBO rindiendo 245 %, dato correcto—.
+Pasó a 100.0. Quién decide si un rendimiento es creíble es la sanidad por segmento, que rotula y
+deja el número a la vista; el solver, que lo vacía, no puede ser ese filtro.
+
+**Motivos mal rotulados y un contador inflado.** `precio <= 0` y "residual contradictorio" se
+reportaban los dos como `vencida` —un bono vivo con precio 0 no está vencido, y un residual que no
+cierra es un problema del dato, no del calendario—. Y `ResultadoMetricas.calculadas` sumaba
+incondicionalmente, así que el número que se reportaba como "cuántas se calcularon" incluía las que
+habían fallado.
+
+**Un pago perdido en el CSV del cronograma.** `data/output/cashflow_completo.csv` traía en la fila
+de CO26 del 29/01/2024 un `_x000d_` —el retorno de carro que Excel escribe codificado— pegado al
+campo `capital`. `float()` fallaba, el pago se descartaba en silencio, y como el residual se deriva
+de `100 - Σ capital` de los pagos cobrados, CO26 quedaba con un residual de 6,25 contra el 3,125 que
+declara la fuente: fuera de tolerancia, descartado por `residual_contradictorio`, sin métricas.
+
+El valor se restauró, y **no por analogía con las otras filas**: la propia fila lo confirma
+aritméticamente (`capital + interés = cash_flow`, 3,125 + 0,66797 = 3,79297 exacto) y la tabla
+`public.cashflow` lo tiene sano. Con la fila reparada el residual derivado vuelve a dar 3,125, igual
+al declarado. Es una reparación de codificación, no una imputación. El archivo se respaldó antes y
+el diff es de una sola fila.
+
+### CORS
+
+El default de `cors_origins` apuntaba sólo a `swappt.netlify.app`, el deploy anterior. **No estaba
+rompiendo nada**: en Vercel los rewrites de `vercel.json` sirven frontend y backend bajo el mismo
+host, así que las llamadas son same-origin y el middleware ni se ejercita. Pero era el default
+equivocado para el día que el backend se mude, que es el único escenario donde este middleware
+existe. Ahora incluye el dominio de Vercel, y **se conserva el de Netlify**: ese deploy sigue vivo
+(responde 200), contra lo que decía el relevamiento inicial.
+
+Dos ajustes más en el middleware: se expone `X-Request-ID` —el backend lo emite y el cliente lo lee
+para poder nombrar un error al reportarlo; sin exponerlo, en cross-origin vuelve `null` en silencio—
+y sale `allow_credentials`, que sobraba: la sesión viaja en el header `Authorization`, no en cookie.
+
+### IAMC se elimina del código
+
+Estaba pausado desde el 13/08 y su única función viva era tapar el agujero de `FUENTE_IAMC`. Se
+borró el paquete entero, su endpoint de subida y su flag. **Se eliminó código, no dato**: la ley, la
+moneda de pago, el emisor y la estructura de cupón que IAMC escribió siguen en la base, protegidos
+por el `COALESCE` del upsert, porque son atributos de la emisión que no envejecen. `convexidad` y
+`fecha_metricas` quedan como columnas declaradas y vacías —era lo que ya pasaba con la pausa activa—.
+Las menciones a IAMC que quedan en docstrings explican de dónde vino un dato persistido, y se
+conservan a propósito (regla 11).
+
+### Correcciones al registro previo
+
+- **`perfil_renta_variable` no está vacía**: tiene 1641 papeles de SEC EDGAR, 870 con clasificación
+  SIC. El pendiente registrado el 23/08 ("el job nunca corrió en producción") ya no aplica. Lo que
+  sigue vacío es la columna `sector`, que era de Yahoo y hoy nadie escribe; la clasificación viva
+  está en `sic_codigo` / `sic_titulo` / `division_cadena`.
+- **`.env.example` declaraba 15 minutos de refresh**; el valor real es 20 desde el 23/08. Se
+  corrigió, y se agregaron `INGESTA_HABILITADA`, `CAFCI_HABILITADO`, `CNV_HABILITADO` y
+  `CRON_SECRET`, que el backend leía sin que el ejemplo las nombrara.
+- Se sacaron del `.env` las cuatro variables `DOCTA_*`, residuo de una fuente dada de baja el 12/08.
+- Un test nuevo (`backend/tests/test_dependencias_declaradas.py`) impide que `pyproject.toml` y
+  `requirements.txt` declaren versiones distintas: ese desfasaje tumbó el deploy del 26/08 y nada lo
+  verificaba.

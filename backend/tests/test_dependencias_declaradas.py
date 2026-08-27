@@ -1,8 +1,8 @@
 """Que `pyproject.toml` y `requirements.txt` no se separen — guardia de deploy.
 
 El backend declara sus dependencias en dos lados y cada uno lo lee alguien distinto: Vercel instala
-desde `[project.dependencies]` de `pyproject.toml` (y **ignora** `requirements.txt` cuando existe esa
-sección) y el Dockerfile hace `pip install -r requirements.txt`. Ese desdoblamiento ya costó una
+desde `[project.dependencies]` de `pyproject.toml` (e **ignora** `requirements.txt` cuando esa
+sección existe) y el Dockerfile hace `pip install -r requirements.txt`. Ese desdoblamiento costó una
 producción caída el 26/08/2026: `pyproject.toml` tenía la sección `[project]` sin `dependencies`,
 Vercel resolvió cero paquetes y la función murió en el primer `from fastapi import FastAPI`.
 
@@ -24,7 +24,7 @@ REQUIREMENTS = RAIZ / "requirements.txt"
 
 
 def _normalizar(nombre: str) -> str:
-    """PEP 503: `PyJWT`, `pyjwt` y `py_jwt` son el mismo paquete para pip, y hay que compararlos igual."""
+    """PEP 503: `PyJWT`, `pyjwt` y `py_jwt` son el mismo paquete para pip; se comparan igual."""
     return nombre.strip().lower().replace("_", "-").replace(".", "-")
 
 
