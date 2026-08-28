@@ -25,7 +25,12 @@ async def create_pool(settings: Settings) -> asyncpg.Pool | None:
         pool = await asyncpg.create_pool(
             dsn=settings.database_url,
             min_size=1,
-            max_size=10,
+            # El Session pooler admite 15 clientes en total y cada instancia del backend arma su
+            # propio pool: con max_size=10, dos instancias (un deploy de Vercel escalado, o uno
+            # local de prueba) alcanzan para agotar el cupo y el resto de los pedidos muere con
+            # 503 — pasó el 28/08/2026 (EMAXCONNSESSION). Con 5, tres instancias conviven y el uso
+            # real (un puñado de asesores) no nota la diferencia.
+            max_size=5,
             timeout=CONNECT_TIMEOUT_S,
             command_timeout=COMMAND_TIMEOUT_S,
         )
