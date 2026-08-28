@@ -25,19 +25,37 @@ from app.ingesta.http import con_reintentos, pedir
 
 NOMBRE_FUENTE = "BYMA"
 
-# Los cinco primeros llevan filas de especies (bonos, ONs, cedears, acciones); el último es el
-# índice dólar y afines, que F-012 usa como contraste. Se listan por separado porque normalizan a
+# Los seis primeros llevan filas de especies (bonos, ONs, cedears, acciones, letras); el último es
+# el índice dólar y afines, que F-012 usa como contraste. Se listan por separado porque normalizan a
 # tipos de fila distintos (decisión 6 del plan), no porque el cliente HTTP los trate distinto.
 #
 # `leading-equity` se agregó en F-007: BYMA publica el panel líder aparte del general, y sin él el
 # universo de acciones salía sin ALUA, BBAR, BMA, BYMA, CEPU, COME ni CRES —las más operadas del
 # mercado— sin que nada lo delatara. Son 40 filas contra las 349 del panel general.
+#
+# `lebacs` se agregó el 28/08/2026. Medido contra la fuente ese día: devuelve 614 filas / 307
+# símbolos, que son **199 especies reales** más 108 con sufijo `.SB` (SENEBI, subconjunto estricto
+# de esas 199). Viene paginado igual que `public-bonds` y con **exactamente las mismas 29 claves**,
+# así que `normalizar_fila_rueda` lo consume sin tocar nada. `denominationCcy` está en las 199
+# (ARS 78, EXT 61, USD 60) y `maturityDate` en 182 —las 17 sin vencimiento son de la serie …N5, ya
+# vencida—. `securitySubType` vale `'E'` en todas, contra `'B'` en public-bonds: es un discriminante
+# de panel de BYMA, **no** una etiqueta que diga "letra", y como código propietario no se traduce
+# (regla 11).
+#
+# Importa que el flag vaya en `false` (ver `EXCLUIR_SIN_COTIZACION`): con `true` este endpoint
+# devuelve **cero filas**, no un panel recortado.
+#
+# **Las `.SB` no se filtran ni se les hace nada especial.** Su ticker no cruza el cronograma por
+# raíz, así que caen por el camino que ya existe —sin clase, fuera del universo, con la punta
+# guardada y contadas en la alerta `clase_sin_mapeo`—, el mismo destino declarado de las 147
+# variantes C/D/X/Y/Z del panel. No se descartan en silencio ni se les inventa una clase.
 ENDPOINTS_ESPECIES: tuple[str, ...] = (
     "negociable-obligations",
     "public-bonds",
     "cedears",
     "general-equity",
     "leading-equity",
+    "lebacs",
 )
 ENDPOINT_INDICE = "index-price"
 
@@ -59,8 +77,11 @@ CODIGO_PAGINACION_INCOMPLETA = "paginacion_incompleta"
 # con el flag y sólo 7 sin él (PS38C y TY38C entre ellos, con `denominationCcy` y `maturityDate`).
 #
 # Que la especie no haya operado no la vuelve menos negociable, y filtrarla es justo lo que prohíbe
-# la regla 9 del dominio. El nombre del flag es de BYMA, no nuestro; se manda a los cinco endpoints
+# la regla 9 del dominio. El nombre del flag es de BYMA, no nuestro; se manda a todos los endpoints
 # porque los que no lo usan lo ignoran sin cambiar la respuesta.
+#
+# En `lebacs` (medido el 28/08/2026) el flag no recorta: decide si hay panel o no. Con `true` la
+# respuesta trae cero filas; con `false`, las 614.
 EXCLUIR_SIN_COTIZACION = False
 
 

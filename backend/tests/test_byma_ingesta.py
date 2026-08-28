@@ -1,7 +1,7 @@
 """GWT-1, GWT-3 y GWT-4 de la spec (`claude-docs/planning/plan.md:260-299`), orquestados.
 
 GWT-2 (moneda por campo declarado) se prueba en `test_byma_normalizacion.py`, donde vive la
-normalización. Acá se prueba lo que sólo se ve con los seis endpoints juntos: que el conteo por
+normalización. Acá se prueba lo que sólo se ve con los siete endpoints juntos: que el conteo por
 endpoint quede en el snapshot, que uno caído no corte a los demás, y que la demora declarada sea un
 atributo del snapshot.
 """
@@ -46,13 +46,18 @@ def _pagina(datos: list[dict], numero: int, page_count: int, total: int) -> http
     )
 
 
-async def test_la_ingesta_registra_el_conteo_de_filas_de_los_seis_endpoints(
+async def test_la_ingesta_registra_el_conteo_de_filas_de_los_siete_endpoints(
     settings_de_prueba,
 ) -> None:
-    """Dos endpoints como lista plana, dos como objeto paginado multi-página, dos de una página."""
+    """Dos endpoints como lista plana, dos paginados multi-página y tres de una sola página."""
     with respx.mock:
         respx.post(f"{BASE_URL}/leading-equity").mock(
             return_value=_pagina([{"symbol": "ALUA"}], 1, 1, 1)
+        )
+        # El panel de letras y su `.SB` de SENEBI: el cliente los baja a los dos sin distinguirlos
+        # (el filtrado de `.SB` no existe, ver `ENDPOINTS_ESPECIES`).
+        respx.post(f"{BASE_URL}/lebacs").mock(
+            return_value=_pagina([{"symbol": "S31G6"}, {"symbol": "S31G6.SB"}], 1, 1, 2)
         )
         respx.post(f"{BASE_URL}/negociable-obligations").mock(
             return_value=httpx.Response(200, json=[{"symbol": f"ON{i}"} for i in range(3)])
@@ -88,6 +93,7 @@ async def test_la_ingesta_registra_el_conteo_de_filas_de_los_seis_endpoints(
             "cedears": 4,
             "general-equity": 2,
             "leading-equity": 1,
+            "lebacs": 2,
             "index-price": 2,
         }
         assert resultado.snapshot.alertas == []
@@ -99,6 +105,7 @@ async def test_la_ingesta_registra_el_conteo_de_filas_de_los_seis_endpoints(
             "cedears": 4,
             "general-equity": 2,
             "leading-equity": 1,
+            "lebacs": 2,
         }
         assert sum(len(f) for f in resultado.especies_por_endpoint.values()) == len(
             resultado.especies
@@ -124,6 +131,9 @@ async def test_un_endpoint_caido_no_impide_ingerir_los_demas(settings_de_prueba)
         respx.post(f"{BASE_URL}/leading-equity").mock(
             return_value=_pagina([{"symbol": "ALUA"}], 1, 1, 1)
         )
+        respx.post(f"{BASE_URL}/lebacs").mock(
+            return_value=_pagina([{"symbol": "S31G6"}], 1, 1, 1)
+        )
         respx.post(f"{BASE_URL}/index-price").mock(
             return_value=_pagina([{"symbol": "IDD"}], 1, 1, 1)
         )
@@ -131,7 +141,8 @@ async def test_un_endpoint_caido_no_impide_ingerir_los_demas(settings_de_prueba)
         resultado = await ingerir_rueda(settings=settings_de_prueba, dormir=_no_dormir)
 
     assert resultado.snapshot.filas_por_tramo["public-bonds"] == 0
-    assert len(resultado.especies) == 4  # ONs + cedears + panel general + panel líder
+    # ONs + cedears + panel general + panel líder + panel de letras
+    assert len(resultado.especies) == 5
     assert len(resultado.indices) == 1
     assert "public-bonds" not in resultado.especies_por_endpoint
 
@@ -160,6 +171,9 @@ async def test_un_500_persistente_agota_los_reintentos_y_no_corta_la_corrida(
         respx.post(f"{BASE_URL}/leading-equity").mock(
             return_value=httpx.Response(200, json=[{"symbol": "ALUA"}])
         )
+        respx.post(f"{BASE_URL}/lebacs").mock(
+            return_value=httpx.Response(200, json=[{"symbol": "S31G6"}])
+        )
         respx.post(f"{BASE_URL}/index-price").mock(
             return_value=_pagina([{"symbol": "IDD"}], 1, 1, 1)
         )
@@ -174,7 +188,7 @@ async def test_un_500_persistente_agota_los_reintentos_y_no_corta_la_corrida(
     assert len(alertas_public_bonds) == 1
     assert alertas_public_bonds[0].codigo == CODIGO_FUENTE_CAIDA
     # Los otros se ingirieron igual.
-    assert len(resultado.especies) == 4
+    assert len(resultado.especies) == 5
     assert len(resultado.indices) == 1
 
 
@@ -184,7 +198,8 @@ async def test_el_snapshot_declara_la_demora_de_veinte_minutos(settings_de_prueb
             respx.post(f"{BASE_URL}/{endpoint}").mock(
                 return_value=httpx.Response(200, json=[{"symbol": "X"}])
             )
-        for endpoint in ("public-bonds", "general-equity", "leading-equity", "index-price"):
+        paginados = ("public-bonds", "general-equity", "leading-equity", "lebacs", "index-price")
+        for endpoint in paginados:
             respx.post(f"{BASE_URL}/{endpoint}").mock(
                 return_value=_pagina([{"symbol": "X"}], 1, 1, 1)
             )

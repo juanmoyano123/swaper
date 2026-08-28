@@ -8,6 +8,11 @@
  * cada uno su propia lógica sobre ese motor común en vez de importarse entre sí: `features/
  * monitor/**` y `features/armador/**` tienen prohibido importarse (precedente F-017/F-018/F-038).
  *
+ * El 28/08/2026 se le sumó `subtipoSoberano`, la séptima dimensión: la subclasificación del crédito
+ * soberano (letras / bonares / globales / bopreales) que llegó con el panel `lebacs` de BYMA. Es la
+ * única que depende de otra —sólo tiene sentido dentro de `credito === 'bono_soberano'`— y por eso
+ * va inmediatamente detrás del crédito en el orden de validación del facetado.
+ *
  * Vacío significa "sin filtro": no hay un valor por defecto que discrimine filas, porque eso sería
  * decidir en silencio qué es "razonable" sin que el asesor lo haya pedido (mismo criterio que ya
  * declaraba `FiltrosNumericos`, ahora extendido a las dimensiones nuevas).
@@ -15,6 +20,7 @@
 
 import { facetar, type Faceta } from '@/lib/facetado'
 import { SIN_MONEDA_DECLARADA } from '@/components/SelectorMoneda'
+import { SIN_SUBCLASE } from '@/components/SelectorSubtipoSoberano'
 
 import type { Especie } from './schema'
 
@@ -26,8 +32,20 @@ export interface FiltrosUniverso {
   soloConPrecio: boolean
   /** Sólo especies con volumen operado mayor a cero en la rueda. */
   soloOperadoHoy: boolean
+  /** Sólo especies cuyo emisor consta. Apagado por defecto, igual que los otros dos: una especie
+   *  sin emisor se muestra con `s/d` y se cuenta (regla 1 del dominio, el faltante se declara). El
+   *  interruptor existe porque de 4.761 instrumentos la mayoría todavía no tiene emisor escrito, y
+   *  para analizar riesgo de crédito hace falta poder mirar sólo los que sí lo declaran. **No es
+   *  un filtro por disponibilidad en un bróker** (regla 9, que sigue vigente): es exigir el dato
+   *  que hace falta para el análisis, no recortar el universo negociable. */
+  soloConEmisor: boolean
   /** `clase_activo`, o `null` = Todos. */
   credito: string | null
+  /** `subtipo` de la especie (o `SIN_SUBCLASE` para las soberanas que no lo declaran), o `null` =
+   *  Todos. Sólo tiene sentido con `credito === 'bono_soberano'`: es la subclasificación de ese
+   *  crédito y de ningún otro. `MonitorPage` lo resetea a `null` al cambiar el crédito, así que
+   *  nunca queda filtrando en fantasma bajo un crédito que no lo tiene. */
+  subtipoSoberano: string | null
   /** `moneda_cotizacion` (o `SIN_MONEDA_DECLARADA`), o `null` = sin elegir a mano. `null` **no**
    *  significa "mostrar todas mezcladas": eso violaría la regla 3 del dominio (nunca comparar
    *  entre monedas sin normalizar). Antes de filtrar la tabla se resuelve a una concreta con
@@ -48,7 +66,9 @@ export const FILTROS_VACIOS: FiltrosUniverso = {
   duracionMax: '',
   soloConPrecio: false,
   soloOperadoHoy: false,
+  soloConEmisor: false,
   credito: null,
+  subtipoSoberano: null,
   moneda: null,
   ley: null,
   sector: null,
@@ -60,7 +80,7 @@ export const LEY_NO_INFORMADA = 'ley_no_informada'
 export const CALIFICACION_NO_INFORMADA = 'calificacion_no_informada'
 
 /**
- * Los umbrales y los dos interruptores: la parte de siempre, ajena al facetado. Una fila con
+ * Los umbrales y los tres interruptores: la parte de siempre, ajena al facetado. Una fila con
  * `rendimiento: null` no puede pasar un filtro de rendimiento activo —no se puede afirmar que un
  * dato que no existe cumple un umbral— pero sin filtros activos se muestra igual.
  *
@@ -73,6 +93,7 @@ function pasaFiltrosNumericos(
     duracion: number | null
     precio: number | null
     volumen: number | null
+    emisor: string | null
   },
   filtros: FiltrosUniverso,
 ): boolean {
@@ -91,6 +112,10 @@ function pasaFiltrosNumericos(
   // Volumen cero y volumen sin publicar son cosas distintas y las dos quedan fuera de "operado hoy":
   // de la primera consta que no operó, de la segunda no consta que sí.
   if (filtros.soloOperadoHoy && !(especie.volumen !== null && especie.volumen > 0)) return false
+  // Sin emisor escrito no se puede nombrar el riesgo de crédito que se está tomando, así que el
+  // asesor puede sacarlas de la vista. Apagado, siguen mostrándose con `s/d`: el faltante existe y
+  // se ve, prenderlo es una decisión de análisis y no el default.
+  if (filtros.soloConEmisor && especie.emisor === null) return false
 
   return true
 }
@@ -105,6 +130,12 @@ export function pasaFiltros(especie: Especie, filtros: FiltrosUniverso): boolean
   if (!pasaFiltrosNumericos(especie, filtros)) return false
 
   if (filtros.credito !== null && especie.clase_activo !== filtros.credito) return false
+
+  // El `null` de la base se colapsa a `SIN_SUBCLASE` antes de comparar: "soberano sin subclase
+  // declarada" es un recorte que el asesor puede querer aislar, distinto de no filtrar por subtipo.
+  if (filtros.subtipoSoberano !== null) {
+    if ((especie.subtipo ?? SIN_SUBCLASE) !== filtros.subtipoSoberano) return false
+  }
 
   if (filtros.moneda !== null) {
     if ((especie.moneda_cotizacion ?? SIN_MONEDA_DECLARADA) !== filtros.moneda) return false
@@ -133,20 +164,27 @@ export function pasaFiltros(especie: Especie, filtros: FiltrosUniverso): boolean
   return true
 }
 
-/** Las seis dimensiones que el facetado acota. Los umbrales y los dos interruptores quedan afuera:
- *  son fuentes que siempre aplican (`pasaFiltrosNumericos`), no un select que pueda quedar
+/** Las siete dimensiones que el facetado acota. Los umbrales y los tres interruptores quedan
+ *  afuera: son fuentes que siempre aplican (`pasaFiltrosNumericos`), no un select que pueda quedar
  *  apagado. */
-export type DimensionFacetadaUniverso = 'credito' | 'moneda' | 'ley' | 'sector' | 'calificaciones' | 'emisor'
+export type DimensionFacetadaUniverso =
+  | 'credito'
+  | 'subtipoSoberano'
+  | 'moneda'
+  | 'ley'
+  | 'sector'
+  | 'calificaciones'
+  | 'emisor'
 
 export interface SeleccionApagadaUniverso {
   dimension: DimensionFacetadaUniverso
   valor: string
 }
 
-/** Las opciones que la pantalla ofrece por dimensión, ya acotadas por el facetado. Crédito y
- *  moneda no están: sus chips muestran conteos (no sólo una lista de valores) y se calculan aparte
- *  con `contarPorCredito`/`contarPorMoneda` sobre el subconjunto que deja el resto de los filtros —
- *  ver `MonitorPage.tsx`. */
+/** Las opciones que la pantalla ofrece por dimensión, ya acotadas por el facetado. Crédito,
+ *  subtipo y moneda no están: sus chips muestran conteos (no sólo una lista de valores) y se
+ *  calculan aparte con `contarPorCredito`/`contarPorSubtipo`/`contarPorMoneda` sobre el
+ *  subconjunto que deja el resto de los filtros — ver `MonitorPage.tsx`. */
 export interface OpcionesFacetadasUniverso {
   leyes: string[]
   tieneLeyNoInformada: boolean
@@ -156,10 +194,11 @@ export interface OpcionesFacetadasUniverso {
   emisores: string[]
 }
 
-/** Las seis dimensiones, como `Faceta<Especie>` para el motor genérico. El orden del array **es**
- *  el orden de validación: crédito y moneda primero —los dos chips, el corte más grueso— y después
- *  ley → sector → calificación → emisor, el mismo orden general→específico que ya usa la barra del
- *  armador. */
+/** Las siete dimensiones, como `Faceta<Especie>` para el motor genérico. El orden del array **es**
+ *  el orden de validación: crédito, su subtipo y moneda primero —los chips, el corte más grueso— y
+ *  después ley → sector → calificación → emisor, el mismo orden general→específico que ya usa la
+ *  barra del armador. El subtipo va inmediatamente detrás del crédito porque depende de él: si el
+ *  crédito elegido no deja soberanos, el subtipo se apaga en la misma pasada. */
 function facetasDeUniverso(filtros: FiltrosUniverso): Array<Faceta<Especie>> {
   return [
     {
@@ -167,6 +206,12 @@ function facetasDeUniverso(filtros: FiltrosUniverso): Array<Faceta<Especie>> {
       seleccion: filtros.credito === null ? [] : [filtros.credito],
       coincide: (especie, valor) => especie.clase_activo === valor,
       valores: (especie) => [especie.clase_activo],
+    },
+    {
+      id: 'subtipoSoberano',
+      seleccion: filtros.subtipoSoberano === null ? [] : [filtros.subtipoSoberano],
+      coincide: (especie, valor) => (especie.subtipo ?? SIN_SUBCLASE) === valor,
+      valores: (especie) => [especie.subtipo ?? SIN_SUBCLASE],
     },
     {
       id: 'moneda',
@@ -240,6 +285,7 @@ export function facetarUniverso(
   const efectivos: FiltrosUniverso = {
     ...filtros,
     credito: resultado.efectivas.get('credito')?.[0] ?? null,
+    subtipoSoberano: resultado.efectivas.get('subtipoSoberano')?.[0] ?? null,
     moneda: resultado.efectivas.get('moneda')?.[0] ?? null,
     ley: resultado.efectivas.get('ley')?.[0] ?? null,
     sector: resultado.efectivas.get('sector')?.[0] ?? null,

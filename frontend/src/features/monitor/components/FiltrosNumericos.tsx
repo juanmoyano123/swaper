@@ -8,11 +8,16 @@
  * El rótulo del rendimiento lleva la unidad del segmento activo (regla 2 del dominio): un filtro
  * sin unidad invitaría a escribir un número pensando en TIR dólar y filtrar sobre una TNA en pesos.
  *
- * Los dos interruptores son de otra clase que los tres numéricos: no comparan contra un umbral que
+ * Los tres interruptores son de otra clase que los tres numéricos: no comparan contra un umbral que
  * el asesor eligió, sacan de la vista lo que no operó. Vienen apagados a propósito —una especie sin
  * precio es un dato del mercado, no ruido— pero la grilla del universo trae muchas que no tuvieron
  * rueda, y poder taparlas de un clic es lo que las hace mirables. Es lo que hace Balanz con sus dos
  * casillas "Mostrar con precio" y "Operado hoy".
+ *
+ * El tercero, "con emisor identificado" (28/08/2026), tapa lo que no se puede analizar en vez de lo
+ * que no operó: sin emisor escrito no hay riesgo de crédito que nombrar. Sigue apagado por defecto
+ * —esas especies se muestran con `s/d`— y no es una whitelist de bróker (regla 9): el universo
+ * negociable no se recorta, se elige mirar el subconjunto que tiene el dato.
  */
 
 import type { ReactNode } from 'react'
@@ -73,6 +78,11 @@ export function FiltrosNumericos({
         etiqueta="operado hoy"
         marcado={valores.soloOperadoHoy}
         onCambio={(soloOperadoHoy) => onCambio({ ...valores, soloOperadoHoy })}
+      />
+      <Interruptor
+        etiqueta="con emisor identificado"
+        marcado={valores.soloConEmisor}
+        onCambio={(soloConEmisor) => onCambio({ ...valores, soloConEmisor })}
       />
       <button type="button" onClick={() => onCambio(FILTROS_VACIOS)} style={estiloBoton}>
         limpiar filtros

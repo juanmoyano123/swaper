@@ -16,8 +16,13 @@ from datetime import date
 import pytest
 
 from app.ingesta.alertas import CODIGO_CAMPO_SIN_COBERTURA, Severidad
+from app.ingesta.byma.cliente import ENDPOINTS_ESPECIES
 from app.ingesta.byma.normalizacion import normalizar_fila_rueda
-from app.ingesta.consolidacion.armado import CODIGO_ESPECIE_REPETIDA, armar_consolidacion
+from app.ingesta.consolidacion.armado import (
+    CODIGO_ESPECIE_REPETIDA,
+    ORDEN_DESEMPATE_ENDPOINTS,
+    armar_consolidacion,
+)
 from app.ingesta.consolidacion.clasificacion import (
     CODIGO_CLASE_DISCREPANTE,
     CODIGO_CLASE_SIN_MAPEO,
@@ -434,6 +439,89 @@ def test_una_especie_en_dos_endpoints_se_declara() -> None:
 
     assert len(resultado.filas_instrumentos) == 1
     assert any(a.codigo == CODIGO_ESPECIE_REPETIDA for a in resultado.alertas)
+
+
+def test_el_desempate_entre_endpoints_sigue_el_orden_declarado_y_no_el_alfabetico() -> None:
+    """BUN26 estaba en `negociable-obligations` el 17/08 y en `lebacs` el 28/08.
+
+    Por abecedario ganaría `lebacs` —que no declara clase— y la ON pasaría a clasificarse por
+    cronograma o a quedar afuera. `ORDEN_DESEMPATE_ENDPOINTS` lo pone último justamente para eso.
+    """
+    resultado = armar_consolidacion(
+        hoy=HOY,
+        especies_por_endpoint={
+            "lebacs": [especie("BUN26")],
+            "negociable-obligations": [especie("BUN26")],
+        },
+        filas_cashflow=[],
+    )
+
+    (instrumento,) = resultado.filas_instrumentos
+    assert instrumento["clase_activo"] == "on_corporativo", "gana el panel con clase propia"
+    assert any(a.codigo == CODIGO_ESPECIE_REPETIDA for a in resultado.alertas)
+
+
+def test_el_orden_de_desempate_cubre_los_endpoints_de_especies() -> None:
+    """Un endpoint fuera de la tupla haría estallar `.index()` en `_colapsar` a mitad de corrida."""
+    assert set(ENDPOINTS_ESPECIES) == set(ORDEN_DESEMPATE_ENDPOINTS)
+    assert ORDEN_DESEMPATE_ENDPOINTS[-1] == "lebacs", "el panel sin clase propia va último"
+
+
+# --- Panel de letras (`lebacs`, 28/08/2026) ----------------------------------------------------
+
+
+def test_una_letra_del_tesoro_del_panel_entra_con_subtipo_letra() -> None:
+    resultado = armar_consolidacion(
+        hoy=HOY,
+        especies_por_endpoint={"lebacs": [especie("S31G6")]},
+        filas_cashflow=[cashflow("S31G6", "FIXED_RATE")],
+    )
+
+    (instrumento,) = resultado.filas_instrumentos
+    assert instrumento["clase_activo"] == "bono_soberano"
+    assert instrumento["subtipo"] == "letra"
+
+
+def test_una_letra_subsoberana_del_mismo_panel_no_lleva_subtipo() -> None:
+    resultado = armar_consolidacion(
+        hoy=HOY,
+        especies_por_endpoint={"lebacs": [especie("BA26T")]},
+        filas_cashflow=[cashflow("BA26T", "SUB_SOBERANO_TAMAR")],
+    )
+
+    (instrumento,) = resultado.filas_instrumentos
+    assert instrumento["clase_activo"] == "bono_subsoberano"
+    assert instrumento["subtipo"] is None, "una letra provincial no es una letra del Tesoro"
+
+
+def test_un_bopreal_lleva_subtipo_bopreal() -> None:
+    resultado = armar_consolidacion(
+        hoy=HOY,
+        especies_por_endpoint={"public-bonds": [especie("BPOA7")]},
+        filas_cashflow=[cashflow("BPOA7", "BOPREAL")],
+    )
+
+    (instrumento,) = resultado.filas_instrumentos
+    assert instrumento["subtipo"] == "bopreal"
+
+
+def test_una_especie_sb_del_panel_queda_fuera_del_universo_con_su_punta_guardada() -> None:
+    """SENEBI: su ticker no cruza el cronograma por raíz, así que no hay clase que declararle.
+
+    Es el mismo destino que ya tenían las variantes C/D/X/Y/Z, y no un filtro nuevo: nadie mira el
+    sufijo `.SB`. Lo que se prueba es que no se pierda la punta ni el faltante.
+    """
+    resultado = armar_consolidacion(
+        hoy=HOY,
+        especies_por_endpoint={"lebacs": [especie("S31G6.SB")]},
+        filas_cashflow=[cashflow("S31G6", "FIXED_RATE")],
+    )
+
+    assert resultado.filas_instrumentos == []
+    (punta,) = resultado.filas_puntas
+    assert punta["ticker"] == "S31G6.SB"
+    assert punta["px_bid"] == 99.0
+    assert any(a.codigo == CODIGO_CLASE_SIN_MAPEO for a in resultado.alertas)
 
 
 # --- Cronograma --------------------------------------------------------------------------------

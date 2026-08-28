@@ -173,10 +173,11 @@ def test_cada_tramo_mapea_a_su_endpoint_de_byma():
     endpoints = {ep for ep, filas in resultado.especies_por_endpoint.items() if filas}
     assert endpoints == {
         "public-bonds",
+        "lebacs",
         "negociable-obligations",
         "cedears",
         "general-equity",
-    }, "arg_bonds y arg_notes comparten public-bonds"
+    }, "arg_notes va a lebacs desde el 28/08/2026: sus 25 tickers son todos de ese panel"
 
 
 # --- Contraste entre fuentes -------------------------------------------------------------------

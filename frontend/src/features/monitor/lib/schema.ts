@@ -14,6 +14,15 @@ export const esquemaEspecie = z.object({
   emision: z.string(),
   sufijo_liquidacion: z.string().nullable(),
   clase_activo: z.string(),
+  /** Subclase dentro del riesgo soberano. Vocabulario cerrado por el CHECK de
+   *  `instrumentos.subtipo` en la base: `'letra'` | `'bonar'` | `'global'` | `'bopreal'`. Se
+   *  tipa como `string` y no como enum a propósito: si la base sumara un valor quinto, el monitor
+   *  tiene que poder mostrarlo tal cual en vez de rechazar la fila entera.
+   *
+   *  `null` = **sin subclase declarada**, que es el caso normal fuera del soberano —una ON no
+   *  tiene subtipo— y también el de un soberano hard-dollar cuya ley no consta. No se elige uno
+   *  por defecto (regla 1). Agregado el 28/08/2026 junto con el panel `lebacs` de BYMA. */
+  subtipo: z.string().nullable(),
   segmento: z.string(),
   naturaleza: z.string(),
   naturaleza_nombre: z.string(),

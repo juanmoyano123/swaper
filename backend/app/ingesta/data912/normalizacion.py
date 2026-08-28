@@ -37,10 +37,16 @@ CAMPOS_COBERTURA_LIVE = ("ticker", "ultimo", "monto")
 # A qué endpoint de BYMA correspondería cada tramo, para el ticker que sólo aparece en data912:
 # `armado.py` clasifica por el nombre del endpoint que trajo la fila, así que un ticker
 # sólo-data912 necesita uno para poder clasificarse igual que si viniera de BYMA.
+#
+# `arg_notes` apunta a `lebacs` desde el 28/08/2026, cuando ese panel se incorporó a la ingesta.
+# Medido ese día: los 25 tickers de `live/arg_notes` son **todos** ⊂ las 199 especies de `lebacs`.
+# Dejarlo en `public-bonds` haría que un ticker que BYMA trae por `lebacs` y data912 por `arg_notes`
+# apareciera bajo dos endpoints distintos y disparara `CODIGO_ESPECIE_REPETIDA` en todas las
+# corridas, sobre una repetición que no existe en la fuente sino en este mapa.
 ENDPOINT_BYMA_POR_TRAMO: dict[str, str] = {
     "arg_corp": "negociable-obligations",
     "arg_bonds": "public-bonds",
-    "arg_notes": "public-bonds",
+    "arg_notes": "lebacs",
     "arg_cedears": "cedears",
     "arg_stocks": "general-equity",
 }

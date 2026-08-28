@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 
 import app.api.v1.jobs as modulo_jobs
 from app.core.config import get_settings
+from app.instrumentos.emisores import ResumenBarrido
 from tests.conftest import AUTORIZACION_DE_CRON, FakeConnection, cliente
 
 
@@ -119,3 +120,36 @@ async def test_disparar_matinal_sin_base_responde_503(crear_app) -> None:
         respuesta = await http.post("/api/v1/jobs/corridas/matinal", headers=AUTORIZACION_DE_CRON)
 
     assert respuesta.status_code == 503
+
+
+async def test_completar_emisores_exige_credencial(crear_app) -> None:
+    """Nace cerrado porque la dependencia vive en el router, no en el decorador. El test lo fija:
+    si alguien moviera `cron_o_asesor` a cada endpoint, éste quedaría abierto y nadie lo notaría.
+    """
+    app = crear_app(_FakeConexionCorridas())
+
+    async with cliente(app) as http:
+        respuesta = await http.post("/api/v1/jobs/completar-emisores")
+
+    assert respuesta.status_code == 401
+
+
+async def test_completar_emisores_topea_el_limite_pedido(crear_app, monkeypatch) -> None:
+    """Son ~4.000 pendientes y un POST por especie: sin tope, una sola llamada duraría más de lo
+    que cualquier proxy tolera."""
+    pedido = {}
+
+    async def _falsa(conn, *, limite):
+        pedido["limite"] = limite
+        return ResumenBarrido(0, 0, 0, 0, 0, 0, 0, 0)
+
+    monkeypatch.setattr(modulo_jobs, "completar_emisores", _falsa)
+    app = crear_app(_FakeConexionCorridas())
+
+    async with cliente(app) as http:
+        respuesta = await http.post(
+            "/api/v1/jobs/completar-emisores?limite=99999", headers=AUTORIZACION_DE_CRON
+        )
+
+    assert respuesta.status_code == 200
+    assert pedido["limite"] == modulo_jobs.LIMITE_EMISORES

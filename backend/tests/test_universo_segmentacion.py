@@ -300,6 +300,29 @@ def test_una_especie_sin_capturado_en_no_se_marca_huerfana_por_default() -> None
     assert por_ticker["SINFECHAO"] is None
 
 
+# --- Subtipo soberano (28/08/2026) --------------------------------------------------------------
+
+
+def test_el_subtipo_viaja_desde_la_vista_hasta_el_dict_del_api() -> None:
+    resultado = segmentar(
+        [fila("S31G6", "tasa-fija", clase="bono_soberano", subtipo="letra")]
+    )
+
+    especie = resultado.especies[0]
+    assert especie.subtipo == "letra"
+    assert especie.como_dict()["subtipo"] == "letra"
+
+
+def test_sin_subtipo_la_especie_lo_declara_vacio_y_no_elige_uno() -> None:
+    """Una ON no tiene subtipo, y un soberano hard-dollar sin ley tampoco: `null`, no un default."""
+    resultado = segmentar(
+        [fila("PLC7O", "hard-dollar"), fila("AL30", "hard-dollar", clase="bono_soberano")]
+    )
+
+    assert [e.subtipo for e in resultado.especies] == [None, None]
+    assert all(e.como_dict()["subtipo"] is None for e in resultado.especies)
+
+
 # --- Residual y valor técnico (relevamiento de confiabilidad de datos, 17/08/2026) ----------------
 
 

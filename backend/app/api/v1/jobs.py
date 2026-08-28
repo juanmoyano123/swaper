@@ -30,6 +30,8 @@ from app.api.deps import cron_o_asesor, get_db
 from app.core.config import Settings, get_settings
 from app.externos.sec import ClienteSec
 from app.ingesta.byma.cedears import traer_lista
+from app.instrumentos.emisores import LIMITE_POR_CORRIDA as LIMITE_EMISORES
+from app.instrumentos.emisores import completar_emisores
 from app.jobs.corridas import correr_fci, corrida_matinal, lock_de_ingesta, refresh_intra_rueda
 from app.jobs.horarios import en_ventana_de_rueda, es_dia_habil, zona
 from app.jobs.registro import listar_corridas
@@ -287,4 +289,33 @@ async def disparar_clasificacion_renta_variable(
         datos_byma=datos_byma,
         limite=limite,
     )
+    return resumen.como_dict()
+
+
+@router.post(
+    "/completar-emisores",
+    summary=(
+        "Completa emisor, ley y denominación de los instrumentos que los tienen vacíos, "
+        "desde la ficha técnica de BYMA"
+    ),
+    responses={
+        401: {"description": "Falta el token de cron o la sesión de asesor, o no son válidos"},
+        503: {
+            "description": ("La base de datos no está disponible, o no se pueden validar sesiones")
+        },
+    },
+)
+async def disparar_completar_emisores(
+    conn: Annotated[asyncpg.Connection, Depends(get_db)],
+    limite: int = LIMITE_EMISORES,
+) -> dict[str, object]:
+    """Incremental: hasta `limite` especies por corrida, retomando donde quedó.
+
+    La matinal ya encadena una tanda chica todos los días (`LIMITE_EMISORES_EN_MATINAL`); esto es
+    para acelerar el barrido a mano sin esperar a que el goteo diario termine.
+
+    `limite` va topeado: son ~4.000 pendientes y un POST por especie, así que pedir el universo
+    entero en una sola llamada la haría durar más de lo que cualquier proxy tolera.
+    """
+    resumen = await completar_emisores(conn, limite=min(limite, LIMITE_EMISORES))
     return resumen.como_dict()

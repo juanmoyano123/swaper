@@ -24,6 +24,7 @@ la feature. El desempate que sí queda es sector nuevo → mejor rendimiento.
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 
 from app.armado.constantes import BANDA_RENDIMIENTO, HORIZONTES, MIX_COBERTURA
 from app.armado.parametros import ParametrosArmado
@@ -44,6 +45,13 @@ CODIGO_SEGMENTO_SIN_CANDIDATOS = "segmento_sin_candidatos"
 CODIGO_SEGMENTO_SIN_CUPO = "segmento_sin_cupo_por_concentracion"
 CODIGO_SEGMENTO_INCOMPLETO = "segmento_incompleto"
 CODIGO_CARTERA_RESCALADA = "cartera_rescalada_a_100"
+CODIGO_CANDIDATOS_SIN_PRECIO_DEL_DIA = "candidatos_sin_precio_del_dia"
+CODIGO_CANDIDATOS_SIN_EMISOR = "candidatos_sin_emisor"
+
+# Cuántos tickers se nombran en el mensaje de una alerta antes de resumir el resto. Mismo criterio y
+# mismo número que `ingesta/consolidacion/metricas.py`, `calendario/alertas.py` y `universo/
+# cambio.py`: cada módulo se lo declara, porque una alerta que lista 1.300 tickers no se lee.
+MUESTRA_ALERTA = 6
 
 
 def _alerta(codigo: str, mensaje: str, **detalle: object) -> Alerta:
@@ -56,6 +64,111 @@ def _alerta(codigo: str, mensaje: str, **detalle: object) -> Alerta:
         accion_requerida=None,
         detalle=detalle,
     )
+
+
+def _muestra(tickers: Sequence[str]) -> str:
+    """Los primeros tickers en orden alfabético y cuántos quedaron sin nombrar — mismo criterio que
+    `app.ingesta.consolidacion.metricas._muestra`, para que todas las alertas del proyecto declaren
+    un faltante grande de la misma forma."""
+    visibles = ", ".join(sorted(tickers)[:MUESTRA_ALERTA])
+    resto = len(tickers) - MUESTRA_ALERTA
+    return f"{visibles} y {resto} más" if resto > 0 else visibles
+
+
+def aplicar_guardas_de_candidatos(
+    universo: Sequence[EspecieUniverso],
+) -> tuple[list[EspecieUniverso], list[Alerta]]:
+    """Lo que el armador puede proponer, y la declaración de lo que dejó afuera por no poder
+    analizarlo. Función pura: no lee nada y no muta lo que recibe.
+
+    Descarta dos cosas, cada una con su alerta. **Nunca en silencio**: el conteo, el motivo y una
+    muestra de tickers viajan en el mensaje (regla 1 del dominio, el faltante se declara con nombre
+    y apellido).
+
+    ## Por qué hace falta, si ya hay un filtro de liquidez
+
+    `candidatos_del_segmento` corta por un **percentil** de los volúmenes de los candidatos que ya
+    pasaron los filtros previos, y un percentil no es un piso absoluto: si el conjunto candidato
+    opera poco, el corte baja con él y sigue dejando pasar al que no operó. El 27/08/2026 entraron
+    1.339 instrumentos nuevos —casi todos sin rueda, porque se empezó a pedir el panel completo de
+    BYMA— y eso dejó de ser un caso de borde. Estas dos guardas son absolutas y no dependen de con
+    quién le tocó competir a cada especie.
+
+    ## Sin precio del día
+
+    `precio is None`, o especie **huérfana**: su `capturado_en` no es el de la corrida más reciente
+    del universo recibido. Es la misma definición que `Segmentacion.huerfanas` en
+    `app/universo/segmentacion.py` —comparación exacta contra el máximo, y una especie sin
+    `capturado_en` no se declara huérfana porque no hay contra qué compararla— y se sostiene en el
+    mismo hecho: la poda de precios es por-ticker, así que una especie que dejó de cotizar conserva
+    su última fila para siempre y la vista la sigue sirviendo sin ninguna marca de antigüedad.
+
+    El máximo se toma sobre el universo que llega acá, que ya viene recortado por el llamador. Es
+    el mismo instante que el de la corrida completa mientras al menos un candidato sea de la última
+    —el caso normal—; si ninguno lo fuera, esta guarda no descartaría nada y el faltante lo
+    seguirían declarando las alertas de sanidad, que miran todas las filas leídas.
+
+    ## Sin emisor identificado
+
+    `emisor is None`. Proponerle a un cliente un riesgo de crédito que no se puede nombrar no es una
+    propuesta, es una apuesta. **Los soberanos nunca caen acá**: la corrida de consolidación les
+    escribe siempre su emisor (asigna `underlying` para `bono_soberano`), así que la guarda sólo
+    alcanza a ONs y subsoberanos sin emisor escrito, que es exactamente su intención.
+
+    **No es la whitelist de bróker que la regla 9 prohíbe.** Ahí lo vedado es recortar el universo
+    por dónde se puede comprar; acá se exige el dato sin el cual el instrumento no se puede
+    analizar. Por eso la especie sigue existiendo y mostrándose en el monitor: lo único que no puede
+    es entrar sola a una cartera que el asesor va a firmar.
+
+    Las dos guardas se aplican en cascada, así que una especie sin precio **y** sin emisor se cuenta
+    una sola vez, en la primera: la alerta dice por qué no entró, no todas las razones por las que
+    podría no haber entrado.
+    """
+    alertas: list[Alerta] = []
+
+    capturas = [e.capturado_en for e in universo if e.capturado_en is not None]
+    ultima_corrida: datetime | None = max(capturas) if capturas else None
+
+    con_precio: list[EspecieUniverso] = []
+    sin_precio: list[str] = []
+    for especie in universo:
+        huerfana = (
+            ultima_corrida is not None
+            and especie.capturado_en is not None
+            and especie.capturado_en != ultima_corrida
+        )
+        if especie.precio is None or huerfana:
+            sin_precio.append(especie.ticker)
+        else:
+            con_precio.append(especie)
+
+    if sin_precio:
+        alertas.append(
+            _alerta(
+                CODIGO_CANDIDATOS_SIN_PRECIO_DEL_DIA,
+                f"{len(sin_precio)} instrumento(s) no se proponen porque no tienen precio de la "
+                f"corrida más reciente —sin precio publicado, o con la última cotización de una "
+                f"rueda anterior—: {_muestra(sin_precio)}.",
+                cantidad=len(sin_precio),
+                tickers=sorted(sin_precio),
+            )
+        )
+
+    candidatos = [e for e in con_precio if e.emisor is not None]
+    sin_emisor = sorted(e.ticker for e in con_precio if e.emisor is None)
+    if sin_emisor:
+        alertas.append(
+            _alerta(
+                CODIGO_CANDIDATOS_SIN_EMISOR,
+                f"{len(sin_emisor)} instrumento(s) no se proponen porque la fuente no declara su "
+                f"emisor, y sin emisor no se puede nombrar el riesgo de crédito que se asume: "
+                f"{_muestra(sin_emisor)}. Se siguen mostrando en el monitor.",
+                cantidad=len(sin_emisor),
+                tickers=sin_emisor,
+            )
+        )
+
+    return candidatos, alertas
 
 
 def percentil_lineal(valores: Sequence[float], q: float) -> float:
@@ -330,8 +443,13 @@ def armar(
 
     Cartera parcial cuando el universo no alcanza para completar el mix o el mínimo sectorial del
     perfil: nunca se rellena con otra naturaleza (regla 1 del dominio) — se alerta y se sigue.
+
+    Lo primero que corre es `aplicar_guardas_de_candidatos`, así cualquier llamador las hereda sin
+    tener que acordarse: nada sin precio del día ni sin emisor identificado llega a
+    `elegir_siguiente`. Sus alertas siembran la lista, de modo que el descarte se declara aunque
+    después la cartera salga completa.
     """
-    alertas: list[Alerta] = []
+    universo, alertas = aplicar_guardas_de_candidatos(universo)
     peso_acumulado: dict[str, float] = {}
     peso_sector: dict[str, float] = {}
     sectores_presentes: set[str] = set()

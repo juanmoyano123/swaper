@@ -8,10 +8,12 @@ suposición razonable.
 
 from app.ingesta.consolidacion.clasificacion import (
     CLASE_POR_ENDPOINT,
+    ENDPOINTS_SIN_CLASE_PROPIA,
     SUBMARKET_MAP,
     clasificar,
     hay_discrepancia,
     subtipo_de,
+    subtipo_en_corrida,
 )
 from app.ingesta.raiz import raiz_emision
 
@@ -139,6 +141,66 @@ def test_el_subtipo_sale_de_la_ley_y_solo_para_hard_dollar() -> None:
 def test_sin_ley_no_hay_subtipo() -> None:
     """En F-007 es el caso normal: la ley llega por IAMC, que cubre 242 emisiones de 822."""
     assert subtipo_de("hard-dollar", None) is None
+
+
+def test_el_panel_de_letras_se_clasifica_por_cronograma_igual_que_public_bonds() -> None:
+    """`lebacs` no declara clase propia: la da el `type` del cronograma, como en public-bonds."""
+    assert clasificar("lebacs", "FIXED_RATE") == ("bono_soberano", "tasa-fija")
+    assert clasificar("lebacs", "SUB_SOBERANO_TAMAR") == ("bono_subsoberano", "tamar")
+    assert "lebacs" in ENDPOINTS_SIN_CLASE_PROPIA
+
+
+def test_una_especie_del_panel_de_letras_sin_cronograma_no_se_clasifica() -> None:
+    """Las 108 `.SB` y las 147 variantes C/D/X/Y/Z caen acá: sin cronograma no hay clase.
+
+    Marcarlas "letra" porque vinieron del panel de letras sería leer el panel como si declarara el
+    emisor, que es lo que la regla 11 prohíbe.
+    """
+    assert clasificar("lebacs", None) is None
+    assert clasificar("lebacs", "SUB_SOBERANO_UVA") is None
+
+
+def test_el_panel_de_letras_no_tiene_clase_propia_que_pueda_discrepar() -> None:
+    assert not hay_discrepancia("lebacs", "SUB_SOBERANO_TAMAR")
+
+
+def test_una_letra_del_tesoro_lleva_subtipo_letra() -> None:
+    assert subtipo_en_corrida("lebacs", "bono_soberano", "tasa-fija") == "letra"
+
+
+def test_una_letra_subsoberana_del_mismo_panel_no_lleva_subtipo() -> None:
+    """El panel mezcla Tesoro y provincias: una letra provincial no es una letra del Tesoro."""
+    assert subtipo_en_corrida("lebacs", "bono_subsoberano", "tamar") is None
+
+
+def test_un_bopreal_lleva_subtipo_bopreal_venga_del_panel_que_venga() -> None:
+    """Lo declara `tipo_tasa`, que sale del `type` del cronograma, no el ticker ni el panel."""
+    assert subtipo_en_corrida("public-bonds", "bono_soberano", "bopreal") == "bopreal"
+    assert subtipo_en_corrida("lebacs", "bono_soberano", "bopreal") == "letra", (
+        "combinación que no se observó el 28/08/2026; el orden queda fijado para que el resultado "
+        "no dependa del azar si alguna vez aparece"
+    )
+
+
+def test_la_corrida_no_deriva_bonar_ni_global() -> None:
+    """Dependen de `law`, que no viaja en la fila de BYMA. Los escribe el backfill, no la corrida.
+
+    Devolver `None` es lo que deja que el COALESCE del upsert conserve el subtipo ya persistido.
+    """
+    assert subtipo_en_corrida("public-bonds", "bono_soberano", "hard-dollar") is None
+
+
+def test_los_subtipos_que_derivan_las_dos_funciones_estan_en_el_dominio_de_la_tabla() -> None:
+    """Si alguna devolviera un valor fuera del CHECK, el INSERT fallaría en la corrida real."""
+    del_check = {"global", "bonar", "letra", "bopreal"}
+    derivados = {
+        subtipo_en_corrida("lebacs", "bono_soberano", "tasa-fija"),
+        subtipo_en_corrida("public-bonds", "bono_soberano", "bopreal"),
+        subtipo_de("hard-dollar", "Ley N.Y."),
+        subtipo_de("hard-dollar", "Ley Argentina"),
+    }
+
+    assert derivados <= del_check
 
 
 def test_las_clases_del_endpoint_estan_todas_en_el_dominio_de_la_tabla() -> None:

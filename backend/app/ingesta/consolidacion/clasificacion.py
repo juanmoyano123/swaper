@@ -15,11 +15,18 @@ Buenos Aires. Lo que sí lo declara es el `type` del cronograma —el submarket 
 emisión, una de las nueve columnas contractuales que el consolidador ya persiste—, cruzado por raíz
 de ticker. Ese mismo `type` es la única fuente de `tipo_tasa` para toda la renta fija.
 
-Una especie de `public-bonds` sin cronograma no entra al universo. No es una pérdida: `clase_activo`
-es NOT NULL y elegirle una clase sería inventar el dato que la separa. El motor viejo hacía lo
-mismo (descartaba las filas de clase nula) y el consolidado histórico tampoco las tenía; lo que se
-descarta acá son las especies X/Y/Z que BYMA publica y el producto nunca consideró. Sus puntas se
-guardan igual, porque `puntas` no tiene FK justamente para no perder ese dato.
+**`lebacs` está en la misma situación desde el 28/08/2026.** El panel de letras de BYMA tampoco
+declara clase: trae letras del Tesoro y letras subsoberanas mezcladas, y su `securitySubType='E'`
+—contra `'B'` en public-bonds— separa paneles, no créditos. Lo que sí aporta por encima del
+cronograma es el **subtipo** `letra`, que es la razón de ser de `subtipo_en_corrida`.
+
+Una especie de un endpoint sin clase propia y sin cronograma no entra al universo. No es una
+pérdida: `clase_activo` es NOT NULL y elegirle una clase sería inventar el dato que la separa. El
+motor viejo hacía lo mismo (descartaba las filas de clase nula) y el consolidado histórico tampoco
+las tenía; lo que se descarta acá son las especies X/Y/Z que BYMA publica y el producto nunca
+consideró, y desde `lebacs` las 108 `.SB` (SENEBI) más las 147 variantes C/D/X/Y/Z cuya raíz no
+cruza el cronograma. Sus puntas se guardan igual, porque `puntas` no tiene FK justamente para no
+perder ese dato.
 """
 
 from app.ingesta.alertas import Alerta, Severidad
@@ -63,7 +70,19 @@ CLASE_POR_ENDPOINT: dict[str, str] = {
     "leading-equity": "accion",
 }
 
-ENDPOINT_SIN_CLASE_PROPIA = "public-bonds"
+# Los endpoints que no declaran clase: la sigue dando el cronograma cruzado por raíz.
+#
+# `lebacs` entró el 28/08/2026 y está acá por el mismo motivo que `public-bonds`: el panel de letras
+# tampoco declara una clase propia. Su `securitySubType` vale `'E'` en las 199 especies (contra
+# `'B'` en public-bonds), pero eso separa paneles de BYMA, no créditos — el panel mezcla letras del
+# Tesoro con subsoberanas (medido: 5 de las 23 que cruzan cronograma son `SUB_SOBERANO_TAMAR`), así
+# que leerlo como "letra del Tesoro" sería traducir un código propietario (regla 11). Quién emite lo
+# sigue diciendo el `type` del cronograma, igual que en public-bonds.
+ENDPOINTS_SIN_CLASE_PROPIA: frozenset[str] = frozenset({"public-bonds", "lebacs"})
+
+# Panel de letras de BYMA. Se nombra aparte porque `subtipo_en_corrida` lo necesita para el subtipo
+# `letra`, lo único que este endpoint aporta por encima de lo que ya da el cronograma.
+ENDPOINT_LEBACS = "lebacs"
 
 CODIGO_CLASE_SIN_MAPEO = "clase_sin_mapeo"
 CODIGO_CLASE_DISCREPANTE = "clase_discrepante"
@@ -76,12 +95,13 @@ def clasificar(endpoint: str, tipo_cronograma: str | None) -> tuple[str, str | N
     """Clase de activo y tipo de tasa de una especie, o `None` si no se puede saber sin inventar.
 
     `tipo_cronograma` es el `type` que el cashflow declara para la raíz de esta especie.
-    Para los endpoints que ya declaran la clase sólo aporta el tipo de tasa; para `public-bonds` es
-    la única forma de saber si el emisor es el Tesoro o una provincia.
+    Para los endpoints que ya declaran la clase sólo aporta el tipo de tasa; para los de
+    `ENDPOINTS_SIN_CLASE_PROPIA` es la única forma de saber si el emisor es el Tesoro o una
+    provincia.
     """
     del_cronograma = SUBMARKET_MAP.get(tipo_cronograma) if tipo_cronograma else None
 
-    if endpoint == ENDPOINT_SIN_CLASE_PROPIA:
+    if endpoint in ENDPOINTS_SIN_CLASE_PROPIA:
         return del_cronograma
 
     clase = CLASE_POR_ENDPOINT.get(endpoint)
@@ -95,7 +115,7 @@ def clasificar(endpoint: str, tipo_cronograma: str | None) -> tuple[str, str | N
 
 def hay_discrepancia(endpoint: str, tipo_cronograma: str | None) -> bool:
     """El endpoint dice una clase y el cronograma otra. Se declara; el endpoint gana igual."""
-    if endpoint == ENDPOINT_SIN_CLASE_PROPIA or not tipo_cronograma:
+    if endpoint in ENDPOINTS_SIN_CLASE_PROPIA or not tipo_cronograma:
         return False
     del_cronograma = SUBMARKET_MAP.get(tipo_cronograma)
     return bool(del_cronograma) and del_cronograma[0] != CLASE_POR_ENDPOINT.get(endpoint)
@@ -118,14 +138,49 @@ def subtipo_de(tipo_tasa: str | None, law: str | None) -> str | None:
     return None
 
 
+def subtipo_en_corrida(
+    endpoint: str, clase_activo: str, tipo_tasa: str | None
+) -> str | None:
+    """El subtipo que **esta corrida** puede declarar sin leer la base ni inferir nada.
+
+    Son los dos que salen de algo ya declarado en la propia fila:
+
+    - `'letra'`: la trajo el panel `lebacs` **y** el cronograma la declaró del Tesoro. Las dos
+      condiciones hacen falta: el panel también trae subsoberanas (medido el 28/08/2026: 5 de las
+      23 especies del panel que cruzan cronograma son `SUB_SOBERANO_TAMAR`), y una letra provincial
+      no es una letra del Tesoro. Marcar todo el panel como `letra` sería leer `securitySubType='E'`
+      como si dijera algo sobre el emisor, que es justo lo que la regla 11 prohíbe.
+    - `'bopreal'`: lo declara el `type` del cronograma (`BOPREAL` → `tipo_tasa='bopreal'`), no el
+      ticker.
+
+    El orden entre las dos es el del código y no se observó ningún caso que lo active: el
+    28/08/2026 no hay bopreales en el panel de letras. Queda fijado para que, si aparece uno, el
+    resultado no dependa del azar.
+
+    **Bonar y global no se derivan acá**, aunque el CHECK de la columna los acepte: dependen de
+    `law`, la corrida no lee la base para clasificar (contrato declarado en `armado.py`) y la fila
+    de BYMA no trae ley. Los escribe el backfill de la migración `20260828120000_subtipo_letra_
+    bopreal.sql` y, de ahí en más, el job que siembra desde el CSV curado. Cuando esta función
+    devuelve `None` el COALESCE del upsert conserva lo que ya estuviera escrito, así que una corrida
+    nueva nunca borra un bonar/global ya derivado.
+    """
+    if endpoint == ENDPOINT_LEBACS and clase_activo == "bono_soberano":
+        return "letra"
+    if tipo_tasa == "bopreal":
+        return "bopreal"
+    return subtipo_de(tipo_tasa, None)
+
+
 def clase_sin_mapeo(tipos: dict[str, int], especies: int) -> Alerta:
-    """Especies de `public-bonds` que no entran al universo por no tener cronograma conocido."""
+    """Especies sin clase propia ni cronograma conocido: no entran al universo."""
     detalle_tipos = ", ".join(f"{t or 'sin cronograma'}: {n}" for t, n in sorted(tipos.items()))
+    paneles = ", ".join(sorted(ENDPOINTS_SIN_CLASE_PROPIA))
     return Alerta(
         codigo=CODIGO_CLASE_SIN_MAPEO,
         mensaje=(
-            f"{especies} especies de public-bonds quedaron fuera del universo por no poder "
-            f"determinar su clase de activo ({detalle_tipos}). Sus puntas se guardaron igual."
+            f"{especies} especies de los paneles sin clase propia ({paneles}) quedaron fuera del "
+            f"universo por no poder determinar su clase de activo ({detalle_tipos}). Sus puntas "
+            f"se guardaron igual."
         ),
         severidad=Severidad.ADVERTENCIA,
         accion_requerida=None,

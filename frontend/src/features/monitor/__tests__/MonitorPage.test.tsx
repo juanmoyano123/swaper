@@ -44,6 +44,7 @@ function especie(extra: Partial<Especie> = {}): Especie {
     emision: 'AL30',
     sufijo_liquidacion: null,
     clase_activo: 'bono_soberano',
+    subtipo: null,
     segmento: 'usd_hard',
     naturaleza: 'tir_usd',
     naturaleza_nombre: 'TIR en dólares (hard dollar)',
@@ -393,6 +394,97 @@ describe('chips de crédito dentro del segmento', () => {
     expect(await screen.findByText('4 de 4 especies en USD')).toBeInTheDocument()
     expect(screen.getByText('AL30')).toBeInTheDocument()
     expect(screen.getByText('YMCHO')).toBeInTheDocument()
+  })
+})
+
+// --- Sub-chip de subtipo soberano (28/08/2026) ---------------------------------------------------
+
+describe('sub-chip de subtipo dentro de los soberanos', () => {
+  // Dos soberanos con subclases distintas y una ON: alcanza para que el sub-chip tenga algo que
+  // separar y para comprobar que la ON no lo hace aparecer.
+  const S31G6 = especie({ ticker: 'S31G6', emision: 'S31G6', subtipo: 'letra', rendimiento: 0.2, duracion: 0.4 })
+  const AL30_BONAR = especie({ ticker: 'AL30', emision: 'AL30', subtipo: 'bonar' })
+
+  function mockearApiConSubtipos() {
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = new URL(String(input), 'http://localhost')
+
+      if (url.pathname === '/api/v1/universo/segmentos') {
+        return respuestaJson({
+          segmentos: [
+            {
+              clave: 'usd_hard',
+              nombre: 'Hard dollar',
+              naturaleza: 'tir_usd',
+              naturaleza_nombre: 'TIR en dólares (hard dollar)',
+              especies: 3,
+            },
+          ],
+          renta_variable: 0,
+          sin_segmento: 0,
+        })
+      }
+      if (url.pathname === '/api/v1/universo/emisiones/especies') {
+        return respuestaJson(pagina([AL30_BONAR, S31G6, YMCHO]))
+      }
+
+      throw new Error(`ruta no mockeada en el test: ${url.pathname}${url.search}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+  }
+
+  it('con el crédito en Todos el sub-chip no se dibuja: el subtipo es del soberano, no del segmento', async () => {
+    mockearApiConSubtipos()
+    renderizar()
+
+    await screen.findByRole('radiogroup', { name: 'Crédito' })
+    expect(screen.queryByRole('radiogroup', { name: 'Subtipo soberano' })).not.toBeInTheDocument()
+  })
+
+  it('al elegir Soberanos aparece con sus subclases y sus conteos', async () => {
+    mockearApiConSubtipos()
+    renderizar()
+
+    await userEvent.click(await screen.findByRole('radio', { name: /^Soberanos/ }))
+
+    const sub = await screen.findByRole('radiogroup', { name: 'Subtipo soberano' })
+    expect(within(sub).getByRole('radio', { name: 'Todos 2' })).toBeInTheDocument()
+    expect(within(sub).getByRole('radio', { name: 'Letras 1' })).toBeInTheDocument()
+    expect(within(sub).getByRole('radio', { name: 'Bonares 1' })).toBeInTheDocument()
+  })
+
+  it('elegir una subclase filtra la tabla dentro del crédito soberano', async () => {
+    mockearApiConSubtipos()
+    renderizar()
+
+    await userEvent.click(await screen.findByRole('radio', { name: /^Soberanos/ }))
+    expect(await screen.findByText('2 de 2 especies en USD')).toBeInTheDocument()
+
+    await userEvent.click(await screen.findByRole('radio', { name: /^Letras/ }))
+
+    expect(await screen.findByText('1 de 1 especies en USD')).toBeInTheDocument()
+    expect(screen.getByText('S31G6')).toBeInTheDocument()
+    expect(screen.queryByText('AL30')).not.toBeInTheDocument()
+  })
+
+  it('cambiar el crédito apaga el subtipo en vez de dejarlo filtrando en fantasma', async () => {
+    mockearApiConSubtipos()
+    renderizar()
+
+    await userEvent.click(await screen.findByRole('radio', { name: /^Soberanos/ }))
+    await userEvent.click(await screen.findByRole('radio', { name: /^Letras/ }))
+    expect(await screen.findByText('1 de 1 especies en USD')).toBeInTheDocument()
+
+    // Los chips de crédito siguen ahí: el subtipo se neutraliza al contarlos, porque es una
+    // dimensión hija. Sin eso, elegir Letras dejaba al asesor encerrado en el soberano.
+    expect(screen.getByRole('radio', { name: /^ONs/ })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('radio', { name: /^ONs/ }))
+
+    // Sin el reseteo, el subtipo 'letra' seguiría activo y la ON —que no lo tiene— quedaría afuera.
+    expect(await screen.findByText('1 de 1 especies en USD')).toBeInTheDocument()
+    expect(screen.getByText('YMCHO')).toBeInTheDocument()
+    expect(screen.queryByRole('radiogroup', { name: 'Subtipo soberano' })).not.toBeInTheDocument()
   })
 })
 

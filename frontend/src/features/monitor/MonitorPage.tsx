@@ -20,11 +20,16 @@
  *    segmento activo. Generaliza a los seis segmentos lo que antes sólo existía para el dólar hard.
  *    "Todos" es válido porque el crédito no cambia la unidad del rendimiento (regla 2); lo que
  *    separa es el riesgo emisor (regla 4).
- * 4. **Moneda** (`SelectorMoneda`, chip): un eje más abajo, sin cambios respecto de antes.
+ * 4. **Subtipo soberano** (`SelectorSubtipoSoberano`, chip, 28/08/2026): Letras / Bonares /
+ *    Globales / Bopreales, **sólo cuando el crédito activo es Soberanos**. Llegó con el panel
+ *    `lebacs` de BYMA, que metió las letras del Tesoro a un casillero donde ya convivían bonares,
+ *    globales y bopreales sin distinguirse. Cambiar el crédito lo apaga. Es filtro y nada más: el
+ *    Bopreal lo emite el BCRA pero sigue bajo la misma clave de concentración (regla 4).
+ * 5. **Moneda** (`SelectorMoneda`, chip): un eje más abajo, sin cambios respecto de antes.
  *
- * Las tres particiones de abajo de la familia son **client-side sobre la misma query cacheada por
- * segmento**: moverse entre segmento/crédito/moneda no dispara un pedido nuevo salvo al cambiar de
- * segmento, porque ahí sí cambia el `?segmento=` que se le pide al backend.
+ * Las particiones de abajo de la familia son **client-side sobre la misma query cacheada por
+ * segmento**: moverse entre segmento/crédito/subtipo/moneda no dispara un pedido nuevo salvo al
+ * cambiar de segmento, porque ahí sí cambia el `?segmento=` que se le pide al backend.
  *
  * Renta variable no tiene segundo nivel propio hoy: `CLAVES_RENTA_VARIABLE` sólo tiene `cedear`, así
  * que la pestaña de familia va directo a la tabla, sin una sub-barra de una sola opción. Si mañana
@@ -44,6 +49,7 @@ import { Pantalla } from '@/components/Pantalla'
 import { Panel } from '@/components/Panel'
 import { SelectorCredito, contarPorCredito } from '@/components/SelectorCredito'
 import { SelectorMoneda, contarPorMoneda, monedaInicial, SIN_MONEDA_DECLARADA } from '@/components/SelectorMoneda'
+import { SelectorSubtipoSoberano, SIN_SUBCLASE, contarPorSubtipo } from '@/components/SelectorSubtipoSoberano'
 import { CLAVES_RENTA_VARIABLE, SelectorSegmento, nombreSegmento, ordenarSegmentos } from '@/components/SelectorSegmento'
 import { TablaFci } from '@/components/TablaFci'
 import { TablaRentaVariable } from '@/components/TablaRentaVariable'
@@ -176,6 +182,10 @@ const MONEDA_PREFERIDA: Record<string, string> = {
 }
 const MONEDA_PREFERIDA_POR_DEFECTO = 'ARS'
 
+/** El único crédito que tiene subclasificación (`SelectorSubtipoSoberano`). El valor es el de
+ *  `clase_activo` en la base, el mismo que usa `ORDEN_CREDITO`. */
+const CREDITO_SOBERANO = 'bono_soberano'
+
 function UniversoDelSegmento({
   segmento,
   naturaleza,
@@ -207,11 +217,28 @@ function UniversoDelSegmento({
   // calculan aparte, cada uno sobre el subconjunto que deja el resto de los filtros (la propia
   // dimensión neutralizada) — mismo criterio *leave-one-out* que ya aplica `facetarUniverso` para
   // sector/ley/calificación/emisor.
+  // El subtipo se neutraliza junto con el crédito, y no sólo el crédito: es una dimensión **hija**
+  // de esta, así que dejarlo activo mientras se cuentan los créditos hace que elegir Letras borre
+  // los chips de Subsoberanos y ONs —ninguna especie no soberana lleva subtipo— y el asesor queda
+  // encerrado en el soberano sin forma de volver. Es la excepción al leave-one-out plano.
   const especiesParaCredito = useMemo(
-    () => deLSegmento.filter((e) => pasaFiltros(e, { ...efectivos, credito: null })),
+    () => deLSegmento.filter((e) => pasaFiltros(e, { ...efectivos, credito: null, subtipoSoberano: null })),
     [deLSegmento, efectivos],
   )
   const creditos = useMemo(() => contarPorCredito(especiesParaCredito), [especiesParaCredito])
+
+  // El sub-chip del soberano (28/08/2026). Mismo criterio leave-one-out que el resto, pero además
+  // acotado a las soberanas: el subtipo es la subclasificación de ese crédito y de ningún otro, así
+  // que contar bajo "Todos los créditos" mostraría a las ONs como "(sin subclase)", que sería
+  // cierto y a la vez engañoso — una ON no es un soberano al que le falte el dato.
+  const soberanasParaSubtipo = useMemo(
+    () =>
+      deLSegmento.filter(
+        (e) => e.clase_activo === CREDITO_SOBERANO && pasaFiltros(e, { ...efectivos, subtipoSoberano: null }),
+      ),
+    [deLSegmento, efectivos],
+  )
+  const subtipos = useMemo(() => contarPorSubtipo(soberanasParaSubtipo), [soberanasParaSubtipo])
 
   const especiesParaMoneda = useMemo(
     () => deLSegmento.filter((e) => pasaFiltros(e, { ...efectivos, moneda: null })),
@@ -240,8 +267,15 @@ function UniversoDelSegmento({
     () =>
       deLSegmento
         .filter((e) => efectivos.credito === null || e.clase_activo === efectivos.credito)
+        // El subtipo entra acá y no en la barra de filtros porque es un chip del mismo nivel que
+        // crédito y moneda: si no, elegir Letras dejaría la curva dibujando todos los soberanos.
+        .filter(
+          (e) =>
+            efectivos.subtipoSoberano === null ||
+            (e.subtipo ?? SIN_SUBCLASE) === efectivos.subtipoSoberano,
+        )
         .filter((e) => (e.moneda_cotizacion ?? SIN_MONEDA_DECLARADA) === activa),
-    [deLSegmento, efectivos.credito, activa],
+    [deLSegmento, efectivos.credito, efectivos.subtipoSoberano, activa],
   )
 
   if (universo.isPending) {
@@ -283,8 +317,23 @@ function UniversoDelSegmento({
         disponibles={creditos.disponibles}
         otras={creditos.otras}
         activo={efectivos.credito}
-        onCambio={(c) => onCambioFiltros({ ...filtros, credito: c })}
+        // Cambiar de crédito apaga el subtipo: fuera de los soberanos no significa nada, y dejarlo
+        // prendido lo haría filtrar en fantasma bajo un chip que ya no se dibuja.
+        onCambio={(c) => onCambioFiltros({ ...filtros, credito: c, subtipoSoberano: null })}
       />
+      {/* El sub-chip vive un nivel debajo del de crédito y sólo dentro de Soberanos: letras,
+          bonares, globales y bopreales son subclases de ese crédito. El Bopreal lo emite el BCRA,
+          pero a efectos de concentración sigue bajo la misma clave soberana (regla 4) — el chip
+          separa en pantalla, no en el tope por emisor. */}
+      {efectivos.credito === CREDITO_SOBERANO && (
+        <SelectorSubtipoSoberano
+          total={soberanasParaSubtipo.length}
+          disponibles={subtipos.disponibles}
+          otros={subtipos.otros}
+          activo={efectivos.subtipoSoberano}
+          onCambio={(s) => onCambioFiltros({ ...filtros, subtipoSoberano: s })}
+        />
+      )}
       {/* `activa` puede ser `null` de forma transitoria —p. ej. mientras se tipea un rango de
           rendimiento que por un instante queda invertido— sin que eso signifique que no hay
           monedas: `SelectorMoneda` necesita una activa concreta, así que sólo se monta cuando hay

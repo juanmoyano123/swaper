@@ -23,6 +23,7 @@ function especieValida(): Record<string, unknown> {
     emision: 'AL30',
     sufijo_liquidacion: null,
     clase_activo: 'bono_soberano',
+    subtipo: 'global',
     segmento: 'usd_hard',
     naturaleza: 'tir_usd',
     naturaleza_nombre: 'TIR en dólares (hard dollar)',

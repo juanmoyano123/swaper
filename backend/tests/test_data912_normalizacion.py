@@ -116,3 +116,20 @@ def test_endpoint_byma_por_tramo_cubre_los_cinco_tramos() -> None:
     from app.ingesta.data912.cliente import TRAMOS_LIVE
 
     assert set(ENDPOINT_BYMA_POR_TRAMO) == set(TRAMOS_LIVE)
+
+
+def test_arg_notes_mapea_al_panel_de_letras() -> None:
+    """Medido el 28/08/2026: los 25 tickers de `live/arg_notes` son todos del panel `lebacs`.
+
+    Con el mapeo viejo a `public-bonds`, un ticker que BYMA trae por `lebacs` y data912 por
+    `arg_notes` aparecía bajo dos endpoints y disparaba `CODIGO_ESPECIE_REPETIDA` todos los días
+    por una repetición que sólo existía en este diccionario.
+    """
+    assert ENDPOINT_BYMA_POR_TRAMO["arg_notes"] == "lebacs"
+
+
+def test_los_endpoints_del_mapeo_existen_en_la_ingesta_de_byma() -> None:
+    """Un nombre que BYMA no publica dejaría al ticker sólo-data912 sin poder clasificarse."""
+    from app.ingesta.byma.cliente import ENDPOINTS_ESPECIES
+
+    assert set(ENDPOINT_BYMA_POR_TRAMO.values()) <= set(ENDPOINTS_ESPECIES)

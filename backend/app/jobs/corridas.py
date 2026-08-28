@@ -35,7 +35,14 @@ from app.ingesta.cafci import ingerir_cafci
 from app.ingesta.consolidacion import armar_consolidacion, consolidar
 from app.ingesta.consolidacion.persistencia import leer_cronograma, persistir
 from app.ingesta.snapshot import Snapshot
-from app.jobs.registro import EstadoCorrida, TipoCorrida, registrar_corrida
+from app.instrumentos.emisores import ResumenBarrido, completar_emisores
+from app.jobs.guardas import claves_de_tramos, paneles_colapsados
+from app.jobs.registro import (
+    EstadoCorrida,
+    TipoCorrida,
+    registrar_corrida,
+    tramos_byma_previos,
+)
 from app.jobs.universo import filtrar_precios_al_universo, leer_tickers_existentes
 
 logger = structlog.get_logger()
@@ -48,6 +55,13 @@ CODIGO_TICKER_FUERA_DE_UNIVERSO = "ticker_fuera_de_universo"
 # tiene que poder rastrearse hasta quién la reservó. Si alguna vez hace falta una segunda, la
 # convención es el número de la feature que la pide.
 CLAVE_LOCK_INGESTA = 8
+
+# Cuántas especies enriquece la matinal con la ficha técnica de BYMA. Es chico a propósito: el
+# barrido es incremental y no tiene por qué terminar en una corrida —son ~4.000 pendientes al
+# 28/08/2026—, y lo que no puede pasar es que un enriquecimiento alargue la ingesta, que es lo que
+# el asesor está esperando. A 50 por día el universo se completa solo; el resto se puede acelerar a
+# mano con `POST /jobs/completar-emisores`.
+LIMITE_EMISORES_EN_MATINAL = 50
 
 
 def _ticker_fuera_de_universo(tickers: list[str]) -> Alerta:
@@ -123,6 +137,40 @@ async def _ingerir_fci_sin_lanzar(
         return snapshot
 
 
+async def _completar_emisores_sin_lanzar(conn: Any) -> ResumenBarrido:
+    """El barrido de emisores contra la ficha técnica de BYMA, en su propio try/except.
+
+    Mismo criterio que `_ingerir_fci_sin_lanzar`: es **enriquecimiento**, no ingesta. Para cuando
+    esto corre, la matinal ya trajo BYMA y data912 y ya escribió el universo del día; que una
+    fuente secundaria falle no puede llevarse puesto ese trabajo. Un fallo baja como una corrida
+    con cero procesados, que se ve en `filas_por_fuente`.
+
+    Corre **después** de `consolidar()` y no antes porque su insumo son las filas de
+    `instrumentos`: las especies nuevas de hoy recién existen una vez que la consolidación las
+    escribió, y adelantarlo las dejaría esperando a la matinal siguiente.
+    """
+    try:
+        return await completar_emisores(conn, limite=LIMITE_EMISORES_EN_MATINAL)
+    except Exception as exc:
+        logger.warning("ficha_byma_barrido_fallo_inesperado", error=str(exc))
+        return ResumenBarrido(0, 0, 0, 0, 0, 0, 0, 0)
+
+
+async def _alertar_paneles_colapsados(conn: Any, snapshot: Snapshot | None) -> None:
+    """Compara los tramos de BYMA de esta corrida contra los de la última que los registró y deja
+    las alertas dentro del propio snapshot.
+
+    Van al snapshot y no a una lista aparte para no tocar nada más: desde ahí viajan solas a
+    `corridas_ingesta.alertas` —las dos corridas juntan sus alertas de los snapshots— y, por ser
+    de severidad ERROR, hacen que `_estado_de` marque la corrida `parcial` en lugar de `completa`.
+    """
+    if snapshot is None:
+        return
+    previas = await tramos_byma_previos(conn)
+    for alerta in paneles_colapsados(previas, snapshot.filas_por_tramo):
+        snapshot.alertar(alerta)
+
+
 def _estado_de(snapshots: Iterable[Snapshot]) -> str:
     """`completa` si nada falló, `parcial` si algo llegó igual, `fallida` si no llegó nada."""
     snapshots = list(snapshots)
@@ -150,16 +198,31 @@ async def corrida_matinal(
     """
     inicio = datetime.now(UTC)
     resultado = await consolidar(conn, settings, dormir=dormir)
+    emisores = await _completar_emisores_sin_lanzar(conn)
     snapshot_fci = await _ingerir_fci_sin_lanzar(conn, settings, dormir)
     fin = datetime.now(UTC)
 
     todos_los_snapshots = {**resultado.snapshots, "cafci": snapshot_fci}
+    snapshot_byma = resultado.snapshots.get("byma")
+    await _alertar_paneles_colapsados(conn, snapshot_byma)
+
     alertas = [
         *(a for s in todos_los_snapshots.values() for a in s.alertas),
         *resultado.consolidacion.alertas,
         *resultado.escritura.alertas,
     ]
-    filas_por_fuente = {nombre: snap.total_filas for nombre, snap in todos_los_snapshots.items()}
+    filas_por_fuente: dict[str, int] = {
+        nombre: snap.total_filas for nombre, snap in todos_los_snapshots.items()
+    }
+    if snapshot_byma is not None:
+        # El conteo por endpoint, además del agregado de la fuente: es la línea de base que la
+        # corrida siguiente va a leer con `tramos_byma_previos`. Sobre el agregado no alcanza —
+        # `app/jobs/guardas.py` documenta por qué.
+        filas_por_fuente |= claves_de_tramos(snapshot_byma.filas_por_tramo)
+    # El barrido de emisores no es una fuente que se consolide —no trae filas al universo, enriquece
+    # las que ya están—, así que no entra en `_estado_de`: una corrida que trajo todo el mercado no
+    # se marca parcial porque BYMA no publique la ficha de una ON.
+    filas_por_fuente["ficha_byma"] = emisores.procesados
     estado = _estado_de(todos_los_snapshots.values())
 
     corrida = await registrar_corrida(
@@ -231,8 +294,13 @@ async def refresh_intra_rueda(
     )
     fin = datetime.now(UTC)
 
+    await _alertar_paneles_colapsados(conn, rueda.snapshot)
+
     alertas = [*rueda.snapshot.alertas, *alertas_consolidacion, *escritura.alertas]
-    filas_por_fuente = {"byma": rueda.snapshot.total_filas}
+    filas_por_fuente = {
+        "byma": rueda.snapshot.total_filas,
+        **claves_de_tramos(rueda.snapshot.filas_por_tramo),
+    }
     estado = _estado_de([rueda.snapshot])
 
     corrida = await registrar_corrida(

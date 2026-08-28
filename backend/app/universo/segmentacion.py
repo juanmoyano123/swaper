@@ -209,6 +209,18 @@ class EspecieUniverso:
     el Tesoro, y separar "mismo emisor" en un swap depende de saberlo. Derivarlo del ticker sería
     la inferencia que la regla 1 prohíbe."""
 
+    subtipo: str | None = None
+    """Subclase dentro del riesgo soberano: `'letra'`, `'bonar'`, `'global'` o `'bopreal'`.
+
+    Vocabulario cerrado por el CHECK de `instrumentos.subtipo`. `None` es lo normal fuera del
+    soberano —una ON no tiene subtipo— y también en un soberano hard-dollar cuya ley no consta: no
+    se elige uno por defecto (regla 1).
+
+    Es **filtro y visualización, nada más** (28/08/2026). En particular el Bopreal lo emite el BCRA
+    y no el Tesoro, pero a efectos de tope por emisor sigue bajo la clave única `SOBERANO_AR`
+    (regla 4): `app/concentracion/riesgo.py` no lo mira. Quien necesita separar emisores en un swap
+    usa `tipo_tasa`, que es lo que F-032 ya hace."""
+
     calificacion: str | None = None
     """Calificación crediticia, del dato curado de F-009. Texto libre tal cual la declara la fuente
     —`'AA(arg)'`, `'AAA (FIX)'`—, sin escala canónica entre calificadoras: **nunca se ordena ni se
@@ -290,6 +302,7 @@ class EspecieUniverso:
             "sector": self.sector,
             "fuente": self.fuente,
             "tipo_tasa": self.tipo_tasa,
+            "subtipo": self.subtipo,
             "calificacion": self.calificacion,
             "capturado_en": self.capturado_en.isoformat() if self.capturado_en else None,
             "fecha_metricas": self.fecha_metricas.isoformat() if self.fecha_metricas else None,
@@ -405,6 +418,7 @@ def segmentar(filas: Iterable[Mapping[str, object]]) -> Segmentacion:
                 sector=_texto(fila.get("sector")),
                 fuente=_texto(fila.get("fuente")),
                 tipo_tasa=_texto(tipo_tasa) if tipo_tasa else None,
+                subtipo=_texto(fila.get("subtipo")),
                 calificacion=_texto(fila.get("calificacion")),
                 capturado_en=capturado_en,
                 fecha_metricas=_fecha(fila.get("fecha_metricas")),

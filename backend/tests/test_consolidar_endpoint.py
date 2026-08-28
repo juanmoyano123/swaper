@@ -37,6 +37,7 @@ ENDPOINTS_BYMA = (
     "cedears",
     "general-equity",
     "leading-equity",
+    "lebacs",
     "index-price",
 )
 

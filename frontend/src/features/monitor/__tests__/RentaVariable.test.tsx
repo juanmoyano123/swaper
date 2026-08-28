@@ -50,6 +50,7 @@ function especieRentaFija(): Especie {
     emision: 'AL30',
     sufijo_liquidacion: null,
     clase_activo: 'bono_soberano',
+    subtipo: null,
     segmento: 'usd_hard',
     naturaleza: 'tir_usd',
     naturaleza_nombre: 'TIR en dólares (hard dollar)',

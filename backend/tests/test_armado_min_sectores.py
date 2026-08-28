@@ -29,6 +29,10 @@ def _especie(
         duracion=duracion,
         precio=100.0,
         sector=sector,
+        # Emisor escrito, porque desde `aplicar_guardas_de_candidatos` (28/08/2026) el armador no
+        # propone lo que no puede nombrar. Se usa el mismo nombre que arma `_riesgo` para que las
+        # dos caras del fixture hablen del mismo emisor.
+        emisor=f"Emisor {ticker[:3]}",
     )
 
 
@@ -100,6 +104,7 @@ def test_soberano_y_subsoberano_no_cuentan_para_el_minimo_de_f019() -> None:
             duracion=3.0,
             precio=100.0,
             sector="Soberano",
+            emisor="Tesoro Nacional",
         ),
         EspecieUniverso(
             ticker="PBA25",
@@ -110,6 +115,7 @@ def test_soberano_y_subsoberano_no_cuentan_para_el_minimo_de_f019() -> None:
             duracion=3.0,
             precio=100.0,
             sector="Subsoberano",
+            emisor="Provincia de Buenos Aires",
         ),
         _especie("T0CO", rendimiento=0.072, sector="O&G"),
     ]

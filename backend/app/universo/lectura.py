@@ -109,6 +109,10 @@ COLUMNAS: tuple[str, ...] = (
     "ticker",
     "clase_activo",
     "tipo_tasa",
+    # Subclase dentro del riesgo soberano (28/08/2026): letra | bonar | global | bopreal, o NULL.
+    # La vista la expone desde `20260816200000_capturado_en_resumen.sql`; lo que faltaba era
+    # leerla. Es filtro de pantalla, no entra en ningún cálculo ni en la concentración (regla 4).
+    "subtipo",
     "tir",
     "tna",
     # F-011: `duration` decide si un grupo de especies es de verdad la misma emisión, y las cuatro

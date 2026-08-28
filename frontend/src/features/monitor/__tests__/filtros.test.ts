@@ -12,6 +12,8 @@ import {
   pasaFiltros,
   type FiltrosUniverso,
 } from '../lib/filtros'
+import { SIN_SUBCLASE } from '@/components/SelectorSubtipoSoberano'
+
 import type { Especie } from '../lib/schema'
 
 function especie(extra: Partial<Especie> = {}): Especie {
@@ -20,6 +22,7 @@ function especie(extra: Partial<Especie> = {}): Especie {
     emision: 'AL30',
     sufijo_liquidacion: null,
     clase_activo: 'bono_soberano',
+    subtipo: null,
     segmento: 'usd_hard',
     naturaleza: 'tir_usd',
     naturaleza_nombre: 'TIR en dólares (hard dollar)',
@@ -139,5 +142,95 @@ describe('pasaFiltros', () => {
     const [al30] = universo()
     expect(pasaFiltros(al30, { ...FILTROS_VACIOS, moneda: null })).toBe(true)
     expect(pasaFiltros(al30, { ...FILTROS_VACIOS, moneda: 'ARS' })).toBe(false)
+  })
+})
+
+describe('sólo con emisor identificado', () => {
+  /** Las cuatro de `universo()` más una ON sin emisor escrito, que es el caso que el interruptor
+   *  existe para tapar: hoy la mayoría del universo está así. */
+  function conUnaSinEmisor(): Especie[] {
+    return [
+      ...universo(),
+      especie({ ticker: 'MRCAO', clase_activo: 'on_corporativo', emisor: null, sector: 'Mineria' }),
+    ]
+  }
+
+  it('apagado —el default— una especie sin emisor se muestra igual', () => {
+    expect(FILTROS_VACIOS.soloConEmisor).toBe(false)
+    const sinEmisor = conUnaSinEmisor()[4]
+    expect(pasaFiltros(sinEmisor, FILTROS_VACIOS)).toBe(true)
+  })
+
+  it('prendido, la especie sin emisor no pasa y las que lo declaran sí', () => {
+    const filtros = { ...FILTROS_VACIOS, soloConEmisor: true }
+    const pasan = conUnaSinEmisor().filter((e) => pasaFiltros(e, filtros))
+    expect(pasan.map((e) => e.ticker)).toEqual(['AL30', 'YPFD', 'PAMP', 'BYMA'])
+  })
+
+  it('acota las opciones facetadas: el sector que sólo aportaba la especie sin emisor desaparece', () => {
+    const sinInterruptor = facetarUniverso(conUnaSinEmisor(), FILTROS_VACIOS)
+    expect([...sinInterruptor.opciones.sectores].sort()).toEqual([
+      'Financiera',
+      'Mineria',
+      'O&G',
+      'Soberano',
+    ])
+
+    const conInterruptor = facetarUniverso(conUnaSinEmisor(), {
+      ...FILTROS_VACIOS,
+      soloConEmisor: true,
+    })
+    expect([...conInterruptor.opciones.sectores].sort()).toEqual(['Financiera', 'O&G', 'Soberano'])
+  })
+})
+
+describe('subtipo soberano', () => {
+  /** Cuatro soberanos con las cuatro subclases y uno sin subclase declarada, más una ON. */
+  function soberanos(): Especie[] {
+    return [
+      especie({ ticker: 'S31G6', clase_activo: 'bono_soberano', subtipo: 'letra' }),
+      especie({ ticker: 'AL30', clase_activo: 'bono_soberano', subtipo: 'bonar' }),
+      especie({ ticker: 'GD30', clase_activo: 'bono_soberano', subtipo: 'global' }),
+      especie({ ticker: 'BPOA7', clase_activo: 'bono_soberano', subtipo: 'bopreal' }),
+      especie({ ticker: 'AE38', clase_activo: 'bono_soberano', subtipo: null }),
+      especie({ ticker: 'YMCXO', clase_activo: 'on_corporativo', subtipo: null }),
+    ]
+  }
+
+  it('filtra por una subclase concreta y deja afuera al resto de los soberanos', () => {
+    const filtros = { ...FILTROS_VACIOS, credito: 'bono_soberano', subtipoSoberano: 'letra' }
+    const pasan = soberanos().filter((e) => pasaFiltros(e, filtros))
+    expect(pasan.map((e) => e.ticker)).toEqual(['S31G6'])
+  })
+
+  it(`"${SIN_SUBCLASE}" aisla a los soberanos que no la declaran, que es distinto de no filtrar`, () => {
+    const conFiltro = { ...FILTROS_VACIOS, credito: 'bono_soberano', subtipoSoberano: SIN_SUBCLASE }
+    expect(soberanos().filter((e) => pasaFiltros(e, conFiltro)).map((e) => e.ticker)).toEqual(['AE38'])
+
+    const sinFiltro = { ...FILTROS_VACIOS, credito: 'bono_soberano' }
+    expect(soberanos().filter((e) => pasaFiltros(e, sinFiltro))).toHaveLength(5)
+  })
+
+  it('el facetado apaga el subtipo cuando el crédito elegido no deja soberanos', () => {
+    const { efectivos, apagadas } = facetarUniverso(soberanos(), {
+      ...FILTROS_VACIOS,
+      credito: 'on_corporativo',
+      subtipoSoberano: 'letra',
+    })
+
+    expect(efectivos.credito).toBe('on_corporativo')
+    expect(efectivos.subtipoSoberano).toBeNull()
+    expect(apagadas).toEqual([{ dimension: 'subtipoSoberano', valor: 'letra' }])
+  })
+
+  it('con el crédito soberano el subtipo se conserva: el crédito va antes y no lo contradice', () => {
+    const { efectivos, apagadas } = facetarUniverso(soberanos(), {
+      ...FILTROS_VACIOS,
+      credito: 'bono_soberano',
+      subtipoSoberano: 'bopreal',
+    })
+
+    expect(efectivos.subtipoSoberano).toBe('bopreal')
+    expect(apagadas).toEqual([])
   })
 })

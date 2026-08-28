@@ -84,7 +84,7 @@ from app.ingesta.consolidacion.clasificacion import (
     clase_sin_mapeo,
     clasificar,
     hay_discrepancia,
-    subtipo_de,
+    subtipo_en_corrida,
 )
 from app.ingesta.consolidacion.metricas import (
     FUENTE_CALCULO,
@@ -139,6 +139,26 @@ CAMPOS_COBERTURA_PUNTAS = ("px_bid", "px_ask")
 
 CODIGO_SIN_TICKER = "especie_sin_ticker"
 CODIGO_ESPECIE_REPETIDA = "especie_en_varios_endpoints"
+
+# Qué endpoint gana cuando BYMA publica la misma especie en dos paneles (`_colapsar`). Antes era el
+# orden alfabético del nombre, que es determinístico pero arbitrario: quién gana no debería
+# depender del abecedario.
+#
+# Los cinco primeros están en el orden que el alfabético ya les daba, así que sobre los
+# solapamientos que existen hoy el comportamiento no cambia. **`lebacs` va último a propósito**
+# (28/08/2026): BYMA mueve especies de panel —BUN26, BUN6C y BUN6D estaban en
+# `negociable-obligations` el 17/08 y hoy están en `lebacs`— y si una aparece en los dos, la clase
+# buena es la del panel que sí declara una clase propia, o la que la especie ya venía teniendo. El
+# alfabético hubiera hecho ganar a `lebacs` sobre `negociable-obligations`, `public-bonds` y
+# `leading-equity`, y esas tres ONs habrían cambiado de clase de activo sin que nada lo pidiera.
+ORDEN_DESEMPATE_ENDPOINTS: tuple[str, ...] = (
+    "cedears",
+    "general-equity",
+    "leading-equity",
+    "negociable-obligations",
+    "public-bonds",
+    "lebacs",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -254,9 +274,9 @@ def _colapsar(
         endpoints = {endpoint for endpoint, _ in candidatas}
         if len(endpoints) > 1:
             en_varios.append(ticker)
-        # Determinístico aunque la fuente empiece a repetir una especie entre paneles: se ordena
-        # por nombre de endpoint antes de elegir, así la corrida no depende del orden del dict.
-        endpoint = sorted(endpoints)[0]
+        # Determinístico aunque la fuente empiece a repetir una especie entre paneles: gana el
+        # primero de `ORDEN_DESEMPATE_ENDPOINTS`, así la corrida no depende del orden del dict.
+        endpoint = min(endpoints, key=ORDEN_DESEMPATE_ENDPOINTS.index)
         filas = [f for ep, f in candidatas if ep == endpoint]
         elegidas[ticker] = (endpoint, _elegir_por_plazo(filas), len(candidatas) > 1)
 
@@ -266,8 +286,8 @@ def _colapsar(
                 codigo=CODIGO_ESPECIE_REPETIDA,
                 mensaje=(
                     f"{len(en_varios)} especies aparecen en más de un endpoint de BYMA "
-                    f"({', '.join(sorted(en_varios)[:5])}). Se conservó la del primero por orden "
-                    f"alfabético; la clase de activo puede estar mal declarada."
+                    f"({', '.join(sorted(en_varios)[:5])}). Se conservó la del panel que gana en "
+                    f"ORDEN_DESEMPATE_ENDPOINTS; la clase de activo puede estar mal declarada."
                 ),
                 severidad=Severidad.ADVERTENCIA,
                 accion_requerida=None,
@@ -461,10 +481,13 @@ def armar_consolidacion(
                 "ticker": ticker,
                 "clase_activo": clase_activo,
                 "tipo_tasa": tipo_tasa,
-                # Sin `law` en la fila el subtipo no puede afinarse por legislación. No se lee la
-                # que ya está persistida para desempatar: eso es tarea de F-009, que tiene el CSV
-                # curado, y adivinarla acá sería completar por analogía (regla 1).
-                "subtipo": subtipo_de(tipo_tasa, None),
+                # Sólo los dos subtipos que salen de esta fila: `letra` (panel `lebacs` + clase
+                # soberana) y `bopreal` (tipo de tasa del cronograma). Sin `law` en la fila el
+                # subtipo no puede afinarse por legislación, y no se lee la que ya está persistida
+                # para desempatar: eso es tarea de F-009, que tiene el CSV curado, y adivinarla acá
+                # sería completar por analogía (regla 1). Cuando esto vale `None` el COALESCE del
+                # upsert conserva el bonar/global que hubiera escrito.
+                "subtipo": subtipo_en_corrida(endpoint, clase_activo, tipo_tasa),
                 "underlying": underlying,
                 "sector": SECTOR_POR_CLASE.get(clase_activo),
                 "maturity": maturity,

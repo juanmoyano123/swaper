@@ -21,8 +21,10 @@ es una guía, no una regla del dominio.
 ## El algoritmo, en orden
 
 1. `pct_rv <= 0` o `n_rv <= 0`: no hay bloque de renta variable que armar.
-2. Se descartan las especies sin `volumen_usd` medible — sin liquidez comparable no hay con qué
-   rankear, y no se le asume cero: es la regla 1 del dominio, no se completa un dato que falta.
+2. Se descartan las especies sin precio publicado —no se propone lo que no se puede valuar— y
+   después las que quedan sin `volumen_usd` medible: sin liquidez comparable no hay con qué
+   rankear, y no se le asume cero, que es la regla 1 del dominio. Cada motivo tiene su alerta y se
+   evalúan en cascada, así que una especie a la que le faltan las dos cosas se cuenta una sola vez.
 3. Con temática activa (`rubro_rv`), se filtra por **igualdad exacta** contra `sic_oficina`, el
    rubro tal como lo nombra la SEC (regla 11: no se traduce ni se normaliza el nombre de la
    fuente). Una especie sin rubro conocido no puede afirmarse que pertenece a la temática, así que
@@ -53,6 +55,7 @@ PCT_RV_PERFIL: dict[str, float] = {
 }
 
 CODIGO_RV_SIN_VOLUMEN_USD = "rv_sin_volumen_usd"
+CODIGO_RV_SIN_PRECIO = "rv_sin_precio"
 CODIGO_RV_SIN_PERFIL_SECTORIAL = "rv_sin_perfil_sectorial"
 """Es la llave con la que el frontend reconoce la alerta: renombrarla la rompería sin cambiar lo
 que significa."""
@@ -85,8 +88,33 @@ def armar_renta_variable(
 
     alertas: list[Alerta] = []
 
-    con_volumen = [e for e in especies if e.volumen_usd is not None]
-    descartadas = len(especies) - len(con_volumen)
+    # Guarda de precio, contraparte de la que `motor.aplicar_guardas_de_candidatos` aplica a renta
+    # fija (28/08/2026): no se propone lo que no se puede valuar. Se comparte el criterio, no el
+    # código, porque `EspecieRentaVariable` no es un `EspecieUniverso` y **no lleva
+    # `capturado_en`**: acá se puede exigir que el precio exista, pero no se puede decir si es de la
+    # corrida más reciente, así que la mitad "huérfana" de aquella guarda no tiene con qué
+    # evaluarse. Queda declarado como faltante y no se sustituye por otro criterio inventado.
+    #
+    # **La guarda de emisor no aplica a renta variable y no es un olvido**: una acción o un CEDEAR
+    # es su propio emisor —el ticker lo nombra—, así que exigir una columna `emisor` acá dejaría
+    # afuera todo el universo por un dato que no falta. No "arreglar" agregándola.
+    con_precio = [e for e in especies if e.precio is not None]
+    sin_precio = len(especies) - len(con_precio)
+    if sin_precio > 0:
+        alertas.append(
+            _alerta(
+                CODIGO_RV_SIN_PRECIO,
+                f"{sin_precio} especie(s) de renta variable no tienen precio publicado y no se "
+                "proponen: sin precio no hay con qué valuar la posición.",
+                cantidad=sin_precio,
+            )
+        )
+
+    con_volumen = [e for e in con_precio if e.volumen_usd is not None]
+    # Contra `con_precio` y no contra `especies`: las que ya cayeron por precio no se cuentan dos
+    # veces, para que cada alerta declare el motivo por el que la especie no entró y no todos los
+    # que podría haber tenido (mismo criterio en cascada que la guarda de renta fija).
+    descartadas = len(con_precio) - len(con_volumen)
     if descartadas > 0:
         alertas.append(
             _alerta(

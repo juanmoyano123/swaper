@@ -12,6 +12,8 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
+from app.jobs.guardas import PREFIJO_TRAMO_BYMA
+
 
 class TipoCorrida(StrEnum):
     MATINAL = "matinal"
@@ -49,6 +51,22 @@ SELECT id, tipo, iniciado_en, finalizado_en, duracion_ms, filas_por_fuente, aler
 SQL_ULTIMA = """
 SELECT id, tipo, iniciado_en, finalizado_en, duracion_ms, filas_por_fuente, alertas, estado
   FROM public.corridas_ingesta
+ ORDER BY iniciado_en DESC
+ LIMIT 1
+"""
+
+# La última corrida que **registró conteos por endpoint**, que no es la última a secas: las corridas
+# anteriores a la guarda de panel colapsado no tienen esas claves, y una corrida de tipo `fci` nunca
+# toca BYMA. Cualquiera de las dos, tomada como línea de base, mediría contra un cero inexistente.
+# El filtro va sobre las claves y no sobre el texto del jsonb para que un valor no pueda parecerse
+# a una clave.
+SQL_TRAMOS_BYMA_PREVIOS = """
+SELECT filas_por_fuente
+  FROM public.corridas_ingesta
+ WHERE EXISTS (
+           SELECT 1 FROM jsonb_object_keys(filas_por_fuente) AS clave
+            WHERE clave LIKE 'byma:%'
+       )
  ORDER BY iniciado_en DESC
  LIMIT 1
 """
@@ -100,3 +118,22 @@ async def listar_corridas(conn: Any, *, limite: int = 20) -> list[dict[str, obje
 async def ultima_corrida(conn: Any) -> dict[str, object] | None:
     fila = await conn.fetchrow(SQL_ULTIMA)
     return _como_dict(fila) if fila else None
+
+
+async def tramos_byma_previos(conn: Any) -> dict[str, int]:
+    """Los conteos por endpoint de BYMA de la última corrida que los registró, o `{}` si ninguna.
+
+    Devuelve las claves **sin** el prefijo `byma:` —`{"public-bonds": 1116}`— porque es la forma en
+    que las tiene `Snapshot.filas_por_tramo`, que es contra lo que se van a comparar en
+    `app/jobs/guardas.py`. El prefijo es cómo conviven con los agregados por fuente dentro del mismo
+    `jsonb`, no una unidad distinta.
+    """
+    crudo = await conn.fetchval(SQL_TRAMOS_BYMA_PREVIOS)
+    if not crudo:
+        return {}
+    filas_por_fuente = json.loads(crudo)
+    return {
+        clave.removeprefix(PREFIJO_TRAMO_BYMA): filas
+        for clave, filas in filas_por_fuente.items()
+        if clave.startswith(PREFIJO_TRAMO_BYMA)
+    }

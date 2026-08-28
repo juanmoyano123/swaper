@@ -9,12 +9,17 @@ ninguna otra fuente, sólo persiste precios y puntas, y clasifica `public-bonds`
 subsoberanos) usando el `type` que ya quedó guardado en `cashflow` de una corrida anterior.
 """
 
+import json
+
 import httpx
 import pytest
 import respx
 
+import app.jobs.corridas as modulo_corridas
 from app.core.config import get_settings
+from app.instrumentos.emisores import ResumenBarrido
 from app.jobs.corridas import corrida_matinal, refresh_intra_rueda
+from app.jobs.guardas import CODIGO_PANEL_COLAPSADO, claves_de_tramos
 from tests.conftest import FakeConexionEscritura
 
 BYMA_URL = "https://byma-test.local/free"
@@ -26,6 +31,7 @@ ENDPOINTS_BYMA = (
     "cedears",
     "general-equity",
     "leading-equity",
+    "lebacs",
     "index-price",
 )
 
@@ -42,6 +48,23 @@ class _FakeConexionConRegistro(FakeConexionEscritura):
     RETURNING` que hace `registrar_corrida()` y se arma la fila con los mismos argumentos que
     recibió, para que las dos corridas (matinal y refresh) puedan registrar de verdad contra esta
     conexión falsa."""
+
+    def __init__(self, *, tramos_byma_previos: dict[str, int] | None = None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.tramos_byma_previos = tramos_byma_previos
+
+    async def fetchval(self, query: str, *args):
+        if "jsonb_object_keys" in query:
+            self._registrar(query)
+            if self.tramos_byma_previos is None:
+                # Ninguna corrida anterior registró conteos por endpoint, que es el estado de la
+                # base el día del deploy y el de todos los demás tests de este archivo.
+                return None
+            # asyncpg entrega el `jsonb` como texto —`registro._como_dict` lo deserializa a mano
+            # por eso mismo—, así que la falsa tiene que entregarlo igual o el test probaría un
+            # camino que en producción no existe.
+            return json.dumps(claves_de_tramos(self.tramos_byma_previos))
+        return await super().fetchval(query, *args)
 
     async def fetchrow(self, query: str, *args):
         if "INSERT INTO public.corridas_ingesta" in query:
@@ -237,7 +260,9 @@ async def test_refresh_solo_escribe_precios_y_puntas(settings_de_prueba) -> None
     assert conn.escribio_en("puntas")
     assert not conn.escribio_en("instrumentos")
     assert not conn.escribio_en("cashflow")
-    assert set(corrida["filas_por_fuente"]) == {"byma"}
+    # BYMA y nada más: las claves `byma:<endpoint>` son el conteo por panel de esa misma fuente
+    # (guarda de panel colapsado), no una segunda fuente.
+    assert {c.split(":")[0] for c in corrida["filas_por_fuente"]} == {"byma"}
 
 
 async def test_refresh_clasifica_soberanos_con_el_cronograma_ya_persistido(
@@ -321,3 +346,160 @@ async def test_refresh_estado_fallida_cuando_byma_esta_caido(settings_de_prueba)
 
     assert corrida["estado"] == "fallida"
     assert corrida["filas_por_fuente"]["byma"] == 0
+
+
+# --- guarda de panel colapsado -----------------------------------------------------------------
+# El conteo por endpoint vivía sólo en `Snapshot.filas_por_tramo`, en memoria. Persistirlo es lo que
+# le da a la corrida siguiente contra qué comparar; la decisión en sí se prueba en
+# `test_jobs_guardas.py`.
+
+
+async def test_la_matinal_persiste_el_conteo_por_endpoint(settings_de_prueba) -> None:
+    conn = _FakeConexionConRegistro()
+    with respx.mock:
+        _montar_byma({"negociable-obligations": [ESPECIE_ON]})
+        _montar_data912()
+
+        corrida = await corrida_matinal(conn, settings_de_prueba, dormir=_no_dormir)
+
+    filas = corrida["filas_por_fuente"]
+    assert filas["byma:negociable-obligations"] == 1
+    assert filas["byma:public-bonds"] == 1
+    # El agregado por fuente sigue estando: las claves nuevas se suman, no lo reemplazan. La barra
+    # de estado y `test_estado_*` leen `byma` a secas.
+    assert filas["byma"] == sum(v for k, v in filas.items() if k.startswith("byma:"))
+
+
+async def test_el_refresh_persiste_el_conteo_por_endpoint(settings_de_prueba) -> None:
+    conn = _FakeConexionRefresh(tickers_existentes=["PLC7O"])
+    with respx.mock:
+        _montar_byma({"negociable-obligations": [ESPECIE_ON]})
+
+        corrida = await refresh_intra_rueda(conn, settings_de_prueba, dormir=_no_dormir)
+
+    filas = corrida["filas_por_fuente"]
+    assert filas["byma:negociable-obligations"] == 1
+    assert filas["byma"] == sum(v for k, v in filas.items() if k.startswith("byma:"))
+
+
+async def test_la_matinal_alerta_cuando_un_panel_colapsa_contra_la_corrida_anterior(
+    settings_de_prueba,
+) -> None:
+    """El 28/08/2026 en chico: `public-bonds` traía 1.116 filas y trae 1. La fuente responde 200 y
+    declara ese total como correcto, así que sin esta guarda la corrida quedaría `completa`."""
+    conn = _FakeConexionConRegistro(tramos_byma_previos={"public-bonds": 1116})
+    with respx.mock:
+        _montar_byma({"negociable-obligations": [ESPECIE_ON]})
+        _montar_data912()
+
+        corrida = await corrida_matinal(conn, settings_de_prueba, dormir=_no_dormir)
+
+    colapsos = [a for a in corrida["alertas"] if a["codigo"] == CODIGO_PANEL_COLAPSADO]
+    assert [a["detalle"]["endpoint"] for a in colapsos] == ["public-bonds"]
+    assert colapsos[0]["severidad"] == "error"
+
+
+async def test_el_refresh_alerta_el_panel_colapsado_y_deja_de_ser_completa(
+    settings_de_prueba,
+) -> None:
+    """La consecuencia que importa: el refresh que trae el panel vacío deja de reportarse
+    `completa`. Es lo que hace que la caída se vea en la barra de estado y no sólo en el detalle."""
+    conn = _FakeConexionRefresh(
+        tickers_existentes=["PLC7O"], tramos_byma_previos={"public-bonds": 1116}
+    )
+    with respx.mock:
+        _montar_byma({"negociable-obligations": [ESPECIE_ON]})
+
+        corrida = await refresh_intra_rueda(conn, settings_de_prueba, dormir=_no_dormir)
+
+    assert CODIGO_PANEL_COLAPSADO in {a["codigo"] for a in corrida["alertas"]}
+    assert corrida["estado"] == "parcial"
+    # La corrida no se aborta: lo que BYMA sí entregó se guarda igual, porque la poda es por ticker
+    # y lo que el panel dejó de declarar conserva su última fila.
+    assert conn.escribio_en("precios")
+
+
+async def test_sin_corrida_anterior_que_declare_tramos_la_matinal_no_alerta(
+    settings_de_prueba,
+) -> None:
+    """El estado de la base el día del deploy: `corridas_ingesta` no tiene ninguna fila con claves
+    `byma:`, y la primera corrida no puede inventarse una línea de base."""
+    conn = _FakeConexionConRegistro()
+    with respx.mock:
+        _montar_byma({"negociable-obligations": [ESPECIE_ON]})
+        _montar_data912()
+
+        corrida = await corrida_matinal(conn, settings_de_prueba, dormir=_no_dormir)
+
+    assert CODIGO_PANEL_COLAPSADO not in {a["codigo"] for a in corrida["alertas"]}
+
+
+async def test_byma_caido_no_agrega_panel_colapsado_encima_de_fuente_no_disponible(
+    settings_de_prueba,
+) -> None:
+    """Todos los paneles en cero es una fuente caída, no seis paneles colapsados: `ingerir_rueda` ya
+    lo declaró endpoint por endpoint y repetirlo sólo agranda la lista sin agregar información."""
+    conn = _FakeConexionConRegistro(tramos_byma_previos={"public-bonds": 1116, "cedears": 3000})
+    with respx.mock:
+        _montar_byma_caido()
+        _montar_data912()
+
+        corrida = await corrida_matinal(conn, settings_de_prueba, dormir=_no_dormir)
+
+    codigos = [a["codigo"] for a in corrida["alertas"]]
+    assert "fuente_no_disponible" in codigos
+    assert CODIGO_PANEL_COLAPSADO not in codigos
+
+
+# --- El enriquecimiento de emisores encadenado a la matinal --------------------------------------
+
+
+async def test_la_matinal_encadena_el_barrido_de_emisores(settings_de_prueba, monkeypatch) -> None:
+    """Corre **después** de `consolidar()`, porque su insumo son las filas de `instrumentos` que la
+    consolidación acaba de escribir. El conteo viaja en `filas_por_fuente` para que se vea en el
+    historial cuántas especies enriqueció cada corrida."""
+    llamado = {}
+
+    async def _falso(conn, *, limite):
+        llamado["limite"] = limite
+        return ResumenBarrido(
+            pendientes=100,
+            procesados=50,
+            con_emisor=48,
+            con_ley=12,
+            ley_fuera_de_vocabulario=3,
+            heredados_por_raiz=5,
+            via_bolsar=1,
+            sin_dato=2,
+        )
+
+    monkeypatch.setattr(modulo_corridas, "completar_emisores", _falso)
+    conn = _FakeConexionConRegistro()
+    with respx.mock:
+        _montar_byma({"negociable-obligations": [ESPECIE_ON]})
+        _montar_data912()
+
+        corrida = await corrida_matinal(conn, settings_de_prueba, dormir=_no_dormir)
+
+    assert llamado["limite"] == modulo_corridas.LIMITE_EMISORES_EN_MATINAL
+    assert corrida["filas_por_fuente"]["ficha_byma"] == 50
+
+
+async def test_un_fallo_del_barrido_no_tumba_la_matinal(settings_de_prueba, monkeypatch) -> None:
+    """Es enriquecimiento, no ingesta: para cuando esto corre, el universo del día ya está escrito.
+    El fallo baja como cero procesados, que se ve, en vez de perder la corrida entera."""
+
+    async def _explota(conn, *, limite):
+        raise RuntimeError("la ficha de BYMA devolvió cualquier cosa")
+
+    monkeypatch.setattr(modulo_corridas, "completar_emisores", _explota)
+    conn = _FakeConexionConRegistro()
+    with respx.mock:
+        _montar_byma({"negociable-obligations": [ESPECIE_ON]})
+        _montar_data912()
+
+        corrida = await corrida_matinal(conn, settings_de_prueba, dormir=_no_dormir)
+
+    assert corrida["filas_por_fuente"]["ficha_byma"] == 0
+    assert corrida["estado"] == "parcial", "el estado lo siguen decidiendo las fuentes de ingesta"
+    assert conn.escribio_en("instrumentos")
