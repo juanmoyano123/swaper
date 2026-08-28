@@ -740,3 +740,103 @@ mira primero si hay precio: un plazo sin precio no es una cotización.
 - **VWCHO** sigue sin moneda ni vencimiento: el 26/08 BYMA la publicaba con `ARS`, el 27/08 no vino
   en el panel. Queda declarado como faltante, no interpretado.
 - **Netlify salió del proyecto** el 27/08: todo quedó en Vercel.
+
+---
+
+## 28/08/2026 — Emisor para todo el universo, letras del Tesoro y subclase soberana
+
+Pedido del dueño del producto: *"tengo tickers que no muestran el emisor, no se entiende qué son.
+Estos tickers no me sirven si no puedo analizarlos"*, y *"los soberanos: ¿son letras, bonos,
+bopreales, bonares? Falta una subclasificación"*. El caso testigo fue TY36O.
+
+### La ficha técnica de BYMA: la fuente que faltaba
+
+Además de los paneles de precios, BYMA publica una **ficha por especie** —
+`POST .../free/bnown/fichatecnica/especies/general` con `{"symbol": ...}`, JSON, sin token — con
+**`emisor` declarado**, más `ley`, `denominacion`, `codigoIsin`, cupón, amortización y garantía. No
+tiene modo bulk (probados `{}`, `page_size`, comodines y listas: todos vacíos): es un POST por
+símbolo, ~80 ms, sin rate limit visible con concurrencia 8.
+
+Cobertura medida sobre las 618 ONs: **611 directo (98,9 %), 616 con herencia por raíz de emisión
+(99,7 %)**. La herencia es segura y está medida: **cero raíces con más de un emisor declarado** sobre
+611 fichas. Nunca se reconstruye una raíz que `raiz_emision` no produce — es la regla de los 121
+tickers.
+
+**Bolsar** (`bolsar.info/infoObligacion.php?on=<especie O>`) cubre los huecos, y va como fallback y
+nunca como primaria por dos motivos medidos: sólo responde por la especie en pesos (50/50 de las `O`,
+0/49 de las `C`/`D`) y **trunca el nombre a 50 caracteres**, lo que rompería cualquier cruce
+posterior contra la CNV.
+
+**Precedencia: curado > ficha BYMA > Bolsar > vacío declarado.** Se implementa por **exclusión** —lo
+que el CSV curado ya cubre no entra al barrido— y no por orden de escritura. El motivo es sutil: en
+lectura, `_resolver_emisor` hace ganar a la vista sobre el curado, así que escribir la ficha donde el
+curado ya tiene emisor habría terminado pisando al dato verificado a mano. Con la ley pasa algo peor:
+escribir una distinta habría disparado el conflicto y **vaciado** la ley en pantalla.
+
+Resultado del barrido completo contra la base: **760 → 3.264 instrumentos con emisor** (68 %).
+`TY36O → TOYOTA COMPAÑIA FINANCIERA DE ARGENTINA S.A.`, corroborado contra la CNV por CUIT
+30709000426, Clase 36.
+
+**La ley que la ficha declara como `Extranjera` no se traduce.** No es ninguno de los dos valores del
+vocabulario (`Ley Argentina`, `Ley N.Y.`) y mapearla por parecido sería repetir el antecedente de
+"Ley Inglesa". Queda vacía y contada en `ley_fuera_de_vocabulario`.
+
+### El panel de letras
+
+BYMA publica las letras y bonos cortos del Tesoro en un panel aparte (`lebacs`) que la ingesta no
+consumía. Son 199 especies con moneda declarada 199/199 y vencimiento 182/199. Entraban sólo por
+data912 —que no declara moneda ni vencimiento— y por eso quedaban sin TIR pese a operar miles de
+millones por día.
+
+Integradas, con TIR calculada por primera vez: **S13N6 27,1 %, S30N6 28,2 %, S30O6 25,4 %, S16O6
+25,2 %, S30S6 21,9 %, S15S6 21,0 %**. Sólo las de tasa fija en pesos: el resto del panel es CER,
+dollar-linked o TAMAR, que quedan fuera del cálculo por naturaleza, como siempre.
+
+Detalles declarados: los `.SB` (SENEBI) y las variantes C/D/X/Y/Z sin cronograma quedan fuera del
+universo con su punta guardada, contadas en `clase_sin_mapeo` — **ese contador crece y no es una
+regresión**, es el conjunto cerrado del cronograma. Y el desempate de `_colapsar` entre paneles pasó
+de orden alfabético a un orden explícito con `lebacs` último: BYMA **mueve especies entre paneles**
+(BUN26 estaba en obligaciones negociables el 17/08 y hoy está en letras), y esa decisión no puede
+tomarla el abecedario.
+
+### La subclase soberana
+
+Toda derivada de dato declarado, nunca del ticker: **letra** ← panel de origen; **bopreal** ←
+`tipo_tasa` del cronograma; **bonar/global** ← ley. Los **duales quedan sin subclase**: ninguna fuente
+los marca, llegan como TAMAR. Estado hoy: 412 bonares, 117 globales, 15 letras, 5 bopreales.
+
+`securitySubType` de BYMA **no sirve** para esto y se midió: vale `CORP` en obligaciones, `B` en
+bonos públicos y `E` en letras — discrimina el panel, no el instrumento.
+
+**No se tocó `concentracion/riesgo.py`** (regla 4): un bopreal sigue siendo `bono_soberano` y mide
+concentración bajo `SOBERANO_AR`. La subclase es visualización y filtro.
+
+### La guarda del panel colapsado
+
+El 28/08 `public-bonds` devolvió **5 filas** contra 1.116 del día anterior — HTTP 200, medido cuatro
+veces, con `total_elements_count = 5`: la fuente declaraba esas 5 como su total. **Nada lo
+detectaba**, porque `paginacion_incompleta` compara lo bajado contra lo que la fuente dice de sí
+misma. Una matinal así deja el universo soberano sin refrescar, en silencio y registrada como
+`completa`.
+
+El umbral tampoco podía ir sobre el total: esas 1.111 filas faltantes eran ~10 % del agregado de
+BYMA. Ahora el conteo **se persiste por panel** en `corridas_ingesta.filas_por_fuente` (claves
+`byma:<endpoint>`) y se compara contra la corrida anterior. **No aborta** —la poda correlacionada por
+ticker conserva la última fila de cada especie— sino que alerta. El panel se recuperó solo: la
+matinal de hoy trajo 875 filas.
+
+### Guardas del armador
+
+El único corte de liquidez era un **percentil** sobre los candidatos, que se mueve con el conjunto:
+con los 1.339 instrumentos que entraron el 27/08 (casi todos sin operar), dejó de alcanzar. El
+armador ahora descarta lo que no tiene precio del día y lo que no tiene emisor identificado,
+**declarando en cada caso cuántos candidatos quedaron afuera y una muestra de tickers**. Los
+soberanos nunca caen por la guarda de emisor. En renta variable la guarda de emisor no aplica: una
+acción es su propio emisor.
+
+### Pendiente declarado
+
+`instrumentos.underlying` dice `'Gobierno Argentino'` para todo `bono_soberano`, **incluidos los
+bopreales, cuyo emisor real es el BCRA**. Es una tensión preexistente y se deja anotada: corregirla
+roza la clave `SOBERANO_AR` y la regla 4. La distinción de emisor para swaps ya existe por otra vía
+(`tipo_tasa == 'bopreal'` en `rotaciones/emisores.py`).
