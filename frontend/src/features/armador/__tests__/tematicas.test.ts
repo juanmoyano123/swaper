@@ -8,9 +8,12 @@
 
 import { describe, expect, it } from 'vitest'
 
+import { presetRvPorId } from '@/lib/presetsRv'
+
 import { FILTROS_ARMADOR_VACIOS } from '../lib/filtros'
 import {
   coincideConPreset,
+  filtraRentaVariable,
   filtrosDelPreset,
   presetPorId,
   PRESETS_TEMATICOS,
@@ -54,16 +57,68 @@ describe('los presets sólo referencian datos que existen', () => {
 
   it('el preset de tecnológicas declara que no filtra renta fija en vez de aproximar con otro sector', () => {
     const tecnologicas = presetPorId('tecnologicas')
+    const compartido = presetRvPorId('tecnologicas')
 
     // No hay emisores tecnológicos en el universo de bonos: mapearlo a Telecomunicaciones sería
     // presentar una aproximación como si fuera el dato pedido.
     expect(tecnologicas?.filtrosRf).toBeNull()
-    expect(tecnologicas?.rubroRv).toBe('Office of Technology')
+    // F-079: migrado de `rubroRv` inline a referenciar el preset compartido — mismo `sic_oficina`
+    // (`Office of Technology`), mismo conjunto de especies, sólo cambia dónde vive la definición.
+    expect(tecnologicas?.rubroRv).toBeNull()
+    expect(tecnologicas?.filtroRv).toBe(compartido?.filtro)
+    expect(tecnologicas?.filtroRv).toEqual({ rubros: ['Office of Technology'] })
     expect(tecnologicas?.nota).toMatch(/Sólo renta variable/)
   })
 
   it('cobertura inflación no filtra renta variable: una acción no ajusta por CER', () => {
     expect(presetPorId('cobertura-inflacion')?.rubroRv).toBeNull()
+  })
+
+  // --- F-078 -----------------------------------------------------------------------------------
+
+  it('metales preciosos referencia el preset compartido en vez de duplicar su definición', () => {
+    const metales = presetPorId('metales-preciosos')
+    const compartido = presetRvPorId('metales-preciosos')
+
+    // Identidad, no igualdad estructural: si alguien duplicara la definición acá, el monitor y el
+    // armador podrían empezar a decir cosas distintas sobre qué es un metal precioso.
+    expect(metales?.filtroRv).toBe(compartido?.filtro)
+    expect(metales?.modoFiltroRv).toBe('union')
+    // Es multidimensional, así que no se puede decir con un `sic_oficina`: `rubroRv` queda en null.
+    expect(metales?.rubroRv).toBeNull()
+    // Y su nota lleva la del preset compartido, con lo que deja afuera.
+    expect(metales?.nota).toContain(compartido!.nota)
+  })
+
+  it('las temáticas que acotan la renta variable son las que se ofrecen en el armado asistido', () => {
+    const ofrecidas = PRESETS_TEMATICOS.filter(filtraRentaVariable).map((p) => p.id)
+
+    // Las dos formas de acotar: por rubro suelto y por filtro multidimensional.
+    expect(ofrecidas).toContain('tecnologicas')
+    expect(ofrecidas).toContain('metales-preciosos')
+    // Las que declaran que no pueden acotar la renta variable no se ofrecen: elegirlas no
+    // cambiaría nada del bloque de CEDEARs.
+    expect(ofrecidas).not.toContain('petroleo-gas')
+    expect(ofrecidas).not.toContain('cobertura-inflacion')
+  })
+
+  // --- F-079: financieras, tecnológicas y medicina migran de `rubroRv` inline a referenciar el
+  // preset compartido de `lib/presetsRv.ts` — mismo `sic_oficina`, mismo conjunto de especies.
+
+  it.each([
+    ['financieras', 'Office of Finance'],
+    ['tecnologicas', 'Office of Technology'],
+    ['medicina', 'Office of Life Sciences'],
+  ])('%s referencia el preset compartido "%s" por identidad, no lo duplica', (id, oficina) => {
+    const tematica = presetPorId(id)
+    const compartido = presetRvPorId(id)
+
+    expect(compartido?.filtro).toEqual({ rubros: [oficina] })
+    // Identidad, no igualdad estructural: si alguien duplicara la definición acá, el monitor y el
+    // armador podrían empezar a decir cosas distintas sobre qué oficina define la temática.
+    expect(tematica?.filtroRv).toBe(compartido?.filtro)
+    expect(tematica?.modoFiltroRv).toBe(compartido?.modo)
+    expect(tematica?.rubroRv).toBeNull()
   })
 })
 

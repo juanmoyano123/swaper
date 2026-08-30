@@ -28,9 +28,29 @@ function especie(extra: Partial<EspecieRentaVariable> = {}): EspecieRentaVariabl
     sic_titulo: null,
     sic_oficina: null,
     division_cadena: null,
+    // F-079: derivados del SIC. Sin curado cargado ni SIC declarado en la fixture, quedan en null.
+    sector_codigo: null,
+    sector: null,
+    rubro_especifico: null,
     estrategia_etf: null,
     ratio_conversion: null,
     mercado_origen: null,
+    // F-078: la geografía que declara el nombre del fondo. Sin `.default()` en el schema, así que
+    // una fixture que no lo declare no compila — a propósito: el campo tiene que viajar siempre.
+    region_etf: null,
+    // F-079: geografía curada de ETFs, todavía sin sembrar en esta fixture.
+    etf_indice: null,
+    etf_alcance: null,
+    etf_pais: null,
+    etf_region: null,
+    etf_geo_fuente: null,
+    etf_geo_verificado: null,
+    // El curado de país, todavía sin sembrar: es el estado real del universo y por eso es el
+    // default de la fixture. Un test que necesite geografía lo declara con `extra`.
+    pais: null,
+    region: null,
+    pais_fuente: null,
+    pais_verificado: null,
     ...extra,
   }
 }

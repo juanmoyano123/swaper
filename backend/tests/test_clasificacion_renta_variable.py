@@ -5,8 +5,13 @@ el 13/08/2026. Lo que se fija acá no es que el código funcione: es **hasta dó
 algo y dónde hay que declarar que no se sabe**.
 """
 
-from app.externos.sic import division_de
-from app.renta_variable.etfs import SIN_CLASIFICAR, es_fondo, estrategia_de
+from app.externos.sic import division_de, major_group_de
+from app.renta_variable.etfs import (
+    SIN_CLASIFICAR,
+    es_fondo,
+    estrategia_de,
+    region_declarada,
+)
 
 # --- El eslabón de la cadena productiva -----------------------------------------------------------
 
@@ -39,6 +44,39 @@ def test_sin_sic_no_se_inventa_un_eslabon() -> None:
     assert division_de(None) is None
     assert division_de("") is None
     assert division_de("no es un numero") is None
+
+
+# --- El major group, extraído para F-079 ----------------------------------------------------------
+
+
+def test_major_group_de_devuelve_dos_digitos_con_cero_a_la_izquierda() -> None:
+    """`28` (Chemicals) queda `"28"`, y `1` (Agricultural Production Crops) queda `"01"`: el eje de
+    "sector" de F-079 agrupa por este string, no por el int."""
+    assert major_group_de("2834") == "28"
+    assert major_group_de("1040") == "10"
+    assert major_group_de(100) == "01"
+    assert major_group_de("0100") == "01"
+
+
+def test_major_group_de_con_menos_de_dos_digitos_no_afirma_nada() -> None:
+    """Un código de un solo dígito no alcanza para decir el major group — no se rellena a
+    ciegas."""
+    assert major_group_de("1") is None
+    assert major_group_de("") is None
+
+
+def test_major_group_de_con_none_o_no_numerico_es_none() -> None:
+    assert major_group_de(None) is None
+    assert major_group_de("no es un numero") is None
+
+
+def test_division_de_sigue_igual_reusando_major_group_de() -> None:
+    """El refactor de extracción no cambia el comportamiento observable de `division_de`: sigue
+    resolviendo la división a partir del mismo major group que ahora expone `major_group_de`."""
+    assert division_de("2834").eslabon == "Manufactura"
+    assert major_group_de("2834") == "28"
+    assert division_de("6850") is None  # hueco del manual, mismo caso que antes del refactor
+    assert major_group_de("6850") == "68"
 
 
 # --- La estrategia de un ETF ----------------------------------------------------------------------
@@ -96,3 +134,67 @@ def test_un_fondo_cuyo_nombre_no_declara_nada_no_se_fuerza() -> None:
 def test_la_estrategia_dice_por_que_se_clasifico_asi() -> None:
     """Un fondo clasificado sin decir por qué es una caja negra."""
     assert "equal weight" in estrategia_de("Invesco S&P 500 eql wght ETF").porque
+
+
+# --- La geografía que el nombre declara ----------------------------------------------------------
+
+
+def test_la_geografia_sale_del_nombre_tal_como_aparece() -> None:
+    """Los nueve fondos con geografía en el nombre, medidos contra la base el 28/08/2026. Los
+    nombres llegan en mayúsculas y en mixta, y lo único que se normaliza es la caja: `EAFE` sigue
+    siendo `EAFE` y no "Europa, Australasia y Lejano Oriente", que es correcto pero no está escrito
+    en ninguna parte de la fuente (regla 11)."""
+    casos = {
+        "iShares MSCI ACWI ETF": "ACWI",
+        "iShares MSCI EAFE ETF": "EAFE",
+        "iShares MSCI JAPAN ETF": "Japan",
+        "iShares MSCI South Korea ETF": "South Korea",
+        "ISHARES CHINA LARGE-CAP ETF": "China",
+        "iShares Core MSCI Emerging Markets ETF": "Emerging Markets",
+        "iShares Core MSCI Europe ETF": "Europe",
+        "IShares Latin America 40 ETF": "Latin America",
+        "Vanguard FTSE Developed Markets ETF": "Developed Markets",
+    }
+    for nombre, region in casos.items():
+        assert region_declarada(nombre) == region, nombre
+
+
+def test_un_fondo_que_no_nombra_geografia_queda_sin_region() -> None:
+    """`None` acá no es "invierte en todos lados": es que no se sabe. Completar `XLK` con "Estados
+    Unidos" porque el SPDR sectorial sigue al S&P 500 sería inferir, no leer."""
+    assert region_declarada("IShares Core S&P 500 ETF") is None
+    assert region_declarada("The Technology Select Sector SPDR Fund") is None
+    assert region_declarada("ETF SPDR GOLD TRUST") is None
+
+
+def test_una_empresa_no_tiene_geografia_de_fondo() -> None:
+    """Mismo guardia que `estrategia_de`: si no es un fondo, no hay nada que leer. Y el detector es
+    por palabra entera — `PetroChina` contiene `China` como substring, que es la misma familia de
+    bug que clasificó a Netflix como fondo."""
+    assert region_declarada("Apple Inc.") is None
+    assert region_declarada("PetroChina Company Limited") is None
+    assert region_declarada(None) is None
+
+
+def test_un_pais_en_la_razon_social_no_es_geografia_de_exposicion() -> None:
+    """Los dos falsos positivos medidos el 28/08/2026. `United States Oil Fund` compra futuros de
+    WTI y `Global X` es la marca del emisor: en los dos el topónimo nombra a quién emite, no dónde
+    invierte. Por eso el vocabulario es cerrado y no "cualquier topónimo"."""
+    assert region_declarada("United States Oil Fund") is None
+    assert region_declarada("Global X Copper Miners ETF") is None
+    assert region_declarada("Global X Uranium ETF") is None
+    # `Global` sin la X sí es alcance del fondo, y ese sí se lee.
+    assert region_declarada("iShares Global Clean Energy ETF") == "Global"
+
+
+def test_una_geografia_negada_no_se_declara_como_exposicion() -> None:
+    """`ex China` nombra China para excluirla. Devolver `China` sería decir exactamente lo contrario
+    de lo que el nombre dice."""
+    assert region_declarada("iShares MSCI Emerging Markets ex China ETF") == "Emerging Markets"
+
+
+def test_lo_especifico_gana_sobre_lo_general() -> None:
+    """Mismo criterio de orden que `_REGLAS`: un nombre que dice `South Korea` no se recorta a
+    `Korea`, porque lo que la fuente escribió es lo primero."""
+    assert region_declarada("iShares MSCI South Korea ETF") == "South Korea"
+    assert region_declarada("Some Korea Fund ETF") == "Korea"

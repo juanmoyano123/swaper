@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 import app.api.v1.jobs as modulo_jobs
 from app.core.config import get_settings
 from app.instrumentos.emisores import ResumenBarrido
+from app.renta_variable.clasificacion import ResumenReclasificacion
 from tests.conftest import AUTORIZACION_DE_CRON, FakeConnection, cliente
 
 
@@ -153,3 +154,90 @@ async def test_completar_emisores_topea_el_limite_pedido(crear_app, monkeypatch)
 
     assert respuesta.status_code == 200
     assert pedido["limite"] == modulo_jobs.LIMITE_EMISORES
+
+
+# --- F-078: reclasificar ETFs y sembrar el curado de países --------------------------------------
+
+
+async def test_reclasificar_etfs_devuelve_los_tres_conteos(crear_app, monkeypatch) -> None:
+    async def _falsa(conn):
+        return ResumenReclasificacion(procesados=1074, con_estrategia=126, con_region=30)
+
+    monkeypatch.setattr(modulo_jobs, "reclasificar_etfs", _falsa)
+    app = crear_app(_FakeConexionCorridas())
+
+    async with cliente(app) as http:
+        respuesta = await http.post("/api/v1/jobs/reclasificar-etfs", headers=AUTORIZACION_DE_CRON)
+
+    assert respuesta.status_code == 200
+    assert respuesta.json() == {"procesados": 1074, "con_estrategia": 126, "con_region": 30}
+
+
+async def test_reclasificar_etfs_exige_credencial(crear_app) -> None:
+    """Nace cerrado porque la dependencia vive en el router: es la propiedad que hace que un job
+    nuevo llegue protegido sin que su autor tenga que enterarse de que la puerta existe."""
+    app = crear_app(_FakeConexionCorridas())
+
+    async with cliente(app) as http:
+        respuesta = await http.post("/api/v1/jobs/reclasificar-etfs")
+
+    assert respuesta.status_code == 401
+
+
+async def test_sembrar_paises_sin_artefacto_devuelve_cero_y_la_alerta(crear_app, tmp_path) -> None:
+    """El estado normal hasta que el curado se valide: cero cargados, con la alerta arriba. No es
+    un fallo — es el país de cada CEDEAR declarado faltante, que es el contrato del sistema."""
+    ajustes = get_settings().model_copy(
+        update={"paises_cedears_csv": str(tmp_path / "no-existe.csv")}
+    )
+    app = crear_app(_FakeConexionCorridas())
+    app.dependency_overrides[get_settings] = lambda: ajustes
+
+    async with cliente(app) as http:
+        respuesta = await http.post(
+            "/api/v1/jobs/sembrar-paises-cedears", headers=AUTORIZACION_DE_CRON
+        )
+
+    assert respuesta.status_code == 200
+    cuerpo = respuesta.json()
+    assert cuerpo["cargados"] == 0
+    assert [a["codigo"] for a in cuerpo["alertas"]] == ["paises_cedears_no_encontrado"]
+
+
+async def test_sembrar_paises_exige_credencial(crear_app) -> None:
+    app = crear_app(_FakeConexionCorridas())
+
+    async with cliente(app) as http:
+        respuesta = await http.post("/api/v1/jobs/sembrar-paises-cedears")
+
+    assert respuesta.status_code == 401
+
+
+# --- F-079 D3: sembrar la geografía curada de ETFs -----------------------------------------------
+
+
+async def test_sembrar_geografia_etfs_sin_artefacto_devuelve_cero(crear_app, tmp_path) -> None:
+    """El estado normal hasta que el curado se valide: cero cargados, sin explotar — cada ETF
+    geográfico sigue mostrándose con el token crudo de su nombre hasta entonces."""
+    ajustes = get_settings().model_copy(
+        update={"etfs_geografia_csv": str(tmp_path / "no-existe.csv")}
+    )
+    app = crear_app(_FakeConexionCorridas())
+    app.dependency_overrides[get_settings] = lambda: ajustes
+
+    async with cliente(app) as http:
+        respuesta = await http.post(
+            "/api/v1/jobs/sembrar-geografia-etfs", headers=AUTORIZACION_DE_CRON
+        )
+
+    assert respuesta.status_code == 200
+    assert respuesta.json() == {"cargados": 0}
+
+
+async def test_sembrar_geografia_etfs_exige_credencial(crear_app) -> None:
+    app = crear_app(_FakeConexionCorridas())
+
+    async with cliente(app) as http:
+        respuesta = await http.post("/api/v1/jobs/sembrar-geografia-etfs")
+
+    assert respuesta.status_code == 401

@@ -100,9 +100,23 @@ function especieRV(extra: Partial<EspecieRentaVariable> = {}): EspecieRentaVaria
     sic_titulo: null,
     sic_oficina: null,
     division_cadena: null,
+    sector_codigo: null,
+    sector: null,
+    rubro_especifico: null,
     estrategia_etf: null,
     ratio_conversion: null,
     mercado_origen: null,
+    region_etf: null,
+    etf_indice: null,
+    etf_alcance: null,
+    etf_pais: null,
+    etf_region: null,
+    etf_geo_fuente: null,
+    etf_geo_verificado: null,
+    pais: null,
+    region: null,
+    pais_fuente: null,
+    pais_verificado: null,
     ...extra,
   }
 }
@@ -245,7 +259,9 @@ describe('GWT-1: las pestañas de renta variable no tienen columna de rendimient
     mockearApi()
     await irALaPestanaDeCedears()
 
-    expect(screen.getByRole('button', { name: /precio/i })).toBeInTheDocument()
+    // Anclado a la palabra entera desde F-078: el chip temático "Metales preciosos" también
+    // contiene "precio", y un `/precio/i` suelto encuentra los dos.
+    expect(screen.getByRole('button', { name: /^precio$/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /variación/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^volumen/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /compra/i })).toBeInTheDocument()

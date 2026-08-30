@@ -17,6 +17,7 @@
 import { createContext, type ReactNode, useContext, useMemo, useReducer } from 'react'
 
 import { FILTROS_ARMADOR_INICIALES, FILTROS_ARMADOR_VACIOS, type FiltrosArmador } from '../lib/filtros'
+import type { AlertaArmado } from '../lib/schemaArmado'
 import {
   agregarConProRata,
   equiponderarPesos,
@@ -82,6 +83,18 @@ interface EstadoArmador {
    *  mandato del cliente, no un campo de un formulario: la cartera se sigue comparando contra él
    *  mientras el asesor edita pesos a mano, mucho después de que ese panel se haya plegado. */
   objetivoRv: number | null
+  /** Las alertas que devolvió el **último armado asistido**, tal como las mandó el backend — F-078.
+   *
+   *  Viven en el store y no adentro del `useMutation` porque las tiene que leer un componente que
+   *  no dispara el armado: las alertas de tope de renta variable (`rv_tope_*`) se muestran en el
+   *  bloque de renta variable, que es donde el asesor está mirando la consecuencia de esos topes,
+   *  y no en el panel del formulario tres secciones más arriba.
+   *
+   *  Se pisan enteras en cada armado y se vacían al vaciar la cartera. Editar posiciones a mano
+   *  **no** las recalcula —nada del frontend puede recalcularlas: son la explicación de una
+   *  decisión que tomó el motor—, así que quien las muestre tiene que decir que son del último
+   *  armado y no de la cartera de este instante. */
+  alertasArmado: AlertaArmado[]
 }
 
 type AccionArmador =
@@ -99,6 +112,7 @@ type AccionArmador =
   | { tipo: 'aplicarTematica'; id: string; filtros: FiltrosArmador }
   | { tipo: 'cargarCartera'; posiciones: PosicionArmador[] }
   | { tipo: 'fijarObjetivoRv'; pct: number | null }
+  | { tipo: 'fijarAlertasArmado'; alertas: AlertaArmado[] }
 
 const ESTADO_INICIAL: EstadoArmador = {
   pos: [],
@@ -110,6 +124,8 @@ const ESTADO_INICIAL: EstadoArmador = {
   // Sin objetivo declarado: el armado asistido usa el default del perfil y la pantalla no compara
   // contra nada hasta que el asesor diga cuánto quiere en cada bloque.
   objetivoRv: null,
+  // Sin ningún armado asistido corrido todavía: no hay nada que explicar.
+  alertasArmado: [],
 }
 
 /** Agrega el ticker con esa clase si no estaba; lo saca si ya estaba. El toggle es por ticker y no
@@ -150,7 +166,9 @@ function reducer(estado: EstadoArmador, accion: AccionArmador): EstadoArmador {
       return { ...estado, pos: equiponderarPesos(estado.pos) }
     }
     case 'vaciar':
-      return { ...estado, pos: [] }
+      // Las alertas se van con la cartera que explicaban: dejarlas sobre una cartera vacía las
+      // convertiría en el diagnóstico de algo que ya no está en pantalla.
+      return { ...estado, pos: [], alertasArmado: [] }
     // El FCI entra con el peso que pidió el llamador (a diferencia de un papel de la grilla, que
     // entra con 100/(n+1)); las demás posiciones se achican pro-rata para hacerle ese lugar.
     case 'agregarFci':
@@ -194,12 +212,21 @@ function reducer(estado: EstadoArmador, accion: AccionArmador): EstadoArmador {
     // acá, repartiendo el residuo, en vez de dejar que cada consumidor trunque por su cuenta.
     case 'cargarCartera': {
       const pesos = normalizarA100(accion.posiciones.map((p) => p.peso))
-      return { ...estado, pos: accion.posiciones.map((p, i) => ({ ...p, peso: pesos[i] })) }
+      // Las alertas del armado anterior se descartan acá y no en `fijarAlertasArmado`: una carga
+      // que no venga acompañada de alertas —hidratar una cartera guardada, por ejemplo— tiene que
+      // dejar la pantalla sin alertas, no con las del armado de hace diez minutos.
+      return {
+        ...estado,
+        pos: accion.posiciones.map((p, i) => ({ ...p, peso: pesos[i] })),
+        alertasArmado: [],
+      }
     }
     // No toca `pos`: declarar el objetivo no rearma la cartera. Lo que cambia es contra qué se
     // compara lo que ya hay — el desvío se muestra, no se corrige solo, igual que `fijarPeso`.
     case 'fijarObjetivoRv':
       return { ...estado, objetivoRv: accion.pct }
+    case 'fijarAlertasArmado':
+      return { ...estado, alertasArmado: accion.alertas }
   }
 }
 
@@ -245,6 +272,9 @@ interface AccionesArmador {
    *  fija). `null` borra el objetivo y devuelve el armado asistido al default de su perfil.
    *  **No rearma ni rebalancea nada**: fija contra qué se compara la cartera. */
   fijarObjetivoRv: (pct: number | null) => void
+  /** Guarda las alertas del armado recién hecho. Se llama **después** de `cargarCartera`, que las
+   *  vacía: el orden importa y es el que usa `useArmadoAsistido`. */
+  fijarAlertasArmado: (alertas: AlertaArmado[]) => void
 }
 
 const EstadoContext = createContext<EstadoArmador | null>(null)
@@ -277,6 +307,8 @@ export function ArmadorProvider({ children }: { children: ReactNode }) {
       cargarCartera: (posiciones: PosicionArmador[]) =>
         dispatch({ tipo: 'cargarCartera', posiciones }),
       fijarObjetivoRv: (pct: number | null) => dispatch({ tipo: 'fijarObjetivoRv', pct }),
+      fijarAlertasArmado: (alertas: AlertaArmado[]) =>
+        dispatch({ tipo: 'fijarAlertasArmado', alertas }),
     }),
     [],
   )

@@ -20,13 +20,45 @@ clasificación contra la SEC (`app/renta_variable/clasificacion.py`) — no de B
 está: el job es incremental y una especie recién agregada al universo puede no tener fila todavía.
 `perfil_fuente` y `perfil_capturado_en` declaran de dónde salió y cuándo, igual que el resto de los
 datos externos del proyecto (regla 11): nunca se muestran sin decir su origen.
+
+**El país es curado y se junta por papel, no por especie** (F-078, 28/08/2026). Viene de
+`public.pais_cedear`, que tiene una fila por papel agrupado, y el join se hace acá en Python porque
+la correspondencia especie→papel la resuelve `agrupamiento.py` contrastando cada grupo contra el
+tipo de cambio del universo — reproducir eso en SQL sería reescribir el agrupamiento en otro
+lenguaje. `pais_fuente` y `pais_verificado` viajan al lado del valor, como todo dato externo.
+
+**Sector y rubro específico son traducción curada del SIC, en dos niveles** (F-079, 29/08/2026).
+`sector_codigo` (el major group de dos dígitos) es aritmética pura sobre `sic_codigo` —
+`app.externos.sic.major_group_de`— y siempre está si hay `sic_codigo`, sin depender de ningún
+curado. `sector` y `rubro_especifico` son las etiquetas ES de `data/sic_sectores.csv` y
+`data/sic_rubros.csv` (`app.renta_variable.sic_es`): `None` mientras el dueño no valide esos CSV,
+o si el código no tiene fila en el curado — el fallback declarado (`sector_codigo` para uno,
+`sic_titulo` en inglés para el otro) lo decide quien consuma la especie, no este módulo.
+
+**La geografía de ETFs es curada por papel** (F-079, D3, 29/08/2026). Viene de
+`public.etf_geografia` y se junta con la misma llave que `pais_cedear` — el mismo `_papel_de`,
+porque es exactamente el mismo problema: identificar qué papel es esta especie antes de buscarle
+un dato por-fondo. `None` en las seis columnas `etf_*` es lo normal para todo lo que no es un ETF
+geográfico curado — a diferencia de sector/rubro, acá no hay fallback textual porque no hay ninguna
+fuente cruda equivalente que mostrar (`region_etf`, el token del nombre del fondo, sigue viviendo
+aparte y sin unificarse).
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
-from app.renta_variable.agrupamiento import agrupar, aplicar_contraste, hermanas, verificar
+from app.externos.sic import major_group_de
+from app.renta_variable.agrupamiento import (
+    Agrupamiento,
+    agrupar,
+    aplicar_contraste,
+    hermanas,
+    verificar,
+)
+from app.renta_variable.geografia_etf import FilaGeografiaEtf
+from app.renta_variable.paises import FilaPais
+from app.renta_variable.sic_es import rubro_de, sector_de
 from app.universo.cambio import MONEDA_EN_PESOS, MONEDAS_EN_DOLARES, TipoDeCambio
 from app.universo.segmentacion import a_numero
 
@@ -80,12 +112,65 @@ class EspecieRentaVariable:
     division_cadena: str | None = None
     """En qué eslabón de la cadena productiva está: extracción, manufactura, comercio, servicios.
     Derivado del rango del SIC según el SIC Manual — ver `app/externos/sic.py`."""
+    sector_codigo: str | None = None
+    """El major group SIC de dos dígitos (`"73"`), derivado de `sic_codigo` — F-079. Siempre
+    presente si hay `sic_codigo`, sin depender de ningún curado: es el eje "rubro" del armador,
+    más específico que `sic_oficina` (que agrupaba oficinas ambiguas de la SEC, "X or Y")."""
+    sector: str | None = None
+    """La etiqueta ES de `sector_codigo`, de `data/sic_sectores.csv`. `None` sin curado cargado o
+    sin fila para ese major group — el fallback declarado es mostrar `sector_codigo`."""
+    rubro_especifico: str | None = None
+    """La etiqueta ES de `sic_codigo` (el título SIC de 4 dígitos), de `data/sic_rubros.csv`.
+    `None` sin curado cargado o sin fila para ese código — el fallback declarado es `sic_titulo`,
+    tal como lo publica la SEC."""
     estrategia_etf: str | None = None
     """Qué idea arma el portafolio si es un fondo. `None` = no es un fondo."""
     ratio_conversion: str | None = None
     """Cuántos CEDEARs equivalen a una acción del subyacente, como razón (`20:1`)."""
     mercado_origen: str | None = None
     """En qué mercado cotiza el subyacente: `NASDAQ`, `NYSE`, `B3`."""
+    region_etf: str | None = None
+    """La geografía que declara el nombre del fondo, tal como aparece en el nombre (`China`,
+    `EAFE`, `Latin America`). `None` = no es un fondo, o su nombre no nombra geografía. **No es la
+    misma columna que `region`**: aquélla sale del país curado por la subregión M49 de la ONU, y
+    ésta del nombre del fondo. Conviven sin unificarse a propósito — mapear `Brazil` a "América
+    Latina y el Caribe" sería traducir. Ver `etfs.py::region_declarada`."""
+
+    # Geografía curada de ETFs (F-079, D3, 29/08/2026). Viene de `public.etf_geografia`, un CSV
+    # investigado a mano por fondo, junto por la misma llave de papel que `pais_cedear`. `None` en
+    # las seis columnas es el caso normal para todo lo que no es un ETF geográfico curado.
+    etf_indice: str | None = None
+    """Qué índice sigue el fondo, en español y corto (`data/etfs_geografia.csv::indice`)."""
+    etf_alcance: str | None = None
+    """Qué alcance declara el emisor de ese índice — la definición del índice según su propio
+    emisor, no nuestra lectura de qué países lo componen hoy (esa composición no se cura: envejece
+    con cada rebalanceo, misma lección que llevó a pausar IAMC)."""
+    etf_pais: str | None = None
+    """ISO 3166-1 alfa-2, sólo para el puñado de fondos mono-país. `None` es el caso normal para
+    un fondo multi-país."""
+    etf_region: str | None = None
+    """La subregión M49 de la ONU de `etf_pais`, derivada al leer (`FilaGeografiaEtf.region`).
+    `None` sin `etf_pais`."""
+    etf_geo_fuente: str | None = None
+    """Qué declara la geografía del ETF y dónde se investigó. Nunca se muestra sin esto (regla
+    11)."""
+    etf_geo_verificado: date | None = None
+    """Cuándo se verificó contra esa fuente. Es la fecha del dato, no la de la carga."""
+
+    # País curado por papel y su región derivada (F-078, 28/08/2026). Vienen de `public.pais_cedear`
+    # —un CSV investigado a mano, validado antes de cargarse— y no de ninguna fuente automática: el
+    # domicilio legal de la SEC no dice a qué economía queda expuesta la plata. `None` es lo normal
+    # hasta que el curado avance, y se muestra como faltante declarado.
+    pais: str | None = None
+    """ISO 3166-1 alfa-2, tal como el curado lo declara."""
+    region: str | None = None
+    """La subregión geográfica M49 de la ONU que corresponde a `pais`, derivada al leer y nunca
+    persistida (`regiones.py`). `None` sin país, y también para el puñado de territorios que el
+    estándar no ubica."""
+    pais_fuente: str | None = None
+    """Qué declara el país y dónde se leyó. Nunca se muestra el país sin esto (regla 11)."""
+    pais_verificado: str | None = None
+    """Cuándo se verificó contra esa fuente, en ISO. Es la fecha del dato, no la de la carga."""
 
     # El OHLC de BYMA que la consolidación descartaba (13/08/2026): el rango del día de la ficha.
     # **Siempre de BYMA**, aunque `fuente` diga data912 — el overlay no los pisa. Ver el
@@ -120,9 +205,23 @@ class EspecieRentaVariable:
             "sic_titulo": self.sic_titulo,
             "sic_oficina": self.sic_oficina,
             "division_cadena": self.division_cadena,
+            "sector_codigo": self.sector_codigo,
+            "sector": self.sector,
+            "rubro_especifico": self.rubro_especifico,
             "estrategia_etf": self.estrategia_etf,
             "ratio_conversion": self.ratio_conversion,
             "mercado_origen": self.mercado_origen,
+            "region_etf": self.region_etf,
+            "etf_indice": self.etf_indice,
+            "etf_alcance": self.etf_alcance,
+            "etf_pais": self.etf_pais,
+            "etf_region": self.etf_region,
+            "etf_geo_fuente": self.etf_geo_fuente,
+            "etf_geo_verificado": self.etf_geo_verificado,
+            "pais": self.pais,
+            "region": self.region,
+            "pais_fuente": self.pais_fuente,
+            "pais_verificado": self.pais_verificado,
             "precio_apertura": self.precio_apertura,
             "precio_maximo": self.precio_maximo,
             "precio_minimo": self.precio_minimo,
@@ -182,8 +281,26 @@ def _fecha_iso(valor: object) -> str | None:
     return valor.isoformat() if isinstance(valor, datetime) else None
 
 
+def _papel_de(agrupado: Agrupamiento) -> str | None:
+    """Con qué llave buscar esta especie en el curado por papel. `None` para lo no identificado.
+
+    **Que las hermanas compartan país no es completar por analogía: es identidad.** `AAPL`, `AAPLC`
+    y `AAPLD` no son tres empresas parecidas, son el mismo CEDEAR de Apple liquidando en tres
+    monedas —lo declaró el dueño del producto y lo confirma el cociente de precios contra el tipo de
+    cambio del universo, ver `agrupamiento.py`—, así que el país de la empresa es literalmente el
+    mismo dato, no uno inferido del otro.
+
+    Lo que termina en `B` cae en `NO_IDENTIFICADO` y queda afuera: su `emision` es el centinela
+    `n/n`, no un ticker, y buscar el país de un papel que no sabemos cuál es sería inventarlo.
+    """
+    return None if agrupado.no_identificado else agrupado.emision
+
+
 def armar_renta_variable(
-    filas: list[dict[str, Any]], cambio: TipoDeCambio
+    filas: list[dict[str, Any]],
+    cambio: TipoDeCambio,
+    paises: dict[str, FilaPais] | None = None,
+    geografia_etfs: dict[str, FilaGeografiaEtf] | None = None,
 ) -> list[EspecieRentaVariable]:
     """Las filas crudas de `leer_renta_variable`, convertidas en especies con variación y USD.
 
@@ -191,7 +308,16 @@ def armar_renta_variable(
     especie sólo se declara variante si su base existe, así que filtrar acciones y CEDEARs por
     separado antes de agrupar dejaría sin base a cualquier papel cuyas especies estuvieran
     repartidas entre las dos clases.
+
+    `paises` es el curado de `pais_cedear` indexado por papel (`leer_paises`). Es opcional y sin él
+    todo lo demás funciona igual, con el país declarado faltante: el curado es trabajo humano por
+    tandas y nada del código lo espera para andar.
+
+    `geografia_etfs` es el curado de `etf_geografia` indexado por papel (`leer_geografia_etfs`,
+    F-079). Mismo criterio que `paises`: opcional, y sin él los seis campos `etf_*` quedan `None`.
     """
+    por_papel = paises or {}
+    por_papel_geo = geografia_etfs or {}
     tickers = {str(f["ticker"]) for f in filas}
     grupos = agrupar(tickers)
     precios = {str(f["ticker"]): a_numero(f.get("lastPrice")) for f in filas}
@@ -204,10 +330,15 @@ def armar_renta_variable(
 
     especies: list[EspecieRentaVariable] = []
     for fila in filas:
+        agrupado = grupos[str(fila["ticker"])]
+        papel = _papel_de(agrupado)
+        del_papel = por_papel.get(papel) if papel else None
+        del_geo = por_papel_geo.get(papel) if papel else None
         precio = a_numero(fila.get("lastPrice"))
         cierre_anterior = a_numero(fila.get("cierre_anterior"))
         volumen = a_numero(fila.get("effectiveVolume"))
         moneda = _texto(fila.get("moneda_cotizacion"))
+        sic_codigo = _texto(fila.get("sic_codigo"))
         especies.append(
             EspecieRentaVariable(
                 ticker=str(fila["ticker"]),
@@ -222,20 +353,38 @@ def armar_renta_variable(
                 px_ask=a_numero(fila.get("px_ask")),
                 operaciones=_entero(fila.get("operaciones")),
                 fuente=_texto(fila.get("fuente")),
-                emision=grupos[str(fila["ticker"])].emision,
-                sufijo_liquidacion=grupos[str(fila["ticker"])].sufijo_liquidacion,
+                emision=agrupado.emision,
+                sufijo_liquidacion=agrupado.sufijo_liquidacion,
                 hermanas=hermanas(grupos, str(fila["ticker"])),
-                no_identificado=grupos[str(fila["ticker"])].no_identificado,
+                no_identificado=agrupado.no_identificado,
                 nombre_largo=_texto(fila.get("nombre_largo")),
                 perfil_fuente=_texto(fila.get("perfil_fuente")),
                 perfil_capturado_en=_fecha_iso(fila.get("perfil_capturado_en")),
-                sic_codigo=_texto(fila.get("sic_codigo")),
+                sic_codigo=sic_codigo,
                 sic_titulo=_texto(fila.get("sic_titulo")),
                 sic_oficina=_texto(fila.get("sic_oficina")),
                 division_cadena=_texto(fila.get("division_cadena")),
+                sector_codigo=major_group_de(sic_codigo),
+                sector=sector_de(sic_codigo),
+                rubro_especifico=rubro_de(sic_codigo),
                 estrategia_etf=_texto(fila.get("estrategia_etf")),
                 ratio_conversion=_texto(fila.get("ratio_conversion")),
                 mercado_origen=_texto(fila.get("mercado_origen")),
+                region_etf=_texto(fila.get("region_etf")),
+                etf_indice=del_geo.indice if del_geo else None,
+                etf_alcance=del_geo.alcance if del_geo else None,
+                etf_pais=del_geo.pais if del_geo else None,
+                etf_region=del_geo.region if del_geo else None,
+                etf_geo_fuente=del_geo.fuente if del_geo else None,
+                etf_geo_verificado=del_geo.verificado if del_geo else None,
+                pais=del_papel.pais if del_papel else None,
+                # La región no se lee de ningún lado: se deriva del país con la subregión M49 de la
+                # ONU en el momento de armar la especie, igual que `division_cadena` se deriva del
+                # código SIC. Ver `regiones.py` para por qué leer un estándar publicado no es
+                # interpretar un código propietario.
+                region=del_papel.region if del_papel else None,
+                pais_fuente=del_papel.fuente if del_papel else None,
+                pais_verificado=del_papel.verificado.isoformat() if del_papel else None,
                 precio_apertura=a_numero(fila.get("precio_apertura")),
                 precio_maximo=a_numero(fila.get("precio_maximo")),
                 precio_minimo=a_numero(fila.get("precio_minimo")),

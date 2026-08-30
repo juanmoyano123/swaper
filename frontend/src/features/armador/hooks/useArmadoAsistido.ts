@@ -23,7 +23,7 @@ import {
 } from '../lib/schemaArmado'
 
 export function useArmadoAsistido() {
-  const { cargarCartera } = useArmadorAcciones()
+  const { cargarCartera, fijarAlertasArmado } = useArmadorAcciones()
 
   return useMutation<ResultadoArmado, Error, ParametrosArmadoAsistido>({
     mutationFn: (parametros) =>
@@ -43,6 +43,11 @@ export function useArmadoAsistido() {
           clase: posicion.clase,
         })),
       )
+      // Después de `cargarCartera`, que las vacía a propósito: el orden es parte del contrato del
+      // store. Las alertas quedan disponibles para el bloque de renta variable, que es donde se
+      // ven las consecuencias de los topes (F-078) — el panel del formulario las sigue mostrando
+      // todas juntas.
+      fijarAlertasArmado(resultado.alertas)
     },
   })
 }

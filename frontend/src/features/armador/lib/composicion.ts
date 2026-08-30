@@ -32,37 +32,46 @@ export interface TramoComposicion {
 
 const EMISOR_NO_INFORMADO = 'emisor no informado'
 
-interface FilaComposicion {
-  especie: Especie
+/** Un ítem con el peso que le toca. Genérico desde F-078: la composición de renta variable
+ *  (`composicionRentaVariable.ts`) agrupa `EspecieRentaVariable`, que no es una `Especie` de renta
+ *  fija ni podría serlo —no tiene TIR, ni duración, ni cronograma—, pero la aritmética de agrupar
+ *  y ordenar es la misma y no se escribe dos veces. */
+export interface FilaPesada<T> {
+  item: T
   peso: number
 }
 
-function filas(resueltas: PosicionResuelta[], porTicker: Map<string, Especie>): FilaComposicion[] {
-  const salida: FilaComposicion[] = []
+function filas(resueltas: PosicionResuelta[], porTicker: Map<string, Especie>): Array<FilaPesada<Especie>> {
+  const salida: Array<FilaPesada<Especie>> = []
   for (const r of resueltas) {
     const especie = porTicker.get(r.ticker)
     if (!especie) continue
-    salida.push({ especie, peso: r.pesoReal ?? r.peso })
+    salida.push({ item: especie, peso: r.pesoReal ?? r.peso })
   }
   return salida
 }
 
 /** Agrupa por la clave que devuelve `claveDe`, ordenado por peso descendente (así el consumidor
- *  puede tomar `[0]` como "el tramo más pesado" sin volver a ordenar). */
-function agrupar(
-  filas: FilaComposicion[],
-  claveDe: (especie: Especie) => string,
+ *  puede tomar `[0]` como "el tramo más pesado" sin volver a ordenar).
+ *
+ *  El desempate es alfabético por nombre y no el orden de llegada: dos tramos con el mismo peso
+ *  —cosa que en una cartera equiponderada es la regla, no la excepción— no pueden saltar de lugar
+ *  entre renders, porque `DistribucionBarras` colorea por índice y el color de cada nombre se
+ *  volvería inestable. */
+export function agrupar<T>(
+  filas: Array<FilaPesada<T>>,
+  claveDe: (item: T) => string,
   nombreDe: (clave: string) => string,
   sinDato: (clave: string) => boolean,
 ): TramoComposicion[] {
   const pesos = new Map<string, number>()
   for (const fila of filas) {
-    const clave = claveDe(fila.especie)
+    const clave = claveDe(fila.item)
     pesos.set(clave, (pesos.get(clave) ?? 0) + fila.peso)
   }
   return [...pesos.entries()]
     .map(([clave, peso]) => ({ nombre: nombreDe(clave), peso, sinDato: sinDato(clave) || undefined }))
-    .sort((a, b) => b.peso - a.peso)
+    .sort((a, b) => b.peso - a.peso || a.nombre.localeCompare(b.nombre, 'es-AR'))
 }
 
 export function composicionPorClase(

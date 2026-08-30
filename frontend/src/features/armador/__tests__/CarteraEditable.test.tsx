@@ -587,6 +587,9 @@ function accionGgal(extra: Record<string, unknown> = {}) {
     nombre_largo: 'Grupo Financiero Galicia S.A.',
     perfil_fuente: 'SEC EDGAR',
     perfil_capturado_en: '2026-08-01T00:00:00Z',
+    // F-078: `region_etf` no tiene default en el schema, así que una respuesta que no lo traiga no
+    // parsea. Es a propósito — el campo tiene que viajar siempre — y por eso la fixture lo declara.
+    region_etf: null,
     ...extra,
   }
 }

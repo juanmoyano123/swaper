@@ -53,9 +53,27 @@ function accion(extra: Partial<EspecieRentaVariable> = {}): EspecieRentaVariable
     sic_titulo: null,
     sic_oficina: null,
     division_cadena: null,
+    sector_codigo: null,
+    sector: null,
+    rubro_especifico: null,
     estrategia_etf: null,
     ratio_conversion: null,
     mercado_origen: null,
+    // F-078: la geografía que declara el nombre del fondo. Sin `.default()` en el schema, así que
+    // una fixture que no lo declare no compila — a propósito: el campo tiene que viajar siempre.
+    region_etf: null,
+    etf_indice: null,
+    etf_alcance: null,
+    etf_pais: null,
+    etf_region: null,
+    etf_geo_fuente: null,
+    etf_geo_verificado: null,
+    // El curado de país, todavía sin sembrar: es el estado real del universo y por eso es el
+    // default de la fixture. Un test que necesite geografía lo declara con `extra`.
+    pais: null,
+    region: null,
+    pais_fuente: null,
+    pais_verificado: null,
     ...extra,
   }
 }
@@ -86,9 +104,27 @@ function cedear(extra: Partial<EspecieRentaVariable> = {}): EspecieRentaVariable
     sic_titulo: null,
     sic_oficina: null,
     division_cadena: null,
+    sector_codigo: null,
+    sector: null,
+    rubro_especifico: null,
     estrategia_etf: null,
     ratio_conversion: null,
     mercado_origen: null,
+    // F-078: la geografía que declara el nombre del fondo. Sin `.default()` en el schema, así que
+    // una fixture que no lo declare no compila — a propósito: el campo tiene que viajar siempre.
+    region_etf: null,
+    etf_indice: null,
+    etf_alcance: null,
+    etf_pais: null,
+    etf_region: null,
+    etf_geo_fuente: null,
+    etf_geo_verificado: null,
+    // El curado de país, todavía sin sembrar: es el estado real del universo y por eso es el
+    // default de la fixture. Un test que necesite geografía lo declara con `extra`.
+    pais: null,
+    region: null,
+    pais_fuente: null,
+    pais_verificado: null,
     ...extra,
   }
 }
@@ -132,6 +168,32 @@ function responderCon({
   return fetchMock
 }
 
+/** Dos alertas de tope y una que no lo es: el bloque muestra las primeras y deja la tercera al
+ *  panel del formulario, que las muestra todas. */
+const ALERTAS_DE_PRUEBA = [
+  {
+    codigo: 'rv_tope_sin_dato_en_eje',
+    mensaje: 'el tope de país se midió sobre 0 de 4 posiciones',
+    severidad: 'advertencia' as const,
+    accion_requerida: null,
+    detalle: {},
+  },
+  {
+    codigo: 'rv_tope_excedido',
+    mensaje: 'Office of Technology quedó en 60% con un tope de 40%',
+    severidad: 'advertencia' as const,
+    accion_requerida: null,
+    detalle: {},
+  },
+  {
+    codigo: 'diversificacion_sectorial_insuficiente',
+    mensaje: 'la cartera tiene 2 sectores y el perfil pide al menos 3',
+    severidad: 'advertencia' as const,
+    accion_requerida: null,
+    detalle: {},
+  },
+]
+
 function FichaFalsa() {
   const { ticker } = useParams()
   return <div>ficha de {ticker}</div>
@@ -139,11 +201,23 @@ function FichaFalsa() {
 
 /** Expone las acciones del store que en la pantalla real dispara el bloque mismo. */
 function Arnes() {
-  const { alternarRentaVariable, alternarPapel, fijarMontoTotal } = useArmadorAcciones()
+  const { alternarRentaVariable, alternarPapel, fijarMontoTotal, fijarAlertasArmado } =
+    useArmadorAcciones()
   return (
     <div>
       <button type="button" onClick={() => alternarRentaVariable('GGAL')}>
         agregar GGAL directo
+      </button>
+      <button type="button" onClick={() => alternarRentaVariable('AAPL')}>
+        agregar AAPL directo
+      </button>
+      <button type="button" onClick={() => alternarRentaVariable('EWZ')}>
+        agregar EWZ directo
+      </button>
+      {/* F-078: en la pantalla real las alertas las deja `useArmadoAsistido` al volver del
+       *  backend; acá se inyectan a mano para probar que el bloque muestra sólo las de tope. */}
+      <button type="button" onClick={() => fijarAlertasArmado(ALERTAS_DE_PRUEBA)}>
+        inyectar alertas de armado
       </button>
       {/* Sólo para el test del mix con renta fija resuelta y renta variable pendiente (bug del
        *  relevamiento del 16/08/2026): el arnés no expone RF en ningún otro lado. */}
@@ -480,128 +554,373 @@ describe('el buscador de CEDEARs', () => {
     expect(screen.queryByRole('button', { name: 'PAMP' })).not.toBeInTheDocument()
   })
 
-  it('filtra por rubro, sólo con las especies de esa clase que lo declaran', async () => {
+  it('filtra por sector, sólo con las especies de esa clase que lo declaran', async () => {
     responderCon({
       cedears: [
-        cedear({ sic_oficina: 'Office of Finance' }),
-        cedear({ ticker: 'PAMP', sic_oficina: 'Office of Energy & Transportation' }),
+        cedear({ sector_codigo: '60', sector: 'Finanzas' }),
+        cedear({ ticker: 'PAMP', sector_codigo: '49', sector: 'Electricidad, gas y sanitarios' }),
       ],
     })
     renderizar()
     await screen.findAllByRole('listitem')
 
-    await userEvent.selectOptions(screen.getByLabelText('Rubro (SEC)'), 'Office of Finance')
+    await userEvent.selectOptions(screen.getByLabelText('Sector (SIC)'), '60')
 
     expect(screen.getByRole('button', { name: 'AAPL' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'PAMP' })).not.toBeInTheDocument()
   })
 
-  it('filtra por eslabón productivo, que es la división del SIC y no una lectura nuestra', async () => {
+  it('filtra por rubro específico, el código SIC de cuatro dígitos', async () => {
     responderCon({
       cedears: [
-        cedear({ division_cadena: 'Finanzas y seguros' }),
-        cedear({ ticker: 'PAMP', division_cadena: 'Extracción' }),
+        cedear({ sic_codigo: '6029', rubro_especifico: 'Bancos comerciales' }),
+        cedear({ ticker: 'PAMP', sic_codigo: '1000', rubro_especifico: 'Minería metálica' }),
       ],
     })
     renderizar()
     await screen.findAllByRole('listitem')
 
-    await userEvent.selectOptions(screen.getByLabelText('Eslabón productivo'), 'Extracción')
+    await userEvent.selectOptions(screen.getByLabelText('Rubro específico'), '1000')
 
     expect(screen.getByRole('button', { name: 'PAMP' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'AAPL' })).not.toBeInTheDocument()
   })
 
-  // Fixture del facetado bidireccional (14/08/2026): dos financieras en eslabones distintos y una
-  // tecnológica, para que cada select tenga algo que achicar en las dos direcciones.
+  // Fixture del facetado bidireccional (14/08/2026): dos financieras con rubro específico
+  // distinto y una tecnológica, para que cada select tenga algo que achicar en las dos direcciones.
   const facetado = () =>
     responderCon({
       cedears: [
-        cedear({ sic_oficina: 'Office of Finance', division_cadena: 'Finanzas y seguros' }),
-        cedear({ ticker: 'MELI', sic_oficina: 'Office of Finance', division_cadena: 'Servicios' }),
-        cedear({ ticker: 'TSLA', sic_oficina: 'Office of Technology', division_cadena: 'Manufactura' }),
+        cedear({
+          sector_codigo: '60',
+          sector: 'Finanzas',
+          sic_codigo: '6029',
+          rubro_especifico: 'Bancos comerciales',
+        }),
+        cedear({
+          ticker: 'MELI',
+          sector_codigo: '60',
+          sector: 'Finanzas',
+          sic_codigo: '6199',
+          rubro_especifico: 'Servicios financieros diversos',
+        }),
+        cedear({
+          ticker: 'TSLA',
+          sector_codigo: '37',
+          sector: 'Equipo de transporte',
+          sic_codigo: '3711',
+          rubro_especifico: 'Fabricación de vehículos',
+        }),
       ],
     })
 
-  it('elegir rubro achica el eslabón a los que tienen empresas de ese rubro', async () => {
+  it('elegir sector achica el rubro específico a los que tienen empresas de ese sector', async () => {
     facetado()
     renderizar()
     await screen.findAllByRole('listitem')
 
-    await userEvent.selectOptions(screen.getByLabelText('Rubro (SEC)'), 'Office of Finance')
+    await userEvent.selectOptions(screen.getByLabelText('Sector (SIC)'), '60')
 
-    const eslabon = screen.getByLabelText('Eslabón productivo')
-    const opciones = Array.from(eslabon.children).map((o) => o.textContent)
-    expect(opciones).toEqual(['todos', 'Finanzas y seguros', 'Servicios'])
+    const rubroEspecifico = screen.getByLabelText('Rubro específico')
+    const opciones = Array.from(rubroEspecifico.children).map((o) => o.textContent)
+    expect(opciones).toEqual(['todos', 'Bancos comerciales', 'Servicios financieros diversos'])
   })
 
-  it('elegir eslabón achica el rubro: el facetado va en las dos direcciones', async () => {
+  it('elegir rubro específico achica el sector: el facetado va en las dos direcciones', async () => {
     facetado()
     renderizar()
     await screen.findAllByRole('listitem')
 
-    await userEvent.selectOptions(screen.getByLabelText('Eslabón productivo'), 'Manufactura')
+    await userEvent.selectOptions(screen.getByLabelText('Rubro específico'), '3711')
 
-    const rubro = screen.getByLabelText('Rubro (SEC)')
-    const opciones = Array.from(rubro.children).map((o) => o.textContent)
-    expect(opciones).toEqual(['todos', 'Office of Technology'])
+    const sector = screen.getByLabelText('Sector (SIC)')
+    const opciones = Array.from(sector.children).map((o) => o.textContent)
+    expect(opciones).toEqual(['todos', 'Equipo de transporte'])
   })
 
-  it('reemplazar con un eslabón activo de otro rubro: el rubro nuevo gana y el eslabón se abre', async () => {
-    // Con el facetado, la UI sola no puede armar una combinación inválida: elegido un eslabón,
-    // los rubros sin empresas de ese eslabón desaparecen del select. La vía programática que
-    // quedaba — `reemplazar()` setea el rubro de la posición que se saca — resetea el eslabón al
-    // hacerlo; sin ese reset los dos filtros se invalidarían mutuamente y los dos caerían a
-    // "todos", perdiendo el rubro que el reemplazo vino a poner.
+  it('reemplazar con un rubro específico activo de otro sector: el sector nuevo gana y el rubro específico se abre', async () => {
+    // Con el facetado, la UI sola no puede armar una combinación inválida: elegido un rubro
+    // específico, los sectores sin empresas de ese rubro desaparecen del select. La vía
+    // programática que quedaba — `reemplazar()` setea el sector de la posición que se saca —
+    // resetea el rubro específico al hacerlo; sin ese reset los dos filtros se invalidarían
+    // mutuamente y los dos caerían a "todos", perdiendo el sector que el reemplazo vino a poner.
     responderCon({
-      acciones: [accion({ sic_oficina: 'Office of Finance' })],
+      acciones: [accion({ sector_codigo: '60' })],
       cedears: [
-        cedear({ sic_oficina: 'Office of Finance', division_cadena: 'Finanzas y seguros' }),
-        cedear({ ticker: 'MELI', sic_oficina: 'Office of Finance', division_cadena: 'Servicios' }),
-        cedear({ ticker: 'TSLA', sic_oficina: 'Office of Technology', division_cadena: 'Manufactura' }),
+        cedear({
+          sector_codigo: '60',
+          sector: 'Finanzas',
+          sic_codigo: '6029',
+          rubro_especifico: 'Bancos comerciales',
+        }),
+        cedear({
+          ticker: 'MELI',
+          sector_codigo: '60',
+          sector: 'Finanzas',
+          sic_codigo: '6199',
+          rubro_especifico: 'Servicios financieros diversos',
+        }),
+        cedear({
+          ticker: 'TSLA',
+          sector_codigo: '37',
+          sector: 'Equipo de transporte',
+          sic_codigo: '3711',
+          rubro_especifico: 'Fabricación de vehículos',
+        }),
       ],
     })
     renderizar()
     await screen.findAllByRole('listitem')
 
     await userEvent.click(screen.getByRole('button', { name: 'agregar GGAL directo' }))
-    // Manufactura sólo existe en Technology; el reemplazo setea el rubro Finance y la invalida.
-    await userEvent.selectOptions(screen.getByLabelText('Eslabón productivo'), 'Manufactura')
+    // "Fabricación de vehículos" sólo existe en Equipo de transporte; el reemplazo setea el
+    // sector Finanzas y la invalida.
+    await userEvent.selectOptions(screen.getByLabelText('Rubro específico'), '3711')
     await userEvent.click(screen.getByRole('button', { name: 'reemplazar GGAL por otro activo' }))
 
-    expect(screen.getByLabelText('Rubro (SEC)')).toHaveValue('Office of Finance')
-    expect(screen.getByLabelText('Eslabón productivo')).toHaveValue('')
-    // Las DOS financieras a la vista: el eslabón inválido no sigue filtrando invisible.
+    expect(screen.getByLabelText('Sector (SIC)')).toHaveValue('60')
+    expect(screen.getByLabelText('Rubro específico')).toHaveValue('')
+    // Las DOS financieras a la vista: el rubro específico inválido no sigue filtrando invisible.
     expect(screen.getByRole('button', { name: 'AAPL' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'MELI' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'TSLA' })).not.toBeInTheDocument()
-    const opciones = Array.from(screen.getByLabelText('Eslabón productivo').children).map((o) => o.textContent)
-    expect(opciones).toEqual(['todos', 'Finanzas y seguros', 'Servicios'])
+    const opciones = Array.from(screen.getByLabelText('Rubro específico').children).map((o) => o.textContent)
+    expect(opciones).toEqual(['todos', 'Bancos comerciales', 'Servicios financieros diversos'])
   })
 
-  it('sin clasificar todavía, rubro y eslabón sólo ofrecen "todos" — no rompe la búsqueda', async () => {
+  it('sin clasificar todavía, sector y rubro específico sólo ofrecen "todos" — no rompe la búsqueda', async () => {
     // El caso normal de un CEDEAR sin clasificación SEC todavía: cubre el 74 % (13/08/2026), no
     // el 100 %.
     responderCon({ cedears: [cedear(), cedear({ ticker: 'PAMP' })] })
     renderizar()
     await screen.findAllByRole('listitem')
 
-    expect(screen.getByLabelText('Rubro (SEC)')).toHaveValue('')
-    expect(screen.getByLabelText('Rubro (SEC)').children).toHaveLength(1) // sólo "todos"
+    expect(screen.getByLabelText('Sector (SIC)')).toHaveValue('')
+    expect(screen.getByLabelText('Sector (SIC)').children).toHaveLength(1) // sólo "todos"
     expect(screen.getByRole('button', { name: 'AAPL' })).toBeInTheDocument()
   })
 })
 
 
+// --- F-078: el picker migrado a `facetar()`, con cinco dimensiones ------------------------------
+
+describe('el picker facetado con las dimensiones de F-078', () => {
+  /** Una tecnológica estadounidense, una minera brasileña y un ETF de Brasil: alcanza para probar
+   *  la cascada en las dos direcciones y la dualidad del vocabulario geográfico. */
+  const geografico = () =>
+    responderCon({
+      cedears: [
+        cedear({
+          ticker: 'AAPL',
+          sector_codigo: '73',
+          sector: 'Servicios de software',
+          pais: 'US',
+          region: 'América del Norte',
+        }),
+        cedear({
+          ticker: 'VALE',
+          sector_codigo: '10',
+          sector: 'Minería metálica',
+          pais: 'BR',
+          region: 'América Latina y el Caribe',
+        }),
+        cedear({
+          ticker: 'EWZ',
+          estrategia_etf: 'geografico',
+          region_etf: 'Brazil',
+        }),
+      ],
+    })
+
+  it('ofrece país, región y estrategia además de sector y rubro específico', async () => {
+    geografico()
+    renderizar()
+    await screen.findAllByRole('listitem')
+
+    expect(screen.getByLabelText('País (ISO)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Región')).toBeInTheDocument()
+    expect(screen.getByLabelText('Estrategia (ETF)')).toBeInTheDocument()
+  })
+
+  it('la región curada y la del nombre del fondo son dos opciones distintas, no una traducida', async () => {
+    geografico()
+    renderizar()
+    await screen.findAllByRole('listitem')
+
+    const opciones = Array.from(screen.getByLabelText('Región').children).map((o) => o.textContent)
+    // `Brazil (fondo)` no se colapsa contra `América Latina y el Caribe`: son dos fuentes
+    // distintas diciendo cosas distintas, y mapearlas sería traducir (regla 11).
+    expect(opciones).toEqual([
+      'todos',
+      'América del Norte',
+      'América Latina y el Caribe',
+      'Brazil (fondo)',
+    ])
+  })
+
+  it('elegir un país achica el sector, y el propio select de país sigue ofreciendo todo (leave-one-out)', async () => {
+    geografico()
+    renderizar()
+    await screen.findAllByRole('listitem')
+
+    await userEvent.selectOptions(screen.getByLabelText('País (ISO)'), 'BR')
+
+    // La cascada: con Brasil elegido, el único sector con respaldo es el de Vale.
+    const sectores = Array.from(screen.getByLabelText('Sector (SIC)').children).map((o) => o.textContent)
+    expect(sectores).toEqual(['todos', 'Minería metálica'])
+    // Leave-one-out: el select que hizo la elección no se acota a sí mismo, así que el asesor
+    // puede pivotar a Estados Unidos sin tener que limpiar nada antes.
+    const paises = Array.from(screen.getByLabelText('País (ISO)').children).map((o) => o.textContent)
+    expect(paises).toEqual(['todos', 'BR', 'US'])
+    // Y la lista muestra sólo lo que corresponde.
+    expect(screen.getByRole('button', { name: 'VALE' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'AAPL' })).not.toBeInTheDocument()
+  })
+
+  it('la estrategia del fondo se muestra con su etiqueta de pantalla, no con la clave interna', async () => {
+    geografico()
+    renderizar()
+    await screen.findAllByRole('listitem')
+
+    const opciones = Array.from(screen.getByLabelText('Estrategia (ETF)').children).map(
+      (o) => o.textContent,
+    )
+    // `estrategia_etf` no es un código de la fuente: es una clave nuestra, derivada leyendo el
+    // nombre del fondo, y su único texto de pantalla es el castellano de `ETIQUETA_ESTRATEGIA`.
+    expect(opciones).toEqual(['todos', 'geográfico'])
+  })
+
+  it('sin país curado los selects de geografía no aparecen: un select con una sola opción no es un filtro', async () => {
+    // El estado real del universo hasta que corra la siembra del curado.
+    responderCon({ cedears: [cedear({ sector_codigo: '60', sector: 'Finanzas' })] })
+    renderizar()
+    await screen.findAllByRole('listitem')
+
+    expect(screen.queryByLabelText('País (ISO)')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Región')).not.toBeInTheDocument()
+    // Sector y rubro específico se muestran siempre: son la pareja histórica de rubro⇄eslabón y
+    // su vacío ya lo explica el aviso de `SIN_PERFILES_DE_EMPRESA`.
+    expect(screen.getByLabelText('Sector (SIC)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Rubro específico')).toBeInTheDocument()
+  })
+
+  it('una selección sin respaldo bajo el resto se apaga y se declara, en vez de vaciar la lista', async () => {
+    geografico()
+    renderizar()
+    await screen.findAllByRole('listitem')
+
+    // País compatible primero…
+    await userEvent.selectOptions(screen.getByLabelText('País (ISO)'), 'BR')
+    // …y ahora se pivota a otro país.
+    await userEvent.selectOptions(screen.getByLabelText('País (ISO)'), 'US')
+
+    // El sector de Vale ya no está disponible: el select se reabrió solo.
+    const sectores = Array.from(screen.getByLabelText('Sector (SIC)').children).map((o) => o.textContent)
+    expect(sectores).toEqual(['todos', 'Servicios de software'])
+    expect(screen.getByRole('button', { name: 'AAPL' })).toBeInTheDocument()
+  })
+})
+
+// --- F-078: la composición que se le muestra al cliente ------------------------------------------
+
+describe('la composición del bloque de renta variable', () => {
+  it('dibuja una barra por eje, pesada por plata invertida', async () => {
+    responderCon({
+      cedears: [
+        cedear({
+          ticker: 'AAPL',
+          precio: 50,
+          sector_codigo: '73',
+          sector: 'Servicios de software',
+          pais: 'US',
+          region: 'América del Norte',
+          mercado_origen: 'NASDAQ',
+        }),
+      ],
+    })
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar AAPL directo' }))
+    await userEvent.click(screen.getByRole('button', { name: 'monto 1.000' }))
+
+    const composicion = await screen.findByRole('region', { name: 'Composición de la renta variable' })
+    expect(within(composicion).getByText('Por sector (SIC)')).toBeInTheDocument()
+    expect(within(composicion).getByText('Por país (ISO 3166-1 alfa-2)')).toBeInTheDocument()
+    expect(within(composicion).getByText('Servicios de software')).toBeInTheDocument()
+    // Única posición valuable del bloque: se lleva el 100% de la plata.
+    expect(within(composicion).getAllByText('100,0%').length).toBeGreaterThan(0)
+    // Y se declara sobre qué se midió antes de mostrar cualquier número.
+    expect(within(composicion).getByText(/efectivamente invertido/)).toBeInTheDocument()
+  })
+
+  it('el papel sin país curado va a su propio tramo, nunca repartido entre los conocidos', async () => {
+    responderCon({
+      cedears: [
+        cedear({ ticker: 'AAPL', precio: 50, sector_codigo: '73', sector: 'Servicios de software' }),
+      ],
+    })
+    renderizar()
+
+    await userEvent.click(screen.getByRole('button', { name: 'agregar AAPL directo' }))
+    await userEvent.click(screen.getByRole('button', { name: 'monto 1.000' }))
+
+    const composicion = await screen.findByRole('region', { name: 'Composición de la renta variable' })
+    // El estado normal hasta que corra la siembra: el eje de país es un solo tramo declarado.
+    expect(within(composicion).getByText('país no informado')).toBeInTheDocument()
+    expect(within(composicion).getByText('región no informada')).toBeInTheDocument()
+  })
+
+  it('sin posiciones de renta variable no hay composición que mostrar', async () => {
+    responderCon({ cedears: [cedear()] })
+    renderizar()
+    await screen.findAllByRole('listitem')
+
+    expect(
+      screen.queryByRole('region', { name: 'Composición de la renta variable' }),
+    ).not.toBeInTheDocument()
+  })
+})
+
+// --- F-078: las alertas de tope se muestran donde se ve su consecuencia --------------------------
+
+describe('las alertas de los topes de renta variable', () => {
+  it('muestra las de tope y deja las demás al panel del formulario', async () => {
+    responderCon({ cedears: [cedear()] })
+    renderizar()
+    await screen.findAllByRole('listitem')
+
+    await userEvent.click(screen.getByRole('button', { name: 'inyectar alertas de armado' }))
+
+    const seccion = await screen.findByRole('region', {
+      name: 'Alertas de los topes de renta variable',
+    })
+    expect(within(seccion).getByText(/el tope de país se midió sobre 0 de 4/)).toBeInTheDocument()
+    expect(within(seccion).getByText(/quedó en 60% con un tope de 40%/)).toBeInTheDocument()
+    // La de diversificación sectorial no es de tope de renta variable: la muestra
+    // `PanelArmadoAsistido`, que muestra todas. Duplicarla acá sería contarla dos veces.
+    expect(within(seccion).queryByText(/al menos 3/)).not.toBeInTheDocument()
+  })
+
+  it('sin armado asistido corrido no hay sección de alertas', async () => {
+    responderCon({ cedears: [cedear()] })
+    renderizar()
+    await screen.findAllByRole('listitem')
+
+    expect(
+      screen.queryByRole('region', { name: 'Alertas de los topes de renta variable' }),
+    ).not.toBeInTheDocument()
+  })
+})
+
 describe('reemplazar una sugerencia', () => {
   // GGAL entra a la cartera con el botón directo del arnés (`alternarRentaVariable`, no el
-  // picker): resuelve su rubro vía `useRentaVariableResuelta`, que sigue trayendo accion+cedear
+  // picker): resuelve su sector vía `useRentaVariableResuelta`, que sigue trayendo accion+cedear
   // para no romper una posición ya cargada (ver el comentario de esa decisión en
   // `useRentaVariableResuelta.ts`). El picker que se usa para *elegir el reemplazo* sólo lista
   // CEDEARs -- por eso el sustituto de estos tests siempre es un `cedear()`.
   it('saca la posición y deja el buscador enfocado para elegir otra', async () => {
     responderCon({
-      acciones: [accion({ sic_oficina: 'Office of Finance' })],
+      acciones: [accion({ sector_codigo: '60' })],
       cedears: [cedear({ ticker: 'MSFT' })],
     })
     renderizar()
@@ -619,15 +938,15 @@ describe('reemplazar una sugerencia', () => {
     expect(screen.getByLabelText('Buscar CEDEAR por ticker o nombre')).toHaveFocus()
   })
 
-  it('pre-filtra por el rubro de la que se saca: "otro banco, no este"', async () => {
+  it('pre-filtra por el sector de la que se saca: "otro banco, no este"', async () => {
     responderCon({
-      acciones: [accion({ sic_oficina: 'Office of Finance' })],
-      // El select sólo puede mostrar seleccionado un rubro que exista como opción -- por eso
-      // hace falta un CEDEAR con el mismo rubro de GGAL además de PAMP, aunque el test no agregue
-      // ese CEDEAR a la cartera.
+      acciones: [accion({ sector_codigo: '60' })],
+      // El select sólo puede mostrar seleccionado un sector que exista como opción -- por eso
+      // hace falta un CEDEAR con el mismo sector de GGAL además de PAMP, aunque el test no
+      // agregue ese CEDEAR a la cartera.
       cedears: [
-        cedear({ sic_oficina: 'Office of Finance' }),
-        cedear({ ticker: 'PAMP', sic_oficina: 'Office of Energy & Transportation' }),
+        cedear({ sector_codigo: '60', sector: 'Finanzas' }),
+        cedear({ ticker: 'PAMP', sector_codigo: '49', sector: 'Electricidad, gas y sanitarios' }),
       ],
     })
     renderizar()
@@ -636,14 +955,14 @@ describe('reemplazar una sugerencia', () => {
     await userEvent.click(screen.getByRole('button', { name: 'agregar GGAL directo' }))
     await userEvent.click(screen.getByRole('button', { name: 'reemplazar GGAL por otro activo' }))
 
-    expect(screen.getByLabelText('Rubro (SEC)')).toHaveValue('Office of Finance')
+    expect(screen.getByLabelText('Sector (SIC)')).toHaveValue('60')
     expect(screen.queryByRole('button', { name: 'PAMP' })).not.toBeInTheDocument()
   })
 
-  it('sin rubro declarado no inventa un filtro: la búsqueda queda abierta', async () => {
+  it('sin sector declarado no inventa un filtro: la búsqueda queda abierta', async () => {
     responderCon({
-      acciones: [accion({ sic_oficina: null })],
-      cedears: [cedear({ ticker: 'PAMP', sic_oficina: 'Office of Energy & Transportation' })],
+      acciones: [accion({ sector_codigo: null })],
+      cedears: [cedear({ ticker: 'PAMP', sector_codigo: '49', sector: 'Electricidad, gas y sanitarios' })],
     })
     renderizar()
     await screen.findAllByRole('listitem')
@@ -651,7 +970,7 @@ describe('reemplazar una sugerencia', () => {
     await userEvent.click(screen.getByRole('button', { name: 'agregar GGAL directo' }))
     await userEvent.click(screen.getByRole('button', { name: 'reemplazar GGAL por otro activo' }))
 
-    expect(screen.getByLabelText('Rubro (SEC)')).toHaveValue('')
+    expect(screen.getByLabelText('Sector (SIC)')).toHaveValue('')
     expect(screen.getByRole('button', { name: 'PAMP' })).toBeInTheDocument()
   })
 })
@@ -725,7 +1044,7 @@ describe('un papel con sus monedas de liquidación', () => {
 
 
 describe('qué es cada papel', () => {
-  it('muestra nombre, actividad y eslabón de la cadena', async () => {
+  it('muestra nombre, actividad y sector', async () => {
     responderCon({
       cedears: [
         cedear({
@@ -733,7 +1052,8 @@ describe('qué es cada papel', () => {
           nombre_largo: 'Apple Inc.',
           sic_codigo: '3571',
           sic_titulo: 'Electronic Computers',
-          division_cadena: 'Manufactura',
+          sector_codigo: '73',
+          sector: 'Servicios de software',
         }),
       ],
     })
@@ -741,7 +1061,7 @@ describe('qué es cada papel', () => {
 
     const lista = await screen.findByRole('list', { name: /Resultados de CEDEARs/ })
     expect(within(lista).getByText('Apple Inc.')).toBeInTheDocument()
-    expect(within(lista).getByText(/Electronic Computers · Manufactura/)).toBeInTheDocument()
+    expect(within(lista).getByText(/Electronic Computers · Servicios de software/)).toBeInTheDocument()
   })
 
   it('un fondo muestra su estrategia en vez de una actividad', async () => {
@@ -763,7 +1083,7 @@ describe('qué es cada papel', () => {
 
     const lista = await screen.findByRole('list', { name: /Resultados de CEDEARs/ })
     expect(within(lista).getByRole('button', { name: 'GGAL' })).toBeInTheDocument()
-    expect(within(lista).queryByText(/Manufactura|Electronic/)).not.toBeInTheDocument()
+    expect(within(lista).queryByText(/Servicios de software|Electronic/)).not.toBeInTheDocument()
   })
 })
 

@@ -1183,3 +1183,101 @@ en más entra sin cronograma, sin tipo de tasa y sin métricas propias, declarad
 instrumentos del motor · calificación en 359 de 927 · lámina en 568 de 927 · 236 instrumentos sin
 ley ni moneda de pago · 6 emisores sin CUIT resoluble en `data/emisores_cuit_pendientes.csv` ·
 `tna` vacía en las 2.894 filas · cobertura del calendario en 70 de 431 emisiones.
+
+---
+
+## Tanda 26 — F-078 Mission control de diversificación de CEDEARs (29/08/2026)
+
+**Qué se pidió.** Un tablero para armar carteras diversificadas de CEDEARs —filtros por moneda,
+geografía, rubro, temáticas como metales preciosos— y poder mostrarle al cliente qué porcentaje
+tiene invertido en cada economía. Markowitz conceptual: diversificar por exposición, sin históricos
+ni covarianzas.
+
+**Cómo se ejecutó.** Cuatro agentes en paralelo sobre archivos disjuntos (backend base, armador
+backend, monitor, armador frontend) más cinco tandas de curación de países. Dos contratos se
+negociaron entre agentes durante la ejecución: `palabras_en_nombre` en `FiltroRv` y los defaults de
+`TOPES_RV_DEFAULT`.
+
+### Lo entregado
+
+| Fase | Qué |
+|---|---|
+| 1 | `region_declarada()` en `etfs.py`, columna `region_etf`, endpoint `POST /jobs/reclasificar-etfs`, contrato extendido |
+| 2 | `filtrosRentaVariable.ts` sobre el motor `facetar()`, chips de seis dimensiones, `ComposicionUniversoRv`, presets en `lib/presetsRv.ts` |
+| 3 | Tabla `pais_cedear`, `regiones.py` (ONU M49), `paises.py` (siembra estilo `semilla.py`), DROP de las cuatro columnas de Yahoo |
+| 4 | `TopesRv`/`FiltroRv`, greedy con cupos por eje, tres alertas de tope, UI de topes y composición de cartera |
+
+Tres migraciones con rollback, **aplicadas a la base real**. `region_etf` poblada en 30 especies /
+10 papeles (`reclasificar_etfs`: procesados 1.074, con estrategia 126, con región 30).
+
+### Verificación
+
+Backend **1.550 tests**, frontend **1.190 tests** (108 archivos), `tsc` limpio, build de producción
+OK, `ruff` sin errores nuevos (36 preexistentes, ninguno en archivos tocados). Endpoint verificado
+en vivo: los cinco campos nuevos viajan.
+
+### Decisiones que quedaron escritas
+
+1. **Tope de moneda apagado de fábrica.** 276 de las 286 especies USD candidatas (96,5 %) son la
+   hermana D/C de un papel que ya cotiza en pesos: cualquier tope < 100 compra `NVDAD` al lado de
+   `NVDA`. La moneda de cotización es forma de liquidación, no eje de diversificación.
+2. **Vocabulario geográfico dual**: región curada ("América Latina y el Caribe") y región declarada
+   por el nombre del fondo ("Brazil") conviven como valores distintos. Unificarlos sería traducir.
+3. **"Global X" es marca, no alcance** — lookahead para no leer "Global" en `Global X Copper Miners`.
+4. **Mercado se pliega por caja** ("NYSE Arca" / "NYSE ARCA") pero **los tiers de NASDAQ no**.
+5. **El preset temático sobrevive al cambio de moneda**: crédito → subtipo es jerárquico y por eso
+   ahí el reset es correcto; moneda → tema no lo es.
+6. **Los defaults de topes aplican solos**, y `topes_rv` presente significa exactamente lo que
+   declara: sin merge parcial contra el perfil, porque si no apagar un eje sería inexpresable.
+
+### Estado del curado de países — **pendiente de validación**
+
+443 papeles en `data/paises_cedears_pendientes.csv`. Primera tanda: **178 investigados, 142
+resueltos** con fuente citada fila por fila, en `data/paises_cedears_propuesta.csv`. **No se sembró:
+espera la validación del dueño.** Quedan 265 sin investigar (dos de las cinco tandas completaron;
+las otras tres se cortaron por límite de sesión).
+
+Reparto: US 89, BR 16, GB 5, DE 4, MX 3, JP 3 y cola de 12 países más. **63 % EE.UU.** — la
+diversificación geográfica dentro de CEDEARs es una cola, no una mitad.
+
+Las 36 vacías, todas con el motivo declarado: fondos (su geografía la da `region_etf`), tickers no
+identificables, y divergencia real entre sede y operaciones (Southern Copper: sede en Phoenix, minas
+en Perú y México; Rio Tinto: *dual-listed* Londres/Melbourne).
+
+## Tanda 27 — F-079 (en curso)
+
+Segunda pasada sobre F-078: especificidad de rubro/sector y geografía de ETFs, más rediseño UX
+del panel de filtros del monitor (la pared de chips ocupaba ~400px). Plan en
+`claude-docs/plans/F-079-plan.md`.
+
+Medido antes de empezar: 43 major groups SIC (2 dígitos) presentes en la base — cabeza: 73
+(servicios/software, 150 especies), 28 (química/farma, 84), 36 (electrónica, 61), 60 (bancos, 55),
+10 (minería metálica, 52). De los 10 ETFs geográficos con `region_etf`, sólo 3 son mono-país
+mapeable a ISO (EWJ→JP, EWY→KR, FXI→CN); el resto (ACWI, EFA, IEMG, IEUR, ILF, VEA, ICLN) son
+índices multi-país y reciben sólo alcance textual, sin país (D3: no se cura composición
+multi-país, envejece).
+
+### Tanda 27 — F-079, cerrada
+
+Backend: `sector_codigo`/`sector`/`rubro_especifico` derivados al leer (Fase 1); tabla
+`etf_geografia` aplicada en producción (Fase 2); armador topea por `sector_codigo` (Fase 3).
+1607 tests, 36 errores ruff preexistentes sin nuevos.
+
+Frontend: schemas + 5 presets unificados monitor↔armador + `CampoSelect` compartido (Fase
+4); panel del monitor reescrito de ~450px a ~90px con buscador + selects (Fase 5); picker y
+ficha del armador migrados a los ejes nuevos, con label "Sector (SIC)" para no chocar con
+el "Sector" de renta fija (Fase 6). 1251 tests, tsc y build limpios.
+
+Verificado en vivo (no solo en tests): buscar "oro" filtra y sugiere el preset Metales
+preciosos; sin curado cargado, Sector cae al código crudo y Rubro específico al título en
+inglés de la SEC — el fallback declarado funciona en el navegador contra el endpoint real.
+El backend local corría con código de las 07:43, sin `--reload`: quedó reiniciado.
+
+**Pendiente, gate explícito**: tres CSV de propuesta en `data/` (`sic_sectores_propuesta.csv`,
+`sic_rubros_propuesta.csv`, `etfs_geografia_propuesta.csv`) esperan validación del dueño
+antes de renombrarse a definitivos y sembrarse. Sigue pendiente también la validación de
+`data/paises_cedears_propuesta.csv` de F-078. Nada de lo construido depende de que eso pase
+para funcionar — es mejora de presentación, no de comportamiento.
+
+Nada de F-078 ni F-079 está commiteado: son 90+ archivos modificados/nuevos, esperando
+autorización explícita.

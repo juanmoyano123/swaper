@@ -33,7 +33,13 @@ from app.core.pagination import CursorParams, Page, build_page
 from app.externos.data912 import cliente_data912_historico
 from app.externos.sec_calendario import cliente_sec_calendario
 from app.externos.sec_ficha import cliente_sec_ficha
-from app.renta_variable import EspecieRentaVariable, armar_renta_variable, leer_renta_variable
+from app.renta_variable import (
+    EspecieRentaVariable,
+    armar_renta_variable,
+    leer_geografia_etfs,
+    leer_paises,
+    leer_renta_variable,
+)
 from app.universo.servicio import sanear_universo
 
 router = APIRouter(prefix="/renta-variable", tags=["renta variable"])
@@ -78,7 +84,16 @@ async def especies(
     # sólo se usa saneado.cambio: el FX del día sale del propio universo, regla 3
     saneado = await sanear_universo(conn)
     filas = await leer_renta_variable(conn)
-    listado = [e for e in armar_renta_variable(filas, saneado.cambio) if e.clase_activo == clase]
+    # El curado de países es una tabla chica (una fila por papel) y se trae entera: el join es por
+    # papel y lo resuelve el agrupamiento en Python, no el SQL. Ver `paises.py::leer_paises`.
+    paises = await leer_paises(conn)
+    # Mismo criterio para la geografía de ETFs (F-079, D3): tabla chica, join por papel en Python.
+    geografia_etfs = await leer_geografia_etfs(conn)
+    listado = [
+        e
+        for e in armar_renta_variable(filas, saneado.cambio, paises, geografia_etfs)
+        if e.clase_activo == clase
+    ]
 
     desde = params.decoded_cursor()
     if desde is not None:
@@ -98,8 +113,10 @@ async def _especie_de(conn: Any, ticker: str) -> EspecieRentaVariable | None:
     """
     saneado = await sanear_universo(conn)
     filas = await leer_renta_variable(conn)
+    paises = await leer_paises(conn)
+    geografia_etfs = await leer_geografia_etfs(conn)
     pedido = ticker.strip().upper()
-    especies = armar_renta_variable(filas, saneado.cambio)
+    especies = armar_renta_variable(filas, saneado.cambio, paises, geografia_etfs)
     return next((e for e in especies if e.ticker.upper() == pedido), None)
 
 

@@ -128,6 +128,34 @@ class Settings(BaseSettings):
     # valúa al 31/12 y no puede traer una emisión que salió a cotizar después.
     emisores_arca_csv: str = "data/emisores_arca.csv"
 
+    # F-078 — el país de la empresa detrás de cada CEDEAR. Mismo criterio que los tres de arriba:
+    # dato curado, versionado, sin fuente de origen viva. La diferencia es que acá la trazabilidad
+    # es **por fila** y no por artefacto (cada papel se investigó por separado, con la fuente que lo
+    # declara y la fecha en que se verificó), y que el archivo puede no existir todavía: el curado
+    # se valida por tandas y hasta la primera validación no hay nada que sembrar. Ese caso no es un
+    # error de configuración — la siembra lo declara con alerta y el país de cada CEDEAR queda
+    # faltante, que es el contrato del sistema y no un estado roto.
+    paises_cedears_csv: str = "data/paises_cedears.csv"
+
+    # F-079 — D3: qué índice sigue cada ETF geográfico, qué alcance declara el emisor de ese
+    # índice (texto ES corto) y el país ISO cuando el fondo es de un solo país. Mismo criterio que
+    # `paises_cedears_csv`: dato curado, por fila, con fuente y fecha propias, validado por el
+    # dueño del producto antes de cargarse. **No se cura la composición completa de un índice
+    # multi-país** — envejece con cada rebalanceo, misma lección que pausó IAMC. El archivo puede
+    # no existir todavía: `app/renta_variable/geografia_etf.py` siembra 0 filas sin explotar y el
+    # ETF sigue mostrándose con el token crudo de su nombre.
+    etfs_geografia_csv: str = "data/etfs_geografia.csv"
+
+    # F-079 — traducción curada al español de la clasificación SIC, en dos niveles: sector (major
+    # group de 2 dígitos, ~43 presentes) y rubro específico (el título de 4 dígitos, ~120
+    # presentes). Mismo criterio que `paises_cedears_csv`: dato curado, sin fuente de origen viva,
+    # validado por el dueño del producto antes de cargarse. Y la misma salvedad — el archivo puede
+    # no existir todavía, y ese no-existir no es un error: `app/renta_variable/sic_es.py` devuelve
+    # `None` para todo y el consumidor cae al fallback declarado (código crudo / `sic_titulo` en
+    # inglés tal como lo publica la SEC).
+    sic_sectores_csv: str = "data/sic_sectores.csv"
+    sic_rubros_csv: str = "data/sic_rubros.csv"
+
     # F-057 — el puente codigo_cnv -> id interno de la CNV, para linkear desde la ficha de un FCI a
     # su "COMPOSICIÓN DE CARTERA" pública (artículo 34). Igual criterio que `emisores_cuit_csv`:
     # dato curado, versionado, sin fuente de origen viva por request (se cura una vez con

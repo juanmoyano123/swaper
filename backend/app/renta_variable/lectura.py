@@ -57,6 +57,10 @@ COLUMNAS_PERFIL: tuple[str, ...] = (
     "sic_oficina",
     "division_cadena",
     "estrategia_etf",
+    # F-078: la geografía que declara el nombre del fondo. Sale del mismo nombre que
+    # `estrategia_etf` y con el mismo parser (`etfs.py`), y no del país curado — son dos ejes
+    # distintos que conviven sin unificarse.
+    "region_etf",
     "ratio_conversion",
     "mercado_origen",
 )

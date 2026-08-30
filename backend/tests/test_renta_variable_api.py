@@ -8,7 +8,7 @@ endpoint lee lo que dice leer. El universo que se usa para el tipo de cambio tie
 dólares de las especies en pesos queda `s/d`.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 import pytest
@@ -70,13 +70,26 @@ class FakeConexionRentaVariable:
         self,
         universo: list[dict[str, Any]] | None = None,
         renta_variable: list[dict[str, Any]] | None = None,
+        paises: list[dict[str, Any]] | None = None,
+        geografia_etfs: list[dict[str, Any]] | None = None,
     ) -> None:
         self.universo = FILAS_UNIVERSO_SIN_FX if universo is None else universo
         self.renta_variable = [] if renta_variable is None else renta_variable
+        # El curado de países (F-078) es la tercera consulta del endpoint. Vacío por defecto: es el
+        # estado real hasta que la primera tanda del curado se valide, y el que tiene que seguir
+        # dando una respuesta completa con el país declarado faltante.
+        self.paises = [] if paises is None else paises
+        # El curado de geografía de ETFs (F-079, D3) es la cuarta. Vacío por defecto, mismo motivo
+        # que `paises`: sin el curado, los seis campos `etf_*` salen `None`.
+        self.geografia_etfs = [] if geografia_etfs is None else geografia_etfs
         self.consultas: list[str] = []
 
     async def fetch(self, query: str, *_: Any) -> list[dict[str, Any]]:
         self.consultas.append(query)
+        if "etf_geografia" in query:
+            return self.geografia_etfs
+        if "pais_cedear" in query:
+            return self.paises
         if "clase_activo IN" in query:
             return self.renta_variable
         return self.universo
@@ -214,3 +227,64 @@ async def test_sin_base_de_datos_responde_503(crear_app) -> None:
         respuesta = await http.get(RUTA, params={"clase": "accion"})
 
     assert respuesta.status_code == 503
+
+
+# --- F-078: los dos ejes geográficos en el contrato ----------------------------------------------
+
+
+async def test_el_endpoint_junta_el_pais_curado_por_papel(app_con_renta_variable) -> None:
+    """El join es en Python y por papel: el curado tiene una fila para `AAPL` y la reciben también
+    sus hermanas, porque son el mismo CEDEAR liquidando en otra moneda."""
+    aapl_d = {**AAPL, "ticker": "AAPLD"}
+    curado = [
+        {
+            "ticker_papel": "AAPL",
+            "pais": "US",
+            "fuente": "Apple Inc. 10-K FY2025 (SEC EDGAR)",
+            "verificado": date(2026, 8, 28),
+        }
+    ]
+    async with cliente(
+        app_con_renta_variable(renta_variable=[AAPL, aapl_d], paises=curado)
+    ) as http:
+        respuesta = await http.get(RUTA, params={"clase": "cedear"})
+
+    items = {f["ticker"]: f for f in respuesta.json()["items"]}
+    assert {t: f["pais"] for t, f in items.items()} == {"AAPL": "US", "AAPLD": "US"}
+    assert items["AAPL"]["region"] == "América del Norte"
+    assert items["AAPL"]["pais_fuente"] == "Apple Inc. 10-K FY2025 (SEC EDGAR)"
+    assert items["AAPL"]["pais_verificado"] == "2026-08-28"
+
+
+async def test_sin_curado_los_campos_de_pais_viajan_declarados_vacios(
+    app_con_renta_variable,
+) -> None:
+    """Es el estado real hasta la primera tanda validada, y viaja **en el contrato**: vacío
+    declarado, no ausente."""
+    async with cliente(app_con_renta_variable(renta_variable=[AAPL])) as http:
+        respuesta = await http.get(RUTA, params={"clase": "cedear"})
+
+    (aapl,) = respuesta.json()["items"]
+    assert aapl["pais"] is None
+    assert aapl["region"] is None
+    assert aapl["pais_fuente"] is None
+    assert aapl["pais_verificado"] is None
+
+
+async def test_la_region_del_etf_viaja_aparte_de_la_region_del_pais(
+    app_con_renta_variable,
+) -> None:
+    """Los dos vocabularios geográficos conviven sin unificarse (regla 11): `region_etf` es lo que
+    dice el nombre del fondo y `region` es la subregión M49 del país curado."""
+    ilf = {
+        **AAPL,
+        "ticker": "ILF",
+        "estrategia_etf": "geografico",
+        "region_etf": "Latin America",
+    }
+    async with cliente(app_con_renta_variable(renta_variable=[ilf])) as http:
+        respuesta = await http.get(RUTA, params={"clase": "cedear"})
+
+    (fila,) = respuesta.json()["items"]
+    assert fila["region_etf"] == "Latin America"
+    assert fila["region"] is None

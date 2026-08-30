@@ -60,15 +60,24 @@ import { useRentaVariable } from '@/lib/rentaVariable'
 import { useAbrirFondoFci } from '@/features/instrumento/useAbrirFondoFci'
 import { useAbrirInstrumento } from '@/features/instrumento/useAbrirInstrumento'
 
+import { ComposicionUniversoRv } from './components/ComposicionUniversoRv'
 import { CurvaSegmento } from './components/CurvaSegmento'
 import { FiltrosFci } from './components/FiltrosFci'
 import { FiltrosNumericos } from './components/FiltrosNumericos'
 import { FiltrosPerfil } from './components/FiltrosPerfil'
+import { FiltrosRentaVariable } from './components/FiltrosRentaVariable'
 import { SelectorFamilia, type Familia } from './components/SelectorFamilia'
 import { TablaUniverso } from './components/TablaUniverso'
 import { useSegmentos } from './hooks/useSegmentos'
 import { useUniversoSegmento } from './hooks/useUniversoSegmento'
 import { FILTROS_VACIOS, facetarUniverso, pasaFiltros, type FiltrosUniverso } from './lib/filtros'
+import {
+  FILTROS_RV_VACIOS,
+  facetarRentaVariable,
+  filtrosAlCambiarDeMoneda,
+  pasaFiltrosRv,
+  type FiltrosRentaVariable as TipoFiltrosRentaVariable,
+} from './lib/filtrosRentaVariable'
 import { FILTROS_FCI_VACIOS, facetarFci, pasaFiltrosFci, type FiltrosFci as TipoFiltrosFci } from './lib/filtrosFci'
 
 export function MonitorPage() {
@@ -378,7 +387,11 @@ function RamaRentaVariable() {
       {CLAVES_RENTA_VARIABLE.length > 1 && (
         <SelectorSegmento segmentos={CLAVES_RENTA_VARIABLE} activo={clase} onCambio={setClase} />
       )}
-      <RentaVariableDelMonitor clase={clase} />
+      {/* `key` remonta la rama al cambiar de clase, y con eso se van la moneda y los filtros de
+          diversificación: los rubros y los países de una clase describen otro universo, y una
+          selección arrastrada seguiría dibujada sobre una tabla que ya no es la que la produjo.
+          Es el mismo criterio con el que el segmento de renta fija resetea sus filtros. */}
+      <RentaVariableDelMonitor key={clase} clase={clase} />
     </>
   )
 }
@@ -392,20 +405,51 @@ function RamaRentaVariable() {
  * denominaciones que un bono —hoy 659 acciones en `ARS`, 417 en `USD` y 341 en `EXT`— y mezclarlas
  * hacía lo mismo de siempre, ordenar por volumen poniendo arriba a las de pesos por el tipo de
  * cambio. Es el único de los cambios de esta pantalla que cruza a esta rama.
+ *
+ * **El mission control de diversificación** (F-078, 28/08/2026; buscador y selects compactos por
+ * F-079, 29/08/2026): entre la moneda y la tabla van el buscador de texto, los atajos temáticos y
+ * los `CampoSelect` por eje —región, país, mercado, sector, rubro específico, estrategia del
+ * fondo—, y debajo de la tabla la composición del recorte por los ejes que alcanzan a ser una barra
+ * legible. La jerarquía sigue siendo la de la renta fija: primero los chips del corte más grueso
+ * (moneda), después las facetas, después la tabla. La moneda no es faceta y no puede quedar
+ * apagada (regla 3); todo lo demás sí, y lo que el facetado apaga se declara en
+ * `FiltrosRentaVariable`.
  */
 function RentaVariableDelMonitor({ clase }: { clase: string }) {
   const rentaVariable = useRentaVariable(clase)
   const abrirInstrumento = useAbrirInstrumento()
   const [moneda, setMoneda] = useState<string | null>(null)
+  const [filtros, setFiltros] = useState<TipoFiltrosRentaVariable>(FILTROS_RV_VACIOS)
 
-  const monedas = useMemo(() => contarPorMoneda(rentaVariable.data ?? []), [rentaVariable.data])
+  const todas = useMemo(() => rentaVariable.data ?? [], [rentaVariable.data])
+
+  // Pasada previa del facetado **sin restringir por moneda**, con un solo fin: saber qué
+  // selecciones tienen respaldo para poder contar los chips de moneda con la propia moneda
+  // neutralizada (mismo leave-one-out que `UniversoDelSegmento` en la renta fija). Sin este paso
+  // habría un círculo —los chips de moneda dependen de las facetas y las facetas de la moneda
+  // elegida— y una selección sin respaldo dejaría los tres chips de moneda en cero, que es
+  // justamente el estado del que el facetado protege.
+  const sinMoneda = useMemo(() => facetarRentaVariable(todas, filtros, null), [todas, filtros])
+  const especiesParaMoneda = useMemo(
+    () => todas.filter((e) => pasaFiltrosRv(e, sinMoneda.efectivos, null)),
+    [todas, sinMoneda.efectivos],
+  )
+  const monedas = useMemo(() => contarPorMoneda(especiesParaMoneda), [especiesParaMoneda])
   const activa = moneda ?? monedaInicial(monedas, MONEDA_PREFERIDA_POR_DEFECTO)
-  const deLaMoneda = useMemo(
-    () =>
-      (rentaVariable.data ?? []).filter(
-        (e) => (e.moneda_cotizacion ?? SIN_MONEDA_DECLARADA) === activa,
-      ),
-    [rentaVariable.data, activa],
+
+  // Pasada real: con la moneda ya resuelta a una concreta, que es la única forma en que puede
+  // filtrar (regla 3). De acá salen los chips que se dibujan y lo que efectivamente recorta.
+  const { opciones, efectivos, apagadas, mercados, etiquetas } = useMemo(
+    () => facetarRentaVariable(todas, filtros, activa),
+    [todas, filtros, activa],
+  )
+
+  // `pasaFiltrosRv` con `moneda: null` no restringe por moneda, y eso acá nunca se quiere: sin
+  // moneda concreta la tabla mezclaría precios y volúmenes de tres denominaciones. `activa` sólo es
+  // `null` cuando no quedó ninguna moneda con especies, y en ese caso no hay nada que mostrar.
+  const visibles = useMemo(
+    () => (activa === null ? [] : todas.filter((e) => pasaFiltrosRv(e, efectivos, activa))),
+    [todas, efectivos, activa],
   )
 
   if (rentaVariable.isPending) {
@@ -432,14 +476,32 @@ function RentaVariableDelMonitor({ clase }: { clase: string }) {
   return (
     <>
       {activa !== null && (
-        <SelectorMoneda disponibles={monedas} activa={activa} onCambio={setMoneda} />
+        <SelectorMoneda
+          disponibles={monedas}
+          activa={activa}
+          // Cambiar de moneda limpia las facetas y deja el preset temático en pie — el porqué de
+          // cada mitad está en `filtrosAlCambiarDeMoneda`, que es donde vive la regla.
+          onCambio={(m) => {
+            setMoneda(m)
+            setFiltros(filtrosAlCambiarDeMoneda(filtros))
+          }}
+        />
       )}
+      <FiltrosRentaVariable
+        filtros={filtros}
+        efectivos={efectivos}
+        opciones={opciones}
+        apagadas={apagadas}
+        etiquetas={etiquetas}
+        onCambio={setFiltros}
+      />
       <TablaRentaVariable
-        especies={deLaMoneda}
+        especies={visibles}
         etiqueta={nombreSegmento(clase)}
         moneda={activa}
         onAbrirTicker={abrirInstrumento}
       />
+      <ComposicionUniversoRv especies={visibles} mercados={mercados} />
     </>
   )
 }

@@ -32,8 +32,13 @@ import structlog
 
 from app.externos.sec import ClienteSec, EntradaSic, LimiteDeLaFuente
 from app.externos.sic import division_de
-from app.renta_variable.etfs import estrategia_de
-from app.renta_variable.perfiles import guardar_clasificacion, papeles_pendientes_sec
+from app.renta_variable.etfs import estrategia_de, region_declarada
+from app.renta_variable.perfiles import (
+    guardar_clasificacion,
+    guardar_reclasificacion,
+    nombres_persistidos,
+    papeles_pendientes_sec,
+)
 
 logger = structlog.get_logger()
 
@@ -197,8 +202,80 @@ async def _guardar(
         sic_oficina=entrada.oficina if entrada else None,
         division_cadena=division.eslabon if division else None,
         estrategia_etf=estrategia.clave if estrategia else None,
+        # La geografía sale del mismo nombre y por el mismo criterio que la estrategia: leer lo que
+        # el nombre dice. `None` cubre dos casos que no hace falta distinguir en la fila —no es un
+        # fondo, o es un fondo cuyo nombre no nombra ninguna geografía—: los dos son "sin dato".
+        region_etf=region_declarada(de_byma.nombre or (perfil.nombre if perfil else None)),
         ratio_conversion=de_byma.ratio,
         mercado_origen=de_byma.mercado,
         fuente=FUENTE,
         capturado_en=capturado_en,
+    )
+
+
+# --- Reclasificación de fondos, sin tocar la SEC -------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class ResumenReclasificacion:
+    """Cuántos papeles se re-derivaron y cuántos quedaron con cada campo poblado.
+
+    Los tres números se leen juntos: `procesados` es cuántas filas tenían nombre para parsear,
+    `con_estrategia` cuántas de esas son fondos, y `con_region` cuántos de esos fondos nombran una
+    geografía. La resta —fondos sin geografía— no es un faltante a resolver: un `XLK` sectorial no
+    dice dónde compra y no se le inventa.
+    """
+
+    procesados: int
+    con_estrategia: int
+    con_region: int
+
+    def como_dict(self) -> dict[str, object]:
+        return {
+            "procesados": self.procesados,
+            "con_estrategia": self.con_estrategia,
+            "con_region": self.con_region,
+        }
+
+
+async def reclasificar_etfs(conn: Any) -> ResumenReclasificacion:
+    """Re-deriva `estrategia_etf` y `region_etf` desde el `nombre_largo` ya persistido.
+
+    **No le pregunta nada a la SEC ni a BYMA**, y ese es el punto: las dos columnas no son dato de
+    esas fuentes, son el resultado de parsear un nombre que ya está en la base. Cuando el
+    vocabulario de `etfs.py` cambia hace falta reescribirlas sobre el universo entero, y el camino
+    normal —`POST /jobs/clasificar-renta-variable`— tardaría diecisiete corridas de 100 papeles
+    barriendo la SEC para no cambiar nada de lo que la SEC aporta.
+
+    Puro e idempotente: sin red, sin reloj, sin límite por corrida. Correrlo dos veces seguidas deja
+    la base igual, y correrlo con el vocabulario sin cambios no modifica una sola fila.
+
+    Efecto lateral deseado: alinea `estrategia_etf` con `nombre_largo`. La corrida contra la SEC la
+    deriva del nombre que trae la lista de CEDEARs de BYMA, que puede faltar aunque el de la SEC
+    esté; acá las dos columnas salen del mismo nombre, el que la fila realmente guarda.
+    """
+    filas = await nombres_persistidos(conn)
+
+    a_escribir: list[tuple[str, str | None, str | None]] = []
+    con_estrategia = con_region = 0
+    for ticker, nombre in filas:
+        estrategia = estrategia_de(nombre)
+        region = region_declarada(nombre)
+        clave = estrategia.clave if estrategia else None
+        if clave is not None:
+            con_estrategia += 1
+        if region is not None:
+            con_region += 1
+        a_escribir.append((ticker, clave, region))
+
+    await guardar_reclasificacion(conn, a_escribir)
+
+    logger.info(
+        "reclasificacion_etfs_termino",
+        procesados=len(filas),
+        con_estrategia=con_estrategia,
+        con_region=con_region,
+    )
+    return ResumenReclasificacion(
+        procesados=len(filas), con_estrategia=con_estrategia, con_region=con_region
     )

@@ -106,6 +106,12 @@ export function FichaRentaVariable({ ticker }: { ticker: string }) {
         <BloqueEmpresa propio={propio} />
       </Panel>
 
+      {propio.etf_indice !== null && (
+        <Panel rotulo="Geografía del fondo · curado propio">
+          <BloqueGeografiaEtf propio={propio} />
+        </Panel>
+      )}
+
       {sec !== undefined && (
         <Panel rotulo={`Estados contables · ${sec.fuente}`}>
           <BloqueEstadosContablesSec sec={sec} />
@@ -225,12 +231,23 @@ function BloqueDeLaRueda({ propio }: { propio: BloquePropio }) {
 
 // --- La empresa: la clasificación de la SEC -----------------------------------------------------
 
+/** Una etiqueta ES curada junto a su código de auditoría, o el código solo con la nota de que no
+ *  tiene traducción — mismo criterio que el picker del armador (`BloqueRentaVariable.tsx`), para
+ *  que el asesor no tenga que aprender dos maneras de leer "sin curar". `null` en el código es la
+ *  única forma de no tener nada que mostrar: sin `sic_codigo` no hay ni `sector_codigo` (F-079). */
+function valorConCodigo(etiqueta: string | null, codigo: string | null): ReactNode {
+  if (codigo === null) return SIN_DATO
+  if (etiqueta === null) return `${codigo} (sin traducir)`
+  return `${etiqueta} (${codigo})`
+}
+
 function BloqueEmpresa({ propio }: { propio: BloquePropio }) {
   const esFondo = propio.estrategia_etf !== null
   const sinNadaQueMostrar =
     propio.sic_titulo === null &&
     propio.sic_oficina === null &&
     propio.division_cadena === null &&
+    propio.sector_codigo === null &&
     propio.ratio_conversion === null &&
     propio.mercado_origen === null &&
     !esFondo
@@ -248,6 +265,10 @@ function BloqueEmpresa({ propio }: { propio: BloquePropio }) {
   }
 
   const campos: [string, ReactNode][] = [
+    // F-079: la lectura ES rápida, por encima de la inglesa cruda de la SEC — las dos conviven,
+    // ninguna reemplaza a la otra (regla 11: el código de auditoría sigue abajo, sin traducir).
+    ['Sector', valorConCodigo(propio.sector, propio.sector_codigo)],
+    ['Rubro específico', valorConCodigo(propio.rubro_especifico, propio.sic_codigo)],
     ['Actividad', propio.sic_titulo ?? SIN_DATO],
     ['Rubro (SEC)', propio.sic_oficina ?? SIN_DATO],
     ['Eslabón productivo', propio.division_cadena ?? SIN_DATO],
@@ -266,11 +287,47 @@ function BloqueEmpresa({ propio }: { propio: BloquePropio }) {
       <Grilla campos={campos} />
       <Leyenda>
         Actividad, rubro y eslabón productivo son de la SEC (código {propio.sic_codigo ?? SIN_DATO},
-        la llave de auditoría), sin traducir (regla 11). El eslabón sale de la división del SIC
-        Manual, no de una interpretación nuestra. Mercado y ratio son de la tabla oficial de
-        CEDEARs de BYMA cuando el papel es un CEDEAR.
+        la llave de auditoría), sin traducir (regla 11). Sector y rubro específico son la traducción
+        curada de ese mismo código SIC en español (F-079, `data/sic_sectores.csv` y
+        `data/sic_rubros.csv`); sin fila en ese curado para el código se dice "sin traducir", nunca
+        se completa por analogía con otra empresa. El eslabón sale de la división del SIC Manual, no
+        de una interpretación nuestra. Mercado y ratio son de la tabla oficial de CEDEARs de BYMA
+        cuando el papel es un CEDEAR.
         {propio.perfil_capturado_en !== null &&
           ` Clasificado el ${fmtFechaHora(propio.perfil_capturado_en)}.`}
+      </Leyenda>
+    </div>
+  )
+}
+
+// --- Geografía curada de ETFs — F-079, D3 --------------------------------------------------------
+
+/**
+ * Índice, alcance y país curados de un fondo, sólo cuando `etf_indice` no es `null`: es el gate del
+ * curado, la misma lógica que ya usa `BloqueRentaVariable.tsx` para pintar el tramo "alcance" de la
+ * composición. País y región sólo existen para el puñado de fondos mono-país; un fondo multi-país
+ * (la mayoría) los deja `null` y esta ficha no completa esa composición porque envejece con cada
+ * rebalanceo del índice (ver el docstring de `esquemaBloquePropio`).
+ */
+function BloqueGeografiaEtf({ propio }: { propio: BloquePropio }) {
+  const campos: [string, ReactNode][] = [
+    ['Índice que sigue', propio.etf_indice ?? SIN_DATO],
+    ['Alcance', propio.etf_alcance ?? SIN_DATO],
+    ['País (ISO 3166-1 alfa-2)', propio.etf_pais ?? SIN_DATO],
+    ['Región', propio.etf_region ?? SIN_DATO],
+  ]
+
+  return (
+    <div>
+      <Grilla campos={campos} />
+      <Leyenda>
+        Geografía curada del fondo, con verificación propia y no una lectura del nombre —fuente:{' '}
+        {propio.etf_geo_fuente ?? SIN_DATO}
+        {propio.etf_geo_verificado !== null && `, verificada el ${fmtFecha(propio.etf_geo_verificado)}`}.
+        País y región sólo se declaran para los fondos mono-país: un fondo multi-país los deja{' '}
+        {SIN_DATO} porque qué países lo componen hoy no se cura —envejece con cada rebalanceo del
+        índice—, y el alcance de arriba es la definición del propio emisor, no nuestra lectura de esa
+        composición.
       </Leyenda>
     </div>
   )

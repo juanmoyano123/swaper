@@ -15,16 +15,52 @@
  * sin relación: el de esta ficha, que se mandaba al backend y se descartaba, y el de la cartera,
  * que era el único que los resolvers usaban para calcular nominales. Cargar el capital acá no
  * hacía nada visible más abajo, y cargarlo en los dos lugares se leía como el doble de plata.
+ *
+ * ## Los topes de renta variable (F-078)
+ *
+ * El bloque "Topes de renta variable" es la parte de esta ficha que **sí cambia lo que el motor
+ * elige**, no sólo lo que filtra: cinco máximos por eje —rubro, país, región, moneda, mercado—
+ * sobre el bloque de renta variable. Vienen precargados con los del perfil y **a la vista**, que es
+ * la promesa entera de la feature: un tope que se aplica sin mostrarse obliga al asesor a adivinar
+ * con qué se armó la cartera que está por defender ante un cliente.
+ *
+ * Tres decisiones que conviene no revisitar:
+ *
+ * - **Inputs numéricos, nunca sliders.** El design system no tiene ninguno (cero usos de
+ *   `type="range"` en todo el repo) y un rango se expresa con `min`/`max` sobre un `number`. Un
+ *   tope de diversificación es un número que se defiende, no un gesto de arrastre.
+ * - **Campo vacío = eje apagado**, y viaja como `null`. Un `0` significaría "ninguna categoría
+ *   puede pesar nada", que es incumplible por construcción, y el backend además lo rechaza
+ *   (`gt=0`).
+ * - **Se mandan siempre los cinco**, porque el backend no hace merge parcial contra los defaults
+ *   del perfil: `topes_rv` presente significa "exactamente esto". Ver `TOPES_RV_PERFIL`.
+ *
+ * Cada campo declara además **cuántos papeles del universo tienen el dato de ese eje**. Es la única
+ * defensa contra el peor estado de la feature: un tope configurado, aplicado, y que en silencio no
+ * mide nada porque a la fuente le falta la columna — hoy, literalmente el caso de `país` hasta que
+ * corra la siembra del curado.
  */
 
 import { useMemo, useState, type ReactNode } from 'react'
+
+import { CampoSelect } from '@/components/CampoSelect'
+import { useRentaVariable } from '@/lib/rentaVariable'
 
 import { AlertasCalendario } from './AlertasCalendario'
 import { useArmadoAsistido } from '../hooks/useArmadoAsistido'
 import { useEspeciesUniverso } from '../hooks/useEspeciesUniverso'
 import { CALIFICACION_NO_INFORMADA } from '../lib/filtros'
-import { PCT_RV_PERFIL, type ParametrosArmadoAsistido } from '../lib/schemaArmado'
-import { PRESETS_TEMATICOS, presetPorId } from '../lib/tematicas'
+import {
+  CAMPO_TOPE_RV,
+  EJES_TOPE_RV,
+  filtroRvABackend,
+  PCT_RV_PERFIL,
+  TOPES_RV_PERFIL,
+  type EjeTopeRv,
+  type ParametrosArmadoAsistido,
+  type TopesRv,
+} from '../lib/schemaArmado'
+import { filtraRentaVariable, PRESETS_TEMATICOS, presetPorId } from '../lib/tematicas'
 import { useArmador, useArmadorAcciones } from '../store/carteraStore'
 
 /** De la que paga más seguido a la que paga menos, con lo no medible al final. Es el orden en que
@@ -91,6 +127,28 @@ export function PanelArmadoAsistido() {
   function setPerfil(nuevo: ParametrosArmadoAsistido['perfil']) {
     setPerfilCrudo(nuevo)
     fijarObjetivoRv(PCT_RV_PERFIL[nuevo])
+    setTopes(topesComoTexto(TOPES_RV_PERFIL[nuevo]))
+  }
+
+  // Los topes de renta variable se guardan como **texto** y no como números — F-078. El campo
+  // vacío es un estado del dominio, no un 0: significa "no acotes por este eje", y un `number`
+  // obliga a elegir un centinela para decirlo (`0`, `NaN`, `-1`) que después hay que recordar en
+  // cada lectura. El texto vacío ya es esa distinción, y es además lo que el input devuelve.
+  //
+  // Arrancan precargados con los defaults del perfil (`TOPES_RV_PERFIL`, espejo de
+  // `TOPES_RV_DEFAULT` del backend) y **a la vista**: la promesa de la feature es que el asesor
+  // sepa con qué topes se armó la cartera, no que los adivine. Cambiar de perfil los pisa, por la
+  // misma razón que pisa el % de renta variable.
+  const [topes, setTopes] = useState<Record<EjeTopeRv, string>>(() =>
+    topesComoTexto(TOPES_RV_PERFIL['moderado']),
+  )
+
+  function fijarTope(eje: EjeTopeRv, valor: string) {
+    // Vacío se deja pasar tal cual (apaga el eje); con número se acota a 1..100 acá mismo, que es
+    // el rango que el backend valida (`gt=0, le=100`): mandar un 150 para que vuelva un 422 sería
+    // hacerle dar la vuelta entera a un error que se ve en el input.
+    const limpio = valor.trim() === '' ? '' : String(Math.min(100, Math.max(1, Number(valor) || 1)))
+    setTopes((previos) => ({ ...previos, [eje]: limpio }))
   }
 
   const mutacion = useArmadoAsistido()
@@ -123,6 +181,32 @@ export function PanelArmadoAsistido() {
     return ORDEN_PERIODICIDAD.filter((p) => presentes.has(p))
   }, [consultaUniverso.data])
 
+  // Cuántos CEDEARs declaran el dato de cada eje. Es la misma consulta que usa el bloque de renta
+  // variable de más abajo —React Query la comparte por clave, así que no agrega un pedido— y sirve
+  // para una sola cosa: **decir en el campo mismo cuando un tope no va a acotar nada**. Hoy `pais`
+  // está en `null` para todo el universo hasta que corra la siembra del curado, y un tope que el
+  // asesor configura y que en silencio no mide nada es peor que no tenerlo (regla 1: el faltante
+  // se declara).
+  const cedears = useRentaVariable('cedear')
+  const coberturaPorEje = useMemo(() => {
+    const especies = cedears.data ?? []
+    const declaran = (tiene: (e: (typeof especies)[number]) => boolean) => especies.filter(tiene).length
+    return {
+      total: especies.length,
+      // Desde F-079 el tope "rubro" mide `sector_codigo` y no `sic_oficina` (ver el docstring de
+      // `TopesRv.max_pct_rubro` en `schemaArmado.ts`): la cobertura sube de 866 a 870 especies
+      // (medido 28/08/2026) porque `sector_codigo` es aritmética sobre `sic_codigo` y no depende
+      // de las 3 oficinas ambiguas que quedaban sin `sic_oficina` resuelto.
+      rubro: declaran((e) => e.sector_codigo !== null),
+      pais: declaran((e) => e.pais !== null),
+      // El eje geográfico de un ETF es el que declara su nombre; el de una empresa, el país
+      // curado. Cualquiera de los dos alcanza para que la posición compute contra el tope.
+      region: declaran((e) => e.region !== null || e.region_etf !== null),
+      moneda: declaran((e) => e.moneda_cotizacion !== null),
+      mercado: declaran((e) => e.mercado_origen !== null),
+    } satisfies Record<EjeTopeRv | 'total', number>
+  }, [cedears.data])
+
   function alternarPeriodicidad(valor: string) {
     const activa = filtros.periodicidades.includes(valor)
     fijarFiltros({
@@ -145,6 +229,8 @@ export function PanelArmadoAsistido() {
 
   const montoValido = Number.isFinite(montoTotal) && montoTotal > 0
 
+  const presetTematico = presetPorId(tematica === '' ? null : tematica)
+
   function armar() {
     if (!montoValido) return
     mutacion.mutate({
@@ -154,7 +240,24 @@ export function PanelArmadoAsistido() {
       perfil,
       horizonte,
       pct_rv: pctRv,
-      rubro_rv: presetPorId(tematica === '' ? null : tematica)?.rubroRv ?? null,
+      // Las dos formas de acotar la renta variable, y **nunca las dos a la vez**: mandar
+      // `rubro_rv` junto con un `filtro_rv.rubros` distinto es 422 del lado del backend, a
+      // propósito (`normalizar_filtro_rv`). Una temática de un solo rubro sigue viajando por el
+      // campo viejo, que el backend pliega adentro del filtro; una temática multidimensional
+      // —metales preciosos— viaja como filtro y deja `rubro_rv` en `null`.
+      rubro_rv: presetTematico?.filtroRv === undefined ? (presetTematico?.rubroRv ?? null) : null,
+      ...(presetTematico?.filtroRv === undefined
+        ? {}
+        : {
+            filtro_rv: filtroRvABackend(
+              presetTematico.filtroRv,
+              presetTematico.modoFiltroRv ?? 'interseccion',
+            ),
+          }),
+      // Los cinco ejes, siempre: el backend no hace merge parcial contra los defaults del perfil
+      // —`topes_rv` presente significa "exactamente esto"—, así que omitir un eje lo apagaría en
+      // vez de dejarle su default. El objeto que se manda es literalmente lo que muestra el panel.
+      topes_rv: topesDesdeTexto(topes),
       // El piso de la grilla es el piso del armado: se manda el mismo número, y sin piso no se
       // manda el campo (el backend ya trata la ausencia como 0).
       ...(filtros.tirMin === '' ? {} : { min_rend: Number(filtros.tirMin) }),
@@ -175,61 +278,33 @@ export function PanelArmadoAsistido() {
           />
         </Campo>
 
-        <Campo etiqueta="Moneda de referencia">
-          <select
-            value={moneda}
-            onChange={(e) => setMoneda(e.target.value as ParametrosArmadoAsistido['moneda'])}
-            style={estiloInput}
-          >
-            {MONEDAS.map((m) => (
-              <option key={m.valor} value={m.valor}>
-                {m.etiqueta}
-              </option>
-            ))}
-          </select>
-        </Campo>
+        <CampoSelect
+          etiqueta="Moneda de referencia"
+          valor={moneda}
+          onChange={(valor) => setMoneda(valor as ParametrosArmadoAsistido['moneda'])}
+          opciones={MONEDAS.map((m) => ({ valor: m.valor, texto: m.etiqueta }))}
+        />
 
-        <Campo etiqueta="Objetivo de cobertura">
-          <select
-            value={cobertura}
-            onChange={(e) => setCobertura(e.target.value as ParametrosArmadoAsistido['cobertura'])}
-            style={estiloInput}
-          >
-            {COBERTURAS.map((c) => (
-              <option key={c.valor} value={c.valor}>
-                {c.etiqueta}
-              </option>
-            ))}
-          </select>
-        </Campo>
+        <CampoSelect
+          etiqueta="Objetivo de cobertura"
+          valor={cobertura}
+          onChange={(valor) => setCobertura(valor as ParametrosArmadoAsistido['cobertura'])}
+          opciones={COBERTURAS.map((c) => ({ valor: c.valor, texto: c.etiqueta }))}
+        />
 
-        <Campo etiqueta="Perfil">
-          <select
-            value={perfil}
-            onChange={(e) => setPerfil(e.target.value as ParametrosArmadoAsistido['perfil'])}
-            style={estiloInput}
-          >
-            {PERFILES.map((p) => (
-              <option key={p.valor} value={p.valor}>
-                {p.etiqueta}
-              </option>
-            ))}
-          </select>
-        </Campo>
+        <CampoSelect
+          etiqueta="Perfil"
+          valor={perfil}
+          onChange={(valor) => setPerfil(valor as ParametrosArmadoAsistido['perfil'])}
+          opciones={PERFILES.map((p) => ({ valor: p.valor, texto: p.etiqueta }))}
+        />
 
-        <Campo etiqueta="Horizonte">
-          <select
-            value={horizonte}
-            onChange={(e) => setHorizonte(e.target.value as ParametrosArmadoAsistido['horizonte'])}
-            style={estiloInput}
-          >
-            {HORIZONTES.map((h) => (
-              <option key={h.valor} value={h.valor}>
-                {h.etiqueta}
-              </option>
-            ))}
-          </select>
-        </Campo>
+        <CampoSelect
+          etiqueta="Horizonte"
+          valor={horizonte}
+          onChange={(valor) => setHorizonte(valor as ParametrosArmadoAsistido['horizonte'])}
+          opciones={HORIZONTES.map((h) => ({ valor: h.valor, texto: h.etiqueta }))}
+        />
 
         <Campo etiqueta="% renta variable">
           <input
@@ -285,20 +360,18 @@ export function PanelArmadoAsistido() {
           />
         </Campo>
 
-        <Campo etiqueta="Temática (CEDEARs)">
-          <select
-            value={tematica}
-            onChange={(e) => setTematica(e.target.value)}
-            style={estiloInput}
-          >
-            <option value="">sin temática</option>
-            {PRESETS_TEMATICOS.filter((preset) => preset.rubroRv !== null).map((preset) => (
-              <option key={preset.id} value={preset.id}>
-                {preset.etiqueta}
-              </option>
-            ))}
-          </select>
-        </Campo>
+        <CampoSelect
+          etiqueta="Temática (CEDEARs)"
+          valor={tematica}
+          onChange={setTematica}
+          opciones={[
+            { valor: '', texto: 'sin temática' },
+            ...PRESETS_TEMATICOS.filter(filtraRentaVariable).map((preset) => ({
+              valor: preset.id,
+              texto: preset.etiqueta,
+            })),
+          ]}
+        />
 
         <button
           type="button"
@@ -311,10 +384,82 @@ export function PanelArmadoAsistido() {
 
         <p style={{ flexBasis: '100%', margin: 0, fontSize: 11, color: 'var(--dim)' }}>
           {pctRv > 0
-            ? `Los bonos se arman sobre el ${100 - pctRv}% restante; los CEDEARs se eligen por liquidez, diversificando sectores.`
+            ? `Los bonos se arman sobre el ${100 - pctRv}% restante; los CEDEARs se eligen por liquidez, respetando los topes de abajo.`
             : 'Sin renta variable: la cartera se arma entera con renta fija.'}
         </p>
+
+        {/* Qué precargó la temática, a la vista y no sólo como tooltip del select. Las temáticas
+            multidimensionales —metales preciosos— no se pueden leer del nombre: hay que decir qué
+            entra y qué queda afuera, que es justamente para lo que existe la nota del preset. */}
+        {presetTematico !== null && (
+          <p
+            style={{ flexBasis: '100%', margin: 0, fontSize: 11, color: 'var(--dim)', textWrap: 'pretty' }}
+          >
+            {presetTematico.etiqueta}: {presetTematico.nota}
+          </p>
+        )}
       </div>
+
+      {/* Los cinco topes de diversificación del bloque de renta variable — F-078.
+
+          **Inputs numéricos y no sliders**: el design system no tiene ninguno (cero usos de
+          `type="range"` en todo el repo) y un rango con `min`/`max` sobre un `<input type="number">`
+          dice lo mismo, se lee a simple vista y se puede tipear. Un tope de diversificación es un
+          número que el asesor defiende ante el cliente, no un gesto de arrastre.
+
+          El porcentaje es **sobre el bloque de renta variable**, no sobre la cartera: es la unidad
+          en la que el armador reparte los cupos. */}
+      <fieldset
+        style={{
+          border: '1px solid var(--lin)',
+          borderRadius: 4,
+          padding: '8px 12px 10px',
+          margin: 0,
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 12,
+          alignItems: 'flex-start',
+        }}
+      >
+        <legend
+          style={{
+            fontSize: 9.5,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            color: 'var(--dim)',
+            padding: '0 4px',
+          }}
+        >
+          Topes de renta variable
+        </legend>
+
+        {EJES_TOPE_RV.map((eje) => (
+          <CampoTope
+            key={eje}
+            eje={eje}
+            valor={topes[eje]}
+            onCambio={(valor) => fijarTope(eje, valor)}
+            declaran={coberturaPorEje[eje]}
+            total={coberturaPorEje.total}
+          />
+        ))}
+
+        <p style={{ flexBasis: '100%', margin: 0, fontSize: 11, color: 'var(--dim)', textWrap: 'pretty' }}>
+          Máximo que puede pesar una misma categoría dentro del bloque de renta variable. Vienen
+          precargados con los del perfil <strong>{perfil}</strong>; cambiar de perfil los vuelve a
+          poner. <strong>Un campo vacío apaga ese tope</strong> y el eje deja de acotar. Lo que se
+          incumple se declara con una alerta en el bloque de renta variable — no bloquea el armado.
+        </p>
+
+        {/* La moneda viene apagada de fábrica y eso necesita explicación: un campo vacío entre
+            cuatro llenos se lee como un olvido. */}
+        <p style={{ flexBasis: '100%', margin: 0, fontSize: 11, color: 'var(--dim)', textWrap: 'pretty' }}>
+          La moneda arranca sin tope en los tres perfiles: 276 de los 286 CEDEARs que cotizan en
+          dólares son la hermana MEP o cable de un papel que ya cotiza en pesos (medido el
+          28/08/2026), así que acotarla forzaría a comprar el mismo papel dos veces por dos
+          ventanillas. Es forma de liquidación, no exposición. Se puede encender a mano.
+        </p>
+      </fieldset>
 
       {/* Cada cuánto cobra el cliente. Sale del cronograma contractual de cada emisión, no de
           contar pagos en la ventana de doce meses: son dos preguntas distintas y el filtro de
@@ -396,6 +541,96 @@ export function PanelArmadoAsistido() {
         )}
 
       {mutacion.isSuccess && <AlertasCalendario alertas={mutacion.data.alertas} />}
+    </div>
+  )
+}
+
+/** Cómo se lee cada eje en pantalla, con la fuente entre paréntesis donde el nombre solo no
+ *  alcanza. `Sector` repite deliberadamente la etiqueta del picker del bloque de renta variable:
+ *  es el mismo campo (`sector_codigo`) desde F-079, y llamarlo distinto sugeriría dos taxonomías.
+ *  El nombre interno del eje sigue siendo `rubro` (`EJES_TOPE_RV`, `max_pct_rubro`): es el
+ *  contrato con el backend, no cambia con la migración — sólo el rótulo que ve el asesor. */
+const ETIQUETA_EJE_TOPE: Record<EjeTopeRv, string> = {
+  rubro: 'Máx. % por sector (SIC)',
+  pais: 'Máx. % por país',
+  region: 'Máx. % por región',
+  moneda: 'Máx. % por moneda',
+  mercado: 'Máx. % por mercado',
+}
+
+/** Los defaults del perfil pasados a lo que muestran los inputs: número a texto, `null` a vacío. */
+function topesComoTexto(topes: TopesRv): Record<EjeTopeRv, string> {
+  const salida = {} as Record<EjeTopeRv, string>
+  for (const eje of EJES_TOPE_RV) {
+    const valor = topes[CAMPO_TOPE_RV[eje]]
+    salida[eje] = valor === null ? '' : String(valor)
+  }
+  return salida
+}
+
+/** El camino de vuelta, para el request: vacío a `null` (eje apagado), texto a número. Devuelve
+ *  siempre los cinco campos — ver el comentario de `armar()` sobre por qué el backend no mergea. */
+function topesDesdeTexto(topes: Record<EjeTopeRv, string>): TopesRv {
+  const salida = {} as TopesRv
+  for (const eje of EJES_TOPE_RV) {
+    const texto = topes[eje].trim()
+    salida[CAMPO_TOPE_RV[eje]] = texto === '' ? null : Number(texto)
+  }
+  return salida
+}
+
+/**
+ * Un tope, con la cobertura del dato debajo.
+ *
+ * La línea de cobertura es lo que evita el peor estado posible de esta feature: un tope configurado,
+ * aplicado y que en silencio no mide nada porque al universo le falta el dato del eje. Hoy es
+ * literalmente el caso de `país`, que está en `null` para todos los papeles hasta que corra la
+ * siembra del curado. Decirlo en el campo mismo —y no sólo en la alerta que vuelve después del
+ * armado— es la diferencia entre un faltante declarado y una pantalla que miente por omisión.
+ */
+function CampoTope({
+  eje,
+  valor,
+  onCambio,
+  declaran,
+  total,
+}: {
+  eje: EjeTopeRv
+  valor: string
+  onCambio: (valor: string) => void
+  /** Cuántos CEDEARs del universo declaran el dato de este eje. */
+  declaran: number
+  /** Cuántos CEDEARs tiene el universo. `0` = todavía no se trajo. */
+  total: number
+}) {
+  const sinDatoEnElEje = total > 0 && declaran === 0
+  const parcial = total > 0 && declaran > 0 && declaran < total
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxWidth: 190 }}>
+      <Campo etiqueta={ETIQUETA_EJE_TOPE[eje]}>
+        <input
+          type="number"
+          inputMode="numeric"
+          min={1}
+          max={100}
+          step={5}
+          value={valor}
+          onChange={(e) => onCambio(e.target.value)}
+          placeholder="sin tope"
+          style={{ ...estiloInput, minWidth: 76 }}
+        />
+      </Campo>
+      {sinDatoEnElEje && (
+        <span style={{ fontSize: 10, color: 'var(--ac2)', textWrap: 'pretty' }}>
+          ninguno de los {total} papeles declara este dato todavía: el tope no va a acotar nada, y
+          el armado lo dice con la alerta <span className="mono">rv_tope_sin_dato_en_eje</span>
+        </span>
+      )}
+      {parcial && (
+        <span style={{ fontSize: 10, color: 'var(--dim)' }}>
+          lo declaran {declaran} de {total} papeles; el resto no computa contra el tope
+        </span>
+      )}
     </div>
   )
 }

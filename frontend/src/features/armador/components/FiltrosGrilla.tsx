@@ -21,10 +21,16 @@
  * pestaña de naturaleza de tasa, después ley → sector → calificación → cashflow → emisor, y en una
  * segunda fila los umbrales que afinan. Emisor va último porque es la dimensión más larga y la que
  * más gana con lo que las anteriores ya descartaron.
+ *
+ * Ley, Sector, Pagos, Emisor y Liquidez usan `@/components/CampoSelect` (F-079, Fase 4): el select
+ * compartido que reemplazó la copia local de `estiloInput` para estos cinco. Calificación queda
+ * afuera —es un multiselect con `<details>`, no un `<select>`— y los umbrales numéricos (Duración,
+ * TIR) siguen con `Campo`/`estiloInput` porque son `<input type="number">`, no selects.
  */
 
 import type { ReactNode } from 'react'
 
+import { CampoSelect } from '@/components/CampoSelect'
 import { unidadDeNaturaleza, SelectorSegmento } from '@/components/SelectorSegmento'
 
 import {
@@ -129,40 +135,30 @@ export function FiltrosGrilla({
       {/* El perfil del papel, de lo general a lo específico. Cada uno de estos acota las opciones
           de los demás: lo que queda a la vista es lo que existe bajo lo ya elegido. */}
       <div style={estiloFila}>
-        <Campo etiqueta="Ley">
-          <select
-            value={efectivos.ley ?? ''}
-            disabled={deshabilitado}
-            onChange={(e) => cambiar({ ley: e.target.value === '' ? null : e.target.value })}
-            style={estiloInput}
-          >
-            <option value="">todos</option>
-            {[...opciones.leyes].sort().map((ley) => (
-              <option key={ley} value={ley}>
-                {ley}
-              </option>
-            ))}
-            {opciones.tieneLeyNoInformada && (
-              <option value={LEY_NO_INFORMADA}>ley no informada</option>
-            )}
-          </select>
-        </Campo>
+        <CampoSelect
+          etiqueta="Ley"
+          valor={efectivos.ley ?? ''}
+          disabled={deshabilitado}
+          onChange={(valor) => cambiar({ ley: valor === '' ? null : valor })}
+          opciones={[
+            { valor: '', texto: 'todos' },
+            ...[...opciones.leyes].sort().map((ley) => ({ valor: ley, texto: ley })),
+            ...(opciones.tieneLeyNoInformada
+              ? [{ valor: LEY_NO_INFORMADA, texto: 'ley no informada' }]
+              : []),
+          ]}
+        />
 
-        <Campo etiqueta="Sector">
-          <select
-            value={efectivos.sector ?? ''}
-            disabled={deshabilitado}
-            onChange={(e) => cambiar({ sector: e.target.value === '' ? null : e.target.value })}
-            style={estiloInput}
-          >
-            <option value="">todos</option>
-            {[...opciones.sectores].sort().map((sector) => (
-              <option key={sector} value={sector}>
-                {sector}
-              </option>
-            ))}
-          </select>
-        </Campo>
+        <CampoSelect
+          etiqueta="Sector"
+          valor={efectivos.sector ?? ''}
+          disabled={deshabilitado}
+          onChange={(valor) => cambiar({ sector: valor === '' ? null : valor })}
+          opciones={[
+            { valor: '', texto: 'todos' },
+            ...[...opciones.sectores].sort().map((sector) => ({ valor: sector, texto: sector })),
+          ]}
+        />
 
         {/* No usa `Campo`: su `<label>` envolvería el `<details>` entero y le rompería el nombre
             accesible a cada checkbox de adentro (un `<label>` implícito se asocia con TODOS los
@@ -235,37 +231,29 @@ export function FiltrosGrilla({
           </details>
         </div>
 
-        <Campo etiqueta="Pagos de renta (ventana 12 m)">
-          <select
-            value={efectivos.pagos}
-            disabled={deshabilitado}
-            onChange={(e) => cambiar({ pagos: e.target.value })}
-            style={estiloInput}
-          >
-            <option value="">todos</option>
-            {[...opciones.pagos].sort((a, b) => a - b).map((n) => (
-              <option key={n} value={String(n)}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </Campo>
+        <CampoSelect
+          etiqueta="Pagos de renta (ventana 12 m)"
+          valor={efectivos.pagos}
+          disabled={deshabilitado}
+          onChange={(valor) => cambiar({ pagos: valor })}
+          opciones={[
+            { valor: '', texto: 'todos' },
+            ...[...opciones.pagos]
+              .sort((a, b) => a - b)
+              .map((n) => ({ valor: String(n), texto: String(n) })),
+          ]}
+        />
 
-        <Campo etiqueta="Emisor">
-          <select
-            value={efectivos.emisor ?? ''}
-            disabled={deshabilitado}
-            onChange={(e) => cambiar({ emisor: e.target.value === '' ? null : e.target.value })}
-            style={estiloInput}
-          >
-            <option value="">todos</option>
-            {[...opciones.emisores].sort().map((emisor) => (
-              <option key={emisor} value={emisor}>
-                {emisor}
-              </option>
-            ))}
-          </select>
-        </Campo>
+        <CampoSelect
+          etiqueta="Emisor"
+          valor={efectivos.emisor ?? ''}
+          disabled={deshabilitado}
+          onChange={(valor) => cambiar({ emisor: valor === '' ? null : valor })}
+          opciones={[
+            { valor: '', texto: 'todos' },
+            ...[...opciones.emisores].sort().map((emisor) => ({ valor: emisor, texto: emisor })),
+          ]}
+        />
       </div>
 
       {/* Los umbrales no son categorías del perfil, pero sí acotan sus opciones: subir la TIR
@@ -293,19 +281,18 @@ export function FiltrosGrilla({
           />
         </Campo>
 
-        <Campo etiqueta="Liquidez mín. (percentil de volumen USD, sobre el universo a la vista)">
-          <select
-            value={filtros.liquidezMin}
-            disabled={deshabilitado}
-            onChange={(e) => cambiar({ liquidezMin: e.target.value as FiltrosArmador['liquidezMin'] })}
-            style={estiloInput}
-          >
-            <option value="">todos</option>
-            <option value="25">≥ p25</option>
-            <option value="50">≥ p50</option>
-            <option value="75">≥ p75</option>
-          </select>
-        </Campo>
+        <CampoSelect
+          etiqueta="Liquidez mín. (percentil de volumen USD, sobre el universo a la vista)"
+          valor={filtros.liquidezMin}
+          disabled={deshabilitado}
+          onChange={(valor) => cambiar({ liquidezMin: valor as FiltrosArmador['liquidezMin'] })}
+          opciones={[
+            { valor: '', texto: 'todos' },
+            { valor: '25', texto: '≥ p25' },
+            { valor: '50', texto: '≥ p50' },
+            { valor: '75', texto: '≥ p75' },
+          ]}
+        />
 
         <label
           style={{

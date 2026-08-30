@@ -67,6 +67,29 @@ DIVISIONES: tuple[tuple[int, int, Division], ...] = (
 )
 
 
+def major_group_de(sic: str | int | None) -> str | None:
+    """El major group SIC de dos dígitos (`"01"`, `"73"`) de un código, o `None`.
+
+    Es el eslabón intermedio de la escalera SIC — más fino que la división (10 valores) y más
+    grueso que el rubro (el código de 4 dígitos entero, ~120 valores presentes). F-079 lo usa como
+    eje de "sector" con traducción curada al español (`app/renta_variable/sic_es.py::sector_de`).
+
+    `None` para un código ausente, ilegible (no numérico) o con menos de dos dígitos — no hay major
+    group que afirmar en esos casos, igual que `division_de` no afirma división.
+    """
+    if sic is None:
+        return None
+    texto = str(sic).strip()
+    if not texto.isdigit() or len(texto) < 2:
+        # Un solo dígito no alcanza: `"1"` podría ser `"01"` con el cero recortado o un código
+        # roto, y las dos lecturas son igual de una adivinanza. El SIC real siempre tiene el major
+        # group entero (2 dígitos) aunque el código completo pierda ceros a la izquierda.
+        return None
+    # El SIC llega con y sin ceros a la izquierda según el endpoint: `100` y `0100` son el mismo
+    # código de agricultura. Los dos primeros dígitos del código de cuatro son el major group.
+    return texto.zfill(4)[:2]
+
+
 def division_de(sic: str | int | None) -> Division | None:
     """En qué eslabón de la cadena está un código SIC. `None` si no se puede afirmar.
 
@@ -75,14 +98,10 @@ def division_de(sic: str | int | None) -> Division | None:
     Devuelve `None` para un código ausente, ilegible o fuera de todos los rangos del manual. Los
     tres casos son el mismo desde el punto de vista del asesor: **no sabemos**, y así se muestra.
     """
-    if sic is None:
+    grupo = major_group_de(sic)
+    if grupo is None:
         return None
-    texto = str(sic).strip()
-    if not texto.isdigit():
-        return None
-    # El SIC llega con y sin ceros a la izquierda según el endpoint: `100` y `0100` son el mismo
-    # código de agricultura. Los dos primeros dígitos del código de cuatro son el major group.
-    major = int(texto.zfill(4)[:2])
+    major = int(grupo)
     for desde, hasta, division in DIVISIONES:
         if desde <= major <= hasta:
             return division

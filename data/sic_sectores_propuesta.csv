@@ -1,0 +1,84 @@
+major_group,nombre_en,etiqueta_es,fuente
+01,Agricultural Production Crops,Producción agrícola de cultivos,https://www.osha.gov/data/sic-manual
+02,Agriculture Production Livestock And Animal Specialties,Producción ganadera y de especialidades animales,https://www.osha.gov/data/sic-manual
+07,Agricultural Services,Servicios agropecuarios,https://www.osha.gov/data/sic-manual
+08,Forestry,Silvicultura,https://www.osha.gov/data/sic-manual
+09,"Fishing, Hunting, And Trapping","Pesca, caza y trampeo",https://www.osha.gov/data/sic-manual
+10,Metal Mining,Minería metálica,https://www.osha.gov/data/sic-manual
+12,Coal Mining,Minería de carbón,https://www.osha.gov/data/sic-manual
+13,Oil And Gas Extraction,Extracción de petróleo y gas,https://www.osha.gov/data/sic-manual
+14,"Mining And Quarrying Of Nonmetallic Minerals, Except Fuels",Minería y canteras de minerales no metálicos (excepto combustibles),https://www.osha.gov/data/sic-manual
+15,Building Construction General Contractors And Operative Builders,Construcción de edificios (contratistas generales y desarrolladores),https://www.osha.gov/data/sic-manual
+16,Heavy Construction Other Than Building Construction Contractors,Construcción pesada (obras de infraestructura),https://www.osha.gov/data/sic-manual
+17,Construction Special Trade Contractors,Contratistas de oficios especializados en construcción,https://www.osha.gov/data/sic-manual
+20,Food And Kindred Products,Alimentos y productos afines,https://www.osha.gov/data/sic-manual
+21,Tobacco Products,Productos de tabaco,https://www.osha.gov/data/sic-manual
+22,Textile Mill Products,Productos textiles,https://www.osha.gov/data/sic-manual
+23,Apparel And Other Finished Products Made From Fabrics And Similar Materials,Indumentaria y otros productos confeccionados con telas y materiales similares,https://www.osha.gov/data/sic-manual
+24,"Lumber And Wood Products, Except Furniture",Productos de madera (excepto muebles),https://www.osha.gov/data/sic-manual
+25,Furniture And Fixtures,Muebles y accesorios,https://www.osha.gov/data/sic-manual
+26,Paper And Allied Products,Papel y productos afines,https://www.osha.gov/data/sic-manual
+27,"Printing, Publishing, And Allied Industries","Imprenta, edición e industrias afines",https://www.osha.gov/data/sic-manual
+28,Chemicals And Allied Products,Química y productos afines,https://www.osha.gov/data/sic-manual
+29,Petroleum Refining And Related Industries,Refinación de petróleo e industrias afines,https://www.osha.gov/data/sic-manual
+30,Rubber And Miscellaneous Plastics Products,Caucho y productos plásticos diversos,https://www.osha.gov/data/sic-manual
+31,Leather And Leather Products,Cuero y productos de cuero,https://www.osha.gov/data/sic-manual
+32,"Stone, Clay, Glass, And Concrete Products","Piedra, arcilla, vidrio y productos de hormigón",https://www.osha.gov/data/sic-manual
+33,Primary Metal Industries,Industrias metálicas básicas,https://www.osha.gov/data/sic-manual
+34,"Fabricated Metal Products, Except Machinery And Transportation Equipment",Productos metálicos elaborados (excepto maquinaria y equipos de transporte),https://www.osha.gov/data/sic-manual
+35,Industrial And Commercial Machinery And Computer Equipment,"Maquinaria industrial y comercial, y equipos de computación",https://www.osha.gov/data/sic-manual
+36,"Electronic And Other Electrical Equipment And Components, Except Computer Equipment",Equipos y componentes electrónicos y eléctricos (excepto de computación),https://www.osha.gov/data/sic-manual
+37,Transportation Equipment,Equipos de transporte,https://www.osha.gov/data/sic-manual
+38,"Measuring, Analyzing, And Controlling Instruments; Photographic, Medical And Optical Goods; Watches And Clocks","Instrumentos de medición, análisis y control; productos fotográficos, médicos y ópticos; relojes",https://www.osha.gov/data/sic-manual
+39,Miscellaneous Manufacturing Industries,Industrias manufactureras diversas,https://www.osha.gov/data/sic-manual
+40,Railroad Transportation,Transporte ferroviario,https://www.osha.gov/data/sic-manual
+41,Local And Suburban Transit And Interurban Highway Passenger Transportation,"Transporte urbano, suburbano e interurbano de pasajeros por carretera",https://www.osha.gov/data/sic-manual
+42,Motor Freight Transportation And Warehousing,Transporte de carga por camión y almacenamiento,https://www.osha.gov/data/sic-manual
+43,United States Postal Service,Servicio Postal de Estados Unidos,https://www.osha.gov/data/sic-manual
+44,Water Transportation,Transporte marítimo y fluvial,https://www.osha.gov/data/sic-manual
+45,Transportation By Air,Transporte aéreo,https://www.osha.gov/data/sic-manual
+46,"Pipelines, Except Natural Gas",Oleoductos (excepto de gas natural),https://www.osha.gov/data/sic-manual
+47,Transportation Services,Servicios de transporte,https://www.osha.gov/data/sic-manual
+48,Communications,Comunicaciones,https://www.osha.gov/data/sic-manual
+49,"Electric, Gas, And Sanitary Services","Electricidad, gas y servicios sanitarios",https://www.osha.gov/data/sic-manual
+50,Wholesale Trade-durable Goods,Comercio mayorista de bienes durables,https://www.osha.gov/data/sic-manual
+51,Wholesale Trade-non-durable Goods,Comercio mayorista de bienes no durables,https://www.osha.gov/data/sic-manual
+52,"Building Materials, Hardware, Garden Supply, And Mobile Home Dealers","Materiales de construcción, ferretería, artículos de jardín y casas rodantes",https://www.osha.gov/data/sic-manual
+53,General Merchandise Stores,Tiendas de mercadería general,https://www.osha.gov/data/sic-manual
+54,Food Stores,Tiendas de alimentos,https://www.osha.gov/data/sic-manual
+55,Automotive Dealers And Gasoline Service Stations,Concesionarias de automotores y estaciones de servicio,https://www.osha.gov/data/sic-manual
+56,Apparel And Accessory Stores,Tiendas de indumentaria y accesorios,https://www.osha.gov/data/sic-manual
+57,"Home Furniture, Furnishings, And Equipment Stores","Tiendas de muebles, decoración y equipamiento para el hogar",https://www.osha.gov/data/sic-manual
+58,Eating And Drinking Places,Restaurantes y bares,https://www.osha.gov/data/sic-manual
+59,Miscellaneous Retail,Comercio minorista diverso,https://www.osha.gov/data/sic-manual
+60,Depository Institutions,Entidades de depósito (bancos),https://www.osha.gov/data/sic-manual
+61,Non-depository Credit Institutions,Entidades de crédito no bancarias,https://www.osha.gov/data/sic-manual
+62,"Security And Commodity Brokers, Dealers, Exchanges, And Services","Corretaje de valores y commodities, bolsas y servicios afines",https://www.osha.gov/data/sic-manual
+63,Insurance Carriers,Compañías de seguros,https://www.osha.gov/data/sic-manual
+64,"Insurance Agents, Brokers, And Service","Agentes, corredores y servicios de seguros",https://www.osha.gov/data/sic-manual
+65,Real Estate,Bienes raíces,https://www.osha.gov/data/sic-manual
+67,Holding And Other Investment Offices,Sociedades holding y otras entidades de inversión,https://www.osha.gov/data/sic-manual
+70,"Hotels, Rooming Houses, Camps, And Other Lodging Places",Hoteles y otros alojamientos,https://www.osha.gov/data/sic-manual
+72,Personal Services,Servicios personales,https://www.osha.gov/data/sic-manual
+73,Business Services,Servicios a empresas,https://www.osha.gov/data/sic-manual
+75,"Automotive Repair, Services, And Parking","Reparación y servicios automotores, y estacionamiento",https://www.osha.gov/data/sic-manual
+76,Miscellaneous Repair Services,Servicios de reparación diversos,https://www.osha.gov/data/sic-manual
+78,Motion Pictures,Industria cinematográfica,https://www.osha.gov/data/sic-manual
+79,Amusement And Recreation Services,Servicios de entretenimiento y recreación,https://www.osha.gov/data/sic-manual
+80,Health Services,Servicios de salud,https://www.osha.gov/data/sic-manual
+81,Legal Services,Servicios jurídicos,https://www.osha.gov/data/sic-manual
+82,Educational Services,Servicios educativos,https://www.osha.gov/data/sic-manual
+83,Social Services,Servicios sociales,https://www.osha.gov/data/sic-manual
+84,"Museums, Art Galleries, And Botanical And Zoological Gardens","Museos, galerías de arte y jardines botánicos y zoológicos",https://www.osha.gov/data/sic-manual
+86,Membership Organizations,Organizaciones de membresía (asociaciones),https://www.osha.gov/data/sic-manual
+87,"Engineering, Accounting, Research, Management, And Related Services","Ingeniería, contabilidad, investigación, gestión y servicios afines",https://www.osha.gov/data/sic-manual
+88,Private Households,Hogares privados (servicio doméstico),https://www.osha.gov/data/sic-manual
+89,Miscellaneous Services,Servicios diversos,https://www.osha.gov/data/sic-manual
+91,"Executive, Legislative, And General Government, Except Finance","Poder ejecutivo, legislativo y administración general de gobierno (excepto finanzas)",https://www.osha.gov/data/sic-manual
+92,"Justice, Public Order, And Safety","Justicia, orden público y seguridad",https://www.osha.gov/data/sic-manual
+93,"Public Finance, Taxation, And Monetary Policy","Finanzas públicas, impuestos y política monetaria",https://www.osha.gov/data/sic-manual
+94,Administration Of Human Resource Programs,Administración de programas de recursos humanos,https://www.osha.gov/data/sic-manual
+95,Administration Of Environmental Quality And Housing Programs,Administración de programas de calidad ambiental y vivienda,https://www.osha.gov/data/sic-manual
+96,Administration Of Economic Programs,Administración de programas económicos,https://www.osha.gov/data/sic-manual
+97,National Security And International Affairs,Seguridad nacional y asuntos internacionales,https://www.osha.gov/data/sic-manual
+99,Nonclassifiable Establishments,Establecimientos no clasificables,https://www.osha.gov/data/sic-manual

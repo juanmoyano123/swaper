@@ -64,9 +64,20 @@ function propio(extra: Partial<BloquePropio> = {}): BloquePropio {
     sic_titulo: null,
     sic_oficina: null,
     division_cadena: null,
+    // F-079: derivados del SIC, sin curado ni clasificación por defecto.
+    sector_codigo: null,
+    sector: null,
+    rubro_especifico: null,
     estrategia_etf: null,
     ratio_conversion: null,
     mercado_origen: null,
+    // F-079, D3: geografía curada de ETFs, sin curado por defecto.
+    etf_indice: null,
+    etf_alcance: null,
+    etf_pais: null,
+    etf_region: null,
+    etf_geo_fuente: null,
+    etf_geo_verificado: null,
     ...extra,
   }
 }
@@ -261,6 +272,115 @@ it('sin clasificar declara que el job no pasó por este papel, no inventa un sec
   renderizar()
 
   expect(await screen.findByText('Todavía no se clasificó este papel.')).toBeInTheDocument()
+})
+
+// --- F-079: sector y rubro específico, la traducción curada del SIC en dos niveles -------------
+
+it('muestra sector y rubro específico en ES, con el código de auditoría entre paréntesis', async () => {
+  mockearRutas({
+    [RUTA_RV(TICKER)]: {
+      body: fichaRV({
+        propio: propio({
+          sic_codigo: '6029',
+          sic_titulo: 'Commercial Banks, NEC',
+          sector_codigo: '60',
+          sector: 'Finanzas',
+          rubro_especifico: 'Bancos comerciales',
+        }),
+      }),
+    },
+  })
+  renderizar()
+
+  expect(await screen.findByText('Finanzas (60)')).toBeInTheDocument()
+  expect(screen.getByText('Bancos comerciales (6029)')).toBeInTheDocument()
+  // La lectura en inglés de la SEC sigue abajo, sin traducir: las dos conviven (regla 11).
+  expect(screen.getByText('Commercial Banks, NEC')).toBeInTheDocument()
+})
+
+it('sin etiqueta ES curada para el código, declara "sin traducir" en vez de dejar el campo vacío', async () => {
+  mockearRutas({
+    [RUTA_RV(TICKER)]: {
+      body: fichaRV({
+        propio: propio({
+          sic_codigo: '9999',
+          sic_titulo: 'Something The SEC Titles',
+          sector_codigo: '99',
+          sector: null,
+          rubro_especifico: null,
+        }),
+      }),
+    },
+  })
+  renderizar()
+
+  expect(await screen.findByText('99 (sin traducir)')).toBeInTheDocument()
+  expect(screen.getByText('9999 (sin traducir)')).toBeInTheDocument()
+})
+
+// --- F-079, D3: geografía curada de ETFs, con su fuente y su fecha de verificación --------------
+
+it('un ETF con geografía curada muestra el bloque de índice, alcance, país y región', async () => {
+  mockearRutas({
+    [RUTA_RV('GLD')]: {
+      body: fichaRV({
+        propio: propio({
+          ticker: 'GLD',
+          estrategia_etf: 'geografico',
+          etf_indice: 'MSCI Brazil',
+          etf_alcance: 'Empresas brasileñas de gran y mediana capitalización',
+          etf_pais: 'BR',
+          etf_region: 'América Latina y el Caribe',
+          etf_geo_fuente: 'ficha del emisor del índice',
+          etf_geo_verificado: '2026-08-20',
+        }),
+      }),
+    },
+  })
+  renderizar('GLD')
+
+  expect(await screen.findByText('Geografía del fondo · curado propio')).toBeInTheDocument()
+  expect(screen.getByText('MSCI Brazil')).toBeInTheDocument()
+  expect(screen.getByText('Empresas brasileñas de gran y mediana capitalización')).toBeInTheDocument()
+  expect(screen.getByText('BR')).toBeInTheDocument()
+  expect(screen.getByText('América Latina y el Caribe')).toBeInTheDocument()
+  expect(screen.getByText(/ficha del emisor del índice/)).toBeInTheDocument()
+})
+
+it('sin geografía curada (`etf_indice` null) no muestra el bloque, sea o no un fondo', async () => {
+  mockearRutas({
+    [RUTA_RV('SPY')]: {
+      body: fichaRV({ propio: propio({ ticker: 'SPY', estrategia_etf: 'indice_amplio' }) }),
+    },
+  })
+  renderizar('SPY')
+
+  await screen.findByText('La empresa · SEC')
+  expect(screen.queryByText('Geografía del fondo · curado propio')).not.toBeInTheDocument()
+})
+
+it('un fondo multi-país curado declara país y región sin dato, no completa la composición', async () => {
+  mockearRutas({
+    [RUTA_RV('EEM')]: {
+      body: fichaRV({
+        propio: propio({
+          ticker: 'EEM',
+          estrategia_etf: 'geografico',
+          etf_indice: 'MSCI Emerging Markets',
+          etf_alcance: 'Mercados emergentes globales',
+          etf_pais: null,
+          etf_region: null,
+          etf_geo_fuente: 'ficha del emisor del índice',
+          etf_geo_verificado: '2026-08-20',
+        }),
+      }),
+    },
+  })
+  renderizar('EEM')
+
+  await screen.findByText('MSCI Emerging Markets')
+  expect(screen.getByText('Mercados emergentes globales')).toBeInTheDocument()
+  expect(screen.getAllByText('s/d').length).toBeGreaterThan(0)
 })
 
 it('muestra las puntas y las operaciones de BYMA', async () => {

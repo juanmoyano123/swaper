@@ -15,6 +15,7 @@ from app.externos.sec import EntradaSic, LimiteDeLaFuente, PerfilSec
 from app.renta_variable.clasificacion import (
     DatosDeBymaPorPapel,
     clasificar_renta_variable,
+    reclasificar_etfs,
 )
 
 AHORA = datetime(2026, 8, 13, 20, 0, tzinfo=UTC)
@@ -130,7 +131,9 @@ async def test_el_nombre_de_byma_gana_sobre_el_de_la_sec() -> None:
 
     (fila,) = conn.escrituras
     assert fila[1] == "Ambev S.A."
-    assert fila[7:9] == ("1:3", "NASDAQ"), "ratio y mercado de BYMA"
+    # Los índices siguen el orden de `SQL_UPSERT_SEC`, que desde F-078 mete `region_etf` entre la
+    # estrategia y el ratio.
+    assert fila[8:10] == ("1:3", "NASDAQ"), "ratio y mercado de BYMA"
 
 
 async def test_un_fondo_guarda_su_estrategia_y_no_un_sic_inventado() -> None:
@@ -163,7 +166,7 @@ async def test_un_papel_que_la_sec_no_lista_igual_se_escribe() -> None:
     assert conn.tickers_escritos == ["GGAL"], "se registra el intento"
     (fila,) = conn.escrituras
     assert fila[2] is None and fila[5] is None, "sin dato: los campos quedan vacíos, no inventados"
-    assert fila[9] == "SEC EDGAR", "pero la fuente y la fecha quedan escritas"
+    assert fila[10] == "SEC EDGAR", "pero la fuente y la fecha quedan escritas"
 
 
 async def test_sin_cik_no_cuenta_como_clasificado() -> None:
@@ -213,3 +216,87 @@ async def test_sin_la_lista_de_byma_la_clasificacion_sigue_con_lo_que_da_la_sec(
 
 
 pytestmark = pytest.mark.anyio
+
+
+# --- La reclasificación de fondos, sin tocar la SEC -----------------------------------------------
+
+
+class FakeConexionReclasificacion:
+    """Sirve los nombres ya persistidos y guarda el lote que se escribe. Sin SEC en el medio: es
+    justamente lo que este job existe para evitar."""
+
+    def __init__(self, filas: list[tuple[str, str]]) -> None:
+        self._filas = filas
+        self.lotes: list[list[tuple[Any, ...]]] = []
+        self.consultas: list[str] = []
+
+    async def fetch(self, query: str, *_args: Any) -> list[dict[str, str]]:
+        self.consultas.append(query)
+        return [{"ticker": t, "nombre_largo": n} for t, n in self._filas]
+
+    def transaction(self) -> "FakeConexionReclasificacion":
+        return self
+
+    async def __aenter__(self) -> "FakeConexionReclasificacion":
+        return self
+
+    async def __aexit__(self, *_: Any) -> None:
+        return None
+
+    async def executemany(self, query: str, args: list[tuple[Any, ...]]) -> None:
+        self.consultas.append(query)
+        self.lotes.append(list(args))
+
+    @property
+    def escrito(self) -> dict[str, tuple[Any, Any]]:
+        return {fila[0]: (fila[1], fila[2]) for lote in self.lotes for fila in lote}
+
+
+async def test_la_reclasificacion_re_deriva_estrategia_y_geografia_del_nombre() -> None:
+    conn = FakeConexionReclasificacion(
+        [
+            ("EWJ", "iShares MSCI JAPAN ETF"),
+            ("XLK", "The Technology Select Sector SPDR Fund"),
+            ("AAPL", "Apple Inc."),
+        ]
+    )
+
+    resumen = await reclasificar_etfs(conn)
+
+    assert resumen.como_dict() == {"procesados": 3, "con_estrategia": 2, "con_region": 1}
+    assert conn.escrito["EWJ"] == ("geografico", "Japan")
+    assert conn.escrito["XLK"] == ("sectorial", None), "es un fondo sin geografía declarada"
+    assert conn.escrito["AAPL"] == (None, None), "no es un fondo"
+
+
+async def test_la_reclasificacion_no_le_pregunta_nada_a_la_sec() -> None:
+    """La propiedad que justifica que este endpoint exista aparte del barrido de la SEC: si tocara
+    la fuente, el backfill costaría diecisiete corridas de 100 papeles para no traer nada nuevo."""
+    conn = FakeConexionReclasificacion([("EWJ", "iShares MSCI JAPAN ETF")])
+
+    await reclasificar_etfs(conn)
+
+    assert all("perfil_renta_variable" in q for q in conn.consultas)
+    assert not any("capturado_en" in q or "fuente" in q for q in conn.consultas), (
+        "no se mueve la trazabilidad: no se consultó nada nuevo"
+    )
+
+
+async def test_reclasificar_dos_veces_deja_lo_mismo() -> None:
+    filas = [("EWJ", "iShares MSCI JAPAN ETF"), ("AAPL", "Apple Inc.")]
+
+    primera = await reclasificar_etfs(FakeConexionReclasificacion(filas))
+    segunda = await reclasificar_etfs(FakeConexionReclasificacion(filas))
+
+    assert primera.como_dict() == segunda.como_dict()
+
+
+async def test_un_papel_sin_nombre_no_se_lee_ni_se_escribe() -> None:
+    """Sin nombre no hay nada que parsear. El SQL ya los filtra; acá se fija que un lote vacío no
+    dispare una escritura al pedo."""
+    conn = FakeConexionReclasificacion([])
+
+    resumen = await reclasificar_etfs(conn)
+
+    assert resumen.procesados == 0
+    assert conn.lotes == []

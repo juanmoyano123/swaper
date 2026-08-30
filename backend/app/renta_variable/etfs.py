@@ -1,4 +1,4 @@
-"""Qué estrategia respalda el armado de un ETF, leída de su nombre oficial.
+"""Qué estrategia respalda el armado de un ETF y sobre qué geografía, leídas de su nombre oficial.
 
 ## Por qué del nombre y no de otra fuente
 
@@ -153,3 +153,84 @@ def estrategia_de(nombre: str | None) -> EstrategiaEtf | None:
         "Fondo, sin clasificar",
         "el nombre no declara una estrategia reconocible; se muestra el nombre oficial tal cual",
     )
+
+
+# --- La geografía que el nombre declara -----------------------------------------------------------
+#
+# Mismo criterio que la estrategia y por la misma razón: el nombre oficial que publica BYMA **ya
+# dice** dónde invierte el fondo, y leerlo no es interpretarlo. `iShares MSCI JAPAN ETF` nombra
+# Japón; `ISHARES CHINA LARGE-CAP ETF` nombra China. Lo que sale de acá es ese token y nada más.
+#
+# **No se traduce.** `EAFE` se devuelve `EAFE`, no "Europa, Australasia y Lejano Oriente": esa
+# expansión es correcta pero no está en el nombre, y la regla 11 pide mostrar lo que la fuente
+# declara tal como lo declara. Lo mismo con `ACWI`. Que después convivan en la misma pantalla un
+# `Brazil` de nombre de ETF y una "América Latina y el Caribe" de país curado es a propósito: son
+# dos vocabularios distintos y unificarlos sería traducir.
+#
+# **El vocabulario es cerrado y sale de la regla `geografico` de arriba**, extendido sólo con lo que
+# se midió en la base (28/08/2026): los nueve fondos con geografía en el nombre son ACWI, EFA
+# (EAFE), EWJ (Japan), EWY (South Korea), FXI (China), IEMG (Emerging Markets), IEUR (Europe), ILF
+# (Latin America) y VEA (Developed Markets). Cerrado y no "cualquier topónimo" por un caso concreto:
+# `United States Oil Fund` (USO) nombra un país en su **razón social** y compra futuros de WTI, así
+# que un detector de topónimos le pondría "United States" como geografía de exposición. No está en
+# la lista y por eso no lo hace.
+
+# Cuánto texto de la izquierda alcanza para saber si un token viene negado (`ex China`, `ex-Japan`).
+# Es fijo porque `re` no admite lookbehind de ancho variable.
+_NEGACION = re.compile(r"\bex[\s-]$", re.I)
+
+# (patrón, forma canónica). **El orden importa**, como en `_REGLAS`: lo específico antes que lo
+# general, para que `South Korea` gane sobre `Korea` y `Emerging Markets` sobre `Emerging`.
+#
+# La forma canónica es la caja, no una traducción: los nombres llegan en mayúsculas (`ISHARES CHINA
+# LARGE-CAP ETF`) y en mixta (`iShares MSCI JAPAN ETF`), y sin normalizar la caja el mismo país
+# aparecería dos veces en un filtro. Lo único que se decide acá es cómo se escribe `China`.
+_REGIONES: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\bACWI\b", re.I), "ACWI"),
+    (re.compile(r"\bEAFE\b", re.I), "EAFE"),
+    (re.compile(r"\bsouth\s+korea\b", re.I), "South Korea"),
+    (re.compile(r"\bkorea\b", re.I), "Korea"),
+    (re.compile(r"\bjapan\b", re.I), "Japan"),
+    (re.compile(r"\bchina\b", re.I), "China"),
+    (re.compile(r"\bbrazil\b", re.I), "Brazil"),
+    (re.compile(r"\blatin\s+america\b", re.I), "Latin America"),
+    (re.compile(r"\beurope\b", re.I), "Europe"),
+    (re.compile(r"\bemerging\s+markets\b", re.I), "Emerging Markets"),
+    (re.compile(r"\bemerging\b", re.I), "Emerging"),
+    (re.compile(r"\bdeveloped\s+markets\b", re.I), "Developed Markets"),
+    (re.compile(r"\bdeveloped\b", re.I), "Developed"),
+    (re.compile(r"\bworld\b", re.I), "World"),
+    # `Global` sí, `Global X` no: es la marca del emisor (Global X Funds), no una declaración de
+    # alcance. Medido el 28/08/2026 — sin el lookahead, `Global X Copper Miners ETF` y `Global X
+    # Uranium ETF` salían con geografía "Global" cuando lo único global de esos nombres es quién los
+    # emite. Misma familia de error que `United States Oil Fund`, y por eso el vocabulario es
+    # cerrado.
+    (re.compile(r"\bglobal\b(?!\s+X\b)", re.I), "Global"),
+)
+
+
+def region_declarada(nombre: str | None) -> str | None:
+    """La geografía que el nombre oficial del fondo declara, tal como aparece. `None` si el papel
+    no es un fondo o si el nombre no nombra ninguna.
+
+    `None` acá no es "invierte en todos lados": es **no sabemos**, y se muestra como faltante. Un
+    fondo sectorial cuyo nombre no dice dónde compra (`The Technology Select Sector SPDR Fund`) cae
+    ahí, y completarlo con "Estados Unidos" porque el SPDR sectorial sigue al S&P 500 sería inferir.
+
+    Se compara **por palabra entera**, con el mismo cuidado que `es_fondo`: `NETFLIX` contiene
+    `ETF`, y por la misma familia de bug `PetroChina` contiene `China`. Los `\\b` del patrón hacen
+    ese trabajo, y el guardia de `es_fondo` hace el resto — una empresa no llega hasta acá.
+
+    Un token negado no cuenta. `MSCI Emerging Markets ex China` nombra China para **excluirla**:
+    devolver `China` sería decir exactamente lo contrario de lo que el nombre dice. Se saltea y
+    sigue buscando, con lo cual ese nombre devuelve `Emerging Markets`, que es lo correcto.
+    """
+    if not es_fondo(nombre):
+        return None
+    texto = nombre or ""
+    for patron, canonica in _REGIONES:
+        for encontrado in patron.finditer(texto):
+            if _NEGACION.search(texto[: encontrado.start()]):
+                continue
+            return canonica
+    return None

@@ -840,3 +840,148 @@ acción es su propio emisor.
 bopreales, cuyo emisor real es el BCRA**. Es una tensión preexistente y se deja anotada: corregirla
 roza la clave `SOBERANO_AR` y la regla 4. La distinción de emisor para swaps ya existe por otra vía
 (`tipo_tasa == 'bopreal'` en `rotaciones/emisores.py`).
+
+## 29/08/2026 — Diversificación de CEDEARs: los ejes que ya existían y el que hubo que curar
+
+La renta variable del monitor mostraba precio, volumen y poco más: los campos de clasificación
+viajaban en el contrato desde la Tanda 20 pero nada los usaba para filtrar. El pedido fue un
+tablero para armar carteras diversificadas de CEDEARs y poder decirle a un cliente qué porcentaje
+tiene invertido en cada economía, rubro y moneda. Al medir qué había, aparecieron **cinco ejes con
+fuente viva y uno sin ninguna**.
+
+### Lo que ya estaba declarado y nadie usaba
+
+Rubro (`sic_oficina`, la oficina de la SEC que revisa esa industria), actividad fina (`sic_titulo`),
+eslabón productivo (`division_cadena`, del SIC Manual), estrategia de fondo (`estrategia_etf`, leída
+del nombre oficial que publica BYMA) y mercado del subyacente (`mercado_origen`, del PDF de BYMA).
+Sobre eso se montaron las facetas del monitor y la composición de la cartera.
+
+Dos hallazgos al integrarlo, los dos del mismo tipo que el viejo bug de "ETF" adentro de "NETFLIX":
+
+- **`mercado_origen` trae el mismo mercado escrito de dos formas**: "NYSE Arca" en 81 papeles y
+  "NYSE ARCA" en 12. Se pliegan por caja, que no es traducir un código sino reconocer una grafía.
+  Los tiers de NASDAQ (`NASDAQ`, `NASDAQ GS`, `NASDAQ GM`, `NASDAQ CM`) **no** se pliegan: son
+  mercados que la fuente distingue, y unificarlos sí sería interpretar.
+- **"Global X" es la marca del emisor, no el alcance del fondo.** `Global X Copper Miners ETF` y
+  `Global X Uranium ETF` salían con región "Global". Con el lookahead que los excluye, `region_etf`
+  queda en 30 especies (10 papeles) en vez de 36.
+
+### `region_etf`: la región que el fondo declara en su propio nombre
+
+Columna nueva en `perfil_renta_variable`, derivada del `nombre_largo` con los mismos patrones que ya
+usaba `etfs.py`. Devuelve el token **tal como aparece**: `EAFE` es `EAFE`, no "Europa, Australasia y
+Lejano Oriente". Poblada: ACWI, EFA→EAFE, EWJ→Japan, EWY→South Korea, FXI→China, IEMG→Emerging
+Markets, IEUR→Europe, ILF→Latin America, VEA→Developed Markets e ICLN→Global.
+
+### El eje que no tenía fuente: país
+
+La columna `pais` que escribía Yahoo quedó huérfana el 23/08 y se borró junto con `nombre_corto`,
+`sector` e `industria` (las cuatro con cero valores no nulos sobre 1.641 filas, verificado antes del
+DROP). **El domicilio que la SEC declara no sirve como reemplazo**: lo que importa no es dónde está
+constituida la empresa sino a qué economía queda expuesta la plata, y bajo ese criterio Alibaba es
+China aunque su constitución sea de Islas Caimán.
+
+Así que el país pasa a ser **dato curado**, con el mismo estatus que `condiciones_emision.csv`:
+tabla `public.pais_cedear` (`ticker_papel`, `pais` en ISO 3166-1 alfa-2, `fuente`, `verificado`),
+sembrada desde `data/paises_cedears.csv` con el patrón de `app/condiciones/semilla.py` y vocabulario
+cerrado. **El país es del papel, no de la especie**: AAPL, AAPLC y AAPLD lo comparten porque son el
+mismo papel, no por analogía.
+
+La **región** se deriva del país en código (`app/renta_variable/regiones.py`), leyendo la
+composición geográfica que publica la ONU (estándar M49). Leer un estándar publicado es lo mismo que
+leer ISO 4217. Se lee a nivel **subregión** —que es lo que da "América Latina y el Caribe" y "Asia
+occidental"—, salvo África, que se lee a nivel de región intermedia porque su subregión mete
+Sudáfrica, Nigeria y Kenia en una sola bolsa mucho más gruesa que el resto.
+
+**El vocabulario geográfico es dual a propósito.** Para empresas la región sale del país curado
+("América Latina y el Caribe"); para fondos, del nombre que el propio fondo declara ("Brazil",
+"EAFE"). Se muestran como valores distintos: mapear uno al otro sería traducir.
+
+### Estado del curado: 178 de 443 papeles
+
+`data/paises_cedears_pendientes.csv` tiene los 443 papeles CEDEAR del universo. La primera tanda
+investigó 178 y resolvió 142, con la fuente citada fila por fila (CIK de la SEC en la mayoría, sitio
+corporativo en el resto). Está en `data/paises_cedears_propuesta.csv` **esperando validación: todavía
+no se sembró**. Los 265 restantes quedan pendientes.
+
+Reparto de lo resuelto: 89 EE.UU., 16 Brasil, 5 Reino Unido, 4 Alemania, 3 México, 3 Japón y una
+cola de 12 países más. **El 63 % es EE.UU.**, que es el dato que ordena expectativas: la
+diversificación geográfica dentro de CEDEARs existe pero es una cola, no una mitad.
+
+Las 36 vacías son de tres clases, todas declaradas en su `fuente`: fondos (su geografía la resuelve
+`region_etf`), tickers que no se pudieron identificar, y **divergencia real entre sede y
+operaciones** — Southern Copper tiene sede en Phoenix y la totalidad de sus minas en Perú y México;
+Rio Tinto es una *dual-listed* con Londres y Melbourne en pie de igualdad. Ahí no se elige: se
+declara la duda.
+
+### El armador: topes por eje, y uno que se apaga
+
+`armar_renta_variable` pasa a respetar cupos por rubro, país, región y mercado, con defaults por
+perfil que **aplican solos** (cambia lo que el armador propone: está probado, no sólo documentado).
+Una categoría faltante no computa contra ningún tope —no se acota lo que no se conoce, el mismo
+criterio de `sector_computable()`— y lo incumplible se declara con `rv_tope_limita_seleccion`,
+`rv_tope_excedido` y `rv_tope_sin_dato_en_eje` en vez de bloquear.
+
+**El tope de moneda queda apagado de fábrica**, y el motivo es medido: de las 286 especies en
+dólares que pasan la guarda de volumen, **276 (96,5 %) son la hermana D/C de un papel que ya cotiza
+en pesos**. Cualquier tope por debajo de 100 fuerza a comprar `NVDAD` al lado de `NVDA` — el mismo
+papel dos veces, para cumplir una diversificación que no existe: un CEDEAR de Apple es exposición al
+dólar se compre en pesos o en dólares. La moneda de cotización es forma de liquidación, no eje de
+diversificación. Queda disponible para encenderlo a mano.
+
+### "Metales preciosos": por qué es un preset y no una faceta
+
+Ninguna fuente declara "esto es metal precioso". Lo que hay son tres declaraciones que, unidas,
+arman la categoría: los fondos que tienen el metal (`estrategia_etf='activo_fisico'`: GLD, SLV), las
+mineras que la SEC titula literalmente **Gold and Silver Ores** (SIC 1040: Barrick, Newmont, Agnico,
+Pan American y afines) y los fondos cuyo nombre nombra el metal (GDX, que la SEC no clasifica).
+
+Queda afuera, y el preset lo dice en pantalla: el SIC 1000 (Metal Mining) es cobre, hierro y litio
+—BHP, Rio Tinto, Vale, Freeport—, y el 1090 es uranio. **Hecla produce plata y tampoco entra por
+código**: la SEC la clasifica entre los minerales no metálicos, y moverla de código sería corregir a
+la fuente.
+
+### Lo que sigue abierto
+
+- **265 papeles sin investigar** y 178 esperando validación: hasta que se siembre, las facetas de
+  país y región muestran todo como "sin dato", que es el contrato del sistema y no un error.
+- `frontend/src/types/database.types.ts` quedó desactualizado (es generado desde Supabase): declara
+  las cuatro columnas de Yahoo que ya no existen y no conoce `region_etf` ni `pais_cedear`. Nadie lo
+  lee para estos campos.
+- El endpoint de renta variable ahora consulta `public.pais_cedear`: **un deploy de código sin la
+  migración rompería la pestaña**. Las tres migraciones ya están aplicadas en producción.
+
+## 29/08/2026 — Especificidad y UX de filtros de renta variable (F-079)
+
+Segunda pasada sobre F-078, sobre tres pedidos del dueño: menos espacio de pantalla, más
+especificidad de rubro, y que un ETF geográfico diga dónde invierte.
+
+**Dos niveles nuevos de clasificación sectorial**, derivados al leer (no columnas nuevas):
+`sector_codigo` (major group SIC de 2 dígitos, siempre calculable desde `sic_codigo`, sin
+depender de curado) y `sector`/`rubro_especifico` (etiquetas en español, `None` sin CSV
+cargado). El armador topea "rubro" por `sector_codigo` — 43 categorías en vez de las 12
+oficinas de la SEC, y elimina 78 especies que caían en oficinas ambiguas ("X or Y",
+"Multiple Offices"). Oficina y Eslabón siguen persistidos, salen de la UI.
+
+**Geografía curada de ETFs** — tabla nueva `public.etf_geografia` (aplicada en producción):
+qué índice sigue cada fondo, alcance declarado por el emisor del índice en español, y país
+ISO solo si es mono-país (3 de los 10 ETFs geográficos: EWJ→Japón, EWY→Corea del Sur,
+FXI→China). Deliberadamente no se cura la composición completa de índices multi-país —
+envejece con cada rebalanceo, misma lección que la pausa de IAMC.
+
+**Panel del monitor reescrito**: de ~450px de chips a ~90px (buscador de texto + 5 píldoras
+de temáticas unificadas monitor↔armador + hasta 6 selects compactos). Buscar "oro" matchea
+directo por nombre/rubro y sugiere el preset "Metales preciosos" — verificado en vivo.
+
+**Tres CSV de propuesta generados y esperando validación** (gate explícito, igual que
+`paises_cedears_propuesta.csv` de F-078): `data/sic_sectores_propuesta.csv` (83 major
+groups, manual completo de OSHA), `data/sic_rubros_propuesta.csv` (120 códigos de 4
+dígitos, traduciendo el `sic_titulo` que ya persiste la SEC), `data/etfs_geografia_propuesta.csv`
+(10 ETFs, fuente = ficha del emisor del índice). **Hasta que se validen y se sieben, todo
+corre con fallback declarado**: sector muestra el código crudo, rubro específico muestra el
+título en inglés de la SEC (la fuente, no una interpretación) — verificado en vivo contra
+el endpoint real, no solo en tests.
+
+Verificación: 1607 tests backend, 1251 frontend, tsc y build limpios, 36 errores de ruff
+preexistentes (ninguno nuevo). El skill `frontend-design` no estaba disponible en la sesión;
+la pasada visual se hizo a mano con el navegador contra datos reales.

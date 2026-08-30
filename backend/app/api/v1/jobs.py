@@ -42,8 +42,11 @@ from app.renta_variable.clasificacion import (
 from app.renta_variable.clasificacion import (
     DatosDeBymaPorPapel,
     clasificar_renta_variable,
+    reclasificar_etfs,
 )
+from app.renta_variable.geografia_etf import sembrar_geografia_etfs
 from app.renta_variable.lectura import leer_renta_variable
+from app.renta_variable.paises import sembrar_paises
 
 router = APIRouter(prefix="/jobs", tags=["jobs"], dependencies=[Depends(cron_o_asesor)])
 
@@ -319,3 +322,87 @@ async def disparar_completar_emisores(
     """
     resumen = await completar_emisores(conn, limite=min(limite, LIMITE_EMISORES))
     return resumen.como_dict()
+
+
+@router.post(
+    "/reclasificar-etfs",
+    summary=(
+        "Re-deriva la estrategia y la geografía de los fondos desde el nombre ya persistido, "
+        "sin tocar la SEC"
+    ),
+    responses={
+        401: {"description": "Falta el token de cron o la sesión de asesor, o no son válidos"},
+        503: {
+            "description": ("La base de datos no está disponible, o no se pueden validar sesiones")
+        },
+    },
+)
+async def disparar_reclasificacion_etfs(
+    conn: Annotated[asyncpg.Connection, Depends(get_db)],
+) -> dict[str, object]:
+    """El backfill de `region_etf` (F-078) y de cualquier cambio futuro en el vocabulario de
+    `app/renta_variable/etfs.py`.
+
+    **No le pega a ninguna fuente externa**, y por eso no lleva `limite` ni ventana de horario: es
+    un parser corriendo sobre el `nombre_largo` que ya está en `perfil_renta_variable`. Puro,
+    idempotente y liviano — un SELECT y un UPDATE por lote, en una sola transacción.
+
+    Es la alternativa a `POST /jobs/clasificar-renta-variable` para este trabajo: aquél tardaría
+    diecisiete corridas de 100 papeles barriendo la SEC para no cambiar nada de lo que la SEC
+    aporta.
+    """
+    resumen = await reclasificar_etfs(conn)
+    return resumen.como_dict()
+
+
+@router.post(
+    "/sembrar-paises-cedears",
+    summary="Carga el curado de países de CEDEARs desde data/paises_cedears.csv",
+    responses={
+        401: {"description": "Falta el token de cron o la sesión de asesor, o no son válidos"},
+        503: {
+            "description": ("La base de datos no está disponible, o no se pueden validar sesiones")
+        },
+    },
+)
+async def disparar_siembra_paises(
+    conn: Annotated[asyncpg.Connection, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> dict[str, object]:
+    """Idempotente, sin red y sin reloj: sembrar dos veces seguidas deja la misma tabla.
+
+    Mientras el curado no esté validado el archivo no existe, y entonces esto devuelve cero
+    cargados con la alerta `paises_cedears_no_encontrado` arriba — que es el estado correcto, no un
+    fallo: el país de cada CEDEAR queda declarado faltante hasta la primera tanda validada.
+
+    `descartados` cuenta lo que el artefacto trae y no se carga (país fuera del vocabulario, papel
+    repetido, fila sin fuente o sin fecha) con el detalle papel por papel; `sin_pais` cuenta lo que
+    **sí** se carga con el país vacío a propósito: los ETFs, cuyo eje geográfico es `region_etf`, y
+    los papeles que se investigaron sin poder resolverse.
+    """
+    resumen = await sembrar_paises(conn, settings)
+    return resumen.como_dict()
+
+
+@router.post(
+    "/sembrar-geografia-etfs",
+    summary="Carga el curado de geografía de ETFs desde data/etfs_geografia.csv",
+    responses={
+        401: {"description": "Falta el token de cron o la sesión de asesor, o no son válidos"},
+        503: {
+            "description": ("La base de datos no está disponible, o no se pueden validar sesiones")
+        },
+    },
+)
+async def disparar_siembra_geografia_etfs(
+    conn: Annotated[asyncpg.Connection, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> dict[str, object]:
+    """Idempotente, sin red y sin reloj: sembrar dos veces seguidas deja la misma tabla (F-079, D3).
+
+    Mientras el curado no esté validado el archivo no existe, y entonces esto devuelve cero
+    cargados — que es el estado correcto, no un fallo: cada ETF geográfico sigue mostrándose con el
+    token crudo de su nombre (`region_etf`) hasta la primera tanda validada.
+    """
+    cargados = await sembrar_geografia_etfs(conn, settings)
+    return {"cargados": cargados}

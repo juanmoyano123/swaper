@@ -58,12 +58,63 @@ export const esquemaEspecieRentaVariable = z.object({
   /** En qué eslabón de la cadena productiva está: `Extracción`, `Manufactura`, `Servicios`…
    *  Sale de la división del SIC Manual, no de una interpretación nuestra. */
   division_cadena: z.string().nullable().default(null),
+
+  // Sector y rubro específico — F-079 (29/08/2026). Traducción curada del SIC en dos niveles: ver
+  // `app/renta_variable/especies.py` para el docstring completo.
+  /** El major group SIC de dos dígitos (`"73"`), aritmética pura sobre `sic_codigo`. Siempre
+   *  presente si hay `sic_codigo`, sin depender de ningún curado. */
+  sector_codigo: z.string().nullable().default(null),
+  /** La etiqueta ES de `sector_codigo` (`data/sic_sectores.csv`). `null` sin curado cargado o sin
+   *  fila para ese major group — el fallback declarado es mostrar `sector_codigo`. */
+  sector: z.string().nullable().default(null),
+  /** La etiqueta ES de `sic_codigo` (`data/sic_rubros.csv`). `null` sin curado cargado o sin fila
+   *  para ese código — el fallback declarado es `sic_titulo`, tal como lo publica la SEC. */
+  rubro_especifico: z.string().nullable().default(null),
   /** Qué idea arma el portafolio si es un fondo. `null` = no es un fondo. */
   estrategia_etf: z.string().nullable().default(null),
   /** Cuántos CEDEARs equivalen a una acción del subyacente, como razón (`20:1`). */
   ratio_conversion: z.string().nullable().default(null),
   /** En qué mercado cotiza el subyacente: `NASDAQ`, `NYSE`, `B3`. */
   mercado_origen: z.string().nullable().default(null),
+  /** La geografía que declara el nombre oficial del fondo, tal como aparece en el nombre: `China`,
+   *  `EAFE`, `Latin America`. `null` = no es un fondo, o su nombre no nombra ninguna geografía.
+   *  **No se traduce ni se unifica con `region`**: aquélla sale del país curado por la subregión
+   *  M49 de la ONU y ésta del nombre del fondo. Son dos vocabularios y se muestran como valores
+   *  distintos — mapear `Brazil` a "América Latina y el Caribe" sería traducir (regla 11). */
+  region_etf: z.string().nullable(),
+
+  // Geografía curada de ETFs — F-079, D3 (29/08/2026). Viene de `public.etf_geografia`, por papel,
+  // igual que el país curado de más abajo. `null` en las seis columnas es lo normal para todo lo
+  // que no es un ETF geográfico curado — a diferencia de sector/rubro, acá no hay fallback textual.
+  /** Qué índice sigue el fondo, en español y corto. */
+  etf_indice: z.string().nullable().default(null),
+  /** Qué alcance declara el emisor de ese índice — su propia definición, no nuestra lectura de qué
+   *  países lo componen hoy (esa composición no se cura: envejece con cada rebalanceo). */
+  etf_alcance: z.string().nullable().default(null),
+  /** ISO 3166-1 alfa-2, sólo para el puñado de fondos mono-país. `null` es el caso normal para un
+   *  fondo multi-país. */
+  etf_pais: z.string().nullable().default(null),
+  /** La subregión M49 de la ONU de `etf_pais`, derivada al leer. `null` sin `etf_pais`. */
+  etf_region: z.string().nullable().default(null),
+  /** Qué declara la geografía del ETF y dónde se investigó. Nunca se muestra sin esto (regla 11). */
+  etf_geo_fuente: z.string().nullable().default(null),
+  /** Cuándo se verificó contra esa fuente, en ISO. Es la fecha del dato, no la de la carga. */
+  etf_geo_verificado: z.string().nullable().default(null),
+
+  // País de la empresa detrás del CEDEAR — F-078. Curado a mano papel por papel, con la fuente que
+  // lo declara y la fecha en que se verificó, y validado antes de cargarse: no hay fuente
+  // automática que diga a qué economía queda expuesta la plata (el domicilio legal de la SEC no lo
+  // dice). `null` mientras el curado no llegue a ese papel, y se muestra como faltante declarado.
+  /** ISO 3166-1 alfa-2, tal como el curado lo declara. */
+  pais: z.string().nullable().default(null),
+  /** La subregión geográfica de la ONU (estándar M49) que corresponde a `pais`, en español y tal
+   *  como la ONU la publica: `América Latina y el Caribe`, `Asia occidental`. La deriva el backend
+   *  al leer; no es una columna. */
+  region: z.string().nullable().default(null),
+  /** Qué declara el país y dónde se leyó. El país nunca se muestra sin esto (regla 11). */
+  pais_fuente: z.string().nullable().default(null),
+  /** Cuándo se verificó contra esa fuente, en ISO. Es la fecha del dato, no la de la carga. */
+  pais_verificado: z.string().nullable().default(null),
 
   // Perfil de empresa: `null` hasta que el job de clasificación pase por este ticker
   // (`app/renta_variable/clasificacion.py`, backend). Tal como la fuente lo declara — nunca se

@@ -59,9 +59,18 @@ function propio(extra: Partial<BloquePropio> = {}): BloquePropio {
     sic_titulo: null,
     sic_oficina: null,
     division_cadena: null,
+    sector_codigo: null,
+    sector: null,
+    rubro_especifico: null,
     estrategia_etf: null,
     ratio_conversion: null,
     mercado_origen: null,
+    etf_indice: null,
+    etf_alcance: null,
+    etf_pais: null,
+    etf_region: null,
+    etf_geo_fuente: null,
+    etf_geo_verificado: null,
     ...extra,
   }
 }

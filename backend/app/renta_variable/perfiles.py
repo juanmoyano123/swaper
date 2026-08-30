@@ -5,6 +5,7 @@ resultado. La decisión de cuándo correr, a qué ritmo y qué hacer con un 429 
 `clasificacion.py`.
 """
 
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
@@ -20,8 +21,8 @@ _CLASES = ", ".join(f"'{c}'" for c in CLASES_RENTA_VARIABLE)
 SQL_UPSERT_SEC = (
     "INSERT INTO public.perfil_renta_variable "
     "(ticker, nombre_largo, sic_codigo, sic_titulo, sic_oficina, division_cadena, "
-    " estrategia_etf, ratio_conversion, mercado_origen, fuente, capturado_en) "
-    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) "
+    " estrategia_etf, region_etf, ratio_conversion, mercado_origen, fuente, capturado_en) "
+    "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) "
     "ON CONFLICT (ticker) DO UPDATE SET "
     # `nombre_largo` con COALESCE y no pisado: la SEC no lo publica para todo papel, y la lista de
     # CEDEARs de BYMA sí lo trae para algunos — perder el que ya había sería un retroceso.
@@ -31,6 +32,11 @@ SQL_UPSERT_SEC = (
     "sic_oficina = EXCLUDED.sic_oficina, "
     "division_cadena = EXCLUDED.division_cadena, "
     "estrategia_etf = EXCLUDED.estrategia_etf, "
+    # Sin COALESCE, igual que `estrategia_etf`: las dos salen del mismo nombre y con el mismo
+    # parser, así que un valor nuevo nunca es "menos" que el guardado — o el nombre cambió, o el
+    # vocabulario de `etfs.py` cambió, y en los dos casos gana lo recién derivado. Protegerlas
+    # dejaría una geografía vieja pegada a un nombre que ya no la declara.
+    "region_etf = EXCLUDED.region_etf, "
     "ratio_conversion = EXCLUDED.ratio_conversion, "
     "mercado_origen = EXCLUDED.mercado_origen, "
     "fuente = EXCLUDED.fuente, "
@@ -73,6 +79,7 @@ async def guardar_clasificacion(
     sic_oficina: str | None,
     division_cadena: str | None,
     estrategia_etf: str | None,
+    region_etf: str | None,
     ratio_conversion: str | None,
     mercado_origen: str | None,
     fuente: str,
@@ -89,8 +96,53 @@ async def guardar_clasificacion(
         sic_oficina,
         division_cadena,
         estrategia_etf,
+        region_etf,
         ratio_conversion,
         mercado_origen,
         fuente,
         capturado_en,
     )
+
+
+# --- Reclasificación de fondos desde el nombre ya persistido -------------------------------------
+#
+# `estrategia_etf` y `region_etf` no son dato de la SEC: salen de parsear `nombre_largo`, que ya
+# está en esta tabla. Cuando el vocabulario de `etfs.py` cambia —como el 28/08/2026, que estrenó
+# `region_etf`— hay que reescribirlas sobre las 1.641 filas, y hacerlo por el camino normal
+# significaría volver a barrer la SEC de a 100 papeles por corrida para no cambiar nada de lo que la
+# SEC aporta. Estas dos consultas existen para no hacer eso.
+
+SQL_NOMBRES_PERSISTIDOS = (
+    "SELECT ticker, nombre_largo FROM public.perfil_renta_variable "
+    "WHERE nombre_largo IS NOT NULL ORDER BY ticker"
+)
+
+# **No toca `capturado_en` ni `fuente`.** Los dos declaran cuándo y de dónde se trajo la fila, y
+# esto no trae nada: re-deriva lo que ya estaba escrito. Moverlos haría parecer fresca una consulta
+# a la SEC que no ocurrió, y sacaría a la fila de la cola de vencidos sin haberla consultado.
+SQL_RECLASIFICAR_FONDO = (
+    "UPDATE public.perfil_renta_variable SET estrategia_etf = $2, region_etf = $3 WHERE ticker = $1"
+)
+
+
+async def nombres_persistidos(conn: Any) -> list[tuple[str, str]]:
+    """`(ticker, nombre_largo)` de toda fila que tenga nombre. Sin nombre no hay nada que re-derivar
+    —ni estrategia ni geografía—, así que esas filas no se leen ni se escriben."""
+    filas = await conn.fetch(SQL_NOMBRES_PERSISTIDOS)
+    return [(fila["ticker"], fila["nombre_largo"]) for fila in filas]
+
+
+async def guardar_reclasificacion(
+    conn: Any, filas: Sequence[tuple[str, str | None, str | None]]
+) -> None:
+    """Escribe `(ticker, estrategia_etf, region_etf)` de a lotes, en una sola transacción.
+
+    Va en bloque y no fila por fila —al revés que `guardar_clasificacion`— porque acá no hay fuente
+    externa que pueda cortar a mitad de camino: es un parser sobre datos que ya están en la base y
+    tarda lo que tarda un UPDATE. Un corte parcial dejaría media tabla con el vocabulario nuevo y
+    media con el viejo, sin nada que lo declarara.
+    """
+    if not filas:
+        return
+    async with conn.transaction():
+        await conn.executemany(SQL_RECLASIFICAR_FONDO, list(filas))

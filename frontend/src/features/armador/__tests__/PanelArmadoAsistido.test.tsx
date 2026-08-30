@@ -113,6 +113,18 @@ describe('PanelArmadoAsistido', () => {
       // El perfil conservador no lleva renta variable, como la cartera conservadora del Excel.
       pct_rv: 0,
       rubro_rv: null,
+      // F-078: los cinco ejes siempre, con los defaults del perfil elegido. El backend no mergea
+      // parcialmente contra sus propios defaults —`topes_rv` presente significa "exactamente
+      // esto"—, así que omitir un eje lo apagaría en vez de dejarle el suyo.
+      topes_rv: {
+        max_pct_rubro: 30,
+        max_pct_pais: 40,
+        max_pct_region: 60,
+        // Apagado de fábrica en los tres perfiles: la moneda de cotización es forma de
+        // liquidación, no exposición (ver `TOPES_RV_PERFIL`).
+        max_pct_moneda: null,
+        max_pct_mercado: 60,
+      },
       // El piso de la grilla viaja como piso del armado: `FILTROS_ARMADOR_INICIALES` arranca en 6%.
       min_rend: 6,
     })
@@ -145,7 +157,7 @@ describe('PanelArmadoAsistido', () => {
     expect(JSON.parse(init?.body as string).pct_rv).toBe(40)
   })
 
-  it('la temática elegida viaja como el rubro literal de la SEC', async () => {
+  it('la temática elegida viaja como el rubro literal de la SEC (vía filtro_rv desde F-079)', async () => {
     const fetchMock = mockFetch(200, RESULTADO_OK)
     renderizar()
 
@@ -154,7 +166,11 @@ describe('PanelArmadoAsistido', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Armar cartera asistida' }))
 
     const [, init] = await esperarLlamadaDeArmado(fetchMock)
-    expect(JSON.parse(init?.body as string).rubro_rv).toBe('Office of Technology')
+    const cuerpo = JSON.parse(init?.body as string)
+    // F-079: Tecnológicas pasó a referenciar el preset compartido de `lib/presetsRv.ts` en vez de
+    // un `rubroRv` inline, así que el rubro literal de la SEC ahora viaja dentro de `filtro_rv`.
+    expect(cuerpo.rubro_rv).toBeNull()
+    expect(cuerpo.filtro_rv.rubros).toEqual(['Office of Technology'])
   })
 
   it('en éxito, precarga la cartera y muestra las alertas de la respuesta', async () => {
@@ -224,5 +240,133 @@ describe('PanelArmadoAsistido', () => {
 
     await waitFor(() => expect(screen.getByTestId('cartera')).toHaveTextContent('GD35'))
     expect(screen.queryByText(/Pediste/)).not.toBeInTheDocument()
+  })
+})
+
+// --- F-078: los topes de renta variable ---------------------------------------------------------
+
+describe('los topes de renta variable', () => {
+  it('vienen precargados con los del perfil y a la vista, no escondidos en el backend', async () => {
+    renderizar()
+
+    // Moderado, el perfil inicial.
+    expect(screen.getByLabelText('Máx. % por sector (SIC)')).toHaveValue(40)
+    expect(screen.getByLabelText('Máx. % por país')).toHaveValue(50)
+    expect(screen.getByLabelText('Máx. % por región')).toHaveValue(70)
+    expect(screen.getByLabelText('Máx. % por mercado')).toHaveValue(70)
+    // La moneda arranca apagada en los tres perfiles: es forma de liquidación, no exposición.
+    expect(screen.getByLabelText('Máx. % por moneda')).toHaveValue(null)
+  })
+
+  it('cambiar de perfil los vuelve a poner, igual que con el % de renta variable', async () => {
+    renderizar()
+
+    await userEvent.selectOptions(screen.getByLabelText('Perfil'), 'conservador')
+    expect(screen.getByLabelText('Máx. % por sector (SIC)')).toHaveValue(30)
+
+    await userEvent.selectOptions(screen.getByLabelText('Perfil'), 'agresivo')
+    expect(screen.getByLabelText('Máx. % por sector (SIC)')).toHaveValue(55)
+  })
+
+  it('son inputs numéricos con rango, no sliders: el design system no tiene ninguno', async () => {
+    renderizar()
+
+    const rubro = screen.getByLabelText('Máx. % por sector (SIC)')
+    expect(rubro).toHaveAttribute('type', 'number')
+    expect(rubro).toHaveAttribute('min', '1')
+    expect(rubro).toHaveAttribute('max', '100')
+  })
+
+  it('vaciar un campo apaga ese eje: viaja como null, no como cero', async () => {
+    const fetchMock = mockFetch(200, RESULTADO_OK)
+    renderizar()
+
+    await userEvent.type(screen.getByLabelText('Monto a invertir (USD)'), '100000')
+    await userEvent.clear(screen.getByLabelText('Máx. % por país'))
+    await userEvent.click(screen.getByRole('button', { name: 'Armar cartera asistida' }))
+
+    const [, init] = await esperarLlamadaDeArmado(fetchMock)
+    const cuerpo = JSON.parse(init?.body as string)
+    // `null` y no `0`: el backend valida `gt=0`, y un 0 significaría "ninguna categoría puede
+    // pesar nada", que es incumplible por construcción. Apagado es apagado.
+    expect(cuerpo.topes_rv.max_pct_pais).toBeNull()
+    // Los otros cuatro siguen viajando: el backend no mergea contra sus defaults, así que omitir
+    // uno lo apagaría en vez de dejarle el suyo.
+    expect(cuerpo.topes_rv).toEqual({
+      max_pct_rubro: 40,
+      max_pct_pais: null,
+      max_pct_region: 70,
+      max_pct_moneda: null,
+      max_pct_mercado: 70,
+    })
+  })
+
+  it('un tope escrito a mano se acota a 1..100 en el input, no de vuelta con un 422', async () => {
+    const fetchMock = mockFetch(200, RESULTADO_OK)
+    renderizar()
+
+    await userEvent.type(screen.getByLabelText('Monto a invertir (USD)'), '100000')
+    const region = screen.getByLabelText('Máx. % por región')
+    await userEvent.clear(region)
+    await userEvent.type(region, '150')
+    await userEvent.click(screen.getByRole('button', { name: 'Armar cartera asistida' }))
+
+    const [, init] = await esperarLlamadaDeArmado(fetchMock)
+    expect(JSON.parse(init?.body as string).topes_rv.max_pct_region).toBe(100)
+  })
+
+  it('explica en pantalla que un campo vacío apaga el eje', async () => {
+    renderizar()
+    expect(screen.getByText(/Un campo vacío apaga ese tope/)).toBeInTheDocument()
+  })
+})
+
+// --- F-078: las temáticas multidimensionales viajan como filtro_rv ------------------------------
+
+describe('la temática de renta variable', () => {
+  it('una temática de un solo rubro (Tecnológicas) viaja por filtro_rv desde F-079, con rubro_rv en null', async () => {
+    const fetchMock = mockFetch(200, RESULTADO_OK)
+    renderizar()
+
+    await userEvent.type(screen.getByLabelText('Monto a invertir (USD)'), '100000')
+    await userEvent.selectOptions(screen.getByLabelText('Temática (CEDEARs)'), 'tecnologicas')
+    await userEvent.click(screen.getByRole('button', { name: 'Armar cartera asistida' }))
+
+    const [, init] = await esperarLlamadaDeArmado(fetchMock)
+    const cuerpo = JSON.parse(init?.body as string)
+    // F-079: Tecnológicas pasó a referenciar el preset compartido de `lib/presetsRv.ts` —mismo
+    // `sic_oficina`, mismo conjunto de especies— en vez de un `rubroRv` inline. El backend sigue
+    // aceptando las dos formas y las pliega en la misma dimensión (`normalizar_filtro_rv`).
+    expect(cuerpo.rubro_rv).toBeNull()
+    expect(cuerpo.filtro_rv).toEqual({ modo: 'interseccion', rubros: ['Office of Technology'] })
+  })
+
+  it('metales preciosos viaja como filtro_rv en unión, con rubro_rv en null', async () => {
+    const fetchMock = mockFetch(200, RESULTADO_OK)
+    renderizar()
+
+    await userEvent.type(screen.getByLabelText('Monto a invertir (USD)'), '100000')
+    await userEvent.selectOptions(screen.getByLabelText('Temática (CEDEARs)'), 'metales-preciosos')
+    await userEvent.click(screen.getByRole('button', { name: 'Armar cartera asistida' }))
+
+    const [, init] = await esperarLlamadaDeArmado(fetchMock)
+    const cuerpo = JSON.parse(init?.body as string)
+    // Nunca los dos a la vez: `rubro_rv` junto con un `filtro_rv.rubros` distinto es 422.
+    expect(cuerpo.rubro_rv).toBeNull()
+    expect(cuerpo.filtro_rv).toEqual({
+      modo: 'union',
+      estrategias_etf: ['activo_fisico'],
+      sic_codigos: ['1040'],
+      palabras_en_nombre: ['gold', 'silver', 'oro', 'plata'],
+    })
+  })
+
+  it('muestra la definición del preset elegido, no sólo su nombre', async () => {
+    renderizar()
+
+    await userEvent.selectOptions(screen.getByLabelText('Temática (CEDEARs)'), 'metales-preciosos')
+
+    // Un preset que no dice qué deja afuera es magia: la nota nombra el cobre y el uranio.
+    expect(screen.getByText(/Deja afuera la minería metálica genérica/)).toBeInTheDocument()
   })
 })

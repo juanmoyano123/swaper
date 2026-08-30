@@ -52,12 +52,36 @@ export const esquemaBloquePropio = z.object({
   /** Eslabón de la cadena productiva (extracción, manufactura, comercio, servicios), derivado de
    *  la división del SIC Manual — nunca una interpretación nuestra. */
   division_cadena: z.string().nullable(),
+  // Sector y rubro específico — F-079 (29/08/2026): traducción curada del SIC en dos niveles.
+  /** El major group SIC de dos dígitos (`"73"`), aritmética pura sobre `sic_codigo`. Siempre
+   *  presente si hay `sic_codigo`, sin depender de ningún curado. */
+  sector_codigo: z.string().nullable(),
+  /** La etiqueta ES de `sector_codigo`. `null` sin curado cargado o sin fila para ese major group
+   *  — el fallback declarado es mostrar `sector_codigo`. */
+  sector: z.string().nullable(),
+  /** La etiqueta ES de `sic_codigo`. `null` sin curado cargado o sin fila para ese código — el
+   *  fallback declarado es `sic_titulo`, tal como lo publica la SEC. */
+  rubro_especifico: z.string().nullable(),
   /** Qué idea arma el portafolio si es un fondo. `null` = no es un fondo. */
   estrategia_etf: z.string().nullable(),
   /** Cuántos CEDEARs equivalen a una acción del subyacente, como razón (`20:1`). */
   ratio_conversion: z.string().nullable(),
   /** En qué mercado cotiza el subyacente: `NASDAQ`, `NYSE`, `B3`. */
   mercado_origen: z.string().nullable(),
+  // Geografía curada de ETFs — F-079, D3 (29/08/2026). `null` en las seis columnas es lo normal
+  // para todo lo que no es un ETF geográfico curado.
+  /** Qué índice sigue el fondo, en español y corto. */
+  etf_indice: z.string().nullable(),
+  /** Qué alcance declara el emisor de ese índice, según su propia definición. */
+  etf_alcance: z.string().nullable(),
+  /** ISO 3166-1 alfa-2, sólo para el puñado de fondos mono-país. */
+  etf_pais: z.string().nullable(),
+  /** La subregión M49 de la ONU de `etf_pais`, derivada al leer. */
+  etf_region: z.string().nullable(),
+  /** Qué declara la geografía del ETF y dónde se investigó (regla 11). */
+  etf_geo_fuente: z.string().nullable(),
+  /** Cuándo se verificó contra esa fuente, en ISO. */
+  etf_geo_verificado: z.string().nullable(),
 })
 
 export type BloquePropio = z.infer<typeof esquemaBloquePropio>

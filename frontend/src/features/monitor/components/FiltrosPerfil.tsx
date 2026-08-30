@@ -7,9 +7,13 @@
  * confirmó, no la cruda): así una selección sin respaldo aparece como "todos" en vez de un valor
  * fantasma que ya no filtra nada. `onChange` sigue escribiendo el filtro crudo — nada se sincroniza
  * con `setState`, todo se deriva en cada render (ver `facetarUniverso`).
+ *
+ * Ley, Sector y Emisor usan `@/components/CampoSelect` (F-079, Fase 4): es el select compartido
+ * que reemplazó la copia local de `estiloInput` para estos tres. Calificación queda afuera —es un
+ * multiselect con `<details>`, no un `<select>`— y sigue usando `estiloInput` directamente.
  */
 
-import type { ReactNode } from 'react'
+import { CampoSelect } from '@/components/CampoSelect'
 
 import {
   CALIFICACION_NO_INFORMADA,
@@ -64,36 +68,28 @@ export function FiltrosPerfil({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={estiloFila}>
-        <Campo etiqueta="Ley">
-          <select
-            value={efectivos.ley ?? ''}
-            onChange={(e) => cambiar({ ley: e.target.value === '' ? null : e.target.value })}
-            style={estiloInput}
-          >
-            <option value="">todos</option>
-            {[...opciones.leyes].sort().map((ley) => (
-              <option key={ley} value={ley}>
-                {ley}
-              </option>
-            ))}
-            {opciones.tieneLeyNoInformada && <option value={LEY_NO_INFORMADA}>ley no informada</option>}
-          </select>
-        </Campo>
+        <CampoSelect
+          etiqueta="Ley"
+          valor={efectivos.ley ?? ''}
+          onChange={(valor) => cambiar({ ley: valor === '' ? null : valor })}
+          opciones={[
+            { valor: '', texto: 'todos' },
+            ...[...opciones.leyes].sort().map((ley) => ({ valor: ley, texto: ley })),
+            ...(opciones.tieneLeyNoInformada
+              ? [{ valor: LEY_NO_INFORMADA, texto: 'ley no informada' }]
+              : []),
+          ]}
+        />
 
-        <Campo etiqueta="Sector">
-          <select
-            value={efectivos.sector ?? ''}
-            onChange={(e) => cambiar({ sector: e.target.value === '' ? null : e.target.value })}
-            style={estiloInput}
-          >
-            <option value="">todos</option>
-            {[...opciones.sectores].sort().map((sector) => (
-              <option key={sector} value={sector}>
-                {sector}
-              </option>
-            ))}
-          </select>
-        </Campo>
+        <CampoSelect
+          etiqueta="Sector"
+          valor={efectivos.sector ?? ''}
+          onChange={(valor) => cambiar({ sector: valor === '' ? null : valor })}
+          opciones={[
+            { valor: '', texto: 'todos' },
+            ...[...opciones.sectores].sort().map((sector) => ({ valor: sector, texto: sector })),
+          ]}
+        />
 
         {/* No usa `Campo`: su `<label>` envolvería el `<details>` entero y le rompería el nombre
             accesible a cada checkbox de adentro (un `<label>` implícito se asocia con TODOS los
@@ -159,20 +155,15 @@ export function FiltrosPerfil({
           </details>
         </div>
 
-        <Campo etiqueta="Emisor">
-          <select
-            value={efectivos.emisor ?? ''}
-            onChange={(e) => cambiar({ emisor: e.target.value === '' ? null : e.target.value })}
-            style={estiloInput}
-          >
-            <option value="">todos</option>
-            {[...opciones.emisores].sort().map((emisor) => (
-              <option key={emisor} value={emisor}>
-                {emisor}
-              </option>
-            ))}
-          </select>
-        </Campo>
+        <CampoSelect
+          etiqueta="Emisor"
+          valor={efectivos.emisor ?? ''}
+          onChange={(valor) => cambiar({ emisor: valor === '' ? null : valor })}
+          opciones={[
+            { valor: '', texto: 'todos' },
+            ...[...opciones.emisores].sort().map((emisor) => ({ valor: emisor, texto: emisor })),
+          ]}
+        />
       </div>
 
       {apagadas.length > 0 && (
@@ -186,15 +177,6 @@ export function FiltrosPerfil({
         </p>
       )}
     </div>
-  )
-}
-
-function Campo({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
-  return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 11, color: 'var(--dim)' }}>
-      {etiqueta}
-      {children}
-    </label>
   )
 }
 

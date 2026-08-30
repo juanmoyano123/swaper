@@ -57,6 +57,13 @@ en qué moneda paga el cupón). La renta variable no tiene esa clasificación --
 un CEDEAR en dólares compiten en el mismo ranking de liquidez, ya llevado a dólares por
 `saneado.cambio` -- así que `moneda` no la toca.
 
+**Los topes de renta variable se resuelven acá, no adentro del armado** (F-078). `topes_del_perfil`
+elige entre lo que mandó el pedido y el default del perfil, exactamente como estas mismas líneas ya
+resuelven `pct_rv` contra `PCT_RV_PERFIL`. `armar_renta_variable` recibe topes, no perfiles: no
+tiene por qué saber qué perfil pidió la cartera, y así el mismo bloque se puede armar desde un test
+o desde `tools/` sin arrastrar la tabla de perfiles. **Cambia lo que el endpoint propone**: un
+pedido sin `topes_rv` que antes armaba sin ninguna restricción ahora arma con los del perfil.
+
 **Si la renta variable queda vacía, la renta fija no se reescala.** `armar()` ya devuelve su
 resultado sumando 100% con lo que pudo cubrir (regla 1: cartera parcial, nunca se rellena con otra
 naturaleza), así que si `armar_renta_variable` no encuentra candidatos la cartera queda sumando
@@ -81,13 +88,13 @@ from app.armado.motor import (
     resolver_mix,
 )
 from app.armado.parametros import ParametrosArmado
-from app.armado.renta_variable import PCT_RV_PERFIL
+from app.armado.renta_variable import PCT_RV_PERFIL, topes_del_perfil
 from app.armado.renta_variable import armar_renta_variable as seleccionar_renta_variable
 from app.concentracion.perfiles import PERFILES
 from app.concentracion.riesgo import derivar_riesgo
 from app.ingesta.alertas import Alerta
 from app.renta_variable import armar_renta_variable as construir_especies_rv
-from app.renta_variable import leer_renta_variable
+from app.renta_variable import leer_geografia_etfs, leer_paises, leer_renta_variable
 from app.universo.servicio import sanear_universo
 
 router = APIRouter(prefix="/armado", tags=["armado"])
@@ -162,12 +169,23 @@ async def armado_asistido(
     alertas_rv: list[Alerta] = []
     if n_rv > 0:
         filas_rv = await leer_renta_variable(conn)
+        # El curado de países, para que los topes de país y región tengan qué medir: sin esto
+        # `pais` sale `None` en todo el bloque, los dos ejes caen por "categoría faltante no
+        # computa" y el armador declararía `rv_tope_sin_dato_en_eje` para siempre, aun con el CSV
+        # ya sembrado. Va acá adentro y no arriba porque con `pct_rv=0` no hay renta variable que
+        # armar y el endpoint tiene que seguir haciendo una sola consulta.
+        paises = await leer_paises(conn)
+        # Mismo criterio para la geografía de ETFs (F-079, D3): tabla chica, join por papel en
+        # Python, y sin ella los campos `etf_*` quedan declarados faltantes en vez de romper nada.
+        geografia_etfs = await leer_geografia_etfs(conn)
         # Sólo CEDEARs (14/08/2026): las acciones argentinas dejaron de ser descubribles desde el
         # picker del armador manual, y el armado automático no puede sugerir algo que el asesor no
         # puede ni buscar. La ingesta y la clasificación de acciones siguen igual — este filtro es
         # sólo del armado, no del universo (ver `app/renta_variable/lectura.py`, sin cambios).
         especies_rv = [
-            e for e in construir_especies_rv(filas_rv, saneado.cambio) if e.clase_activo == "cedear"
+            e
+            for e in construir_especies_rv(filas_rv, saneado.cambio, paises, geografia_etfs)
+            if e.clase_activo == "cedear"
         ]
         posiciones_rv, alertas_rv = seleccionar_renta_variable(
             especies_rv,
@@ -175,6 +193,11 @@ async def armado_asistido(
             n_rv=n_rv,
             monto_total=entrada.monto,
             rubro_rv=entrada.rubro_rv,
+            # Los topes del perfil aplican solos cuando el pedido no los trae -- misma resolución
+            # que `pct_rv_efectivo` unas líneas más arriba y por la misma razón: no hay número que
+            # signifique "usá el default", así que la ausencia es la señal (F-078).
+            topes_rv=topes_del_perfil(entrada.perfil, entrada.topes_rv),
+            filtro_rv=entrada.filtro_rv,
         )
 
     # Sin candidatos de renta variable la cartera queda sumando 100% con lo que armó armar() --
