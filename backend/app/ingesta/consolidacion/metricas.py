@@ -61,15 +61,21 @@ from app.ingesta.alertas import Alerta, Severidad
 # entera; el mensaje tiene que poder leerse. Mismo criterio que `universo/cambio.py`.
 MUESTRA_ALERTA = 6
 
-# Qué moneda de cotización hace comparable el precio con el flujo, por tipo de tasa. Sólo códigos
-# ISO 4217: para dividir un precio por un flujo hay que saber que están en la misma unidad, y `EXT`
-# —vocabulario propio de BYMA, sin documentar— no permite afirmarlo (regla 11, 08/08/2026). Cuesta
-# 63 de las 276 especies hard-dollar que hoy tienen precio y cronograma; las 213 restantes se
-# calculan igual. Balanz llega por su cuenta al mismo lugar: en su panel ninguna especie C publica
-# TIR (verificado el 08/08/2026 sobre AE38C, AL30C, AL29C y S2G6C).
+# Qué moneda de cotización hace comparable el precio con el flujo, por tipo de tasa. `EXT`
+# —vocabulario propio de BYMA, sin documentar por la fuente— quedó fuera desde el 08/08/2026
+# (regla 11) porque nada confirmaba qué denota. Dejó de ser un supuesto del código el 30/08/2026:
+# el dueño del producto confirmó que `EXT` es liquidación cable y `USD` es liquidación MEP, ambas
+# dólares — la misma distinción que ya usa renta variable con el sufijo del ticker (`D`=MEP,
+# `C`=cable). Con la fuente puesta (la confirmación queda en CLAUDE.md, sección de reglas de
+# dominio), cable deja de ser un código sin traducir para pasar a ser dólares confirmados, y por
+# eso entra a `MONEDAS_DEL_FLUJO` igual que `USD`: cada especie sigue calculando con **su propio
+# precio** —una fila `EXT` nunca usa el precio de su hermana `USD`, eso seguiría siendo copiarle la
+# métrica, que es lo que prohíbe la regla 1—, sólo que ahora la fila `EXT` deja de descartarse antes
+# de intentarlo. `tasa-fija` no suma `EXT` porque esa naturaleza paga en pesos: no hay bono
+# tasa-fija que cotice en dólares, cable o MEP, así que el caso no existe.
 MONEDAS_DEL_FLUJO: dict[str, frozenset[str]] = {
-    "hard-dollar": frozenset({"USD"}),
-    "bopreal": frozenset({"USD"}),
+    "hard-dollar": frozenset({"USD", "EXT"}),
+    "bopreal": frozenset({"USD", "EXT"}),
     "tasa-fija": frozenset({"ARS"}),
 }
 

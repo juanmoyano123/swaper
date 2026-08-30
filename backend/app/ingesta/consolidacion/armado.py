@@ -445,18 +445,24 @@ def armar_consolidacion(
 
         # La punta se guarda siempre, incluso para lo que no entra al universo: `puntas` no tiene
         # FK justamente para no perder el precio de compra y venta de una especie sin clasificar.
-        puntas.append(
-            {
-                "ticker": ticker,
-                "px_bid": _precio(fila["precio_compra"]),
-                "px_ask": _precio(fila["precio_venta"]),
-                "operaciones": fila["operaciones"],
-                # Experimento data912: si el overlay pisó esta especie, la punta es la que trajo
-                # data912 y se rotula igual — incluido `-arrastre`, porque si no operó, la fecha
-                # del libro es tan desconocida como la del precio (regla 11).
-                "fuente": fila.get("origen_precio", "byma"),
-            }
-        )
+        # La excepción es un libro sin bid ni ask: mismo caso que el de `precios` más abajo — si
+        # BYMA declaró el ticker sin ninguna punta, no insertar la fila deja al ticker "ausente"
+        # para `sql_poda`, que conserva el último libro bueno en vez de reemplazarlo por uno vacío.
+        px_bid = _precio(fila["precio_compra"])
+        px_ask = _precio(fila["precio_venta"])
+        if px_bid is not None or px_ask is not None:
+            puntas.append(
+                {
+                    "ticker": ticker,
+                    "px_bid": px_bid,
+                    "px_ask": px_ask,
+                    "operaciones": fila["operaciones"],
+                    # Experimento data912: si el overlay pisó esta especie, la punta es la que
+                    # trajo data912 y se rotula igual — incluido `-arrastre`, porque si no operó,
+                    # la fecha del libro es tan desconocida como la del precio (regla 11).
+                    "fuente": fila.get("origen_precio", "byma"),
+                }
+            )
 
         clasificacion = clasificar(endpoint, tipo_cronograma)
         if clasificacion is None:
@@ -543,24 +549,50 @@ def armar_consolidacion(
             residual=componentes.residual_vigente if componentes else None,
             valor_tecnico=componentes.valor_tecnico if componentes else None,
         )
-        precios.append(
-            {
-                "ticker": ticker,
-                "last_price": precio,
-                "tna": None,
-                "effective_volume": fila["monto_operado"],
-                "fuente": _fuente_de(propias, origen=fila.get("origen_precio", "byma")),
-                "cierre_anterior": _precio(fila["precio_cierre_anterior"]),
-                # Siempre de BYMA, aunque `fuente` diga data912: el overlay no los pisa (no están
-                # en `CAMPOS_PISADOS`) y una fila sólo-data912 los trae `None` de fábrica. Por
-                # `_precio()`: un 0 no es un precio, es "no operó".
-                "precio_apertura": _precio(fila["precio_apertura"]),
-                "precio_maximo": _precio(fila["precio_maximo"]),
-                "precio_minimo": _precio(fila["precio_minimo"]),
-                "vwap": _precio(fila["vwap"]),
-                **metricas,
-            }
+        cierre_anterior = _precio(fila["precio_cierre_anterior"])
+        precio_apertura = _precio(fila["precio_apertura"])
+        precio_maximo = _precio(fila["precio_maximo"])
+        precio_minimo = _precio(fila["precio_minimo"])
+        vwap = _precio(fila["vwap"])
+
+        # BYMA declaró el ticker en el panel de hoy, pero sin un solo campo de precio: ni operó
+        # hoy, ni trae el cierre de ayer, ni ninguna punta de la rueda. Pasa en la pre-apertura con
+        # especies poco líquidas — no es un error de la fuente, es que todavía no hay nada que
+        # publicar. `sql_poda` (`persistencia.py`) sólo conserva la fila más vieja de un ticker
+        # **ausente** del panel de hoy; un ticker presente pero vacío arma una fila nueva con
+        # `capturado_en` de ahora, que pasa a ser el máximo, y la poda borra la fila de la corrida
+        # anterior que sí tenía precio — perdiendo un dato real por uno vacío. No insertar esta
+        # fila dejar el ticker "ausente" a ojos de la poda es lo que ya protege a un ticker que el
+        # panel dejó de declarar del todo: mismo mecanismo, extendido al caso que hoy no cubría
+        # (hallazgo del 30/08/2026, EXT/MGCOC y afines). `effective_volume` no entra en la
+        # condición: un volumen en 0 es un dato válido ("no operó hoy"), no ausencia de dato.
+        sin_ningun_precio = (
+            precio is None
+            and cierre_anterior is None
+            and precio_apertura is None
+            and precio_maximo is None
+            and precio_minimo is None
+            and vwap is None
         )
+        if not sin_ningun_precio:
+            precios.append(
+                {
+                    "ticker": ticker,
+                    "last_price": precio,
+                    "tna": None,
+                    "effective_volume": fila["monto_operado"],
+                    "fuente": _fuente_de(propias, origen=fila.get("origen_precio", "byma")),
+                    "cierre_anterior": cierre_anterior,
+                    # Siempre de BYMA, aunque `fuente` diga data912: el overlay no los pisa (no
+                    # están en `CAMPOS_PISADOS`) y una fila sólo-data912 los trae `None` de
+                    # fábrica. Por `_precio()`: un 0 no es un precio, es "no operó".
+                    "precio_apertura": precio_apertura,
+                    "precio_maximo": precio_maximo,
+                    "precio_minimo": precio_minimo,
+                    "vwap": vwap,
+                    **metricas,
+                }
+            )
 
     alertas.extend(resultado_metricas.alertas)
 

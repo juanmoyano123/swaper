@@ -985,3 +985,46 @@ el endpoint real, no solo en tests.
 Verificación: 1607 tests backend, 1251 frontend, tsc y build limpios, 36 errores de ruff
 preexistentes (ninguno nuevo). El skill `frontend-design` no estaba disponible en la sesión;
 la pasada visual se hizo a mano con el navegador contra datos reales.
+
+## 30/08/2026 — TIR de ONs en liquidación cable, y un precio bueno que la poda pisaba
+
+Dos hallazgos del mismo día de uso real, ninguno relacionado con F-079.
+
+**1. `EXT` (cable) confirmado y sumado al cálculo de TIR/duración/paridad.** El dueño del producto
+confirmó lo que el código sólo podía sugerir desde el 08/08 sin fuente: `USD` en BYMA es liquidación
+MEP y `EXT` es liquidación cable, ambas dólares — misma distinción que ya usa renta variable con el
+sufijo del ticker (`D`/`C`). Con la fuente puesta (la confirmación queda citada en CLAUDE.md, regla
+11), `MONEDAS_DEL_FLUJO` en `backend/app/ingesta/consolidacion/metricas.py` suma `EXT` para
+`hard-dollar` y `bopreal`. Cada especie sigue calculando con su propio precio — nunca se copia el de
+la hermana en otra moneda de liquidación, eso seguiría siendo la regla 1. Verificado offline con
+datos reales sin tocar producción: AL30C (cable, precio 53,02) da TIR 11,31 % contra AL30D (MEP,
+precio 55,32) con 8,95 % — la brecha cable-MEP real, antes oculta, ahora visible. `tasa-fija` no
+suma `EXT` porque esa naturaleza no tiene ningún bono que cotice en dólares.
+
+**2. La poda podía pisar un precio bueno con uno vacío.** Al verificar el punto 1 en vivo se disparó
+`POST /jobs/corridas/refresh` en pre-apertura (08:33 ART) y BYMA no devolvió precio para varias ONs
+poco líquidas (MGCOC, MGCRC, YM34C entre otras). El pipeline no inventó nada — pero como el ticker
+sí venía **declarado** en el panel (sólo que sin ningún campo de precio), `armar_consolidacion`
+igual insertaba una fila de `precios` vacía con `capturado_en` de ahora, y `sql_poda`
+(correlacionada por ticker, no distinguía "declarado vacío" de "declarado con datos") tomaba esa
+fila como la más nueva y borraba la de la corrida anterior que sí tenía precio. Fix en
+`backend/app/ingesta/consolidacion/armado.py`: si BYMA declaró el ticker sin un solo campo de
+precio (ni hoy, ni cierre de ayer, ni OHLC), no se inserta fila — el ticker queda "ausente" a ojos
+de la poda, el mismo mecanismo que ya protegía a una especie que el panel dejó de declarar del
+todo. Mismo criterio aplicado a `puntas` (bid/ask). `effective_volume` no participa de la condición:
+un volumen en cero es dato válido ("no operó"), no ausencia de dato.
+
+**Costo conocido y aceptado**: para un ticker sin precio de hoy, `residual_value`/`valor_tecnico`
+(que se calculan del cronograma, sin depender del precio) tampoco se actualizan esa corrida —
+quedan con el valor de la última vez que sí hubo precio, en vez de refrescarse cada tick. Es
+aritmética que cambia lento (acumulación de interés diaria) contra perder el último precio de
+mercado real, que es lo que se estaba rompiendo. Si hiciera falta refrescar esos dos campos
+independientemente del precio, es un cambio aparte con su propio análisis.
+
+**Daño ya causado, sin arreglo retroactivo posible**: MGCOC, MGCRC, YM34C y las demás ONs que cayeron
+en la corrida de refresh de las 08:33 quedaron con `last_price` y `cierre_anterior` en NULL hasta
+que BYMA publique un precio real (mercado abierto) o corra la próxima matinal. No se puede
+reconstruir el precio perdido sin inventarlo — se declara vacío y se espera la próxima fuente real,
+que es la única salida consistente con la regla 1.
+
+Verificado: 1608 tests backend (1607 + 1 nuevo dedicado al hallazgo 2), `ruff` limpio en lo tocado.

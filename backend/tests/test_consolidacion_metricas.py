@@ -86,13 +86,13 @@ class TestQuienSeCalcula:
         ("tipo_tasa", "moneda", "esperado"),
         [
             ("hard-dollar", "USD", FUENTE_CALCULO),
-            # `EXT` pasó de `calculo` a `fuera` el 08/08/2026 con la regla 11: para dividir el
-            # precio por el flujo hay que saber que están en la misma moneda, y BYMA no documenta
-            # qué denota ese código. Cuesta 63 de las 276 hard-dollar calculables del universo real.
-            ("hard-dollar", "EXT", FUENTE_FUERA),
+            # `EXT` volvió a `calculo` el 30/08/2026: el dueño del producto confirmó que es
+            # liquidación cable (dólares), la misma distinción que ya usa renta variable con el
+            # sufijo del ticker. Ver CLAUDE.md, regla 11.
+            ("hard-dollar", "EXT", FUENTE_CALCULO),
             ("hard-dollar", "ARS", FUENTE_FUERA),
             ("bopreal", "USD", FUENTE_CALCULO),
-            ("bopreal", "EXT", FUENTE_FUERA),
+            ("bopreal", "EXT", FUENTE_CALCULO),
             ("tasa-fija", "ARS", FUENTE_CALCULO),
             ("tasa-fija", "USD", FUENTE_FUERA),
             ("cer", "ARS", FUENTE_FUERA),
@@ -163,14 +163,17 @@ class TestFaltaDeInsumo:
         assert resultado.filas_precios == []
 
     def test_sin_precio_del_dia_queda_vacia_y_nombrada(self) -> None:
+        """Un precio de cero es que no operó — y sin ninguna otra señal de precio (F-079, 30/08),
+        tampoco se inserta fila de precios: se declara vacía en la alerta, no en una fila vacía que
+        la poda pueda confundir con la más reciente. Ver
+        `test_un_ticker_declarado_sin_ningun_precio_no_genera_fila_de_precios` en
+        `test_consolidacion_armado.py`."""
         resultado = armar(
             especies_por_endpoint={"public-bonds": [especie("AL30D", ultimo=0.0)]},
             filas_cashflow=cronograma("AL30", "HARD_DOLLAR"),
         )
 
-        (precio,) = resultado.filas_precios
-        assert precio["last_price"] is None, "un precio de cero es que no operó"
-        assert precio["tir"] is None
+        assert resultado.filas_precios == []
         alerta = alerta_con(resultado, CODIGO_METRICAS_SIN_INSUMO)
         assert alerta is not None
         assert alerta.detalle["por_motivo"]["sin_precio"] == ["AL30D"]

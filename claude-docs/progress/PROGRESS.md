@@ -1281,3 +1281,17 @@ para funcionar — es mejora de presentación, no de comportamiento.
 
 Nada de F-078 ni F-079 está commiteado: son 90+ archivos modificados/nuevos, esperando
 autorización explícita.
+
+### Fuera de tanda — 30/08/2026, dos fixes de renta fija
+
+No relacionados con F-079. `backend/app/ingesta/consolidacion/metricas.py`: `EXT` (cable,
+confirmado por el dueño del producto) se suma a `MONEDAS_DEL_FLUJO` para hard-dollar/bopreal —
+TIR/duración/paridad ya se calculan para especies que liquidan cable, con su propio precio.
+`backend/app/ingesta/consolidacion/armado.py`: un ticker declarado por BYMA sin ningún campo de
+precio ya no inserta fila en `precios`/`puntas`, para que `sql_poda` no confunda "declarado vacío"
+con "declarado con datos" y borre un precio bueno de la corrida anterior — hallazgo real disparado
+al verificar el fix de EXT en vivo durante la pre-apertura (MGCOC/MGCRC/YM34C quedaron sin precio,
+sin arreglo retroactivo posible, se recuperan con el próximo tick real de BYMA).
+
+1608 tests backend, ruff limpio. Ver `docs/ESTADO.md` (30/08/2026) para el detalle completo. Nada
+de esto está commiteado todavía.

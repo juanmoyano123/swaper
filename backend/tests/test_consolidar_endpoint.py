@@ -173,7 +173,12 @@ async def test_una_corrida_completa_escribe_el_universo_y_no_toca_el_cronograma(
 
     escrito = resultado.escritura.filas_por_tabla
     assert escrito["instrumentos"] >= 1
-    assert escrito["precios"] == escrito["instrumentos"]
+    # Ya no es 1 a 1 con `instrumentos` (F-079, 30/08): los endpoints sin filas propias los rellena
+    # `_montar_byma_con_filas` con un símbolo de relleno sin ningún campo de precio, y esas filas
+    # dejaron de insertarse en `precios` — es el fix del hallazgo MGCOC/MGCRC/YM34C, para que la
+    # poda no confunda "declarado sin precio" con "el precio de hoy es nada". `PLC7O` (`ESPECIE_ON`)
+    # es la única fila con trade/bid/offer reales, así que es la única que persiste.
+    assert escrito["precios"] == 1
     assert escrito["cashflow"] == 0, "el cronograma se lee, ya no se escribe"
     assert set(resultado.snapshots) == {"byma", "data912"}
 

@@ -395,8 +395,11 @@ def test_un_plazo_sin_cotizacion_no_le_gana_al_plazo_que_si_cotizo() -> None:
 def test_sin_cotizacion_en_ningun_plazo_sigue_ganando_el_plazo_estandar() -> None:
     """Una especie que no operó en ninguno de los dos plazos entra igual, con su metadata.
 
-    Es el caso que el panel completo agrega de a miles: sin precio no hay `last_price` ni métricas
-    —se declaran faltantes—, pero moneda y vencimiento los publica BYMA y se guardan.
+    Es el caso que el panel completo agrega de a miles: la moneda y el vencimiento los publica
+    BYMA y se guardan igual. La fila de precios, en cambio, no se inserta (ver
+    `test_un_ticker_declarado_sin_ningun_precio_no_genera_fila_de_precios`): sin ningún campo de
+    precio no hay nada que persistir, y no persistir es lo que deja sobrevivir el último precio
+    bueno de una corrida anterior en vez de pisarlo con una fila vacía (30/08/2026).
     """
     resultado = armar_consolidacion(
         hoy=HOY,
@@ -410,12 +413,10 @@ def test_sin_cotizacion_en_ningun_plazo_sigue_ganando_el_plazo_estandar() -> Non
     )
 
     (instrumento,) = resultado.filas_instrumentos
-    (precio,) = resultado.filas_precios
     assert instrumento["plazo_liquidacion"] == "2"
     assert instrumento["moneda_cotizacion"] == "EXT", "código propietario, se guarda sin traducir"
     assert instrumento["maturity"] == date(2030, 7, 9)
-    assert precio["last_price"] is None, "no operó: el hueco se declara, no se rellena"
-    assert precio["tir"] is None
+    assert resultado.filas_precios == [], "sin ningún precio no hay fila que insertar"
 
 
 def test_una_especie_que_solo_cotiza_en_un_plazo_no_se_marca_duplicada() -> None:
@@ -567,6 +568,48 @@ def test_un_cronograma_no_usable_se_propaga_como_none_y_no_como_lista_vacia() ->
 
 
 def test_un_precio_en_cero_es_una_especie_que_no_opero_y_no_un_precio() -> None:
+    """Un cero no es un precio — pero acá SÍ hay algo que persistir: el cierre de ayer.
+
+    `previousClosingPrice=100.0` es la única señal de precio de esta fila; con eso alcanza para
+    que la fila de precios se inserte, y adentro `last_price` queda vacío por el cero, no por la
+    ausencia total de datos (ese otro caso, con bid/ask también en cero, es
+    `test_un_ticker_declarado_sin_ningun_precio_no_genera_fila_de_precios`, donde ni precios ni
+    puntas se insertan).
+    """
+    resultado = armar_consolidacion(
+        hoy=HOY,
+        especies_por_endpoint={
+            "negociable-obligations": [
+                especie(
+                    "PLC7O",
+                    ultimo=0.0,
+                    monto=0.0,
+                    bidPrice=0.0,
+                    offerPrice=0.0,
+                    previousClosingPrice=100.0,
+                )
+            ]
+        },
+        filas_cashflow=[cashflow("PLC7", "ON")],
+    )
+
+    assert resultado.filas_precios[0]["last_price"] is None
+    # El volumen sí conserva el cero: "no operó" es información sobre el instrumento.
+    assert resultado.filas_precios[0]["effective_volume"] == 0.0
+
+
+def test_un_ticker_declarado_sin_ningun_precio_no_genera_fila_de_precios() -> None:
+    """El hallazgo del 30/08/2026: BYMA declaró MGCOC/MGCRC/YM34C en la rueda pre-apertura sin un
+    solo campo de precio, y como la fila SÍ se insertaba (vacía, con `capturado_en` de ahora),
+    `sql_poda` la tomaba como la más nueva del ticker y borraba la corrida anterior que sí tenía
+    precio bueno — perdiendo un dato real por uno vacío.
+
+    Sin ningún campo de precio (ni hoy, ni cierre de ayer, ni OHLC) no se inserta fila: el ticker
+    queda "ausente" a ojos de la poda, que es el mismo mecanismo que ya protege a una especie que
+    el panel dejó de declarar del todo. `effective_volume` no participa de esta condición — ver
+    `test_un_precio_en_cero_es_una_especie_que_no_opero_y_no_un_precio` para el caso con volumen
+    en cero pero con una señal de precio real.
+    """
     resultado = armar_consolidacion(
         hoy=HOY,
         especies_por_endpoint={
@@ -577,10 +620,10 @@ def test_un_precio_en_cero_es_una_especie_que_no_opero_y_no_un_precio() -> None:
         filas_cashflow=[cashflow("PLC7", "ON")],
     )
 
-    assert resultado.filas_precios[0]["last_price"] is None
-    assert resultado.filas_puntas[0]["px_bid"] is None
-    # El volumen sí conserva el cero: "no operó" es información sobre el instrumento.
-    assert resultado.filas_precios[0]["effective_volume"] == 0.0
+    assert resultado.filas_precios == []
+    assert resultado.filas_puntas == []
+    # El instrumento se sigue clasificando igual: lo que no se persiste es sólo el precio del día.
+    assert resultado.filas_instrumentos[0]["ticker"] == "PLC7O"
 
 
 def test_un_vencimiento_ilegible_queda_vacio_y_se_alerta() -> None:

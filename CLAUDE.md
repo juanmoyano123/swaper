@@ -78,11 +78,17 @@ una está en `docs/ESTADO.md` y en `docs/historial/`.
     representación de datos —monitor, armador, ficha, exportes, informes—, no sólo al monitor.
 
     La línea práctica: un código estándar se lee (`USD` y `ARS` son ISO 4217 y significan lo
-    que significan); un **código propietario de la fuente no se traduce**. `denominationCcy`
-    de BYMA vale `ARS`, `USD` y `EXT`, y BYMA no publica en ningún lado qué es `EXT`. Que su
-    cociente contra la especie en pesos dé ~1576 contra ~1521 de la `USD` *sugiere* cable
-    contra MEP, pero medir una coincidencia no es tener una fuente. `EXT` se muestra como
-    `EXT`, y todo número que dependa de interpretarlo va vacío.
+    que significan); un **código propietario de la fuente no se traduce sin una fuente que lo
+    confirme**. `denominationCcy` de BYMA vale `ARS`, `USD` y `EXT`, y BYMA no publica en ningún
+    lado qué es `EXT`. Medir una coincidencia de precio no es tener una fuente — pero una
+    confirmación del dueño del producto sí lo es: **30/08/2026, confirmado, `USD` es liquidación
+    MEP y `EXT` es liquidación cable**, la misma distinción que ya usa renta variable con el
+    sufijo del ticker (`D`=MEP, `C`=cable). Desde esa fecha `EXT` se sigue mostrando como `EXT`
+    en pantalla (regla 11 sigue vigente: no se traduce el código), pero los cálculos
+    determinísticos que sólo necesitaban saber "esto es dólares" —como la TIR de un bono
+    hard-dollar contra su propio precio— ya pueden usar una fila `EXT` igual que usan una `USD`,
+    sin mezclar el precio de una especie con el de su hermana. Cualquier interpretación de `EXT`
+    que no sea "dólares por cable" sigue sin fuente y sigue yendo vacía.
 
     Un cálculo determinístico sobre datos duros **no es una inferencia**: la TIR que sale de
     resolver el cronograma contractual contra el precio publicado es aritmética, y se muestra.
