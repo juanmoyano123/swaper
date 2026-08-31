@@ -1290,8 +1290,10 @@ TIR/duración/paridad ya se calculan para especies que liquidan cable, con su pr
 `backend/app/ingesta/consolidacion/armado.py`: un ticker declarado por BYMA sin ningún campo de
 precio ya no inserta fila en `precios`/`puntas`, para que `sql_poda` no confunda "declarado vacío"
 con "declarado con datos" y borre un precio bueno de la corrida anterior — hallazgo real disparado
-al verificar el fix de EXT en vivo durante la pre-apertura (MGCOC/MGCRC/YM34C quedaron sin precio,
-sin arreglo retroactivo posible, se recuperan con el próximo tick real de BYMA).
+al verificar el fix de EXT en vivo durante la pre-apertura. Alcance real medido después del hecho
+(no lo que se pensó al escribir el fix): **4597 de 4766 tickers**, no un puñado de ONs ilíquidas —
+`EXCLUIR_SIN_COTIZACION = False` (27/08) hace que un domingo cerrado BYMA devuelva casi todo el
+panel con precio en cero. Sin arreglo retroactivo posible; se recuperan con la matinal del lunes
+(pg_cron no corre fin de semana). Detalle completo en `docs/ESTADO.md` (30/08/2026).
 
-1608 tests backend, ruff limpio. Ver `docs/ESTADO.md` (30/08/2026) para el detalle completo. Nada
-de esto está commiteado todavía.
+Commiteado en `abc3385`. 1608 tests backend, ruff limpio.

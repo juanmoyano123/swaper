@@ -1021,10 +1021,22 @@ aritmética que cambia lento (acumulación de interés diaria) contra perder el 
 mercado real, que es lo que se estaba rompiendo. Si hiciera falta refrescar esos dos campos
 independientemente del precio, es un cambio aparte con su propio análisis.
 
-**Daño ya causado, sin arreglo retroactivo posible**: MGCOC, MGCRC, YM34C y las demás ONs que cayeron
-en la corrida de refresh de las 08:33 quedaron con `last_price` y `cierre_anterior` en NULL hasta
-que BYMA publique un precio real (mercado abierto) o corra la próxima matinal. No se puede
+**Daño ya causado, sin arreglo retroactivo posible — alcance real medido, mayor al estimado al
+escribir el fix.** La corrida de refresh de las 08:33 no afectó "varias ONs poco líquidas": afectó
+**4597 de 4766 tickers en `precios`** (medido contra la base tras el hecho), porque desde `d7a5f7c`
+(27/08) `EXCLUIR_SIN_COTIZACION = False` amplía el panel de BYMA a ~2700 tickers que no cotizan, y
+un domingo con el mercado cerrado *todo* el panel completo vuelve con los seis campos de precio en
+cero. Antes del fix, eso significaba una fila vacía por cada uno de esos miles de tickers, y la poda
+borrando la última fila buena de cada uno. Quedaron con `last_price`, `tir`, `duration` y `paridad`
+en NULL — visibles como `s/d` en el monitor — hasta que BYMA publique un precio real. No se puede
 reconstruir el precio perdido sin inventarlo — se declara vacío y se espera la próxima fuente real,
 que es la única salida consistente con la regla 1.
+
+Agravante de horario: el disparo fue manual (`POST /jobs/corridas/refresh`), que a diferencia del
+cron (`GET /jobs/cron/refresh`) no tiene guarda de ventana de rueda — corre a cualquier hora que se
+lo llame. El pg_cron automático sólo dispara lunes a viernes (`supabase/migrations/20260827210000_cron_ingesta.sql`),
+así que en fin de semana no hay ningún tick que reponga lo perdido: la recuperación llega recién con
+la matinal del lunes (11:30 ART), con datos reales de mercado abierto. No es un bug pendiente — el
+fix ya corta la causa — es la ventana de espera hasta la próxima rueda.
 
 Verificado: 1608 tests backend (1607 + 1 nuevo dedicado al hallazgo 2), `ruff` limpio en lo tocado.
