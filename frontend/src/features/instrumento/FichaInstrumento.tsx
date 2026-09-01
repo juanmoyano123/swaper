@@ -26,6 +26,7 @@ import { useFichaInstrumento } from './hooks/useFichaInstrumento'
 import { useProspectoInstrumento } from './hooks/useProspectoInstrumento'
 import { useSensibilidadInstrumento } from './hooks/useSensibilidadInstrumento'
 import { useSerieProspecto } from './hooks/useSerieProspecto'
+import { nominalDesdeMonto } from './lib/nominal'
 import type { CondicionesDetalle, EspecieFicha, ResumenCronograma } from './lib/schema'
 
 /**
@@ -114,7 +115,12 @@ export function FichaInstrumento({ ticker }: { ticker: string | undefined }) {
       </Panel>
 
       <Panel rotulo="Cronograma">
-        <BloqueCronograma query={cronogramaQuery} />
+        <BloqueCronograma
+          query={cronogramaQuery}
+          precio={especie.precio}
+          monedaCotizacion={especie.moneda_cotizacion}
+          lamina={condicionesQuery.data?.condiciones?.lamina ?? null}
+        />
       </Panel>
 
       <Panel rotulo="Sensibilidad">
@@ -300,7 +306,19 @@ function campoDeCondicion(
 
 // --- Cronograma -----------------------------------------------------------------------------------
 
-function BloqueCronograma({ query }: { query: ReturnType<typeof useCronogramaInstrumento> }) {
+function BloqueCronograma({
+  query,
+  precio,
+  monedaCotizacion,
+  lamina,
+}: {
+  query: ReturnType<typeof useCronogramaInstrumento>
+  precio: number | null
+  monedaCotizacion: string | null
+  lamina: number | null
+}) {
+  const [monto, setMonto] = useState(0)
+
   if (query.isPending) return <EstadoCarga que="el cronograma de pagos" />
   if (query.isError) {
     return <EstadoError error={query.error} onRetry={() => void query.refetch()} />
@@ -311,17 +329,27 @@ function BloqueCronograma({ query }: { query: ReturnType<typeof useCronogramaIns
     return <EstadoVacio titulo="Sin cronograma cargado para esta emisión." />
   }
 
+  const monedaFmt = monedaCotizacion?.toLowerCase() === 'ars' ? 'ars' : 'usd'
+  const nominal = monto > 0 && precio !== null && precio > 0 ? nominalDesdeMonto(monto, precio, lamina) : null
+  const factor = nominal === null ? 1 : nominal / 100
+  const invertidoReal = nominal !== null && precio !== null ? (nominal * precio) / 100 : null
+
   const filas = pagos.flatMap((pago) => {
     const items: { fecha: string; tipo: string; monto: number; residual: number | null }[] = []
     if (pago.interes > 0) {
-      items.push({ fecha: pago.fecha, tipo: 'renta', monto: pago.interes, residual: pago.residual })
+      items.push({
+        fecha: pago.fecha,
+        tipo: 'renta',
+        monto: pago.interes * factor,
+        residual: pago.residual === null ? null : pago.residual * factor,
+      })
     }
     if (pago.amortizacion > 0) {
       items.push({
         fecha: pago.fecha,
         tipo: 'amortización',
-        monto: pago.amortizacion,
-        residual: pago.residual,
+        monto: pago.amortizacion * factor,
+        residual: pago.residual === null ? null : pago.residual * factor,
       })
     }
     return items
@@ -330,13 +358,58 @@ function BloqueCronograma({ query }: { query: ReturnType<typeof useCronogramaIns
   return (
     <div>
       <LecturaValorTecnico resumen={query.data.resumen} />
+
+      {precio === null ? (
+        <p style={{ fontSize: 10.5, color: 'var(--dim)', marginBottom: 10, textWrap: 'pretty' }}>
+          Sin precio de hoy: no se puede estimar el nominal a partir de un monto.
+        </p>
+      ) : (
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 8,
+            fontSize: 10.5,
+            color: 'var(--dim)',
+            marginBottom: 10,
+          }}
+        >
+          Monto a invertir ({monedaCotizacion ?? SIN_DATO})
+          <input
+            type="number"
+            inputMode="decimal"
+            min={0}
+            value={monto === 0 ? '' : monto}
+            onChange={(e) => setMonto(Number(e.target.value) || 0)}
+            placeholder="0"
+            className="mono"
+            style={{
+              fontSize: 12,
+              padding: '3px 6px',
+              width: 120,
+              background: 'transparent',
+              border: '1px solid var(--lin)',
+              borderRadius: 4,
+              color: 'inherit',
+            }}
+          />
+          {nominal !== null && (
+            <span className="mono">
+              → {fmtNumero(nominal, 0)} VN · invertís {fmtMonto(invertidoReal, monedaFmt)}
+              {lamina === null && ' · lámina no informada: sin redondear'}
+            </span>
+          )}
+        </label>
+      )}
+
       <table className="mono" style={{ width: '100%', fontSize: 11.5, borderCollapse: 'collapse' }}>
         <thead>
           <tr style={{ color: 'var(--dim)', textAlign: 'left' }}>
             <th style={{ fontWeight: 400, padding: '2px 6px 4px 0' }}>fecha</th>
             <th style={{ fontWeight: 400, padding: '2px 6px 4px' }}>tipo</th>
             <th style={{ fontWeight: 400, padding: '2px 6px 4px', textAlign: 'right' }}>
-              monto / 100 VN
+              {nominal === null ? 'monto / 100 VN' : 'monto'}
             </th>
             <th style={{ fontWeight: 400, padding: '2px 0 4px', textAlign: 'right' }}>residual</th>
           </tr>
@@ -346,15 +419,18 @@ function BloqueCronograma({ query }: { query: ReturnType<typeof useCronogramaIns
             <tr key={`${fila.fecha}-${fila.tipo}-${indice}`} style={{ borderTop: '1px solid var(--lin)' }}>
               <td style={{ padding: '3px 6px 3px 0' }}>{fmtFecha(fila.fecha)}</td>
               <td style={{ padding: '3px 6px', textTransform: 'capitalize' }}>{fila.tipo}</td>
-              <td style={{ padding: '3px 6px', textAlign: 'right' }}>{fmtNumero(fila.monto, 4)}</td>
+              <td style={{ padding: '3px 6px', textAlign: 'right' }}>
+                {fmtNumero(fila.monto, nominal === null ? 4 : 2)}
+              </td>
               <td style={{ padding: '3px 0', textAlign: 'right' }}>{fmtNumero(fila.residual, 1)}</td>
             </tr>
           ))}
         </tbody>
       </table>
       <p style={{ fontSize: 10.5, color: 'var(--dim)', marginTop: 8, textWrap: 'pretty' }}>
-        Montos y residual por cada 100 de valor nominal; el flujo en plata del cliente depende del
-        nominal que tenga asignado.
+        {nominal === null
+          ? 'Montos y residual por cada 100 de valor nominal; el flujo en plata del cliente depende del nominal que tenga asignado.'
+          : `Montos para un nominal de ${fmtNumero(nominal, 0)} VN, calculado a partir del monto ingresado.`}
       </p>
     </div>
   )

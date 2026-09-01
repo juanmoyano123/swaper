@@ -433,6 +433,92 @@ describe('el cronograma', () => {
   })
 })
 
+// --- Monto a invertir → nominal escalado, respetando la lámina mínima ------------------------------
+
+describe('el monto a invertir', () => {
+  it('sin monto cargado, sigue mostrando el cronograma por 100 VN', async () => {
+    mockearRutas(
+      rutasOk('AL30D', {
+        [RUTA_CRONOGRAMA('AL30D')]: { body: cronograma([pago({ interes: 1.5, amortizacion: 0 })]) },
+      }),
+    )
+
+    renderizar('AL30D')
+
+    await screen.findByText('AL30D')
+    expect(screen.getByText('monto / 100 VN')).toBeInTheDocument()
+    expect(screen.getByText('1,5000')).toBeInTheDocument()
+  })
+
+  it('con lámina informada, redondea el nominal hacia abajo y escala los montos', async () => {
+    const especieConPrecio = especie('AL30D', { precio: 50, moneda_cotizacion: 'USD' })
+    const detalle = { ...condicionDetalleVacia(), lamina: 1000 }
+    mockearRutas(
+      rutasOk('AL30D', {
+        [RUTA_FICHA('AL30D')]: { body: { ...ficha('AL30D'), especie: especieConPrecio } },
+        [RUTA_CONDICIONES('AL30D')]: { body: condiciones(detalle) },
+        [RUTA_CRONOGRAMA('AL30D')]: {
+          body: cronograma([pago({ interes: 1.5, amortizacion: 0, residual: 100.0 })]),
+        },
+      }),
+    )
+
+    renderizar('AL30D')
+
+    await screen.findByText('AL30D')
+    const input = screen.getByLabelText(/Monto a invertir \(USD\)/)
+    await userEvent.type(input, '600')
+
+    // 600 / (50/100) = 1200 nominal crudo, floor a la lámina de 1000 → 1000 VN, US$ 500 invertidos.
+    expect((await screen.findAllByText(/1\.000 VN/)).length).toBeGreaterThan(0)
+    expect(screen.getByText(/invertís US\$ 500,00/)).toBeInTheDocument()
+    expect(screen.getByText('monto')).toBeInTheDocument()
+    // Factor 1000/100 = 10: renta 1,5 → 15,00 y residual 100,0 → 1.000,0.
+    expect(screen.getByText('15,00')).toBeInTheDocument()
+    expect(screen.getByText('1.000,0')).toBeInTheDocument()
+  })
+
+  it('sin lámina informada, no redondea y lo declara', async () => {
+    const especieConPrecio = especie('AL30D', { precio: 50, moneda_cotizacion: 'USD' })
+    mockearRutas(
+      rutasOk('AL30D', {
+        [RUTA_FICHA('AL30D')]: { body: { ...ficha('AL30D'), especie: especieConPrecio } },
+        [RUTA_CRONOGRAMA('AL30D')]: {
+          body: cronograma([pago({ interes: 1.5, amortizacion: 0, residual: 100.0 })]),
+        },
+      }),
+    )
+
+    renderizar('AL30D')
+
+    await screen.findByText('AL30D')
+    const input = screen.getByLabelText(/Monto a invertir \(USD\)/)
+    await userEvent.type(input, '600')
+
+    // Sin lámina: 600 / (50/100) = 1200 nominal, sin redondear.
+    expect((await screen.findAllByText(/1\.200 VN/)).length).toBeGreaterThan(0)
+    expect(screen.getByText(/lámina no informada: sin redondear/)).toBeInTheDocument()
+  })
+
+  it('sin precio de hoy, no se puede estimar el nominal y no muestra el input', async () => {
+    const especieSinPrecio = especie('AL30D', { precio: null })
+    mockearRutas(
+      rutasOk('AL30D', {
+        [RUTA_FICHA('AL30D')]: { body: { ...ficha('AL30D'), especie: especieSinPrecio } },
+        [RUTA_CRONOGRAMA('AL30D')]: { body: cronograma([pago()]) },
+      }),
+    )
+
+    renderizar('AL30D')
+
+    await screen.findByText('AL30D')
+    expect(
+      screen.getByText('Sin precio de hoy: no se puede estimar el nominal a partir de un monto.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/Monto a invertir/)).not.toBeInTheDocument()
+  })
+})
+
 // --- Residual y valor técnico (relevamiento de confiabilidad de datos, 17/08/2026) ---------------
 
 describe('residual y valor técnico', () => {
