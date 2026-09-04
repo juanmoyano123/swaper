@@ -66,6 +66,7 @@ function especie(extra: Partial<Especie> = {}): Especie {
     dato_sano: true,
     hermanas: [],
     fuente: null,
+    capturado_en: null,
     ...extra,
   }
 }
@@ -283,6 +284,41 @@ describe('residual: cuánto capital queda vivo (relevamiento de confiabilidad de
 
     const fila = await screen.findByText('AL30').then((el) => el.closest('div[role="button"]'))
     expect(fila).toHaveTextContent('s/d')
+  })
+})
+
+describe('sin precio: por qué está en s/d, sin tener que abrir la ficha', () => {
+  it('con capturado_en, declara la fecha del último dato conocido', async () => {
+    mockearApiConUnaEspecie(
+      especie({ precio: null, capturado_en: '2026-08-20T20:00:02.098529+00:00' }),
+    )
+    renderizar()
+
+    const fila = await screen.findByText('AL30').then((el) => el.closest('div[role="button"]'))
+    const celdaPrecio = within(fila as HTMLElement).getByText('s/d')
+    expect(celdaPrecio.getAttribute('title')).toBe(
+      'sin precio en la corrida de hoy; el último dato conocido es del 20/08/2026, 17:00',
+    )
+  })
+
+  it('sin capturado_en, declara que nunca tuvo un precio registrado', async () => {
+    mockearApiConUnaEspecie(especie({ precio: null, capturado_en: null }))
+    renderizar()
+
+    const fila = await screen.findByText('AL30').then((el) => el.closest('div[role="button"]'))
+    const celdaPrecio = within(fila as HTMLElement).getByText('s/d')
+    expect(celdaPrecio.getAttribute('title')).toBe(
+      'nunca tuvo un precio registrado desde que está en el universo',
+    )
+  })
+
+  it('con precio, no lleva título explicativo', async () => {
+    mockearApiConUnaEspecie(especie({ precio: 62.5, capturado_en: '2026-08-30T20:00:00Z' }))
+    renderizar()
+
+    const fila = await screen.findByText('AL30').then((el) => el.closest('div[role="button"]'))
+    const celdaPrecio = within(fila as HTMLElement).getByText('62,50')
+    expect(celdaPrecio.getAttribute('title')).toBeNull()
   })
 })
 

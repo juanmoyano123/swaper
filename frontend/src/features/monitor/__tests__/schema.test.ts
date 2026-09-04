@@ -45,6 +45,7 @@ function especieValida(): Record<string, unknown> {
     dato_sano: true,
     hermanas: [],
     fuente: null,
+    capturado_en: '2026-08-30T20:00:02.098529+00:00',
   }
 }
 

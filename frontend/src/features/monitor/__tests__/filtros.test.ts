@@ -44,6 +44,7 @@ function especie(extra: Partial<Especie> = {}): Especie {
     dato_sano: true,
     hermanas: [],
     fuente: null,
+    capturado_en: null,
     ...extra,
   }
 }

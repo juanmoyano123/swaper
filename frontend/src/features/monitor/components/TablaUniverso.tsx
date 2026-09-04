@@ -17,7 +17,7 @@ import { useMemo, useRef, useState } from 'react'
 
 import { unidadDeNaturaleza } from '@/components/SelectorSegmento'
 import { etiquetaClase } from '@/lib/claseActivo'
-import { fmtCompacto, fmtFecha, fmtNumero, fmtPct, SIN_DATO } from '@/lib/fmt'
+import { fmtCompacto, fmtFecha, fmtFechaHora, fmtNumero, fmtPct, SIN_DATO } from '@/lib/fmt'
 import { colorDeParidad } from '@/lib/paridad'
 
 import { useAbrirInstrumento } from '@/features/instrumento/useAbrirInstrumento'
@@ -231,6 +231,20 @@ function Cabecera({
   )
 }
 
+/**
+ * Por qué una fila está en s/d, para no obligar a abrir la ficha a averiguarlo. `capturado_en` es
+ * el instante de la última fila de `precios` que tuvo la especie — si es `null`, nunca cotizó
+ * desde que está en el universo; si tiene un valor, ese precio quedó protegido de la poda de una
+ * corrida anterior pero hoy no llegó ninguno nuevo (mercado ilíquido, no un error de la fuente).
+ */
+function tituloSinPrecio(especie: Especie): string | undefined {
+  if (especie.precio !== null) return undefined
+  if (especie.capturado_en === null) {
+    return 'nunca tuvo un precio registrado desde que está en el universo'
+  }
+  return `sin precio en la corrida de hoy; el último dato conocido es del ${fmtFechaHora(especie.capturado_en)}`
+}
+
 function FilaEspecie({ especie, top, alto, onClick }: { especie: Especie; top: number; alto: number; onClick: () => void }) {
   return (
     <div
@@ -272,7 +286,11 @@ function FilaEspecie({ especie, top, alto, onClick }: { especie: Especie; top: n
           tabla. Repetirla en cada fila era necesario mientras convivían las tres especies de una
           emisión; con una moneda por vez es ruido, y además invitaba a comparar hacia abajo una
           columna que mezclaba pesos con dólares. */}
-      <span className="mono" style={{ padding: '0 8px', fontSize: 12, textAlign: 'right' }}>
+      <span
+        className="mono"
+        style={{ padding: '0 8px', fontSize: 12, textAlign: 'right' }}
+        title={tituloSinPrecio(especie)}
+      >
         {fmtNumero(especie.precio)}
       </span>
       <span className="mono" style={{ padding: '0 8px', fontSize: 12, textAlign: 'right' }}>

@@ -65,6 +65,12 @@ export const esquemaEspecie = z.object({
    * ingesta se eliminó el 26/08/2026, tras estar pausada desde el 13/08— pero sigue llegando en
    * filas escritas antes. `null` en cualquier corrida anterior a la migración que lo expone. */
   fuente: z.string().nullable(),
+  /** El instante de la corrida que escribió la última fila de `precios` de esta especie —
+   *  `EspecieUniverso.como_dict()`, `backend/app/universo/segmentacion.py`. `null` cuando la
+   *  especie nunca tuvo una fila de precios (nunca cotizó desde que está en el universo), que es
+   *  distinto de tener una vieja: eso se declara en la grilla en vez de dejar el `s/d` sin
+   *  explicación. */
+  capturado_en: z.string().nullable(),
 })
 
 export type Especie = z.infer<typeof esquemaEspecie>

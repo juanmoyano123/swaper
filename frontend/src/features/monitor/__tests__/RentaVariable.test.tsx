@@ -72,6 +72,7 @@ function especieRentaFija(): Especie {
     dato_sano: true,
     hermanas: [],
     fuente: null,
+    capturado_en: null,
   }
 }
 
