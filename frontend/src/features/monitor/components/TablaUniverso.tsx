@@ -17,7 +17,7 @@ import { useMemo, useRef, useState } from 'react'
 
 import { unidadDeNaturaleza } from '@/components/SelectorSegmento'
 import { etiquetaClase } from '@/lib/claseActivo'
-import { fmtCompacto, fmtFecha, fmtFechaHora, fmtNumero, fmtPct, SIN_DATO } from '@/lib/fmt'
+import { fmtCompacto, fmtFecha, fmtFechaHora, fmtNumero, fmtPct, hace, SIN_DATO } from '@/lib/fmt'
 import { colorDeParidad } from '@/lib/paridad'
 
 import { useAbrirInstrumento } from '@/features/instrumento/useAbrirInstrumento'
@@ -38,6 +38,7 @@ type Campo =
   | 'residual'
   | 'volumen'
   | 'vencimiento'
+  | 'capturado_en'
 
 type Direccion = 'asc' | 'desc'
 
@@ -48,14 +49,15 @@ interface Orden {
 
 /**
  * ticker · tipo · ley · emisor · precio · rendimiento · duración · paridad · residual · volumen ·
- * vencimiento · relleno. El emisor tiene techo (240px) para que un nombre corto no deje un bloque
- * de blanco en el medio de la fila: el espacio sobrante se junta en la columna final vacía. TIPO
- * son 108px porque "ON corporativa" —la etiqueta más larga— mide ~101px con padding; LEY son 96px
- * porque "Ley Argentina" —el valor más largo de la fuente— entra completo sin truncar; PRECIO son
- * 104px, dieciséis menos que antes: dejó de llevar la moneda pegada al número (ver abajo).
+ * vencimiento · último dato · relleno. El emisor tiene techo (240px) para que un nombre corto no
+ * deje un bloque de blanco en el medio de la fila: el espacio sobrante se junta en la columna
+ * final vacía. TIPO son 108px porque "ON corporativa" —la etiqueta más larga— mide ~101px con
+ * padding; LEY son 96px porque "Ley Argentina" —el valor más largo de la fuente— entra completo
+ * sin truncar; PRECIO son 104px, dieciséis menos que antes: dejó de llevar la moneda pegada al
+ * número (ver abajo). ÚLTIMO DATO son 100px, suficiente para "hace 17 días" sin truncar.
  */
 const PLANTILLA_COLUMNAS =
-  '64px 108px 96px minmax(120px,240px) 104px 108px 68px 72px 72px 92px 96px 1fr'
+  '64px 108px 96px minmax(120px,240px) 104px 108px 68px 72px 72px 92px 96px 100px 1fr'
 const ALTO_FILA = 32
 const ALTO_CONTENEDOR = 520
 
@@ -159,6 +161,7 @@ export function TablaUniverso({
         <Cabecera campo="residual" orden={orden} onClick={alternarOrden} alinear="right">residual</Cabecera>
         <Cabecera campo="volumen" orden={orden} onClick={alternarOrden} alinear="right">volumen</Cabecera>
         <Cabecera campo="vencimiento" orden={orden} onClick={alternarOrden} alinear="right">vencimiento</Cabecera>
+        <Cabecera campo="capturado_en" orden={orden} onClick={alternarOrden} alinear="right">último dato</Cabecera>
         {/* Relleno: la cabecera son botones con fondo y borde propios, así que la columna vacía
             necesita su celda para que la línea del header llegue pareja hasta el final. */}
         <div aria-hidden style={{ background: 'var(--pan2)', borderBottom: '1px solid var(--lin)' }} />
@@ -245,6 +248,19 @@ function tituloSinPrecio(especie: Especie): string | undefined {
   return `sin precio en la corrida de hoy; el último dato conocido es del ${fmtFechaHora(especie.capturado_en)}`
 }
 
+/**
+ * "hace 17 días" al lado de cada fila, visible sin pasar el mouse — el tooltip de
+ * `tituloSinPrecio` complementa esto, no lo reemplaza: acá se ve de un vistazo la edad de
+ * CUALQUIER fila (incluida una con precio pero arrastrado de una corrida vieja), y el tooltip da
+ * el porqué puntual cuando el precio falta.
+ */
+function textoUltimoDato(capturadoEn: string | null): string {
+  if (capturadoEn === null) return 'nunca'
+  const minutos = (Date.now() - Date.parse(capturadoEn)) / 60_000
+  if (!Number.isFinite(minutos) || minutos < 0) return SIN_DATO
+  return hace(minutos)
+}
+
 function FilaEspecie({ especie, top, alto, onClick }: { especie: Especie; top: number; alto: number; onClick: () => void }) {
   return (
     <div
@@ -319,6 +335,13 @@ function FilaEspecie({ especie, top, alto, onClick }: { especie: Especie; top: n
       </span>
       <span className="mono" style={{ padding: '0 8px', fontSize: 12, textAlign: 'right' }}>
         {fmtFecha(especie.vencimiento)}
+      </span>
+      <span
+        className="mono"
+        style={{ padding: '0 8px', fontSize: 12, textAlign: 'right', color: 'var(--dim)' }}
+        title={especie.capturado_en === null ? undefined : fmtFechaHora(especie.capturado_en)}
+      >
+        {textoUltimoDato(especie.capturado_en)}
       </span>
     </div>
   )

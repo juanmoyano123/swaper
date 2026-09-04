@@ -22,7 +22,7 @@
 
 import { useId, useState } from 'react'
 
-import { fmtFechaHora, fmtNumero } from '@/lib/fmt'
+import { fmtFechaHora, fmtNumero, hace } from '@/lib/fmt'
 
 import { useEstadoDelDato } from '../hooks/useEstadoDelDato'
 import type { EstadoDelDato } from '../lib/schema'
@@ -142,14 +142,6 @@ function HoraDelDato({ estado }: { estado: EstadoDelDato }) {
       <span title={demora.por_que}> · {demora.fuente} declara {demora.minutos} min de demora</span>
     </span>
   )
-}
-
-/** Cuántas horas o minutos hace. Sin veredicto: la barra informa la edad del dato, no la juzga. */
-export function hace(minutos: number): string {
-  if (minutos < 90) return `hace ${fmtNumero(minutos, 0)} min`
-  const horas = Math.round(minutos / 60)
-  if (horas < 48) return `hace ${fmtNumero(horas, 0)} h`
-  return `hace ${fmtNumero(Math.round(horas / 24), 0)} días`
 }
 
 /**

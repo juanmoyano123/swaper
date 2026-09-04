@@ -18,6 +18,7 @@ vi.mock('@/lib/supabase', () => ({
 
 import { crearQueryClient } from '@/app/queryClient'
 import type { FondoFci } from '@/lib/fci'
+import { fmtFechaHora } from '@/lib/fmt'
 
 import { MonitorPage } from '../MonitorPage'
 import type { Especie, Segmentos } from '../lib/schema'
@@ -186,6 +187,37 @@ function mockearApiConCredito() {
   return fetchMock
 }
 
+/** Un único segmento (`usd_hard`) con las especies que el test quiera, para casos que necesitan
+ *  más de una fila pero no el crédito ni las hermanas que trae `mockearApiConCredito`. */
+function mockearApiConEspecies(especies: Especie[]) {
+  const fetchMock = vi.fn((input: RequestInfo | URL) => {
+    const url = new URL(String(input), 'http://localhost')
+
+    if (url.pathname === '/api/v1/universo/segmentos') {
+      return respuestaJson({
+        segmentos: [
+          {
+            clave: 'usd_hard',
+            nombre: 'Hard dollar',
+            naturaleza: 'tir_usd',
+            naturaleza_nombre: 'TIR en dólares (hard dollar)',
+            especies: especies.length,
+          },
+        ],
+        renta_variable: 0,
+        sin_segmento: 0,
+      })
+    }
+    if (url.pathname === '/api/v1/universo/emisiones/especies') {
+      return respuestaJson(pagina(especies))
+    }
+
+    throw new Error(`ruta no mockeada en el test: ${url.pathname}${url.search}`)
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  return fetchMock
+}
+
 function FichaFalsa() {
   const { ticker } = useParams()
   return <div>ficha de {ticker}</div>
@@ -319,6 +351,56 @@ describe('sin precio: por qué está en s/d, sin tener que abrir la ficha', () =
     const fila = await screen.findByText('AL30').then((el) => el.closest('div[role="button"]'))
     const celdaPrecio = within(fila as HTMLElement).getByText('62,50')
     expect(celdaPrecio.getAttribute('title')).toBeNull()
+  })
+})
+
+describe('columna "último dato": la antigüedad se ve sin pasar el mouse', () => {
+  it('sin capturado_en, la celda dice "nunca"', async () => {
+    mockearApiConUnaEspecie(especie({ capturado_en: null }))
+    renderizar()
+
+    const fila = await screen.findByText('AL30').then((el) => el.closest('div[role="button"]'))
+    expect(fila).toHaveTextContent('nunca')
+  })
+
+  it('con capturado_en de hace 17 días, la celda dice "hace 17 días" y el título trae la hora exacta', async () => {
+    const hace17dias = new Date(Date.now() - 17 * 24 * 60 * 60 * 1000).toISOString()
+    mockearApiConUnaEspecie(especie({ precio: null, capturado_en: hace17dias }))
+    renderizar()
+
+    const fila = await screen.findByText('AL30').then((el) => el.closest('div[role="button"]'))
+    const celdaUltimoDato = within(fila as HTMLElement).getByText('hace 17 días')
+    expect(celdaUltimoDato.getAttribute('title')).toBe(fmtFechaHora(hace17dias))
+  })
+
+  it('una fila recién capturada dice "hace N min", no una fecha vieja', async () => {
+    mockearApiConUnaEspecie(especie({ capturado_en: new Date().toISOString() }))
+    renderizar()
+
+    const fila = await screen.findByText('AL30').then((el) => el.closest('div[role="button"]'))
+    expect(fila).toHaveTextContent(/hace \d+ min/)
+  })
+
+  it('la cabecera "último dato" ordena por antigüedad, con "nunca" siempre al final', async () => {
+    const hace1dia = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString()
+    const hace10dias = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString()
+    mockearApiConEspecies([
+      especie({ ticker: 'AL30', emision: 'AL30', capturado_en: hace10dias }),
+      especie({ ticker: 'GD30', emision: 'GD30', capturado_en: hace1dia }),
+      especie({ ticker: 'AE38', emision: 'AE38', capturado_en: null }),
+    ])
+    const { container } = renderizar()
+    await screen.findByText('3 de 3 especies en USD')
+
+    const tickerDeCadaFila = () =>
+      Array.from(container.querySelectorAll('div[role="button"]')).map((fila) => fila.textContent?.slice(0, 4))
+
+    const cabecera = screen.getByRole('button', { name: 'último dato' })
+    await userEvent.click(cabecera) // asc: la fecha ISO más chica primero → el más viejo primero
+    expect(tickerDeCadaFila()).toEqual(['AL30', 'GD30', 'AE38'])
+
+    await userEvent.click(cabecera) // desc: el más reciente primero, "nunca" sigue último
+    expect(tickerDeCadaFila()).toEqual(['GD30', 'AL30', 'AE38'])
   })
 })
 

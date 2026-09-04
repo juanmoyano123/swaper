@@ -121,3 +121,13 @@ export function fmtFechaHora(valor: string | Date | null | undefined): string {
   if (Number.isNaN(fecha.getTime())) return SIN_DATO
   return FECHA_HORA.format(fecha)
 }
+
+/** Cuántas horas o minutos hace. Sin veredicto: informa la edad del dato, no la juzga.
+ *  Vivía en `BarraEstadoDato` (F-013); se movió acá cuando la columna "último dato" del monitor
+ *  necesitó hablar el mismo idioma de antigüedad que la barra. */
+export function hace(minutos: number): string {
+  if (minutos < 90) return `hace ${fmtNumero(minutos, 0)} min`
+  const horas = Math.round(minutos / 60)
+  if (horas < 48) return `hace ${fmtNumero(horas, 0)} h`
+  return `hace ${fmtNumero(Math.round(horas / 24), 0)} días`
+}
