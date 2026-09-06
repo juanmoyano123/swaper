@@ -67,6 +67,10 @@ export const esquemaEspecieRentaVariable = z.object({
   /** La etiqueta ES de `sector_codigo` (`data/sic_sectores.csv`). `null` sin curado cargado o sin
    *  fila para ese major group — el fallback declarado es mostrar `sector_codigo`. */
   sector: z.string().nullable().default(null),
+  /** El nombre oficial del major group, en inglés (SIC Manual de OSHA). Siempre presente si hay
+   *  `sector_codigo` reconocido, sin depender de ningún curado — es el fallback de `sector` antes
+   *  de caer al código crudo (30/08/2026). */
+  sector_titulo: z.string().nullable().default(null),
   /** La etiqueta ES de `sic_codigo` (`data/sic_rubros.csv`). `null` sin curado cargado o sin fila
    *  para ese código — el fallback declarado es `sic_titulo`, tal como lo publica la SEC. */
   rubro_especifico: z.string().nullable().default(null),

@@ -334,9 +334,22 @@ def test_sector_codigo_se_deriva_de_sic_codigo_sin_ningun_curado(
     assert especie.rubro_especifico is None
 
 
+def test_sector_titulo_esta_siempre_que_haya_sector_codigo_sin_ningun_curado(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`sector_titulo` (30/08/2026) es el nombre oficial del SIC Manual de OSHA — igual que
+    `sector_codigo`, aritmética pura, presente aunque no exista ningún CSV curado todavía."""
+    _apuntar_sic(
+        monkeypatch, sectores=tmp_path / "no_existe.csv", rubros=tmp_path / "no_existe.csv"
+    )
+    (especie,) = armar_renta_variable([_fila_con_sic("7372")], TipoDeCambio())
+    assert especie.sector_titulo == "Business Services"
+
+
 def test_sin_sic_codigo_sector_codigo_es_none() -> None:
     (especie,) = armar_renta_variable([_fila_con_sic(None)], TipoDeCambio())
     assert especie.sector_codigo is None
+    assert especie.sector_titulo is None
 
 
 def test_con_el_curado_cargado_sector_y_rubro_traen_la_etiqueta_es(
@@ -359,10 +372,12 @@ def test_con_el_curado_cargado_sector_y_rubro_traen_la_etiqueta_es(
 
     assert especie.sector_codigo == "73"
     assert especie.sector == "Software y datos"
+    assert especie.sector_titulo == "Business Services", "el título OSHA convive con la etiqueta ES"
     assert especie.rubro_especifico == "Software empaquetado"
     cuerpo = especie.como_dict()
     assert cuerpo["sector_codigo"] == "73"
     assert cuerpo["sector"] == "Software y datos"
+    assert cuerpo["sector_titulo"] == "Business Services"
     assert cuerpo["rubro_especifico"] == "Software empaquetado"
 
 
@@ -386,6 +401,9 @@ def test_sin_fila_en_el_curado_sector_y_rubro_quedan_none(
 
     assert especie.sector_codigo == "73"
     assert especie.sector is None
+    assert especie.sector_titulo == "Business Services", (
+        "sin fila en el curado, el título OSHA sigue"
+    )
     assert especie.rubro_especifico is None
 
 

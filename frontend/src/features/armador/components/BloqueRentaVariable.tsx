@@ -313,14 +313,14 @@ export function BloqueRentaVariable() {
   // El texto de cada opción de Sector y Rubro específico — F-079. `valorDe` de esas dos dimensiones
   // es el código (`sector_codigo`, `sic_codigo`) para que la jerarquía y la comparación de
   // `facetar()` corran sobre un valor estable; el texto que ve el asesor es la etiqueta ES cuando
-  // el curado la tiene, resuelta acá escaneando la primera especie que la declare. Sin curado para
-  // ese código se dice, en vez de mostrar el código pelado como si fuera autoexplicativo.
+  // el curado la tiene, y si no el nombre oficial del major group (SIC Manual de OSHA,
+  // `sector_titulo`, 30/08/2026) — nunca vacío mientras haya `sector_codigo` reconocido, mismo
+  // fallback que ya usa `rubroEspecifico` con `sic_titulo` y que usa el backend en `especies.py`.
   const etiquetaSector = useMemo(() => {
     const mapa = new Map<string, string>()
     for (const e of listaPicker) {
-      if (e.sector_codigo !== null && e.sector !== null && !mapa.has(e.sector_codigo)) {
-        mapa.set(e.sector_codigo, e.sector)
-      }
+      if (e.sector_codigo === null || mapa.has(e.sector_codigo)) continue
+      mapa.set(e.sector_codigo, e.sector ?? e.sector_titulo ?? e.sector_codigo)
     }
     return mapa
   }, [listaPicker])
@@ -336,7 +336,7 @@ export function BloqueRentaVariable() {
     return mapa
   }, [listaPicker])
   function textoDeOpcion(id: string, valor: string): string {
-    if (id === 'sector') return etiquetaSector.get(valor) ?? `${valor} (sin traducir)`
+    if (id === 'sector') return etiquetaSector.get(valor) ?? valor
     if (id === 'rubroEspecifico') return etiquetaRubroEspecifico.get(valor) ?? valor
     return valor
   }

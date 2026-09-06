@@ -30,10 +30,11 @@
  * (las etiquetas ES). Si el curado de `data/sic_sectores.csv` cambiara mañana el texto de un
  * código, una selección guardada por texto se invalidaría sola; guardada por código, sigue
  * apuntando a lo mismo. `etiquetaDeValorRv` traduce el código a texto sólo para mostrarlo, con un
- * `Map` construido sobre el universo (mismo patrón que `formasCanonicasDeMercado`): si ninguna
- * especie con ese código trae la etiqueta ES cargada, se muestra el propio código (sector) o el
- * título en inglés que publica la SEC (`sic_titulo`, rubroEspecifico) — nunca se inventa una
- * traducción, y el `title` de la opción deja la fuente a la vista.
+ * `Map` construido sobre el universo (mismo patrón que `formasCanonicasDeMercado`): sin etiqueta ES
+ * cargada se muestra el título en inglés que publica la fuente pública correspondiente —
+ * `sic_titulo` de la SEC para rubroEspecifico, `sector_titulo` del SIC Manual de OSHA para sector
+ * (30/08/2026)— y sólo si tampoco existe ese título (los huecos del Manual) se cae al código
+ * pelado. Nunca se inventa una traducción, y el `title` de la opción deja la fuente a la vista.
  *
  * ## El eje geográfico se unifica en país, sigue en cascada en región
  *
@@ -330,25 +331,37 @@ export interface EtiquetasRv {
   /** `sic_codigo` → `sic_titulo`, siempre en inglés, tal como lo publica la SEC. Es la fuente que
    *  el `title` de cada opción de rubro específico deja a la vista. */
   sicTitulos: Map<string, string>
+  /** `sector_codigo` → `sector_titulo`, el nombre oficial del major group del SIC Manual de OSHA
+   *  (30/08/2026), siempre en inglés. A diferencia de `sicTitulos` no está garantizado para todo
+   *  código: el Manual deja huecos (18-19, 68-69, 90) sin nombre — ver `app/externos/sic.py`. */
+  sectorTitulos: Map<string, string>
 }
 
-/** El `Map<sector_codigo, etiqueta ES>` construido sobre el universo — mismo patrón que
- *  `formasCanonicasDeMercado`: se recorre una vez y se recuerda la primera etiqueta no vacía que
- *  aparece para cada código, porque el curado puede cubrir una especie del papel y no otra
- *  (hermanas en pesos/cable/MEP comparten `sector_codigo` pero no necesariamente el mismo dato ya
- *  propagado). Sin ninguna etiqueta para un código, ese código simplemente no entra al `Map`: el
- *  fallback (mostrar el código crudo) lo decide `etiquetaDeValorRv`, no esta función. */
+/** Los dos mapas de sector: la etiqueta ES curada (`data/sic_sectores.csv`, sólo trae entrada
+ *  cuando alguna especie del universo con ese código trajo la etiqueta cargada) y el nombre
+ *  oficial del major group en inglés (SIC Manual de OSHA, presente salvo en los huecos del
+ *  Manual). Mismo patrón que `etiquetasDeRubroEspecifico`: se recorren juntos porque escanean el
+ *  mismo universo una sola vez. Sin ninguna entrada para un código, el fallback (mostrar el
+ *  código crudo) lo decide `etiquetaDeValorRv`, no esta función. */
 export function etiquetasDeSector(
-  especies: readonly { sector_codigo: string | null; sector: string | null }[],
-): Map<string, string> {
+  especies: readonly {
+    sector_codigo: string | null
+    sector: string | null
+    sector_titulo: string | null
+  }[],
+): { etiquetas: Map<string, string>; sectorTitulos: Map<string, string> } {
   const etiquetas = new Map<string, string>()
+  const sectorTitulos = new Map<string, string>()
   for (const especie of especies) {
     if (especie.sector_codigo === null) continue
+    if (especie.sector_titulo !== null && !sectorTitulos.has(especie.sector_codigo)) {
+      sectorTitulos.set(especie.sector_codigo, especie.sector_titulo)
+    }
     if (especie.sector !== null && !etiquetas.has(especie.sector_codigo)) {
       etiquetas.set(especie.sector_codigo, especie.sector)
     }
   }
-  return etiquetas
+  return { etiquetas, sectorTitulos }
 }
 
 /** Los dos mapas de rubro específico: la etiqueta a mostrar (ES si hay, si no el título EN de la
@@ -615,10 +628,12 @@ export function facetarRentaVariable(
 } {
   const mercados = formasCanonicasDeMercado(especies)
   const { etiquetas: etiquetasRubroEspecifico, sicTitulos } = etiquetasDeRubroEspecifico(especies)
+  const { etiquetas: etiquetasSector, sectorTitulos } = etiquetasDeSector(especies)
   const etiquetas: EtiquetasRv = {
-    sector: etiquetasDeSector(especies),
+    sector: etiquetasSector,
     rubroEspecifico: etiquetasRubroEspecifico,
     sicTitulos,
+    sectorTitulos,
   }
   const facetas = facetasDeRentaVariable(filtros, mercados)
   const base = (especie: EspecieRentaVariable) => pasaBaseRv(especie, filtros, moneda)
@@ -673,19 +688,23 @@ export function facetarRentaVariable(
 }
 
 /** Cómo se lee un valor de faceta en pantalla: los centinelas por su nombre de hueco, las
- *  estrategias por su etiqueta en castellano, sector/rubroEspecifico por el `Map` que trae
- *  `etiquetas` (si se pasa; sin él, el propio código) y todo lo demás **tal como la fuente lo
- *  escribe** (regla 11: un rótulo de la fuente no se traduce). */
+ *  estrategias por su etiqueta en castellano, rubroEspecifico por el `Map` que trae `etiquetas`
+ *  (si se pasa; sin él, el propio código), sector por la etiqueta ES si existe y si no por el
+ *  nombre oficial del major group (SIC Manual de OSHA, 30/08/2026) — y todo lo demás **tal como la
+ *  fuente lo escribe** (regla 11: un rótulo de la fuente no se traduce). */
 export function etiquetaDeValorRv(dimension: DimensionRv, valor: string, etiquetas?: EtiquetasRv): string {
   if (valor === CENTINELA_DE[dimension]) return ETIQUETA_SIN_DATO[valor]
   if (dimension === 'estrategiaEtf') return ETIQUETA_ESTRATEGIA_RV[valor] ?? valor
-  if (dimension === 'sector') return etiquetas?.sector.get(valor) ?? valor
+  if (dimension === 'sector') return etiquetas?.sector.get(valor) ?? etiquetas?.sectorTitulos.get(valor) ?? valor
   if (dimension === 'rubroEspecifico') return etiquetas?.rubroEspecifico.get(valor) ?? valor
   return valor
 }
 
 /** El `title` de una opción de `CampoSelect`, cuando hace falta dejar la fuente a la vista:
- *  - Sector sin traducción cargada: el código no alcanza para explicarse solo.
+ *  - Sector con el nombre OSHA (sin ES curada, con título): la fuente queda visible aunque la
+ *    etiqueta que se ve ya venga del catálogo público y no de un curado validado.
+ *  - Sector sin ES **ni** título OSHA (un código en un hueco del Manual): el código no alcanza
+ *    para explicarse solo — caso residual, ya no el habitual desde 30/08/2026.
  *  - Rubro específico: siempre, con el título en inglés de la SEC (`sic_titulo`), esté o no
  *    curada la etiqueta ES — así la fuente queda visible aunque la etiqueta ya esté en español.
  *  `undefined` cuando no hace falta (sector con etiqueta ES cargada, centinelas, otras dimensiones):
@@ -696,6 +715,8 @@ export function tituloOpcionRv(
   etiquetas: EtiquetasRv,
 ): string | undefined {
   if (dimension === 'sector' && valor !== SECTOR_SIN_DATO && !etiquetas.sector.has(valor)) {
+    const titulo = etiquetas.sectorTitulos.get(valor)
+    if (titulo !== undefined) return `SIC major group ${valor} — ${titulo} (OSHA)`
     return `SIC major group ${valor} — sin traducción cargada`
   }
   if (dimension === 'rubroEspecifico' && valor !== RUBRO_ESPECIFICO_SIN_DATO) {

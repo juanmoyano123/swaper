@@ -46,6 +46,7 @@ function especie(extra: Partial<EspecieRentaVariable> = {}): EspecieRentaVariabl
     division_cadena: null,
     sector_codigo: null,
     sector: null,
+    sector_titulo: null,
     rubro_especifico: null,
     estrategia_etf: null,
     ratio_conversion: null,
@@ -134,13 +135,22 @@ describe('las etiquetas de sector muestran la traducción curada o el código, n
     expect(within(sector).getByText('Tecnología (1)')).toBeInTheDocument()
   })
 
-  it('sin curado, la opción muestra el código con un title que declara el hueco', () => {
-    const sinCurar = especie({ ticker: 'B', sector_codigo: '10', sector: null })
+  it('sin curado ES pero con el nombre oficial OSHA, la opción muestra ese nombre', () => {
+    const sinCurar = especie({ ticker: 'B', sector_codigo: '10', sector: null, sector_titulo: 'Metal Mining' })
     montar([APPLE, sinCurar])
 
     const sector = screen.getByRole('combobox', { name: 'Sector' })
-    const opcion = within(sector).getByText('10 (1)')
-    expect(opcion).toHaveAttribute('title', 'SIC major group 10 — sin traducción cargada')
+    const opcion = within(sector).getByText('Metal Mining (1)')
+    expect(opcion).toHaveAttribute('title', 'SIC major group 10 — Metal Mining (OSHA)')
+  })
+
+  it('sin curado ES ni título OSHA (código en un hueco del Manual), la opción muestra el código pelado', () => {
+    const enHueco = especie({ ticker: 'B', sector_codigo: '18', sector: null, sector_titulo: null })
+    montar([APPLE, enHueco])
+
+    const sector = screen.getByRole('combobox', { name: 'Sector' })
+    const opcion = within(sector).getByText('18 (1)')
+    expect(opcion).toHaveAttribute('title', 'SIC major group 18 — sin traducción cargada')
   })
 })
 

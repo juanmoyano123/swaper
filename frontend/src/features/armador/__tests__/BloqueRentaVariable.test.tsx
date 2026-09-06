@@ -55,6 +55,7 @@ function accion(extra: Partial<EspecieRentaVariable> = {}): EspecieRentaVariable
     division_cadena: null,
     sector_codigo: null,
     sector: null,
+    sector_titulo: null,
     rubro_especifico: null,
     estrategia_etf: null,
     ratio_conversion: null,
@@ -106,6 +107,7 @@ function cedear(extra: Partial<EspecieRentaVariable> = {}): EspecieRentaVariable
     division_cadena: null,
     sector_codigo: null,
     sector: null,
+    sector_titulo: null,
     rubro_especifico: null,
     estrategia_etf: null,
     ratio_conversion: null,
@@ -568,6 +570,29 @@ describe('el buscador de CEDEARs', () => {
 
     expect(screen.getByRole('button', { name: 'AAPL' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'PAMP' })).not.toBeInTheDocument()
+  })
+
+  it('sin curado ES, la opción de sector muestra el nombre oficial del SIC Manual de OSHA', async () => {
+    // Ningún `cedear` acá trae `sector` (la etiqueta ES) — sólo `sector_titulo`, el nombre oficial
+    // que ya viaja siempre que hay `sector_codigo` reconocido, sin depender de ningún curado.
+    responderCon({
+      cedears: [
+        cedear({ sector_codigo: '60', sector: null, sector_titulo: 'Depository Institutions' }),
+        cedear({
+          ticker: 'PAMP',
+          sector_codigo: '49',
+          sector: null,
+          sector_titulo: 'Electric, Gas, And Sanitary Services',
+        }),
+      ],
+    })
+    renderizar()
+    await screen.findAllByRole('listitem')
+
+    const sectores = Array.from(screen.getByLabelText('Sector (SIC)').children).map((o) => o.textContent)
+    expect(sectores).toContain('Depository Institutions')
+    expect(sectores).toContain('Electric, Gas, And Sanitary Services')
+    expect(sectores.some((s) => s?.includes('(sin traducir)'))).toBe(false)
   })
 
   it('filtra por rubro específico, el código SIC de cuatro dígitos', async () => {

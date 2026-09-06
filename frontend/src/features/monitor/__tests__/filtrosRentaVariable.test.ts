@@ -32,6 +32,7 @@ import {
   pasaFiltrosRv,
   presetsQueCoinciden,
   tituloOpcionRv,
+  type EtiquetasRv,
   type FiltrosRentaVariable,
 } from '../lib/filtrosRentaVariable'
 
@@ -59,6 +60,7 @@ function especie(extra: Partial<EspecieRentaVariable> = {}): EspecieRentaVariabl
     division_cadena: null,
     sector_codigo: null,
     sector: null,
+    sector_titulo: null,
     rubro_especifico: null,
     estrategia_etf: null,
     ratio_conversion: null,
@@ -218,21 +220,31 @@ describe('centinelas de sin dato', () => {
   })
 })
 
+function etiquetasVacias(): EtiquetasRv {
+  return { sector: new Map(), rubroEspecifico: new Map(), sicTitulos: new Map(), sectorTitulos: new Map() }
+}
+
 describe('sector y rubro específico: código en la faceta, etiqueta en pantalla (regla 11)', () => {
-  it('sin ninguna especie con la etiqueta ES cargada, sector se muestra por su propio código', () => {
-    const barrick = especie({ ticker: 'B', sector_codigo: '10', sector: null })
-    expect(etiquetaDeValorRv('sector', '10', {
-      sector: etiquetasDeSector([barrick]),
-      rubroEspecifico: new Map(),
-      sicTitulos: new Map(),
-    })).toBe('10')
+  it('sin ES ni título OSHA (código en un hueco del Manual), sector se muestra por su propio código', () => {
+    // 18 es uno de los huecos que el SIC Manual de OSHA no define (ver `app/externos/sic.py`).
+    const enHueco = especie({ ticker: 'B', sector_codigo: '18', sector: null, sector_titulo: null })
+    const { etiquetas, sectorTitulos } = etiquetasDeSector([enHueco])
+    expect(etiquetaDeValorRv('sector', '18', { ...etiquetasVacias(), sector: etiquetas, sectorTitulos })).toBe('18')
   })
 
-  it('con la etiqueta ES cargada en alguna especie del universo, se muestra esa etiqueta', () => {
-    const conEtiqueta = especie({ ticker: 'B', sector_codigo: '10', sector: 'Minería metálica' })
-    const sinEtiqueta = especie({ ticker: 'B2', sector_codigo: '10', sector: null })
-    const mapa = etiquetasDeSector([sinEtiqueta, conEtiqueta])
-    expect(etiquetaDeValorRv('sector', '10', { sector: mapa, rubroEspecifico: new Map(), sicTitulos: new Map() })).toBe(
+  it('sin ES cargado pero con título OSHA, sector se muestra por el nombre oficial en inglés', () => {
+    const barrick = especie({ ticker: 'B', sector_codigo: '10', sector: null, sector_titulo: 'Metal Mining' })
+    const { etiquetas, sectorTitulos } = etiquetasDeSector([barrick])
+    expect(etiquetaDeValorRv('sector', '10', { ...etiquetasVacias(), sector: etiquetas, sectorTitulos })).toBe(
+      'Metal Mining',
+    )
+  })
+
+  it('con la etiqueta ES cargada en alguna especie del universo, se muestra esa etiqueta por sobre el título OSHA', () => {
+    const conEtiqueta = especie({ ticker: 'B', sector_codigo: '10', sector: 'Minería metálica', sector_titulo: 'Metal Mining' })
+    const sinEtiqueta = especie({ ticker: 'B2', sector_codigo: '10', sector: null, sector_titulo: 'Metal Mining' })
+    const { etiquetas, sectorTitulos } = etiquetasDeSector([sinEtiqueta, conEtiqueta])
+    expect(etiquetaDeValorRv('sector', '10', { ...etiquetasVacias(), sector: etiquetas, sectorTitulos })).toBe(
       'Minería metálica',
     )
   })
@@ -240,21 +252,29 @@ describe('sector y rubro específico: código en la faceta, etiqueta en pantalla
   it('rubro específico sin ES cargado cae al título en inglés de la SEC, no explota', () => {
     const oro = especie({ ticker: 'B', sic_codigo: '1040', rubro_especifico: null, sic_titulo: 'Gold and Silver Ores' })
     const { etiquetas } = etiquetasDeRubroEspecifico([oro])
-    expect(etiquetaDeValorRv('rubroEspecifico', '1040', { sector: new Map(), rubroEspecifico: etiquetas, sicTitulos: new Map() })).toBe(
+    expect(etiquetaDeValorRv('rubroEspecifico', '1040', { ...etiquetasVacias(), rubroEspecifico: etiquetas })).toBe(
       'Gold and Silver Ores',
     )
   })
 
-  it('el título de la opción sin traducción de sector nombra el hueco, no lo esconde', () => {
-    const etiquetas = { sector: new Map<string, string>(), rubroEspecifico: new Map<string, string>(), sicTitulos: new Map<string, string>() }
-    expect(tituloOpcionRv('sector', '10', etiquetas)).toBe('SIC major group 10 — sin traducción cargada')
+  it('el título de la opción sin ES ni título OSHA nombra el hueco, no lo esconde', () => {
+    expect(tituloOpcionRv('sector', '18', etiquetasVacias())).toBe('SIC major group 18 — sin traducción cargada')
+  })
+
+  it('el título de la opción de sector nombra la fuente OSHA cuando no hay ES pero sí título', () => {
+    const barrick = especie({ ticker: 'B', sector_codigo: '73', sector: null, sector_titulo: 'Business Services' })
+    const { sectorTitulos } = etiquetasDeSector([barrick])
+    expect(tituloOpcionRv('sector', '73', { ...etiquetasVacias(), sectorTitulos })).toBe(
+      'SIC major group 73 — Business Services (OSHA)',
+    )
   })
 
   it('el título de rubro específico siempre nombra la fuente SEC, tenga o no etiqueta ES', () => {
     const oro = especie({ ticker: 'B', sic_codigo: '1040', rubro_especifico: 'Oro y plata', sic_titulo: 'Gold and Silver Ores' })
     const { sicTitulos } = etiquetasDeRubroEspecifico([oro])
-    const etiquetas = { sector: new Map<string, string>(), rubroEspecifico: new Map<string, string>(), sicTitulos }
-    expect(tituloOpcionRv('rubroEspecifico', '1040', etiquetas)).toBe('SIC 1040 — Gold and Silver Ores (SEC)')
+    expect(tituloOpcionRv('rubroEspecifico', '1040', { ...etiquetasVacias(), sicTitulos })).toBe(
+      'SIC 1040 — Gold and Silver Ores (SEC)',
+    )
   })
 })
 

@@ -32,8 +32,13 @@ lenguaje. `pais_fuente` y `pais_verificado` viajan al lado del valor, como todo 
 `app.externos.sic.major_group_de`— y siempre está si hay `sic_codigo`, sin depender de ningún
 curado. `sector` y `rubro_especifico` son las etiquetas ES de `data/sic_sectores.csv` y
 `data/sic_rubros.csv` (`app.renta_variable.sic_es`): `None` mientras el dueño no valide esos CSV,
-o si el código no tiene fila en el curado — el fallback declarado (`sector_codigo` para uno,
-`sic_titulo` en inglés para el otro) lo decide quien consuma la especie, no este módulo.
+o si el código no tiene fila en el curado.
+
+`sector_titulo` (30/08/2026) es el nombre oficial en inglés del major group, del SIC Manual de
+OSHA (`app.externos.sic.titulo_major_group_de`) — mismo criterio que `sic_titulo` para el rubro de
+4 dígitos: un catálogo público, no un curado que necesite validación del dueño del producto, así
+que está siempre que `sector_codigo` sea afirmable. Es el fallback declarado de `sector` mientras
+`data/sic_sectores.csv` no exista; el consumidor decide en qué orden probarlos.
 
 **La geografía de ETFs es curada por papel** (F-079, D3, 29/08/2026). Viene de
 `public.etf_geografia` y se junta con la misma llave que `pais_cedear` — el mismo `_papel_de`,
@@ -48,7 +53,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
 
-from app.externos.sic import major_group_de
+from app.externos.sic import major_group_de, titulo_major_group_de
 from app.renta_variable.agrupamiento import (
     Agrupamiento,
     agrupar,
@@ -119,6 +124,10 @@ class EspecieRentaVariable:
     sector: str | None = None
     """La etiqueta ES de `sector_codigo`, de `data/sic_sectores.csv`. `None` sin curado cargado o
     sin fila para ese major group — el fallback declarado es mostrar `sector_codigo`."""
+    sector_titulo: str | None = None
+    """El nombre oficial del major group, en inglés — SIC Manual de OSHA. Siempre presente si hay
+    `sector_codigo` reconocido, sin depender de ningún curado. Fallback de `sector` antes de caer
+    al código crudo."""
     rubro_especifico: str | None = None
     """La etiqueta ES de `sic_codigo` (el título SIC de 4 dígitos), de `data/sic_rubros.csv`.
     `None` sin curado cargado o sin fila para ese código — el fallback declarado es `sic_titulo`,
@@ -207,6 +216,7 @@ class EspecieRentaVariable:
             "division_cadena": self.division_cadena,
             "sector_codigo": self.sector_codigo,
             "sector": self.sector,
+            "sector_titulo": self.sector_titulo,
             "rubro_especifico": self.rubro_especifico,
             "estrategia_etf": self.estrategia_etf,
             "ratio_conversion": self.ratio_conversion,
@@ -366,6 +376,7 @@ def armar_renta_variable(
                 division_cadena=_texto(fila.get("division_cadena")),
                 sector_codigo=major_group_de(sic_codigo),
                 sector=sector_de(sic_codigo),
+                sector_titulo=titulo_major_group_de(sic_codigo),
                 rubro_especifico=rubro_de(sic_codigo),
                 estrategia_etf=_texto(fila.get("estrategia_etf")),
                 ratio_conversion=_texto(fila.get("ratio_conversion")),

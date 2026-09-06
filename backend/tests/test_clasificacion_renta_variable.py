@@ -5,7 +5,7 @@ el 13/08/2026. Lo que se fija acá no es que el código funcione: es **hasta dó
 algo y dónde hay que declarar que no se sabe**.
 """
 
-from app.externos.sic import division_de, major_group_de
+from app.externos.sic import division_de, major_group_de, titulo_major_group_de
 from app.renta_variable.etfs import (
     SIN_CLASIFICAR,
     es_fondo,
@@ -77,6 +77,39 @@ def test_division_de_sigue_igual_reusando_major_group_de() -> None:
     assert major_group_de("2834") == "28"
     assert division_de("6850") is None  # hueco del manual, mismo caso que antes del refactor
     assert major_group_de("6850") == "68"
+
+
+# --- El nombre oficial del major group, del SIC Manual de OSHA (30/08/2026) -----------------------
+
+
+def test_titulo_major_group_de_trae_el_nombre_oficial() -> None:
+    """Los mismos códigos SIC reales que ya usa `test_el_sic_ubica_a_la_empresa_en_la_cadena`."""
+    assert titulo_major_group_de("1040") == "Metal Mining"  # Gold and Silver Ores
+    assert titulo_major_group_de("3571") == (
+        "Industrial And Commercial Machinery And Computer Equipment"
+    )  # Electronic Computers (Apple)
+    assert titulo_major_group_de("7372") == "Business Services"  # Prepackaged Software (Microsoft)
+    assert titulo_major_group_de("6021") == "Depository Institutions"  # National Commercial Banks
+
+
+def test_titulo_major_group_de_con_ceros_a_la_izquierda_recortados() -> None:
+    assert titulo_major_group_de("100") == titulo_major_group_de("0100")
+    assert titulo_major_group_de(100) == "Agricultural Production Crops"
+
+
+def test_titulo_major_group_de_en_un_hueco_del_manual_es_none() -> None:
+    """Mismo hueco que ya prueba `division_de`: el Manual no define 18-19, 68-69 ni 90 — no hay
+    nombre que afirmar ahí."""
+    assert titulo_major_group_de("1850") is None
+    assert titulo_major_group_de("6850") is None
+    assert titulo_major_group_de("9050") is None
+
+
+def test_titulo_major_group_de_sin_sic_no_inventa_nada() -> None:
+    assert titulo_major_group_de(None) is None
+    assert titulo_major_group_de("") is None
+    assert titulo_major_group_de("no es un numero") is None
+    assert titulo_major_group_de("1") is None
 
 
 # --- La estrategia de un ETF ----------------------------------------------------------------------

@@ -31,6 +31,7 @@ function especie(extra: Partial<EspecieRentaVariable> = {}): EspecieRentaVariabl
     // F-079: derivados del SIC. Sin curado cargado ni SIC declarado en la fixture, quedan en null.
     sector_codigo: null,
     sector: null,
+    sector_titulo: null,
     rubro_especifico: null,
     estrategia_etf: null,
     ratio_conversion: null,
