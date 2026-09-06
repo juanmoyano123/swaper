@@ -12,24 +12,44 @@ sin header- están en `test_cron_auth.py`.
 """
 
 from datetime import UTC, datetime
+from typing import Any
 
 import app.api.v1.jobs as modulo_jobs
 from app.core.config import get_settings
 from app.instrumentos.emisores import ResumenBarrido
+from app.jobs.corridas import CLAVE_LOCK_INGESTA
 from app.renta_variable.clasificacion import ResumenReclasificacion
 from tests.conftest import AUTORIZACION_DE_CRON, FakeConnection, cliente
 
 
 class _FakeConexionCorridas(FakeConnection):
-    def __init__(self, filas: list[dict] | None = None) -> None:
+    """`lock_libre=True` por defecto: la mayoría de estos tests no le interesa el lock, sólo que
+    el endpoint delegue en la corrida correcta, y con el lock tomado eso no pasaría —el mismo
+    problema que resuelve `_FakeConexionConLock` en `test_jobs_cron.py`, replicado acá porque
+    `disparar_matinal`/`disparar_refresh` ahora también pasan por `lock_de_ingesta`."""
+
+    def __init__(self, filas: list[dict] | None = None, *, lock_libre: bool = True) -> None:
         super().__init__()
         self.filas = filas or []
         self.limite_pedido: int | None = None
+        self.lock_libre = lock_libre
+        self.llamadas_al_lock: list[str] = []
 
     async def fetch(self, query: str, *args):
         self._registrar(query)
         self.limite_pedido = args[0] if args else None
         return self.filas
+
+    async def fetchval(self, query: str, *args: Any) -> Any:
+        self._registrar(query)
+        if "pg_try_advisory_lock" in query:
+            assert args == (CLAVE_LOCK_INGESTA,)
+            self.llamadas_al_lock.append("lock")
+            return self.lock_libre
+        if "pg_advisory_unlock" in query:
+            self.llamadas_al_lock.append("unlock")
+            return True
+        return await super().fetchval(query, *args)
 
 
 def _fila_cruda() -> dict:
@@ -112,6 +132,60 @@ async def test_disparar_refresh_delega_en_refresh_intra_rueda(crear_app, monkeyp
 
     assert respuesta.status_code == 200
     assert respuesta.json() == {"tipo": "refresh", "estado": "parcial"}
+
+
+async def test_disparar_matinal_con_lock_tomado_se_omite_y_no_corre(
+    crear_app, monkeypatch
+) -> None:
+    """El botón manual apretado mientras el cron (u otro click) ya está corriendo: no se suman
+    corridas en paralelo, se declara por qué no corrió — mismo contrato que `GET /jobs/cron/*`."""
+    llamado = {"veces": 0}
+
+    async def _falsa(conn, settings):
+        llamado["veces"] += 1
+        return {"tipo": "matinal", "estado": "completa"}
+
+    monkeypatch.setattr(modulo_jobs, "corrida_matinal", _falsa)
+    conexion = _FakeConexionCorridas(lock_libre=False)
+    app = crear_app(conexion)
+
+    async with cliente(app) as http:
+        respuesta = await http.post("/api/v1/jobs/corridas/matinal", headers=AUTORIZACION_DE_CRON)
+
+    assert respuesta.status_code == 200
+    assert respuesta.json() == {"omitida": True, "motivo": modulo_jobs.MOTIVO_LOCK_TOMADO}
+    assert llamado["veces"] == 0
+    assert conexion.llamadas_al_lock == ["lock"]
+
+
+async def test_disparar_refresh_con_lock_tomado_se_omite_y_no_corre(
+    crear_app, monkeypatch
+) -> None:
+    async def _falsa(conn, settings):
+        raise AssertionError("no debería correr con el lock tomado")
+
+    monkeypatch.setattr(modulo_jobs, "refresh_intra_rueda", _falsa)
+    app = crear_app(_FakeConexionCorridas(lock_libre=False))
+
+    async with cliente(app) as http:
+        respuesta = await http.post("/api/v1/jobs/corridas/refresh", headers=AUTORIZACION_DE_CRON)
+
+    assert respuesta.status_code == 200
+    assert respuesta.json() == {"omitida": True, "motivo": modulo_jobs.MOTIVO_LOCK_TOMADO}
+
+
+async def test_disparar_matinal_toma_y_suelta_el_lock(crear_app, monkeypatch) -> None:
+    async def _falsa(conn, settings):
+        return {"tipo": "matinal", "estado": "completa"}
+
+    monkeypatch.setattr(modulo_jobs, "corrida_matinal", _falsa)
+    conexion = _FakeConexionCorridas()
+    app = crear_app(conexion)
+
+    async with cliente(app) as http:
+        await http.post("/api/v1/jobs/corridas/matinal", headers=AUTORIZACION_DE_CRON)
+
+    assert conexion.llamadas_al_lock == ["lock", "unlock"]
 
 
 async def test_disparar_matinal_sin_base_responde_503(crear_app) -> None:

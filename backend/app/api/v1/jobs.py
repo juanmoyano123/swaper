@@ -76,6 +76,29 @@ async def corridas(
     return await listar_corridas(conn, limite=min(limite, LIMITE_MAXIMO))
 
 
+MOTIVO_LOCK_TOMADO = "corrida en curso"
+
+
+def _omitida(motivo: str) -> dict[str, object]:
+    """La respuesta de una corrida que no se ejecutó. **200 y no 4xx, a propósito.**
+
+    Nace para el cron externo best-effort: GitHub Actions no garantiza el minuto y puede llegar
+    tarde, y además dispara los feriados bursátiles, que no se modelan (ver el docstring de
+    `app.jobs.horarios`). Con un 4xx el workflow se pondría en rojo cada feriado y cada tick
+    corrido — y un log que está en rojo por diseño enseña a no mirarlo, con lo cual el día que
+    falle de verdad la alerta ya no alerta a nadie. Omitir es el resultado esperado de una
+    condición normal, así que se informa, no se falla.
+
+    Mismo criterio aplica al disparo manual cuando el lock ya está tomado: que un asesor haya
+    apretado el botón mientras el cron corría no es un error suyo, es una corrida que ya está en
+    marcha.
+
+    El contrato lo consume `.github/workflows/ingesta.yml`, que busca `"omitida": true` en el
+    cuerpo y lo registra como `::notice::`.
+    """
+    return {"omitida": True, "motivo": motivo}
+
+
 @router.post(
     "/corridas/matinal",
     summary="Dispara a mano la corrida matinal completa (BYMA + data912 + consolidación)",
@@ -90,7 +113,16 @@ async def disparar_matinal(
     conn: Annotated[asyncpg.Connection, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> dict[str, object]:
-    return await corrida_matinal(conn, settings)
+    """Sin la guarda de horario del cron a propósito: un asesor que aprieta el botón sabe qué hora
+    es y quiere que corra igual (ver el docstring del módulo). Sí toma `lock_de_ingesta` — la misma
+    guarda de no-solapamiento que ya usa `GET /jobs/cron/matinal` — porque el cron corre cada 20
+    minutos entre las 11:00 y las 16:40 ART y nada impide que este botón se apriete en el medio; sin
+    el lock, las dos corridas intercalarían su `capturado_en` (ver el docstring de
+    `lock_de_ingesta`)."""
+    async with lock_de_ingesta(conn) as tomado:
+        if not tomado:
+            return _omitida(MOTIVO_LOCK_TOMADO)
+        return await corrida_matinal(conn, settings)
 
 
 @router.post(
@@ -107,10 +139,12 @@ async def disparar_refresh(
     conn: Annotated[asyncpg.Connection, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> dict[str, object]:
-    return await refresh_intra_rueda(conn, settings)
+    """Mismo criterio que `disparar_matinal`: sin guarda de horario, con `lock_de_ingesta`."""
+    async with lock_de_ingesta(conn) as tomado:
+        if not tomado:
+            return _omitida(MOTIVO_LOCK_TOMADO)
+        return await refresh_intra_rueda(conn, settings)
 
-
-MOTIVO_LOCK_TOMADO = "corrida en curso"
 
 RESPUESTAS_CRON = {
     200: {
@@ -122,22 +156,6 @@ RESPUESTAS_CRON = {
     401: {"description": "Falta el token de cron o la sesión de asesor, o no son válidos"},
     503: {"description": "La base de datos no está disponible, o no se pueden validar sesiones"},
 }
-
-
-def _omitida(motivo: str) -> dict[str, object]:
-    """La respuesta de una corrida que no se ejecutó. **200 y no 4xx, a propósito.**
-
-    El disparador es un cron externo best-effort: GitHub Actions no garantiza el minuto y puede
-    llegar tarde, y además dispara los feriados bursátiles, que no se modelan (ver el docstring de
-    `app.jobs.horarios`). Con un 4xx el workflow se pondría en rojo cada feriado y cada tick
-    corrido — y un log que está en rojo por diseño enseña a no mirarlo, con lo cual el día que
-    falle de verdad la alerta ya no alerta a nadie. Omitir es el resultado esperado de una
-    condición normal, así que se informa, no se falla.
-
-    El contrato lo consume `.github/workflows/ingesta.yml`, que busca `"omitida": true` en el
-    cuerpo y lo registra como `::notice::`.
-    """
-    return {"omitida": True, "motivo": motivo}
 
 
 async def _corrida_del_cron(

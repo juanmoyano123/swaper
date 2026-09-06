@@ -24,8 +24,9 @@ import { useId, useState } from 'react'
 
 import { fmtFechaHora, fmtNumero, hace } from '@/lib/fmt'
 
+import { useDispararCorrida } from '../hooks/useDispararCorrida'
 import { useEstadoDelDato } from '../hooks/useEstadoDelDato'
-import type { EstadoDelDato } from '../lib/schema'
+import { esCorridaOmitida, type EstadoDelDato, type ResultadoCorrida } from '../lib/schema'
 import { colorDe, resumirConteos } from '../lib/severidad'
 
 import { DetalleDelDato } from './DetalleDelDato'
@@ -79,6 +80,7 @@ export function BarraEstadoDato() {
         <Tamanio estado={estado} />
         <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
           <Conteos estado={estado} />
+          <BotonActualizar />
           <button
             type="button"
             onClick={() => setAbierto((v) => !v)}
@@ -195,6 +197,63 @@ function Conteos({ estado }: { estado: EstadoDelDato }) {
           requiere acción
         </span>
       )}
+    </span>
+  )
+}
+
+/**
+ * El disparo manual de BYMA + data912 (F-008/`POST /jobs/corridas/matinal`). Vive acá y no en el
+ * monitor porque la barra ya es el lugar de las seis pantallas que declara de qué hora es el dato
+ * — el botón que fuerza uno nuevo es la otra mitad de esa misma responsabilidad.
+ *
+ * La corrida completa puede tardar varios minutos (BYMA + data912 + consolidación + barrido de
+ * emisores + CAFCI, con `maxDuration: 300` en Vercel): el estado "actualizando" lo dice explícito
+ * para que nadie interprete el botón trabado como colgado.
+ */
+function BotonActualizar() {
+  const mutacion = useDispararCorrida()
+
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+      <button
+        type="button"
+        onClick={() => mutacion.mutate()}
+        disabled={mutacion.isPending}
+        style={boton}
+      >
+        {mutacion.isPending ? 'actualizando…' : 'actualizar ahora'}
+      </button>
+      {mutacion.isPending && (
+        <span style={{ color: 'var(--dim)' }}>puede tardar varios minutos</span>
+      )}
+      {!mutacion.isPending && mutacion.isSuccess && <ResumenDeCorrida resultado={mutacion.data} />}
+      {!mutacion.isPending && mutacion.isError && (
+        <span style={{ color: 'var(--neg)' }}>{mutacion.error.message}</span>
+      )}
+    </span>
+  )
+}
+
+const COLOR_POR_ESTADO: Record<string, string> = {
+  completa: 'var(--tx)',
+  parcial: 'var(--ac2)',
+  fallida: 'var(--neg)',
+}
+
+function ResumenDeCorrida({ resultado }: { resultado: ResultadoCorrida }) {
+  if (esCorridaOmitida(resultado)) {
+    return <span style={{ color: 'var(--dim)' }}>no se disparó: {resultado.motivo}</span>
+  }
+
+  const { estado, duracion_ms, filas_por_fuente, alertas } = resultado
+  const segundos = fmtNumero(duracion_ms / 1000, 1)
+  const byma = filas_por_fuente.byma ?? 0
+  const data912 = filas_por_fuente.data912 ?? 0
+
+  return (
+    <span style={{ color: COLOR_POR_ESTADO[estado] ?? 'var(--tx)' }}>
+      {estado} · {segundos}s · byma {fmtNumero(byma, 0)} · data912 {fmtNumero(data912, 0)}
+      {alertas.length > 0 && <> · {alertas.length} alertas</>}
     </span>
   )
 }

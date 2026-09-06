@@ -138,8 +138,44 @@ export const esquemaEstadoDelDato = z.object({
   }),
 })
 
+/**
+ * El contrato de `POST /api/v1/jobs/corridas/matinal` — el botón de refresh manual.
+ *
+ * `alertas` usa `esquemaAlerta` sin `origen`: ese campo lo agrega `GET /estado-del-dato` al fusionar
+ * fuentes, no viene en el dict crudo de `Alerta` que devuelve `registrar_corrida` en el backend.
+ */
+export const esquemaCorridaDisparada = z.object({
+  id: z.number(),
+  tipo: z.string(),
+  estado: z.string(),
+  iniciado_en: z.string(),
+  finalizado_en: z.string(),
+  duracion_ms: z.number(),
+  filas_por_fuente: z.record(z.string(), z.number()),
+  alertas: z.array(esquemaAlerta.partial({ origen: true })),
+})
+
+/**
+ * La corrida no se disparó porque ya había una en curso (el cron, u otro click de este mismo
+ * botón). 200 y no un error — `backend/app/api/v1/jobs.py` explica por qué en `_omitida()`.
+ */
+export const esquemaCorridaOmitida = z.object({
+  omitida: z.literal(true),
+  motivo: z.string(),
+})
+
+export const esquemaResultadoCorrida = z.union([esquemaCorridaDisparada, esquemaCorridaOmitida])
+
 export type Severidad = z.infer<typeof esquemaSeveridad>
 export type Alerta = z.infer<typeof esquemaAlerta>
 export type Descarte = z.infer<typeof esquemaDescarte>
 export type CoberturaCampo = z.infer<typeof esquemaCobertura>
 export type EstadoDelDato = z.infer<typeof esquemaEstadoDelDato>
+export type CorridaDisparada = z.infer<typeof esquemaCorridaDisparada>
+export type CorridaOmitida = z.infer<typeof esquemaCorridaOmitida>
+export type ResultadoCorrida = z.infer<typeof esquemaResultadoCorrida>
+
+/** Type guard para distinguir las dos formas de `ResultadoCorrida` en la vista. */
+export function esCorridaOmitida(resultado: ResultadoCorrida): resultado is CorridaOmitida {
+  return 'omitida' in resultado
+}

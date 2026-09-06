@@ -426,3 +426,139 @@ describe('el costo del lado del cliente', () => {
     expect(screen.getByText(/en caché desde 07\/08\/2026, 11:02/)).toBeInTheDocument()
   })
 })
+
+// --- El botón de refresh manual: BYMA + data912 vía POST /jobs/corridas/matinal ------------------
+
+function corrida(extra: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: 1,
+    tipo: 'matinal',
+    estado: 'completa',
+    iniciado_en: new Date(2026, 7, 7, 11, 30).toISOString(),
+    finalizado_en: new Date(2026, 7, 7, 11, 30, 45).toISOString(),
+    duracion_ms: 45_000,
+    filas_por_fuente: { byma: 2894, data912: 1200 },
+    alertas: [],
+    ...extra,
+  }
+}
+
+/** GET a `/estado-del-dato` sigue respondiendo `estado()`; el POST a la corrida responde lo que
+ * se le pase — es lo único que necesita este describe, que no le interesa la franja en sí. */
+function responderConCorrida(cuerpoCorrida: unknown, statusCorrida = 200) {
+  const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+    const esPost = init?.method === 'POST'
+    const cuerpo = esPost ? cuerpoCorrida : estado()
+    const status = esPost ? statusCorrida : 200
+    return Promise.resolve(
+      new Response(JSON.stringify(cuerpo), { status, headers: { 'Content-Type': 'application/json' } }),
+    )
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  return fetchMock
+}
+
+describe('el botón de refresh manual', () => {
+  it('dispara BYMA + data912 y muestra el resumen al terminar', async () => {
+    responderConCorrida(corrida())
+    renderizar()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'actualizar ahora' }))
+
+    expect(
+      await screen.findByText('completa · 45,0s · byma 2.894 · data912 1.200'),
+    ).toBeInTheDocument()
+  })
+
+  it('cuenta las alertas de la corrida cuando las hay', async () => {
+    responderConCorrida(corrida({ alertas: [alerta(), alerta()] }))
+    renderizar()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'actualizar ahora' }))
+
+    expect(await screen.findByText(/2 alertas/)).toBeInTheDocument()
+  })
+
+  it('declara que no se disparó cuando el backend la omite por lock ya tomado', async () => {
+    // El cron corriendo, o un segundo click sobre el primero: el backend responde 200 y no falla.
+    responderConCorrida({ omitida: true, motivo: 'corrida en curso' })
+    renderizar()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'actualizar ahora' }))
+
+    expect(await screen.findByText('no se disparó: corrida en curso')).toBeInTheDocument()
+  })
+
+  it('deshabilita el botón y avisa la espera mientras la corrida sigue en curso', async () => {
+    let resolver: (respuesta: Response) => void = () => {}
+    const promesaControlada = new Promise<Response>((resolve) => {
+      resolver = resolve
+    })
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') return promesaControlada
+      return Promise.resolve(
+        new Response(JSON.stringify(estado()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderizar()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'actualizar ahora' }))
+
+    const botonEnCurso = await screen.findByRole('button', { name: 'actualizando…' })
+    expect(botonEnCurso).toBeDisabled()
+    expect(screen.getByText('puede tardar varios minutos')).toBeInTheDocument()
+
+    resolver(
+      new Response(JSON.stringify(corrida()), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+
+    expect(await screen.findByRole('button', { name: 'actualizar ahora' })).not.toBeDisabled()
+  })
+
+  it('muestra el error del backend y deja reintentar', async () => {
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        return Promise.resolve(
+          new Response(JSON.stringify({ error: { code: 'internal_error', message: 'roto' } }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify(estado()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderizar()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'actualizar ahora' }))
+
+    expect(await screen.findByText('roto')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'actualizar ahora' })).not.toBeDisabled()
+  })
+
+  it('invalida el estado del dato tras un éxito, para que la barra refleje la corrida nueva', async () => {
+    const fetchMock = responderConCorrida(corrida())
+    renderizar()
+    await franjaCargada()
+
+    await userEvent.click(screen.getByRole('button', { name: 'actualizar ahora' }))
+    await screen.findByText(/completa/)
+
+    await waitFor(() => {
+      const pedidosDeEstado = fetchMock.mock.calls.filter(([, init]) => init?.method !== 'POST')
+      expect(pedidosDeEstado.length).toBeGreaterThanOrEqual(2)
+    })
+  })
+})
